@@ -354,12 +354,14 @@ describe('EnrolmentWizard', () => {
     expect(await screen.findByText('A date of birth is in the past.')).toBeTruthy();
   });
 
-  it('closes on Escape, saying the lead is already saved', async () => {
+  it('keeps the full-page flow open on Escape and offers Back to clients', async () => {
     const { onDone } = mountWithRecord(baseRecord());
     await fillIdentity();
     await screen.findByRole('button', { name: 'Add contact' });
     expect(await screen.findByText(/Saved as a lead/)).toBeTruthy();
     fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onDone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to clients' }));
     expect(onDone).toHaveBeenCalled();
   });
 

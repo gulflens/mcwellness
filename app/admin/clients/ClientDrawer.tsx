@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AssessmentsTab } from '../assessments/AssessmentsTab';
 import { RecordTimeline } from '../audit/RecordTimeline';
 import type { ClientRow } from '../../api/clients/schema';
-import { CloseIcon } from '../../shell/components/Icons';
-import { Button, Field, Note } from '../../shell/components/Controls';
+import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { ClientStatusChip } from '../../shell/components/StatusChip';
 import { ConsentTab } from './ConsentTab';
 import { ContactsTab } from './ContactsTab';
@@ -60,20 +59,28 @@ const FINANCE_TABS: readonly Tab[] = ALL_TABS.filter((tab) =>
 const DEFAULT_TAB = 'overview';
 
 /**
- * The client's detail drawer (docs/DESIGN-BRIEF.md section 6.2: a right-side
- * drawer, never a modal dialog). One fetch of GET /api/clients/:id on open
- * (the server audits the read); tabs switch client-side (task brief item 1).
- * Seeded by the trunk in PR 6 with its first tab, Timeline; the
- * client-record worktree brings the rest here.
+ * Full-page client workspace. The established export name is retained for
+ * existing callers; the surface is now an in-flow section, not a drawer.
+ * The page owns the opaque client ID and selected section in the URL.
+ * Role filtering and the audited record fetch remain unchanged.
  */
-export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: () => void }) {
+export function ClientDrawer({
+  client,
+  clientId,
+  section,
+  onSectionChange,
+  onClose,
+}: {
+  client?: ClientRow;
+  clientId?: string;
+  section?: string;
+  onSectionChange?: (section: string) => void;
+  onClose: () => void;
+}) {
+  const id = clientId ?? client!.id;
   const closeRef = useRef<HTMLButtonElement>(null);
-  // The tab lives in the drawer's own state, not in the address bar: this drawer is
-  // opened by a row click and is not addressable by URL (the shell owns the routes,
-  // and the sibling screens keep their drawers the same way), so a fragment would
-  // promise a persistence it cannot keep and would carry one client's tab onto the
-  // next. Every client opens on Overview.
-  const [tab, setTab] = useState<string>(DEFAULT_TAB);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [localTab, setLocalTab] = useState<string>(DEFAULT_TAB);
   const [reason, setReason] = useState('');
   // Set the moment this record is erased from the Overview tab, and not by
   // asking the server: the person who pressed the button may be an admin, and
@@ -83,7 +90,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
   // drawer takes the fact from the panel that did it — the status it shows,
   // and the reason its own routes now ask for.
   const [erasedHere, setErasedHere] = useState(false);
-  const { state, refetch } = useClientRecord(client.id);
+  const { state, refetch } = useClientRecord(id);
   const { session } = useAuth();
   const actor = session.status === 'signed-in' ? session.actor : null;
   const now = new Date();
@@ -95,164 +102,196 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
   const mayWriteConcerns = canWriteConcerns(actor) && !erased;
   const mayWriteHealth = canWriteHealth(actor) && !erased;
   const tabs = canSeeFullRecord(actor) ? ALL_TABS : FINANCE_TABS;
+  const requestedTab = section ?? localTab;
+  const tab = tabs.some((candidate) => candidate.id === requestedTab) ? requestedTab : DEFAULT_TAB;
+  const setTab = (next: string) => {
+    setLocalTab(next);
+    onSectionChange?.(next);
+    contentRef.current?.scrollIntoView?.({ block: 'start' });
+  };
+  const displayed = state.kind === 'ready' ? state.record : client;
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('keydown', onKey);
       previous?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
-    <aside className="drawer" role="dialog" aria-labelledby="drawer-title">
-      <header className="drawer__header">
+    <section className="client-workspace" aria-labelledby="client-workspace-title">
+      <button ref={closeRef} type="button" className="link workspace-back" onClick={onClose}>
+        Back to clients
+      </button>
+      <header className="client-workspace__header">
         <div className="drawer__title">
-          <h2 id="drawer-title">
+          <h1 id="client-workspace-title">
             {erased
               ? clientHeadingName('Erased client', 'Erased client')
-              : clientHeadingName(client.givenName, client.familyName)}
-          </h2>
+              : displayed
+                ? clientHeadingName(displayed.givenName, displayed.familyName)
+                : 'Client record'}
+          </h1>
           {/* The console is English only (operator's decision of 7 September
               2026, docs/DESIGN-BRIEF.md section 10 item 4); the Arabic name
               stays on the wire for the portal and the documents. */}
           <p className="drawer__facts small">
-            <span className="numeric">{client.mrn}</span>
+            <span className="numeric">{displayed?.mrn ?? ''}</span>
             {/* The record's own status once it has loaded: activating from Overview must
                 not leave the header still saying "lead" against a row the list fetched
                 before the change. */}
             <ClientStatusChip
               status={
-                erased ? 'erased' : state.kind === 'ready' ? state.record.status : client.status
+                erased
+                  ? 'erased'
+                  : state.kind === 'ready'
+                    ? state.record.status
+                    : (client?.status ?? 'lead')
               }
             />
           </p>
         </div>
-        <button
-          ref={closeRef}
-          type="button"
-          className="drawer__close"
-          aria-label="Close"
-          onClick={onClose}
-        >
-          <CloseIcon />
-        </button>
       </header>
-      <div className="drawer__body">
-        <Tabs tabs={tabs} selected={tab} onSelect={setTab} idPrefix="client" />
-
-        {state.kind === 'loading' ? <Note>Loading the record.</Note> : null}
-        {state.kind === 'error' ? (
-          <Note tone="critical">The record could not be loaded. Try again.</Note>
-        ) : null}
-        {state.kind === 'reason-required' ? (
-          <div className="tab-section">
-            <Note>This record has been erased. Opening it is logged; say why you need to.</Note>
-            <Field
-              id="drawer-reason"
-              label="Reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
+      <div className="client-workspace__layout">
+        <nav className="client-workspace__nav" aria-label="Client sections">
+          <div className="client-workspace__desktop-nav">
+            <Tabs
+              tabs={tabs}
+              selected={tab}
+              onSelect={setTab}
+              idPrefix="client"
+              orientation="vertical"
             />
-            <Button
-              variant="primary"
-              disabled={!reason.trim()}
-              onClick={() => void refetch(reason.trim())}
-            >
-              View record
-            </Button>
           </div>
-        ) : null}
+          <div className="client-workspace__mobile-nav">
+            <Select
+              id="client-section"
+              label="Client section"
+              value={tab}
+              onChange={(event) => setTab(event.target.value)}
+            >
+              {tabs.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </nav>
+        <div className="client-workspace__content" ref={contentRef}>
+          <h2 className="client-workspace__section-title">
+            {tabs.find((item) => item.id === tab)?.label}
+          </h2>
 
-        {state.kind === 'ready' ? (
-          <>
-            <TabPanel id="overview" idPrefix="client" selected={tab}>
-              <OverviewTab
-                record={state.record}
-                onChanged={() => void refetch(reason.trim() || undefined)}
-                mayWrite={mayWrite}
-                reason={reason.trim() || undefined}
-                onErased={(erasureReason) => {
-                  setErasedHere(true);
-                  // The reason it was erased with becomes the reason this
-                  // drawer holds, so an owner or a lead practitioner reading
-                  // the record afterwards is not bounced to the reason prompt
-                  // for a record they are standing in front of.
-                  if (!reason.trim()) setReason(erasureReason);
-                }}
+          {state.kind === 'loading' ? <Note>Loading the record.</Note> : null}
+          {state.kind === 'error' ? (
+            <Note tone="critical">The record could not be loaded. Try again.</Note>
+          ) : null}
+          {state.kind === 'reason-required' ? (
+            <div className="tab-section">
+              <Note>This record has been erased. Opening it is logged; say why you need to.</Note>
+              <Field
+                id="drawer-reason"
+                label="Reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
               />
-            </TabPanel>
-            <TabPanel id="contacts" idPrefix="client" selected={tab}>
-              <ContactsTab
-                clientId={client.id}
-                record={state.record}
-                onChanged={() => void refetch(reason.trim() || undefined)}
-                mayWrite={mayWrite}
-                erased={erased}
-              />
-            </TabPanel>
-            <TabPanel id="locations" idPrefix="client" selected={tab}>
-              <LocationsTab
-                clientId={client.id}
-                record={state.record}
-                onChanged={() => void refetch(reason.trim() || undefined)}
-                mayWrite={mayWrite}
-                erased={erased}
-              />
-            </TabPanel>
-            <TabPanel id="consent" idPrefix="client" selected={tab}>
-              <ConsentTab
-                clientId={client.id}
-                record={state.record}
-                onChanged={() => void refetch(reason.trim() || undefined)}
-                mayWrite={mayWrite}
-                erased={erased}
-              />
-            </TabPanel>
-            <TabPanel id="health" idPrefix="client" selected={tab}>
-              <HealthTab
-                clientId={client.id}
-                record={state.record}
-                onChanged={() => void refetch(reason.trim() || undefined)}
-                mayWrite={mayWriteHealth}
-                erased={erased}
-              />
-            </TabPanel>
-            <TabPanel id="goals" idPrefix="client" selected={tab}>
-              <GoalsTab
-                clientId={client.id}
-                record={state.record}
-                onChanged={() => void refetch(reason.trim() || undefined)}
-                mayWrite={mayWriteGoals}
-                mayWriteConcerns={mayWriteConcerns}
-                erased={erased}
-              />
-            </TabPanel>
-            <TabPanel id="documents" idPrefix="client" selected={tab}>
-              <DocumentsTab
-                clientId={client.id}
-                mayWrite={mayWrite}
-                erased={erased}
-                reason={reason.trim() || undefined}
-              />
-            </TabPanel>
-            <TabPanel id="assessments" idPrefix="client" selected={tab}>
-              <AssessmentsTab clientId={client.id} />
-            </TabPanel>
-            <TabPanel id="reports" idPrefix="client" selected={tab}>
-              <ReportsTab clientId={client.id} erased={erased} />
-            </TabPanel>
-          </>
-        ) : null}
-        <TabPanel id="timeline" idPrefix="client" selected={tab}>
-          <RecordTimeline key={client.id} clientId={client.id} />
-        </TabPanel>
+              <Button
+                variant="primary"
+                disabled={!reason.trim()}
+                onClick={() => void refetch(reason.trim())}
+              >
+                View record
+              </Button>
+            </div>
+          ) : null}
+
+          {state.kind === 'ready' ? (
+            <>
+              <TabPanel id="overview" idPrefix="client" selected={tab}>
+                <OverviewTab
+                  record={state.record}
+                  onChanged={() => void refetch(reason.trim() || undefined)}
+                  mayWrite={mayWrite}
+                  reason={reason.trim() || undefined}
+                  onErased={(erasureReason) => {
+                    setErasedHere(true);
+                    // The reason it was erased with becomes the reason this
+                    // drawer holds, so an owner or a lead practitioner reading
+                    // the record afterwards is not bounced to the reason prompt
+                    // for a record they are standing in front of.
+                    if (!reason.trim()) setReason(erasureReason);
+                  }}
+                />
+              </TabPanel>
+              <TabPanel id="contacts" idPrefix="client" selected={tab}>
+                <ContactsTab
+                  clientId={id}
+                  record={state.record}
+                  onChanged={() => void refetch(reason.trim() || undefined)}
+                  mayWrite={mayWrite}
+                  erased={erased}
+                />
+              </TabPanel>
+              <TabPanel id="locations" idPrefix="client" selected={tab}>
+                <LocationsTab
+                  clientId={id}
+                  record={state.record}
+                  onChanged={() => void refetch(reason.trim() || undefined)}
+                  mayWrite={mayWrite}
+                  erased={erased}
+                />
+              </TabPanel>
+              <TabPanel id="consent" idPrefix="client" selected={tab}>
+                <ConsentTab
+                  clientId={id}
+                  record={state.record}
+                  onChanged={() => void refetch(reason.trim() || undefined)}
+                  mayWrite={mayWrite}
+                  erased={erased}
+                />
+              </TabPanel>
+              <TabPanel id="health" idPrefix="client" selected={tab}>
+                <HealthTab
+                  clientId={id}
+                  record={state.record}
+                  onChanged={() => void refetch(reason.trim() || undefined)}
+                  mayWrite={mayWriteHealth}
+                  erased={erased}
+                />
+              </TabPanel>
+              <TabPanel id="goals" idPrefix="client" selected={tab}>
+                <GoalsTab
+                  clientId={id}
+                  record={state.record}
+                  onChanged={() => void refetch(reason.trim() || undefined)}
+                  mayWrite={mayWriteGoals}
+                  mayWriteConcerns={mayWriteConcerns}
+                  erased={erased}
+                />
+              </TabPanel>
+              <TabPanel id="documents" idPrefix="client" selected={tab}>
+                <DocumentsTab
+                  clientId={id}
+                  mayWrite={mayWrite}
+                  erased={erased}
+                  reason={reason.trim() || undefined}
+                />
+              </TabPanel>
+              <TabPanel id="assessments" idPrefix="client" selected={tab}>
+                <AssessmentsTab clientId={id} />
+              </TabPanel>
+              <TabPanel id="reports" idPrefix="client" selected={tab}>
+                <ReportsTab clientId={id} erased={erased} />
+              </TabPanel>
+            </>
+          ) : null}
+          <TabPanel id="timeline" idPrefix="client" selected={tab}>
+            <RecordTimeline key={id} clientId={id} />
+          </TabPanel>
+        </div>
       </div>
-    </aside>
+    </section>
   );
 }

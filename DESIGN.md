@@ -214,14 +214,14 @@ The chrome carries the practice and the figures carry the data. Hue-bearing mine
 
 **This reverses the achromatic chrome of 2026-09-02.** That decision held for six days and was taken back by the owner on 2026-09-08, who asked for "a more attractive simple coloured design" and for the practice's logo to appear in the interface. The reasoning for the original rule is not withdrawn — it is narrowed to the place it was actually earning its keep, which is the figure. `docs/SPEC/coloured-shell.md` carries the decision, the sampled palette and the measurements.
 
-The system has three grounds that share one token set. The ledger (light, dense, the admin console) is the reference surface and the only one fully built. The instrument (dark, `[data-ground='dark']`, the practitioner's phone) inverts ink and paper, lifts the band and status hues, and steps every type size up one so it reads at arm's length in a dim room. The record (light, calm, the client portal) uses the same tokens at a 68-character measure and low density. Sampled at the finish review on 2026-09-02: paper #EEF2F1, ink #16242A, hairline #CBD5D6 rules, 44px rows, tabular figures, status in words with a 6px dot, and an ink-on-paper primary button; no hue, no cards, no accent. Sampled again after PR 6: a record's detail opens in a 480px drawer at the inline end, surface white on a hairline edge with the one soft shadow and no scrim, and its history is a list of sentences on 12px-stepped hairline rules; the ledger stays readable beside it.
+The system has three grounds that share one token set. The ledger (light, dense, the admin console) is the reference surface and the only one fully built. The instrument (dark, `[data-ground='dark']`, the practitioner's phone) inverts ink and paper, lifts the band and status hues, and steps every type size up one so it reads at arm's length in a dim room. The record (light, calm, the client portal) uses the same tokens at a 68-character measure and low density. Sampled at the finish review on 2026-09-02: paper #EEF2F1, ink #16242A, hairline #CBD5D6 rules, 44px rows, tabular figures, status in words with a 6px dot, and an ink-on-paper primary button; no hue, no cards, no accent. PR 6 introduced a 480px record drawer. On 24 September 2026, the operator approved replacing the main client record and enrolment drawers with full-page workspaces. Focused task drawers retain their existing treatment; record history remains a list of sentences on 12px-stepped hairline rules.
 
 **Key Characteristics:**
 - Achromatic chrome: mineral ink on cool paper, structure in hairline rules, no accent colour anywhere.
 - Hue is signal: five band colours reserved for band data, three desaturated status colours carried by a 6px dot beside a word.
 - One family, two weights: IBM Plex Sans and IBM Plex Sans Arabic at 400 and 500, self-hosted; tabular lining figures on every numeral.
 - Tables, not cards: homogeneous data sits in 44px rows on hairline rules, with sticky headers and no zebra striping.
-- Detail beside the ledger: a record opens in a drawer at the inline end, over the list without a scrim, never in a modal dialog.
+- Full-page client work: the main client record and enrolment use the content column, with section or step navigation beside the form. Focused task drawers remain available elsewhere.
 - Three grounds, one token set: the ledger (light), the instrument (dark, type up one step) and the record (light, 68ch measure).
 - Logical properties only, so every layout mirrors for Arabic.
 - Almost no motion: feedback is instant, and the drawer's 160ms entrance is the one transition in the shell.
@@ -299,7 +299,7 @@ The ledger is a two-column grid: the rail on the inline start and a content colu
 
 Page furniture is fixed: the heading and its count sit on one baseline with a 16px gap and 24px beneath; the toolbar is a wrapping row with 16px gaps aligned to the bottom edge, 24px beneath; then the table. The search field is the primary action and takes the width (`flex: 1 1 24rem`, capped at the 68ch measure) while the status select sits beside it at a minimum of 12rem. Both fields sit on a 4px gap under their label.
 
-The drawer is the ledger's second width token beside the rail: `clamp(320px, 55vw, 480px)` (`--drawer`), so on a tablet it takes a share of the screen rather than most of it and the ledger stays readable beside it. It is fixed to the block edges and the inline end, above the content (`z-index: 2`) with no scrim and no shift of the list beneath, never wider than the viewport. Its header and body each pad 24px; the header closes with a hairline, and the body scrolls on its own so the title stays put. Inside it the timeline keeps the ledger's rhythm at a finer step: a day heading with 16px above and 8px of block padding, events padded 12px block on hairline rules, 4px between a sentence and its meta line and again before a reason, and 24px of block padding around the paging button.
+Focused task drawers retain the ledger's second width token beside the rail: `clamp(320px, 55vw, 480px)` (`--drawer`), so on a tablet it takes a share of the screen rather than most of it and the ledger stays readable beside it. It is fixed to the block edges and the inline end, above the content (`z-index: 2`) with no scrim and no shift of the list beneath, never wider than the viewport. Its header and body each pad 24px; the header closes with a hairline, and the body scrolls on its own so the title stays put. Inside it the timeline keeps the ledger's rhythm at a finer step: a day heading with 16px above and 8px of block padding, events padded 12px block on hairline rules, 4px between a sentence and its meta line and again before a reason, and 24px of block padding around the paging button.
 
 The spacing scale is a 4px step: 4, 8, 12, 16, 20, 24, 32, 48, 64. Twelve is the horizontal unit inside rows, rail items and inputs, and the block unit of a timeline event; sixteen is the gap between siblings; twenty-four is the gap between blocks and the drawer's padding; thirty-two is the page's outer padding.
 
@@ -323,6 +323,8 @@ On a phone the console is not folded at all. It declares a 1024px layout width (
 **The Hairline Rule.** Structure is drawn with 1px rules in Rule (#cbd5d6): table rows, the rail's edge, field borders, the drawer's edge, the rule under each event. No zebra striping, no card borders, no boxes around groups.
 
 **The Beside Rule.** A record's detail opens in the drawer at the inline end, over the ledger with no scrim, so the list stays readable beside it. It takes a share of the screen, `clamp(320px, 55vw, 480px)`, and the full width below the tablet tier. Detail is never a modal dialog.
+
+The main client workspace uses a sticky section column (192px), a gap (32px) and a white content surface capped at 1040px with 24px padding. Enrolment uses the same proportions for its step guide and form. At a workspace container width of 767px or less, record sections become a labelled select, content padding reduces to 16px and enrolment steps use the compact grid. These are in-flow pages within the existing admin shell; saved drawer widths do not size them.
 
 ## Elevation & Depth
 
@@ -366,7 +368,7 @@ Ink on paper, hairline-bordered, instant to respond. Three variants share one sh
 - **Focus:** the shared ring. No transition on any state.
 
 ### Link
-An in-page control that reads as a link: in the ledger, the client's name opens the drawer.
+An in-page control that reads as a link: in the ledger, the client's name opens the full-page client workspace.
 - **Style:** a `button.link` reset to its text: no padding, border or fill; inherits the cell's font; ink; aligned start; a hairline underline offset 0.18em.
 - **Hover:** the underline thickens to 2px. Nothing else changes and nothing transitions.
 - **Focus:** the shared ring. No arrow, no colour, no icon.
@@ -407,13 +409,16 @@ The console's defining surface: homogeneous rows on hairline rules.
 - **Header:** sticky at the top, paper ground so rows pass under it, small (14px) medium in second ink, 44px tall, 12px horizontal padding, hairline beneath.
 - **Rows:** 44px tall, 12px horizontal padding, a hairline beneath each, no zebra, no hover tint, cells vertically centred and unwrapped.
 - **Alignment:** identifiers (the record number, phone numbers) align start even though they are numerals; quantities marked `align: end` align end. Numeric cells take tabular lining figures.
-- **Name cell:** the Latin name as a Link that opens the drawer, and beneath it the Arabic name in small second ink with `lang="ar"` and `dir="rtl"`.
+- **Name cell:** the Latin name as a Link that opens the client workspace, and beneath it the Arabic name in small second ink with `lang="ar"` and `dir="rtl"`.
 - **Contact cell:** relationship in ink, then the phone number in numeric second ink, on one baseline with a 12px gap.
 - **Empty:** a single spanning cell, 24px vertical padding, wrapped text in second ink.
 - **Mobile:** the first two columns pin to the inline start on paper ground; the second draws an inset hairline on its end edge.
 
+### Client workspace
+The main client record opens as a full-page section within the admin shell. A heading shows the client name, record number and status, with a hairline beneath. A 44px-minimum “Back to clients” control precedes it. Desktop section navigation uses vertical tabs with a brand-wash selected state and keyboard arrow/Home/End navigation; narrow containers use a labelled “Client section” select. The section title and existing record forms occupy the white content surface. Navigation remains role-filtered. Escape does not leave this page.
+
 ### The Drawer (signature)
-A record's detail opens beside the ledger, not over a dimmed page.
+Focused tasks elsewhere retain the drawer beside their context. This pattern no longer applies to the main client record or enrolment.
 - **Placement:** fixed to the block edges and the inline end, 480px wide (`--drawer`), never wider than the viewport, above the content with no scrim; the ledger neither moves nor dims.
 - **Surface:** white on a hairline at its inline-start edge, lifted by the one soft shadow (see Elevation).
 - **Header:** 24px padding, a hairline beneath. The title block stacks the client's name (h2), the Arabic name beneath in small second ink (`lang="ar"`, `dir="rtl"`, pinned to the inline start as in the ledger's name cell), then the record number in numeric and the status chip, each on its own line at 4px gaps; nothing joins them with a dot or a bar.
@@ -425,15 +430,15 @@ A record's detail opens beside the ledger, not over a dimmed page.
 
 ### Enrolment and consent signing
 
-Enrolment keeps the ledger's typography, violet, hairlines and spacing tokens. A persistent progress area gives the current step a surface fill, brand ink and `--lift-1`; this is a local selected-step treatment. The content starts with the step title, count and a plain-language instruction. Identity fields are grouped separately from the contact fields. Activation requirements sit in an expandable, brand-wash area during the later steps and remain visible on Review. Existing forms retain their save and permission rules.
+Enrolment occupies a full page with “Back to clients”, an h1 and a sticky step guide beside the form. Its action row sticks to the bottom of the form while scrolling. It keeps the ledger's typography, violet, hairlines and spacing tokens. A persistent progress area gives the current step a surface fill, brand ink and `--lift-1`; this is a local selected-step treatment. The content starts with the step title, count and a plain-language instruction. Identity fields are grouped separately from the contact fields. Activation requirements sit in an expandable, brand-wash area during the later steps and remain visible on Review. Existing forms retain their save and permission rules.
 
-The consent tab introduces “Select consents and sign once” on a lavender brand-wash surface, alongside the count of required consents on file. Permitted writers can also open it when the required consents are complete, supporting renewals. The combined form begins with a prominent select-all checkbox and individual eligible-agreement checklist: four purposes for a child, three for an adult, initially all selected. Violet native checkboxes have visible focus, at least 44px-high label targets and a mixed select-all state; the checklist adapts to one column in narrow space. A live selected count keeps the scope of the single signature explicit.
+The Consent section uses the full workspace content width and introduces “Select consents and sign once” on a lavender brand-wash surface, alongside the count of required consents on file. Permitted writers can also open it when the required consents are complete, supporting renewals. The combined form begins with a prominent select-all checkbox and individual eligible-agreement checklist: four purposes for a child, three for an adult, initially all selected. Violet native checkboxes have visible focus, at least 44px-high label targets and a mixed select-all state; the checklist adapts to one column in narrow space. A live selected count keeps the scope of the single signature explicit.
 
 Three numbered sections separated by hairlines follow: confirm the signer, read the selected agreements, sign once. The reading section lists only selected purposes before their versioned wording, uses a brand-wash reading surface and reports whether the end has been reached. Signature and scan inputs retain the reading gate; an empty selection cannot be recorded. Changing the signer or selection clears signature evidence and reading state, resets the reading region and evidence controls, and invalidates pending scan preparation. One signature covers the selected wording versions through the existing bundle flow, while each agreement keeps its own consent record. IBM Plex, violet, spacing tokens, wording and authorisation remain governed by the existing implementation.
 
 ### The Record Timeline (signature)
 A client's history as sentences on rules: the ledger's vocabulary turned to time.
-- **Structure:** newest first, grouped by day in the practice's time zone. Each day heading (an `h4` set at small, medium, second ink) is sticky at the top of the drawer body on the surface, so it holds while its events scroll under it, with 16px above and 8px of block padding.
+- **Structure:** newest first, grouped by day in the practice's time zone. Each day heading (an `h4` set at small, medium, second ink) is sticky at the top of the record content on the surface, so it holds while its events scroll under it, with 16px above and 8px of block padding.
 - **Events:** an ordered list; each event pads 12px block and closes with a hairline. The sentence is body text: a change or a creation is medium in ink, a read or a system row is regular in second ink (The Kind-by-Weight Rule). No icon, no dot, no card, no colour.
 - **Meta:** 4px beneath the sentence, a micro line in second ink: the actor's roles ("Owner, Admin, Lead practitioner, Finance") and the time in tabular figures, on a 12px gap. Roles show once per run of the same actor and roles, not on every line; the time shows on every line.
 - **Reason:** 4px beneath the meta, when one was given: small second ink with a colon label ("Reason: synthetic seed").
@@ -452,7 +457,7 @@ A client's history as sentences on rules: the ledger's vocabulary turned to time
 - **Do** answer loading, empty and error states with a Note line in second ink or critical, capped at 68ch.
 - **Do** put the dark ground on a surface with `data-ground='dark'` and let the tokens swap; never restyle a component for dark.
 - **Do** keep the Latin wordmark "McWellness" in every locale.
-- **Do** open a record's detail in the drawer: a share of the screen at the inline end on surface, a hairline edge and the one soft shadow, no scrim, full width below the tablet tier.
+- **Do** use the full-page workspace for the main client record and enrolment, with section navigation or a step guide and an explicit return to the client list. Keep focused task drawers for their existing uses.
 - **Do** make an in-page control that reads as a link a `button.link` in ink with a hairline underline that thickens to 2px on hover.
 - **Do** write history as sentences on hairline rules at a 12px block step: a change or creation in medium ink, a read or system row in regular second ink, roles and a tabular time in micro beneath.
 

@@ -18,7 +18,6 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { PhoneField } from '../../shell/components/PhoneField';
-import { CloseIcon } from '../../shell/components/Icons';
 import { ActivationSummary } from './ActivationSummary';
 import { canActivate, practiceToday, toActivationRecord } from './activation';
 import { Checkbox } from './FormAtoms';
@@ -166,18 +165,10 @@ export function EnrolmentWizard({
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
-    // Escape closes this as it closes the record drawer beside it. Nothing is lost by
-    // closing: the lead and every step's writes are already saved (section 4.3), which
-    // is what the line above the buttons says.
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onDone();
-    };
-    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('keydown', onKey);
       previous?.focus();
     };
-  }, [onDone]);
+  }, []);
 
   /** The one way the step moves, so the high-water mark can never drift from it. */
   function goTo(next: Step) {
@@ -354,10 +345,16 @@ export function EnrolmentWizard({
   const canGoNext = step !== 'identity' && step !== 'summary' && stepIndex < STEPS.length - 1;
 
   return (
-    <aside className="drawer enrolment" role="dialog" aria-labelledby="enrolment-title">
-      <header className="drawer__header">
+    <section
+      className="client-workspace enrolment enrolment--page"
+      aria-labelledby="enrolment-title"
+    >
+      <button ref={closeRef} type="button" className="link workspace-back" onClick={onDone}>
+        Back to clients
+      </button>
+      <header className="client-workspace__header">
         <div className="drawer__title">
-          <h2 id="enrolment-title">Enrol a client</h2>
+          <h1 id="enrolment-title">Enrol a client</h1>
           <p className="small muted">
             {created ? (
               <>
@@ -369,15 +366,6 @@ export function EnrolmentWizard({
             )}
           </p>
         </div>
-        <button
-          ref={closeRef}
-          type="button"
-          className="drawer__close"
-          aria-label="Close"
-          onClick={onDone}
-        >
-          <CloseIcon />
-        </button>
       </header>
       <div className="enrolment__layout">
         <nav className="enrolment__progress" aria-label="Enrolment steps">
@@ -416,7 +404,7 @@ export function EnrolmentWizard({
             })}
           </ol>
         </nav>
-        <div className="drawer__body enrolment__content">
+        <div className="enrolment__content">
           <div className="enrolment__intro" key={step}>
             <h3>{STEP_LABELS[step]}</h3>
             <p className="small muted">
@@ -663,6 +651,6 @@ export function EnrolmentWizard({
           ) : null}
         </div>
       </div>
-    </aside>
+    </section>
   );
 }

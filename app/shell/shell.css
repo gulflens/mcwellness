@@ -1623,3 +1623,30 @@ a.rail__item.rail__item--active:active {
   padding: 0;
   margin: 0;
 }
+
+/* Vertical client section navigation uses the shared tab control. */
+.client-workspace__nav .tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s-1);
+  border: 0;
+  overflow: visible;
+}
+
+.client-workspace__nav .tabs__tab {
+  text-align: start;
+  justify-content: start;
+  background: transparent;
+  box-shadow: none;
+  border: 0;
+  min-block-size: 44px;
+  border-radius: var(--r-2);
+  padding: var(--s-3) var(--s-4);
+}
+
+.client-workspace__nav .tabs__tab--selected {
+  background: var(--brand-wash);
+  color: var(--brand);
+  box-shadow: none;
+}

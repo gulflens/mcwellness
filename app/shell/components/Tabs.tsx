@@ -16,7 +16,9 @@ export function Tabs({
   onSelect,
   idPrefix,
   label = 'Record sections',
+  orientation = 'horizontal',
 }: {
+  orientation?: 'horizontal' | 'vertical';
   tabs: readonly Tab[];
   selected: string;
   onSelect: (id: string) => void;
@@ -39,10 +41,13 @@ export function Tabs({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    if (event.key === 'ArrowRight') {
+    if (event.key === 'ArrowRight' || (orientation === 'vertical' && event.key === 'ArrowDown')) {
       event.preventDefault();
       move(index, 1);
-    } else if (event.key === 'ArrowLeft') {
+    } else if (
+      event.key === 'ArrowLeft' ||
+      (orientation === 'vertical' && event.key === 'ArrowUp')
+    ) {
       event.preventDefault();
       move(index, -1);
     } else if (event.key === 'Home') {
@@ -63,7 +68,7 @@ export function Tabs({
   }
 
   return (
-    <div className="tabs" role="tablist" aria-label={label}>
+    <div className="tabs" role="tablist" aria-label={label} aria-orientation={orientation}>
       {tabs.map((tab, index) => (
         <button
           key={tab.id}

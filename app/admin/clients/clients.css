@@ -673,3 +673,131 @@
 .consent-start > p {
   margin: 0;
 }
+
+/* Client records use the page's full working area. Compact tasks elsewhere
+   keep their drawers; saved drawer widths do not size these workspaces. */
+.client-workspace {
+  min-inline-size: 0;
+  container-type: inline-size;
+}
+
+.workspace-back {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  margin-block-end: var(--s-3);
+}
+
+.client-workspace__header {
+  display: flex;
+  align-items: start;
+  gap: var(--s-4);
+  padding-block-end: var(--s-6);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.client-workspace__header h1 {
+  margin: 0;
+}
+
+.client-workspace__layout {
+  display: grid;
+  grid-template-columns: 192px minmax(0, 1fr);
+  gap: var(--s-8);
+  padding-block-start: var(--s-6);
+}
+
+.client-workspace__nav {
+  align-self: start;
+  position: sticky;
+  inset-block-start: var(--s-4);
+}
+
+.client-workspace__mobile-nav {
+  display: none;
+}
+
+.client-workspace__content {
+  min-inline-size: 0;
+  max-inline-size: 1040px;
+  padding: var(--s-6);
+  background: var(--surface);
+  border-radius: var(--r-2);
+}
+
+.client-workspace__section-title {
+  margin-block: 0 var(--s-5);
+}
+
+.client-workspace .record-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--s-5) var(--s-8);
+}
+
+.enrolment--page {
+  inline-size: auto;
+}
+
+.enrolment--page .enrolment__layout {
+  padding-block-start: var(--s-6);
+  gap: var(--s-8);
+  grid-template-columns: 192px minmax(0, 1040px);
+}
+
+.enrolment--page .enrolment__progress {
+  position: sticky;
+  inset-block-start: var(--s-4);
+  align-self: start;
+  border: 0;
+  border-radius: var(--r-2);
+}
+
+.enrolment--page .enrolment__content {
+  min-inline-size: 0;
+  padding: var(--s-6);
+  background: var(--surface);
+  border-radius: var(--r-2);
+  overflow: visible;
+}
+
+.enrolment--page .wizard__nav {
+  position: sticky;
+  inset-block-end: 0;
+  padding-block: var(--s-4);
+  background: var(--surface);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+@container (max-width: 767px) {
+  .client-workspace__layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-4);
+  }
+
+  .client-workspace__nav {
+    position: static;
+  }
+
+  .client-workspace__desktop-nav {
+    display: none;
+  }
+
+  .client-workspace__mobile-nav {
+    display: block;
+  }
+
+  .client-workspace__content,
+  .enrolment--page .enrolment__content {
+    padding: var(--s-4);
+  }
+
+  .enrolment--page .enrolment__layout {
+    gap: var(--s-4);
+  }
+
+  .enrolment--page .enrolment__progress {
+    position: static;
+    align-self: stretch;
+  }
+}
