@@ -417,6 +417,12 @@ export const RecordPastSessionRequest = z.object({
     .max(PAST_SESSION_MINUTES.max)
     .optional(),
   billing: z.enum(PAST_SESSION_BILLING),
+  /**
+   * A correction: the visit logged from the records that this one replaces.
+   * It is voided and this one written in its place, in one act, as its next
+   * version (docs/superpowers/specs/2026-09-23-void-logged-session-design.md).
+   */
+  replaces: z.uuid().optional(),
 });
 export type RecordPastSessionRequest = z.infer<typeof RecordPastSessionRequest>;
 
@@ -457,12 +463,34 @@ export const RECORD_PAST_BLOCK_REASONS = [
 ] as const;
 export type RecordPastBlockReason = (typeof RECORD_PAST_BLOCK_REASONS)[number];
 
+// POST /api/sessions/:id/void (app/api/sessions/void.ts): a visit logged
+// from the records, voided because it was logged in error
+// (docs/superpowers/specs/2026-09-23-void-logged-session-design.md).
+export const VoidSessionResponse = z.object({
+  sessionId: z.uuid(),
+  appointmentId: z.uuid(),
+  /** False when the visit was settled before the app and took no credit. */
+  creditRestored: z.boolean(),
+});
+export type VoidSessionResponse = z.infer<typeof VoidSessionResponse>;
+
+/** Why a void was refused as a conflict: the row is not one that may be voided. */
+export const VOID_CONFLICT_CODES = [
+  'not_a_records_row',
+  'not_completed',
+  'already_voided',
+  'session_in_use',
+] as const;
+export type VoidConflictCode = (typeof VOID_CONFLICT_CODES)[number];
+
 export const RecordPastSessionResponse = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('recorded'),
     sessionId: z.uuid(),
     appointmentId: z.uuid(),
     billed: z.enum(PAST_SESSION_BILLING),
+    /** Present when the request replaced a visit: the one voided in its place. */
+    voided: VoidSessionResponse.optional(),
   }),
   z.object({
     status: z.literal('blocked'),

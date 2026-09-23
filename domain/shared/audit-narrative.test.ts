@@ -464,6 +464,80 @@ describe('the equipment register and the setup photograph', () => {
     expect(/[\u0600-\u06FF]/.test(ar?.sentence ?? '')).toBe(true);
   });
 
+  it('says a past visit was voided as logged in error, in both languages, keeping the reason', () => {
+    const voided = event({
+      entityType: 'session',
+      action: 'session_voided',
+      reason: 'Logged against the wrong household',
+    });
+    expect(narrate(voided, 'en')).toEqual({
+      sentence: `${OWNER.name} voided a past visit that had been logged in error`,
+      reason: 'Logged against the wrong household',
+      kind: 'other',
+    });
+    expect(narrate(voided, 'ar')?.sentence).toBe(`${OWNER.name} ألغى زيارة سابقة سُجّلت بالخطأ`);
+  });
+
+  it('says why a visit was refused in words, never the raw code', () => {
+    const refused = (reason: string, locale: 'en' | 'ar' = 'en') =>
+      narrate(event({ entityType: 'session', action: 'refused', reason }), locale);
+    expect(refused('no_credit_available')?.sentence).toBe(
+      `${OWNER.name} was refused: no credit was available on the visit's day`,
+    );
+    for (const code of [
+      'no_credit_available',
+      'practitioner_overlap',
+      'client_overlap',
+      'in_the_future',
+      'too_old',
+      'reason_required',
+      'wrong_role',
+      'not_found',
+      'not_a_records_row',
+      'not_completed',
+      'already_voided',
+      'session_in_use',
+    ]) {
+      const en = refused(code);
+      expect(en?.sentence, code).toMatch(new RegExp(`^${OWNER.name} was refused: `));
+      expect(en?.sentence, code).not.toContain(code);
+      // The code is the sentence's own business; the Timeline prints no
+      // "Reason:" line that would say it again, raw.
+      expect(en?.reason, code).toBeNull();
+      const ar = refused(code, 'ar')?.sentence ?? '';
+      expect(/[\u0600-\u06FF]/.test(ar), code).toBe(true);
+      expect(ar, code).not.toContain(code);
+    }
+  });
+
+  it('says every reason when a gate gave several', () => {
+    expect(
+      narrate(
+        event({
+          entityType: 'session',
+          action: 'refused',
+          reason: 'practitioner_overlap, client_overlap',
+        }),
+        'en',
+      )?.sentence,
+    ).toBe(
+      `${OWNER.name} was refused: the practitioner already had a visit at that time; ` +
+        'the household already had a visit at that time',
+    );
+  });
+
+  it('falls back to a plain sentence for a refusal it has no words for, without the code', () => {
+    for (const reason of ['device_clock_out_of_range', 'no_credit_available, a_new_code', null]) {
+      const en = narrate(event({ entityType: 'session', action: 'refused', reason }), 'en');
+      expect(en?.sentence, String(reason)).toBe(
+        `${OWNER.name} was refused an action on this visit`,
+      );
+      expect(en?.reason, String(reason)).toBeNull();
+      const ar = narrate(event({ entityType: 'session', action: 'refused', reason }), 'ar');
+      expect(/[\u0600-\u06FF]/.test(ar?.sentence ?? ''), String(reason)).toBe(true);
+    }
+  });
+
   it('writes all four in Arabic too', () => {
     for (const overrides of [
       { entityType: 'kit', action: 'insert', newValues: { kind: 'amplifier' } },

@@ -552,6 +552,95 @@ function plainInsert(actor: string, entity: string, locale: Locale): string {
   return pick(t(`${actor} added ${withArticle(entity)}`, `${actor} أضاف ${entity}`), locale);
 }
 
+/**
+ * Why a visit was refused, in words (trunk round 60). A refusal on a visit is
+ * written by app/api/sessions/audit.ts's `logRefusal`, whose `reason` column
+ * carries the refusal's own codes joined with ", " — not anybody's typed
+ * reason — so the Timeline printed "Reason: no_credit_available". These are
+ * the codes the office's own acts on a visit write: logging one from the
+ * records and voiding one.
+ */
+const VISIT_REFUSAL: Record<string, Text> = {
+  no_credit_available: t(
+    "no credit was available on the visit's day",
+    'لم يكن هناك رصيد متاح في يوم الزيارة',
+  ),
+  practitioner_overlap: t(
+    'the practitioner already had a visit at that time',
+    'كان لدى الممارس زيارة أخرى في ذلك الوقت',
+  ),
+  client_overlap: t(
+    'the household already had a visit at that time',
+    'كان لدى الأسرة زيارة أخرى في ذلك الوقت',
+  ),
+  in_the_future: t("the visit's day had not come yet", 'لم يأتِ يوم الزيارة بعد'),
+  too_old: t("the visit's day was before the practice began", 'كان يوم الزيارة قبل بدء المركز'),
+  reason_required: t('no reason was given', 'لم يُذكر سبب'),
+  wrong_role: t('their role does not allow it', 'دوره لا يسمح بذلك'),
+  not_found: t('the visit could not be found', 'تعذّر العثور على الزيارة'),
+  not_authorised: t(
+    'the practitioner held no certification for the service on that day',
+    'لم يكن لدى الممارس شهادة للخدمة في ذلك اليوم',
+  ),
+  client_inactive: t('the household is not a current client', 'الأسرة ليست عميلًا حاليًا'),
+  date_of_birth_unknown: t(
+    'the date of birth is not on the record',
+    'تاريخ الميلاد غير مسجّل في السجل',
+  ),
+  not_a_records_row: t(
+    'only a visit logged from the records can be voided',
+    'لا يمكن إلغاء إلا زيارة سُجّلت من السجلات',
+  ),
+  not_completed: t('the visit was not completed', 'لم تكن الزيارة مكتملة'),
+  already_voided: t('the visit was already voided', 'كانت الزيارة ملغاة من قبل'),
+  session_in_use: t(
+    'a measurement, an invoice or a billing question still names the visit',
+    'لا يزال قياس أو فاتورة أو مسألة فوترة يشير إلى الزيارة',
+  ),
+};
+
+/** One refusal code in words, or null when this catalogue has none for it. */
+function visitRefusalWords(code: string, locale: Locale): string | null {
+  const known = VISIT_REFUSAL[code];
+  if (known) return pick(known, locale);
+  const consent = /^consent_missing_(.+)$/.exec(code);
+  const purpose = consent ? PURPOSE[consent[1]!] : undefined;
+  if (purpose) {
+    return pick(
+      t(
+        `there was no ${purpose.en} consent on file`,
+        `لم تكن هناك موافقة على ${purpose.ar} في الملف`,
+      ),
+      locale,
+    );
+  }
+  return null;
+}
+
+/**
+ * "{actor} was refused: {why}". Every code is said, in the order the gate
+ * gave them; one code this catalogue has no words for turns the whole row to
+ * the plain sentence, because half an explanation reads as the whole of one,
+ * and the raw code is never printed.
+ */
+function visitRefusalSentence(actor: string, event: AuditEvent, locale: Locale): string {
+  const codes = (event.reason ?? '')
+    .split(',')
+    .map((code) => code.trim())
+    .filter((code) => code.length > 0);
+  const words = codes.map((code) => visitRefusalWords(code, locale));
+  if (codes.length > 0 && words.every((w): w is string => w !== null)) {
+    return pick(
+      t(`${actor} was refused: ${words.join('; ')}`, `${actor} مُنع: ${words.join('؛ ')}`),
+      locale,
+    );
+  }
+  return pick(
+    t(`${actor} was refused an action on this visit`, `${actor} مُنع من إجراء على هذه الزيارة`),
+    locale,
+  );
+}
+
 function sentenceFor(event: AuditEvent, locale: Locale): string | null {
   const actor = actorPhrase(event, locale);
   const key = `${event.entityType}.${event.action}`;
@@ -848,6 +937,19 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         ),
         locale,
       );
+    // A visit logged from the records in error, withdrawn by the office
+    // (trunk round 60, app/api/sessions/void.ts). The row stays, stamped; the
+    // reason the office gave rides on this row and is shown beside it.
+    case 'session.session_voided':
+      return pick(
+        t(
+          `${actor} voided a past visit that had been logged in error`,
+          `${actor} ألغى زيارة سابقة سُجّلت بالخطأ`,
+        ),
+        locale,
+      );
+    case 'session.refused':
+      return visitRefusalSentence(actor, event, locale);
     case 'session.session.photo_filed':
       // The document id is on the row and is not said: what a reader needs is
       // that a photograph of the setup was filed against this visit, and by
@@ -1176,7 +1278,10 @@ export function narrate(event: AuditEvent, locale: Locale): Narration | null {
   // section 6, break-glass access), and that reason is the whole point of the
   // row — nulling it here would make the one read that demanded a reason the
   // one read that can never show it.
-  const keepReason = kind !== 'read' || event.subjectErased === true;
+  // A refused visit's reason column holds the refusal's codes, which the
+  // sentence has already said in words: shown again it would be the raw code.
+  const refusalCodes = event.entityType === 'session' && event.action === 'refused';
+  const keepReason = !refusalCodes && (kind !== 'read' || event.subjectErased === true);
   const reason = keepReason ? event.reason?.trim() || null : null;
   return { sentence, reason, kind };
 }

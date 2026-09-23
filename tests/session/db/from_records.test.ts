@@ -304,3 +304,169 @@ describe('logging a past visit', () => {
     expect(((await res.json()) as { reasons: string[] }).reasons[0]).toMatch(/overlap$/);
   });
 });
+
+describe('correcting a visit logged from the records', () => {
+  const CORRECTION = { 'x-reason': 'Logged at the wrong hour' };
+
+  async function logged(
+    clientIndex: number,
+    overrides: Record<string, unknown>,
+  ): Promise<{ sessionId: string; appointmentId: string }> {
+    const res = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      visit(clientIndex, overrides),
+      REASON,
+    );
+    if (res.status !== 201) throw new Error(`The visit was not logged: ${res.status}`);
+    const body = (await res.json()) as RecordPastSessionResponse;
+    if (body.status !== 'recorded') throw new Error('not recorded');
+    return { sessionId: body.sessionId, appointmentId: body.appointmentId };
+  }
+
+  let corrected: string;
+
+  it('corrects a visit: voids the old and logs the new in one act, the new being version 2 with the reason', async () => {
+    const old = await logged(WITH_PACKAGE, { on: '2026-03-09', startTime: '10:00' });
+    const res = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      visit(WITH_PACKAGE, { on: '2026-03-09', startTime: '11:00', replaces: old.sessionId }),
+      CORRECTION,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as RecordPastSessionResponse;
+    if (body.status !== 'recorded') throw new Error('not recorded');
+    expect(body.voided).toEqual({
+      sessionId: old.sessionId,
+      appointmentId: old.appointmentId,
+      creditRestored: true,
+    });
+
+    const before = await h.owner.query(
+      'select status::text, void_reason from session where id = $1',
+      [old.sessionId],
+    );
+    expect(before.rows[0]).toEqual({ status: 'voided', void_reason: 'Logged at the wrong hour' });
+    const after = await h.owner.query(
+      'select status::text, version, supersedes_id, amendment_reason, recorded_from ' +
+        'from session where id = $1',
+      [body.sessionId],
+    );
+    expect(after.rows[0]).toEqual({
+      status: 'completed',
+      version: 2,
+      supersedes_id: old.sessionId,
+      amendment_reason: 'Logged at the wrong hour',
+      recorded_from: 'records',
+    });
+
+    // Both halves are on the trail under the correction's one reason: the old
+    // one voided, the new one logged; the old one's own logging stands before.
+    const trail = await h.owner.query<{ action: string; entity_id: string; reason: string }>(
+      'select action, entity_id, reason from audit_log ' +
+        "where action in ('session_voided', 'session_recorded_from_records') " +
+        'and entity_id = any($1::uuid[]) order by id',
+      [[old.sessionId, body.sessionId]],
+    );
+    expect(trail.rows).toEqual([
+      {
+        action: 'session_recorded_from_records',
+        entity_id: old.sessionId,
+        reason: 'From the paper diary, before the app',
+      },
+      { action: 'session_voided', entity_id: old.sessionId, reason: 'Logged at the wrong hour' },
+      {
+        action: 'session_recorded_from_records',
+        entity_id: body.sessionId,
+        reason: 'Logged at the wrong hour',
+      },
+    ]);
+    corrected = old.sessionId;
+  });
+
+  it('refuses to correct a visit already voided, or one it cannot see, and logs both', async () => {
+    const again = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      visit(WITH_PACKAGE, { on: '2026-03-09', startTime: '13:00', replaces: corrected }),
+      CORRECTION,
+    );
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ error: 'conflict', code: 'already_voided' });
+    const unknown = '00000000-0000-4000-8000-0000000000dd';
+    const missing = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      visit(WITH_PACKAGE, { on: '2026-03-09', startTime: '13:00', replaces: unknown }),
+      CORRECTION,
+    );
+    expect(missing.status).toBe(404);
+    const logged = await h.owner.query<{ entity_id: string; reason: string }>(
+      "select entity_id, reason from audit_log where action = 'refused' " +
+        'and entity_id = any($1::uuid[]) order by id',
+      [[corrected, unknown]],
+    );
+    expect(logged.rows).toEqual([
+      { entity_id: corrected, reason: 'already_voided' },
+      { entity_id: unknown, reason: 'not_found' },
+    ]);
+    // Nothing new was written at 13:00.
+    const day = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from appointment where window_start = '2026-03-09T09:00:00Z'",
+    );
+    expect(day.rows[0]?.n).toBe('0');
+  });
+
+  it('rolls the void back when the new visit is refused', async () => {
+    const old = await logged(WITH_PACKAGE, { on: '2026-03-10', startTime: '10:00' });
+    // A third visit, the same practitioner's, at the hour the correction names.
+    await logged(WITHOUT_PACKAGE, {
+      on: '2026-03-10',
+      startTime: '12:00',
+      billing: 'settled_outside',
+    });
+    const res = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      visit(WITH_PACKAGE, { on: '2026-03-10', startTime: '12:15', replaces: old.sessionId }),
+      CORRECTION,
+    );
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ status: 'blocked', reasons: ['practitioner_overlap'] });
+
+    // The wrong visit is never gone while the right one is missing.
+    const still = await h.owner.query(
+      'select s.status::text as session, s.voided_at, a.status::text as appointment ' +
+        'from session s join appointment a on a.id = s.appointment_id where s.id = $1',
+      [old.sessionId],
+    );
+    expect(still.rows[0]).toEqual({
+      session: 'completed',
+      voided_at: null,
+      appointment: 'completed',
+    });
+    const credit = await h.owner.query<{ status: string; replaced: string }>(
+      'select e.status::text as status, (select count(*) from entitlement r ' +
+        'where r.replaces_entitlement_id = e.id)::text as replaced ' +
+        'from entitlement e where e.consumed_by_session_id = $1',
+      [old.sessionId],
+    );
+    expect(credit.rows).toEqual([{ status: 'consumed', replaced: '0' }]);
+    const successor = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from session where supersedes_id = $1',
+      [old.sessionId],
+    );
+    expect(successor.rows[0]?.n).toBe('0');
+    const voidedOnTrail = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'session_voided' and entity_id = $1",
+      [old.sessionId],
+    );
+    expect(voidedOnTrail.rows[0]?.n).toBe('0');
+  });
+});

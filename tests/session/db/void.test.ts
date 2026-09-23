@@ -32,6 +32,11 @@ const VOID_REASON = 'Logged against the wrong household';
 
 /** A member of staff who keeps the books and nothing else; the seed has none. */
 const FINANCE_ONLY = '000000e9-0000-4000-8000-000000000001';
+const FINANCE_AUTH = '000000e9-0000-4000-8000-0000000000f1';
+/** Another practice entirely, and its owner, who may void nothing of this one. */
+const OTHER_PRACTICE = '000000e9-0000-4000-8000-0000000000b0';
+const OTHER_OWNER = '000000e9-0000-4000-8000-0000000000b1';
+const OTHER_OWNER_AUTH = '000000e9-0000-4000-8000-0000000000b2';
 /** A visit closed on the phone, and a records row that never completed. */
 const DEVICE_SESSION = '000000e9-0000-4000-8000-000000000002';
 const UNFINISHED_SESSION = '000000e9-0000-4000-8000-000000000003';
@@ -48,6 +53,8 @@ let tenantId: string;
 let wrong: { sessionId: string; appointmentId: string };
 /** The credit the wrong visit took. */
 let wrongCredit: { id: string; package_purchase_id: string };
+/** The visits the API refused, read back by the case after. */
+let refused: { target: string; named: string };
 
 function userId(index: number): string {
   const user = h.data.users[index];
@@ -129,6 +136,29 @@ async function refusedWith(code: string, actor: string, sessionId: string): Prom
   expect(outcome).toEqual({ ok: false, code: '23001', message: code });
 }
 
+/** The void over the API, as the screens will post it. */
+function voidOverApi(
+  sessionId: string,
+  as: { seeded: number } | { authId: string } = { seeded: SEEDED.owner },
+  headers: Record<string, string> = { 'x-reason': VOID_REASON },
+): Promise<Response> {
+  // No body to speak of, but a POST is JSON or the door answers 415.
+  const path = `/api/sessions/${sessionId}/void`;
+  return 'seeded' in as
+    ? h.call('POST', path, as.seeded, {}, headers)
+    : h.callAs('POST', path, as.authId, {}, headers);
+}
+
+/** The refusals the trail holds for one visit, oldest first. */
+async function refusalsFor(sessionId: string): Promise<string[]> {
+  const { rows } = await h.owner.query<{ reason: string }>(
+    "select reason from audit_log where action = 'refused' and entity_type = 'session' " +
+      'and entity_id = $1 order by id',
+    [sessionId],
+  );
+  return rows.map((r) => r.reason);
+}
+
 /** Runs `sql` as the owner with the request's stamps and returns the SQLSTATE it failed with. */
 async function failureOf(sql: string, params: unknown[] = []): Promise<string | undefined> {
   await h.owner.query('begin');
@@ -192,9 +222,19 @@ beforeAll(async () => {
   await seedUser(h.owner, {
     id: FINANCE_ONLY,
     tenantId,
-    authId: null,
+    authId: FINANCE_AUTH,
     displayName: `${GIVEN_NAMES[3]!.en} ${FAMILY_NAMES[2]!.en}`,
     roles: ['finance'],
+  });
+  await h.owner.query("insert into tenant (id, legal_name) values ($1, 'Synthetic Studio B')", [
+    OTHER_PRACTICE,
+  ]);
+  await seedUser(h.owner, {
+    id: OTHER_OWNER,
+    tenantId: OTHER_PRACTICE,
+    authId: OTHER_OWNER_AUTH,
+    displayName: `${GIVEN_NAMES[4]!.en} ${FAMILY_NAMES[3]!.en}`,
+    roles: ['owner'],
   });
 
   wrong = await logVisit(WITH_PACKAGE);
@@ -523,6 +563,112 @@ describe('voiding a visit logged from the records', () => {
     } finally {
       await h.owner.query('rollback');
     }
+  });
+
+  it('voids over the API with a reason, logs session_voided, and answers what came back', async () => {
+    const target = await logVisit(WITH_PACKAGE, { on: '2026-03-19' });
+    const res = await voidOverApi(target.sessionId);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      sessionId: target.sessionId,
+      appointmentId: target.appointmentId,
+      creditRestored: true,
+    });
+    const session = await h.owner.query<{ status: string }>(
+      'select status::text from session where id = $1',
+      [target.sessionId],
+    );
+    expect(session.rows[0]?.status).toBe('voided');
+    const trail = await h.owner.query(
+      'select actor_id, client_id, reason from audit_log ' +
+        "where action = 'session_voided' and entity_type = 'session' and entity_id = $1",
+      [target.sessionId],
+    );
+    expect(trail.rows).toEqual([
+      { actor_id: userId(SEEDED.owner), client_id: h.clientId(WITH_PACKAGE), reason: VOID_REASON },
+    ]);
+  });
+
+  it("answers 400 without a reason, 403 for finance, 404 for another practice's visit, 409 with the code for each refusal", async () => {
+    const target = await logVisit(WITH_PACKAGE, { on: '2026-03-20' });
+
+    const silent = await voidOverApi(target.sessionId, { seeded: SEEDED.owner }, {});
+    expect(silent.status).toBe(400);
+    expect(await silent.json()).toMatchObject({ code: 'reason_required' });
+    const blank = await voidOverApi(
+      target.sessionId,
+      { seeded: SEEDED.owner },
+      { 'x-reason': '  ' },
+    );
+    expect(blank.status).toBe(400);
+    expect(await blank.json()).toMatchObject({ code: 'reason_required' });
+
+    const notAnId = await voidOverApi('not-a-session');
+    expect(notAnId.status).toBe(400);
+    expect(await notAnId.json()).toMatchObject({ code: 'invalid_request' });
+
+    const finance = await voidOverApi(target.sessionId, { authId: FINANCE_AUTH });
+    expect(finance.status).toBe(403);
+    expect(await finance.json()).toMatchObject({ code: 'wrong_role' });
+    const practitioner = await voidOverApi(target.sessionId, { seeded: SEEDED.practitioner });
+    expect(practitioner.status).toBe(403);
+
+    // Another practice's owner learns nothing: not a 403 that says the visit exists.
+    const foreign = await voidOverApi(target.sessionId, { authId: OTHER_OWNER_AUTH });
+    expect(foreign.status).toBe(404);
+    const unknown = await voidOverApi('000000e9-0000-4000-8000-0000000000dd');
+    expect(unknown.status).toBe(404);
+
+    const named = await logVisit(WITH_PACKAGE, { on: '2026-03-23' });
+    await writeAsOwner(
+      'insert into assessment (tenant_id, client_id, performed_at, performed_by_practitioner_id, ' +
+        'instrument, instrument_version, derived, session_id, created_by) values ($1, $2, ' +
+        "'2026-03-23T12:00:00Z', $3, 'questionnaire', '1', '{}', $4, $5)",
+      [tenantId, h.clientId(WITH_PACKAGE), practitionerId, named.sessionId, userId(SEEDED.owner)],
+    );
+    for (const [sessionId, code] of [
+      [DEVICE_SESSION, 'not_a_records_row'],
+      [UNFINISHED_SESSION, 'not_completed'],
+      [wrong.sessionId, 'already_voided'],
+      [named.sessionId, 'session_in_use'],
+    ] as const) {
+      const res = await voidOverApi(sessionId);
+      expect(res.status, code).toBe(409);
+      expect(await res.json(), code).toMatchObject({ error: 'conflict', code });
+    }
+
+    // Nothing was voided by any of it.
+    const still = await h.owner.query<{ status: string }>(
+      'select status::text from session where id = any($1::uuid[]) order by id',
+      [[target.sessionId, named.sessionId]],
+    );
+    expect(still.rows).toEqual([{ status: 'completed' }, { status: 'completed' }]);
+
+    refused = { target: target.sessionId, named: named.sessionId };
+  });
+
+  it('logs every refusal before answering', async () => {
+    // The two with no reason, finance, the practitioner, then the other
+    // practice's owner, each against the visit it asked about.
+    expect(await refusalsFor(refused.target)).toEqual([
+      'reason_required',
+      'reason_required',
+      'wrong_role',
+      'wrong_role',
+      'not_found',
+    ]);
+    expect(await refusalsFor(DEVICE_SESSION)).toContain('not_a_records_row');
+    expect(await refusalsFor(UNFINISHED_SESSION)).toContain('not_completed');
+    expect(await refusalsFor(wrong.sessionId)).toContain('already_voided');
+    expect(await refusalsFor(refused.named)).toEqual(['session_in_use']);
+    // The refusal a practice's own staff met names the household; the other
+    // practice's names nobody, and is kept in that practice's own trail.
+    const foreign = await h.owner.query<{ tenant_id: string; client_id: string | null }>(
+      "select tenant_id, client_id from audit_log where action = 'refused' and entity_id = $1 " +
+        "and reason = 'not_found'",
+      [refused.target],
+    );
+    expect(foreign.rows).toEqual([{ tenant_id: OTHER_PRACTICE, client_id: null }]);
   });
 
   it('leaves the audit chain intact', async () => {
