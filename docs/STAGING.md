@@ -2498,3 +2498,15 @@ definer flag, its pinned search path, whether `app_role` may run it and whether
 `app_role` may execute both and `public` neither; the ledger `c82f621f…` over
 111 rows. Production was then applied the same way and read back the same nine
 values; the live pass that followed is in `docs/PRODUCTION.md` under this date.
+
+## What was done on 2026-09-24: the staging pass for trunk rounds 60 and 61 — migrations 924, 969, 970 and 971
+
+Applied by hand from `main` `7d64bf9a`, each file's statements with its ledger
+row in the same `apply_migration` call, 20:17–20:21 UTC on 23 September (00:17
++04 on the 24th), in the order 924, 969, 970, 971 — the last three in separate
+calls because 969 adds `voided` to two enums and 970 is the first file that may
+name it in a constraint. Ledger 111 → 115. No policy file. The nine-category
+fingerprint (see the thirty-seventh pass in `docs/PRODUCTION.md`) is identical
+to a freshly migrated local database and to production. Staging held 23
+sessions, none logged from the records and none superseded, so 971's composite
+key on `supersedes_id` applied to no row. Nothing else was written.
