@@ -2465,3 +2465,36 @@ and CI ran them on the merged commit), no bundle was built for staging and
 nothing was walked on it. Staging has no second owner to write and needs none.
 `app.verify_audit_chain()` was not run on staging; it was on production, where
 it mattered.
+
+## What was done on 2026-09-23: the staging pass for trunk round 59 — migration 968
+
+**17:03 UTC on 23 September, which is 21:03 in Dubai**, on the operator's
+word ("continue", 20:57 +04, read as the word for the thirty-fifth live pass
+and said so before anything was applied). `main` at `34b9ddb1`, pull request
+211, the round whose record is `docs/CHANGE-REQUESTS/trunk-round-59.md`; its
+"Going live" section is the recipe, and this is the staging leg of step 2 and
+step 3.
+
+**Read first.** `schema_migration` held 110 rows and no `968`;
+`app.unlink_household_contact` did not exist. The file was hashed from
+`origin/main` after the merge and not from the worktree: sha256
+`69b88e8d…7f51`, the digest `db/runner/plan.ts` computes over the file's text.
+The hold protocol found one other session on the laptop, which answered clear:
+reading only, nothing to be deployed or written for an hour.
+
+**Applied** through Supabase's migration tool in one call: the file's
+statements whole and in the file's order, followed in the same transaction by
+its bookkeeping row carrying that sha256 — what `db/runner/apply.ts` does.
+Nothing else: the grant on the new function is inside the migration, and the
+round changed no policy file. Read back: **111 rows.**
+
+**Fingerprinted against a local database built by the runner from `main`**
+(the worktree's, migrated before the pass: nothing to apply, 27 policy files
+re-applied). The two functions the round writes or restates, each with its
+definer flag, its pinned search path, whether `app_role` may run it and whether
+`public` may, and the whole ledger. **All identical, staging against local:**
+`app.erase_client` definition `0173e378…`, `app.unlink_household_contact`
+`bc91705d…`, both `security definer` with `search_path = pg_catalog, pg_temp`,
+`app_role` may execute both and `public` neither; the ledger `c82f621f…` over
+111 rows. Production was then applied the same way and read back the same nine
+values; the live pass that followed is in `docs/PRODUCTION.md` under this date.

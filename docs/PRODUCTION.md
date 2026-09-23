@@ -2901,3 +2901,102 @@ step is where to look, and the record above says exactly what it wrote. Every
 other row now opens as a profile with two tabs, Profile and Access, and a
 switch off is a role taken away on the next click that person makes. For the
 two admins, the list is what they keep; every button on it is gone.
+
+## What was done on 2026-09-23: the thirty-fifth live pass — an act aimed at a household spares a colleague
+
+Production runs `main` `34b9ddb1`, build `01a0cf3e`. One migration and no
+policy file: `main` holds 111 migration files and both databases stand at 111.
+No row was written to production by hand and none needed to be: no colleague is
+linked as a contact of any household there, so the migration changed no data.
+
+**Why it began.** Trunk round 59 (pull request 211,
+`docs/CHANGE-REQUESTS/trunk-round-59.md`): ending a household's access ends the
+link and never the colleague. Client erasure no longer archives the sign-in of
+a member of staff who happens to be a contact of the erased household, and the
+household portal's Revoke unlinks such a contact instead of refusing. Merged at
+07:52 UTC on 22 September on the operator's "go", read as the merge alone; the
+word to go live was asked separately and the session ended without it.
+
+**The word.** "continue", at 20:57 +04 (16:57 UTC) on 23 September, the
+operator's first message to a session resumed a day later, whose recorded last
+state was that the round was merged, not live, and waiting on his word. That
+was read as the word for this pass, said so to him before anything was applied,
+and is recorded here as a reading of one word rather than a quotation of "go
+live". The pass began at 17:00 UTC.
+
+**Before-state, 17:00 to 17:06 UTC.** `main` at `34b9ddb1` and the worktree
+detached on it, clean; one other session on the laptop, which answered the hold
+check at 17:01 with clear — reading only, nothing to be deployed, built or
+written for an hour. Entry `index-BgXEF-Lp.js`, shell stylesheet
+`index-qCiLscI6.css`, portal screen `PortalAccessPage-6JvsAYoC.js` (6,694
+bytes, saved, holding no `works at the practice`), health 200 in 0.23 s. Both
+databases at 110, no `968` row, `app.unlink_household_contact` absent from
+both. On production, the read the recipe asks for before the migration: no
+household contact's account holds any role at the practice — **no rows**, as
+at the thirty-fourth pass.
+
+**Databases, staging then production, 17:03 to 17:06 UTC.**
+`968_erasure_and_revoke_spare_a_colleague`, the file's statements whole and its
+ledger row in the same call, with the sha256 of the file's text taken from
+`origin/main` after the merge (`69b88e8d…7f51`; `db/runner/plan.ts` writes the
+same digest). Both ledgers read back **111**. Nothing else was applied: the
+grant on the new function is in the migration and no policy file changed.
+
+**Fingerprint identical across local, staging and production.** The local
+reference is the worktree's runner-built database, migrated from `main` before
+the pass (nothing to apply, 27 policy files re-applied). `app.erase_client`
+definition `0173e378…` and `app.unlink_household_contact` `bc91705d…`, both
+`security definer`, both with `search_path = pg_catalog, pg_temp`, `app_role`
+may execute both and `public` neither; the ledger `c82f621f…` over 111 rows.
+Every one of the nine values the same on all three databases. The old build
+answered health 200 on the new schema, which is the safe direction the round
+note describes: the old route's staff branch answers 409 before any write and
+never calls the new function, and the old erasure call reaches the new, safer
+body.
+
+**The pass.** Archive `mcwellness-34b9ddb1.tar.gz` from `origin/main`,
+6,737,061 bytes, with its `mcwellness/` root folder; `works at the practice`
+read back out of `app/admin/portal/PortalAccessPage.tsx` inside the archive
+before it left. Stored build settings read back and sent unchanged (Node 24,
+`hono`, root `mcwellness`, output `.`, `build:production`,
+`app/api/start.mjs`, npm). TUS create 201, PATCH 204 with `upload-offset` equal
+to the size, the keys read by `curl` from a file of mode 0600 deleted in the
+same command — the recipe. Build asked 17:09:45 UTC, read `completed`
+17:11:10; the served names had changed by the 17:11:06 poll.
+
+**Proved to be this tree.** The stylesheet did not move, and should not have:
+the round changed no style, so the proof is the round's own sentence read off
+the live site. The entry is `index-CNBfWus0.js`; the portal screen's script,
+read out of it, is `PortalAccessPage-SI6bADMD.js`, 6,962 bytes against the old
+6,694, and it holds `This person works at the practice, so a household link
+cannot be issued to their sign-in` — the sentence round 59 gave the screen for
+a refusal that used to read "Try again". The old chunk, saved before the
+upload, holds it nowhere. Both old names answer 404, and so does a name that
+never existed.
+
+**The process is the new one.** The runtime log holds fresh start-up blocks at
+17:11:04 and 17:11:11, each ending "Serving the built app from dist/" and "API
+listening", with `started_at` 17:11:04 against `last_deployed_at` 17:11:10 and
+no error line; a third block at 17:14:26 is the host's own and carries no
+error either. **No restart — eighteenth consecutive.** Health 200 in 0.15 s,
+deep 200 in 0.20 s.
+
+**Not checked, and why.** Neither new behaviour was provoked on production:
+both need a colleague linked as a household's contact, and production has
+none. Both were watched red and then green against a real database before
+merge — fifteen cases in `tests/db/spare_a_colleague.test.ts`, the old
+deadlock geometry in `tests/db/spare_a_colleague_race.test.ts` taking exactly
+the one-second deadlock timeout against migration 964 and finishing cleanly
+against 968 — and CI's `verify-db` ran the same on the merged commit.
+
+**Still the operator's, from round 59's note.** The erasure letter's "account
+… has been closed" clause overstates for a colleague's account, which is now
+spared; the wording is approved wording 1.0 and changing it is his call with
+the lawyer's. And one clause of `docs/SPEC/00-data-model.md` is asked for in
+the round's change request.
+
+**For the owner.** Nothing to do, and nothing looks different on your own
+screen today. Click back into the window and choose any section in the
+sidebar and it brings this version by itself. If a member of staff is ever
+linked as a contact of a household, erasing that household or ending its
+portal access now leaves their sign-in alone.
