@@ -1,0 +1,476 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { PackagesResponse } from '../../../app/api/billing/ledger-schema';
+import type { RecordPastSessionResponse } from '../../../app/api/sessions/schema';
+import { SEED_TODAY } from '../../../db/seed/generate';
+import { FAMILY_NAMES, GIVEN_NAMES } from '../../../db/seed/names';
+import {
+  SEEDED,
+  SILVER_CODE,
+  setPracticePrices,
+  silverInput,
+  startHarness,
+  type Harness,
+} from '../../billing/db/support';
+import { seedUser } from '../../db/helpers';
+
+/**
+ * Voiding a visit logged from the records (migrations 969 and 970; trunk round
+ * 60, docs/superpowers/specs/2026-09-23-void-logged-session-design.md): the
+ * wrong row stays, stamped with when, by whom and why; its appointment stops
+ * holding the window; the credit it took comes back the way a waiver gives one
+ * back; and the close guard admits that one transition and nothing else.
+ *
+ * The visits are logged through the API the server builds, on the synthetic
+ * practice; the void is `app.void_recorded_session` called as the API role
+ * with the request's stamps, which is what the route will do. Every person is
+ * the seed's or named from db/seed/names.ts, and every id is synthetic.
+ */
+
+const NOW = () => new Date(`${SEED_TODAY}T08:00:00.000Z`);
+const REASON = { 'x-reason': 'From the paper diary, before the app' };
+const VOID_REASON = 'Logged against the wrong household';
+
+/** A member of staff who keeps the books and nothing else; the seed has none. */
+const FINANCE_ONLY = '000000e9-0000-4000-8000-000000000001';
+/** A visit closed on the phone, and a records row that never completed. */
+const DEVICE_SESSION = '000000e9-0000-4000-8000-000000000002';
+const UNFINISHED_SESSION = '000000e9-0000-4000-8000-000000000003';
+const REQUEST_ID = '000000e9-0000-4000-8000-0000000000ee';
+
+const WITH_PACKAGE = 4;
+const WITHOUT_PACKAGE = 5;
+
+let h: Harness;
+let practitionerId: string;
+let nfSession: string;
+let tenantId: string;
+/** The wrong visit, logged first and voided by the first case. */
+let wrong: { sessionId: string; appointmentId: string };
+/** The credit the wrong visit took. */
+let wrongCredit: { id: string; package_purchase_id: string };
+
+function userId(index: number): string {
+  const user = h.data.users[index];
+  if (!user) throw new Error(`No seeded user ${index}.`);
+  return user.id;
+}
+
+function visit(clientIndex: number, overrides: Record<string, unknown> = {}) {
+  const client = h.data.clients[clientIndex];
+  if (!client) throw new Error(`No seeded client ${clientIndex}.`);
+  return {
+    clientId: client.id,
+    practitionerId,
+    serviceTypeId: nfSession,
+    locationId: client.primaryLocationId,
+    deliveryMode: 'home',
+    on: '2026-03-04',
+    startTime: '15:30',
+    billing: 'credit',
+    ...overrides,
+  };
+}
+
+async function logVisit(
+  clientIndex: number,
+  overrides: Record<string, unknown> = {},
+): Promise<{ sessionId: string; appointmentId: string }> {
+  const res = await h.call(
+    'POST',
+    '/api/sessions/from-records',
+    SEEDED.owner,
+    visit(clientIndex, overrides),
+    REASON,
+  );
+  if (res.status !== 201) throw new Error(`The visit was not logged: ${res.status}`);
+  const body = (await res.json()) as RecordPastSessionResponse;
+  if (body.status !== 'recorded') throw new Error('not recorded');
+  return { sessionId: body.sessionId, appointmentId: body.appointmentId };
+}
+
+type Outcome =
+  | { ok: true; result: { sessionId: string; appointmentId: string; creditRestored: boolean } }
+  | { ok: false; code: string | undefined; message: string | undefined };
+
+/**
+ * The void as the route will make it: the API role, the practice, the actor
+ * and their roles stamped transaction-local, then the function. Committed when
+ * it succeeds, so the next request sees it; rolled back when it refuses.
+ */
+async function voidAs(actor: string, sessionId: string, reason = VOID_REASON): Promise<Outcome> {
+  await h.owner.query('begin');
+  try {
+    await h.owner.query('set local role app_role');
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.actor_roles', 'owner', true), set_config('app.request_id', $3, true), " +
+        "set_config('app.reason', $4, true)",
+      [tenantId, actor, REQUEST_ID, reason],
+    );
+    const { rows } = await h.owner.query<{ result: Outcome & { ok: true } }>(
+      'select app.void_recorded_session($1, $2) as result',
+      [sessionId, reason],
+    );
+    await h.owner.query('commit');
+    return {
+      ok: true,
+      result: rows[0]!.result as unknown as Extract<Outcome, { ok: true }>['result'],
+    };
+  } catch (error) {
+    await h.owner.query('rollback');
+    const e = error as { code?: string; message?: string };
+    return { ok: false, code: e.code, message: e.message };
+  }
+}
+
+/** Expects the void to be refused with restrict_violation and exactly this code. */
+async function refusedWith(code: string, actor: string, sessionId: string): Promise<void> {
+  const outcome = await voidAs(actor, sessionId);
+  expect(outcome).toEqual({ ok: false, code: '23001', message: code });
+}
+
+/** Runs `sql` as the owner with the request's stamps and returns the SQLSTATE it failed with. */
+async function failureOf(sql: string, params: unknown[] = []): Promise<string | undefined> {
+  await h.owner.query('begin');
+  try {
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.request_id', $3, true)",
+      [tenantId, userId(SEEDED.owner), REQUEST_ID],
+    );
+    await h.owner.query(sql, params);
+    return undefined;
+  } catch (error) {
+    return (error as { code?: string }).code;
+  } finally {
+    await h.owner.query('rollback');
+  }
+}
+
+/** Writes rows as the owner with the request's stamps, committed. */
+async function writeAsOwner(sql: string, params: unknown[] = []): Promise<void> {
+  await h.owner.query('begin');
+  try {
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.request_id', $3, true)",
+      [tenantId, userId(SEEDED.owner), REQUEST_ID],
+    );
+    await h.owner.query(sql, params);
+    await h.owner.query('commit');
+  } catch (error) {
+    await h.owner.query('rollback');
+    throw error;
+  }
+}
+
+beforeAll(async () => {
+  h = await startHarness(NOW);
+  tenantId = h.data.tenant.id;
+  await setPracticePrices(h, SEED_TODAY);
+  const created = await h.call(
+    'POST',
+    '/api/billing/packages',
+    SEEDED.owner,
+    silverInput(h, SEED_TODAY),
+  );
+  if (created.status !== 201) throw new Error('Silver could not be created.');
+  const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+  const silver = ((await list.json()) as PackagesResponse).packages.find(
+    (p) => p.code === SILVER_CODE,
+  );
+  if (!silver) throw new Error('Silver is missing.');
+  const sale = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+    packageId: silver.id,
+    clientId: h.clientId(WITH_PACKAGE),
+    purchasedOn: SEED_TODAY,
+  });
+  if (sale.status !== 201) throw new Error('Silver could not be sold.');
+  practitionerId = h.data.practitioners[0]!.id;
+  nfSession = h.serviceTypeId('nf-session');
+
+  await seedUser(h.owner, {
+    id: FINANCE_ONLY,
+    tenantId,
+    authId: null,
+    displayName: `${GIVEN_NAMES[3]!.en} ${FAMILY_NAMES[2]!.en}`,
+    roles: ['finance'],
+  });
+
+  wrong = await logVisit(WITH_PACKAGE);
+  const credit = await h.owner.query<{ id: string; package_purchase_id: string }>(
+    "select id, package_purchase_id from entitlement where consumed_by_session_id = $1 and status = 'consumed'",
+    [wrong.sessionId],
+  );
+  if (!credit.rows[0]) throw new Error('The wrong visit took no credit.');
+  wrongCredit = credit.rows[0];
+});
+
+afterAll(async () => {
+  await h.close();
+});
+
+describe('voiding a visit logged from the records', () => {
+  it('stamps the session and the appointment voided with when, who and why', async () => {
+    const before = await h.owner.query(
+      'select checked_in_at, started_at, ended_at, closed_at, service_type_id, practitioner_id ' +
+        'from session where id = $1',
+      [wrong.sessionId],
+    );
+
+    const outcome = await voidAs(userId(SEEDED.owner), wrong.sessionId);
+    expect(outcome).toEqual({
+      ok: true,
+      result: {
+        sessionId: wrong.sessionId,
+        appointmentId: wrong.appointmentId,
+        creditRestored: true,
+      },
+    });
+
+    const session = await h.owner.query(
+      'select status::text, voided_at is not null as stamped, voided_by, void_reason ' +
+        'from session where id = $1',
+      [wrong.sessionId],
+    );
+    expect(session.rows[0]).toEqual({
+      status: 'voided',
+      stamped: true,
+      voided_by: userId(SEEDED.owner),
+      void_reason: VOID_REASON,
+    });
+    // The row keeps everything it was logged with: a void is a stamp, not an edit.
+    const after = await h.owner.query(
+      'select checked_in_at, started_at, ended_at, closed_at, service_type_id, practitioner_id ' +
+        'from session where id = $1',
+      [wrong.sessionId],
+    );
+    expect(after.rows[0]).toEqual(before.rows[0]);
+
+    const appointment = await h.owner.query(
+      'select status::text, voided_at is not null as stamped, voided_by, void_reason ' +
+        'from appointment where id = $1',
+      [wrong.appointmentId],
+    );
+    expect(appointment.rows[0]).toEqual({
+      status: 'voided',
+      stamped: true,
+      voided_by: userId(SEEDED.owner),
+      void_reason: VOID_REASON,
+    });
+
+    // The trail names the person who voided it, under the reason.
+    const trail = await h.owner.query<{ actor_id: string; reason: string }>(
+      "select actor_id, reason from audit_log where entity_type = 'session' and entity_id = $1 " +
+        "and action = 'update'",
+      [wrong.sessionId],
+    );
+    expect(trail.rows).toEqual([{ actor_id: userId(SEEDED.owner), reason: VOID_REASON }]);
+  });
+
+  it('frees the window: the right visit can then be logged at the same hour', async () => {
+    const res = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      visit(WITH_PACKAGE),
+      REASON,
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it('gives the credit back as a replacement and the books see a credit restored', async () => {
+    const waived = await h.owner.query(
+      'select status::text, waiver_reason, waived_at is not null as stamped, waived_by, ' +
+        'consumed_by_session_id from entitlement where id = $1',
+      [wrongCredit.id],
+    );
+    expect(waived.rows[0]).toEqual({
+      status: 'waived',
+      waiver_reason: VOID_REASON,
+      stamped: true,
+      waived_by: userId(SEEDED.owner),
+      consumed_by_session_id: wrong.sessionId,
+    });
+
+    const same =
+      'client_id, service_type_id, source_type, package_purchase_id, invoice_id, ' +
+      'allocated_net_fils, vat_rate_basis_points, vat_setting_version, expires_on';
+    const original = await h.owner.query(`select ${same} from entitlement where id = $1`, [
+      wrongCredit.id,
+    ]);
+    const replacement = await h.owner.query(
+      `select ${same}, created_by from entitlement where replaces_entitlement_id = $1`,
+      [wrongCredit.id],
+    );
+    expect(replacement.rows).toEqual([{ ...original.rows[0], created_by: userId(SEEDED.owner) }]);
+
+    // The purchase's credits still total what was paid: the waived row out,
+    // its replacement counted in its place (403's deferred check).
+    const sums = await h.owner.query<{ paid: number; allocated: string }>(
+      'select pp.net_fils as paid, (select sum(e.allocated_net_fils) from entitlement e ' +
+        "where e.package_purchase_id = pp.id and e.status <> 'waived')::text as allocated " +
+        'from package_purchase pp where pp.id = $1',
+      [wrongCredit.package_purchase_id],
+    );
+    expect(Number(sums.rows[0]?.allocated)).toBe(Number(sums.rows[0]?.paid));
+
+    // The books read it as the waiver event, with a replacement: a credit restored.
+    await h.owner.query('begin');
+    try {
+      await h.owner.query('set local role app_role');
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.actor_roles', 'owner', true)",
+        [tenantId, userId(SEEDED.owner)],
+      );
+      const events = await h.owner.query(
+        'select source_event, has_replacement from app.unposted_money_events() ' +
+          "where source_table = 'entitlement' and source_id = $1 order by source_event",
+        [wrongCredit.id],
+      );
+      expect(events.rows).toEqual([
+        { source_event: 'credit.consumed', has_replacement: null },
+        { source_event: 'credit.waived', has_replacement: true },
+      ]);
+    } finally {
+      await h.owner.query('rollback');
+    }
+  });
+
+  it('restores nothing for a visit settled before the app', async () => {
+    const settled = await logVisit(WITHOUT_PACKAGE, {
+      on: '2026-03-05',
+      billing: 'settled_outside',
+    });
+    const count = async () =>
+      Number(
+        (
+          await h.owner.query<{ n: string }>(
+            'select count(*)::text as n from entitlement where client_id = $1',
+            [h.clientId(WITHOUT_PACKAGE)],
+          )
+        ).rows[0]?.n,
+      );
+    const before = await count();
+    const outcome = await voidAs(userId(SEEDED.owner), settled.sessionId);
+    expect(outcome).toEqual({
+      ok: true,
+      result: {
+        sessionId: settled.sessionId,
+        appointmentId: settled.appointmentId,
+        creditRestored: false,
+      },
+    });
+    expect(await count()).toBe(before);
+  });
+
+  it('refuses a visit closed on the phone', async () => {
+    await writeAsOwner(
+      'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+        'checked_in_at, started_at, ended_at, status, recorded_from) values ($1, $2, $3, $4, $5, ' +
+        "'2026-03-10T10:00:00Z', '2026-03-10T10:05:00Z', '2026-03-10T11:00:00Z', 'completed', 'device')",
+      [DEVICE_SESSION, tenantId, h.clientId(WITH_PACKAGE), practitionerId, nfSession],
+    );
+    await refusedWith('not_a_records_row', userId(SEEDED.owner), DEVICE_SESSION);
+  });
+
+  it('refuses a visit that is not completed', async () => {
+    await writeAsOwner(
+      'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+        'checked_in_at, status, recorded_from) values ($1, $2, $3, $4, $5, ' +
+        "'2026-03-11T10:00:00Z', 'scheduled', 'records')",
+      [UNFINISHED_SESSION, tenantId, h.clientId(WITH_PACKAGE), practitionerId, nfSession],
+    );
+    await refusedWith('not_completed', userId(SEEDED.owner), UNFINISHED_SESSION);
+  });
+
+  it('refuses a visit already voided', async () => {
+    await refusedWith('already_voided', userId(SEEDED.owner), wrong.sessionId);
+  });
+
+  it('refuses a visit an assessment still names', async () => {
+    const named = await logVisit(WITH_PACKAGE, { on: '2026-03-12' });
+    await writeAsOwner(
+      'insert into assessment (tenant_id, client_id, performed_at, performed_by_practitioner_id, ' +
+        'instrument, instrument_version, derived, session_id, created_by) values ($1, $2, ' +
+        "'2026-03-12T12:00:00Z', $3, 'questionnaire', '1', '{}', $4, $5)",
+      [tenantId, h.clientId(WITH_PACKAGE), practitionerId, named.sessionId, userId(SEEDED.owner)],
+    );
+    await refusedWith('session_in_use', userId(SEEDED.owner), named.sessionId);
+    const still = await h.owner.query<{ status: string }>(
+      'select status::text from session where id = $1',
+      [named.sessionId],
+    );
+    expect(still.rows[0]?.status).toBe('completed');
+  });
+
+  it('refuses a finance actor and a practitioner', async () => {
+    const target = await logVisit(WITH_PACKAGE, { on: '2026-03-13' });
+    await refusedWith('wrong_role', FINANCE_ONLY, target.sessionId);
+    await refusedWith('wrong_role', userId(SEEDED.practitioner), target.sessionId);
+    // And a reason that is only whitespace is no reason, whoever gives it.
+    expect(await voidAs(userId(SEEDED.owner), target.sessionId, '   ')).toEqual({
+      ok: false,
+      code: '23001',
+      message: 'reason_required',
+    });
+    // The coordinator may: admin is one of the three.
+    const byAdmin = await voidAs(userId(SEEDED.admin), target.sessionId);
+    expect(byAdmin.ok).toBe(true);
+  });
+
+  it('still refuses every other change to a closed row, and any change to a voided row', async () => {
+    const standing = await logVisit(WITH_PACKAGE, { on: '2026-03-16' });
+    // An ordinary edit of a completed records row.
+    expect(
+      await failureOf(
+        "update session set ended_at = ended_at + interval '15 minutes' where id = $1",
+        [standing.sessionId],
+      ),
+    ).toBe('23001');
+    // The void transition with anything else riding in on it.
+    expect(
+      await failureOf(
+        "update session set status = 'voided', voided_at = now(), voided_by = $2, " +
+          "void_reason = 'wrong', ended_at = ended_at + interval '15 minutes' where id = $1",
+        [standing.sessionId, userId(SEEDED.owner)],
+      ),
+    ).toBe('23001');
+    // The void transition on a visit closed on the phone.
+    expect(
+      await failureOf(
+        "update session set status = 'voided', voided_at = now(), voided_by = $2, " +
+          "void_reason = 'wrong' where id = $1",
+        [DEVICE_SESSION, userId(SEEDED.owner)],
+      ),
+    ).toBe('23001');
+    // A voided row: its reason, and its way back to completed.
+    expect(
+      await failureOf("update session set void_reason = 'a better reason' where id = $1", [
+        wrong.sessionId,
+      ]),
+    ).toBe('23001');
+    expect(
+      await failureOf(
+        "update session set status = 'completed', voided_at = null, voided_by = null, " +
+          'void_reason = null where id = $1',
+        [wrong.sessionId],
+      ),
+    ).toBe('23001');
+    // A void stamp on a row that is not voided is refused by the table itself.
+    expect(
+      await failureOf(
+        "update appointment set voided_at = now(), voided_by = $2, void_reason = 'x' where id = $1",
+        [standing.appointmentId, userId(SEEDED.owner)],
+      ),
+    ).toBe('23514');
+  });
+
+  it('leaves the audit chain intact', async () => {
+    const { rows } = await h.owner.query<{ broken: string | null }>(
+      'select app.verify_audit_chain()::text as broken',
+    );
+    expect(rows[0]?.broken).toBeNull();
+  });
+});
