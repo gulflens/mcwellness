@@ -233,6 +233,9 @@ function.
    where that account belongs to a member of our staff, unlinked from your
    record" is the operator's, with the lawyer if he wishes. Nothing on
    production can meet the case today (the pre-pass read of 22 September).
+   _Done: trunk round 64, 23 September, on the operator's instruction — both
+   languages moved to version 1.1 with the clause saying both halves
+   (`docs/CHANGE-REQUESTS/trunk-round-64.md`)._
 5. **`docs/SPEC/00-data-model.md` describes the erasure's effect in one clause
    that is now imprecise** — it "removes contacts and the portal account". The
    model lists neither function and is the shared zone's, so this is a request
