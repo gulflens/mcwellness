@@ -719,7 +719,6 @@
 
 .client-workspace__content {
   min-inline-size: 0;
-  max-inline-size: 1040px;
   padding: var(--s-6);
   background: var(--surface);
   border-radius: var(--r-2);
@@ -742,7 +741,7 @@
 .enrolment--page .enrolment__layout {
   padding-block-start: var(--s-6);
   gap: var(--s-8);
-  grid-template-columns: 192px minmax(0, 1040px);
+  grid-template-columns: 192px minmax(0, 1fr);
 }
 
 .enrolment--page .enrolment__progress {
@@ -799,5 +798,49 @@
   .enrolment--page .enrolment__progress {
     position: static;
     align-self: stretch;
+  }
+}
+
+/* Use the available workspace rather than the physical device category.
+   Wide screens can keep the agreements and their signature in view together. */
+@container (min-width: 1200px) {
+  .consent-form--bundle {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    column-gap: var(--s-8);
+    align-items: start;
+  }
+
+  .consent-form--bundle > * {
+    grid-column: 1 / -1;
+    min-inline-size: 0;
+  }
+
+  .consent-form--bundle .consent-form__reading {
+    grid-column: 1;
+  }
+
+  .consent-form--bundle .consent-form__signing {
+    grid-column: 2;
+  }
+
+  .consent-form--bundle .consent-text {
+    max-block-size: min(60dvh, 42rem);
+  }
+}
+
+@container (max-width: 767px) {
+  .client-workspace__content,
+  .enrolment--page .enrolment__content {
+    padding: var(--s-3);
+  }
+
+  .client-workspace .consent-choice,
+  .client-workspace .consent-start {
+    padding: var(--s-4);
+  }
+
+  .enrolment--page .wizard__nav {
+    flex-wrap: wrap;
   }
 }
