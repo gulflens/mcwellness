@@ -305,7 +305,7 @@ The spacing scale is a 4px step: 4, 8, 12, 16, 20, 24, 32, 48, 64. Twelve is the
 
 Density is set by one number: every row, input, button and rail item is 44px tall. The tap target rises to 48px for the sign-out control, the drawer's close control and, by the brief, on the instrument. Sign-in and the plain landing pages are a single centred column, 24rem wide (28rem on the instrument, the 68ch measure on the record), padded 64px above and 24px at the sides.
 
-Enrolment has a wider task-specific drawer default: `min(920px, 90vw)` (`--enrolment-width`), with a 176px progress column (`--enrolment-progress`). The shared remembered resize choice, exposed as `--drawer-resized`, overrides that default. Its own inline-size container switches to a four-column step grid and single-column fields at 767px or less, even inside a narrow desktop drawer; below the 768px viewport tier the enrolment drawer is full width. See [Enrolment and consent UI](docs/SPEC/enrolment-consent-ui.md) for the bounded refinement and its limits.
+Enrolment now uses the full-page workspace described below. Its inline-size container switches to a four-column step grid and single-column fields at 767px or less; remembered drawer widths do not affect this page. See [Enrolment and consent UI](docs/SPEC/enrolment-consent-ui.md) for the bounded refinement and its limits.
 
 ### Tiers
 
@@ -324,7 +324,7 @@ On a phone the console is not folded at all. It declares a 1024px layout width (
 
 **The Beside Rule.** A record's detail opens in the drawer at the inline end, over the ledger with no scrim, so the list stays readable beside it. It takes a share of the screen, `clamp(320px, 55vw, 480px)`, and the full width below the tablet tier. Detail is never a modal dialog.
 
-The main client workspace uses a sticky section column (192px), a gap (32px) and a white content surface filling the available column with 24px padding. Enrolment uses the same proportions for its step guide and form. At a workspace container width of 767px or less, record sections become a labelled select, content padding reduces to 16px and enrolment steps use the compact grid. At container widths of 767px or less, content padding reduces to 12px and enrolment actions wrap. These are in-flow pages within the existing admin shell; saved drawer widths do not size them.
+The main client workspace uses a sticky section column (192px), a gap (32px) and a white content surface filling the available column with 24px padding. Enrolment uses the same proportions for its step guide and form. At a workspace container width of 767px or less, record sections become a labelled select, content padding reduces to 12px, enrolment steps use the compact grid and enrolment actions wrap. These are in-flow pages within the existing admin shell; saved drawer widths do not size them.
 
 ## Elevation & Depth
 
