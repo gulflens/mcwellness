@@ -305,7 +305,7 @@ export function SignAllForm({
   const heading = useFocusOnOpen<HTMLHeadingElement>();
 
   return (
-    <section className="tab-section consent-form">
+    <section className="tab-section consent-form consent-form--bundle">
       {/* Focused once, when this form opens (useFocusOnOpen.ts), the same
           reason every panel this tab opens takes focus (ConsentTab.tsx's
           PanelHeading): the button that opened this is unchanged above it. */}
@@ -415,7 +415,10 @@ export function SignAllForm({
 
       {state.kind === 'ready' ? (
         <>
-          <section className="consent-form__section" aria-labelledby="consent-read-heading">
+          <section
+            className="consent-form__section consent-form__reading"
+            aria-labelledby="consent-read-heading"
+          >
             <h4 id="consent-read-heading">2. Read the agreements</h4>
             <p className="small muted">The signature will cover the following consents:</p>
             <ul className="consent-form__purposes small">
@@ -455,7 +458,10 @@ export function SignAllForm({
                 : 'Scroll inside the agreements to the end to unlock signing.'}
             </p>
           </section>
-          <section className="consent-form__section" aria-labelledby="consent-sign-heading">
+          <section
+            className="consent-form__section consent-form__signing"
+            aria-labelledby="consent-sign-heading"
+          >
             <h4 id="consent-sign-heading">3. Sign once for the selected agreements</h4>
             <p className="small">
               This signature covers {countInWords(selectedPurposes.length)} selected{' '}
