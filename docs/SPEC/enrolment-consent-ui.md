@@ -30,7 +30,7 @@ The URL contains the opaque client ID and section (`?client=<opaque-id>&section=
 
 Enrolment opens at `?enrol=new` as a full page. A “Back to clients” control precedes its heading. A sticky 192px progress column sits beside the form, which fills the available column as in the record. The steps remain Identity, Contacts, Location, Goals, Consent, Health and Review. Reached steps retain their existing navigation behaviour; unreached steps remain unavailable. Each content view adds a title, step count and short instruction. Identity uses paired fields where there is room and separates client details from contact details. The action row is sticky at the bottom of the form.
 
-At a workspace container width of 767px or less, progress becomes a four-column grid, step numbers disappear and fields become one column. At container widths of 479px or less, record and enrolment content padding reduces to 12px, consent introduction and selection padding reduces to 16px, and enrolment actions wrap. These are layout rules, not a claim of complete device or browser coverage. Enrolment progress and unsaved fields are not restored from the URL after reload; existing saved lead records remain governed by the existing persistence rules.
+At a workspace container width of 767px or less, progress becomes a four-column grid, step numbers disappear and fields become one column. At container widths of 767px or less, record and enrolment content padding reduces to 12px, consent introduction and selection padding reduces to 16px, and enrolment actions wrap. These are layout rules, not a claim of complete device or browser coverage. Enrolment progress and unsaved fields are not restored from the URL after reload; existing saved lead records remain governed by the existing persistence rules.
 
 After a lead exists, the later non-review steps expose the existing activation summary through an expandable “View what is still needed to activate” area, or “Ready to activate” when complete. Review keeps the requirements visible and retains the existing activation gate. Creating the lead, saving subsequent sections and finishing later retain the existing persistence behaviour; no new autosave or draft system is added.
 
@@ -46,7 +46,7 @@ The form then presents three numbered sections:
 2. Read the selected agreements, with the selected purpose list before the versioned wording and a status line describing the reading gate.
 3. Sign once for the selected agreements, using the existing on-screen or photographed/scanned paper method.
 
-At workspace container widths of 1400px or more, the combined form places reading and signing side by side in columns proportioned 1.2:1 with a 32px gap. All other form children span both columns. The reading region has a maximum height of `min(60dvh, 42rem)`. Below that container width, reading and signing stack.
+At workspace container widths of 1200px or more, the combined form places reading and signing side by side in columns proportioned 1.2:1 with a 32px gap. All other form children span both columns. The reading region has a maximum height of `min(60dvh, 42rem)`. Below that container width, reading and signing stack.
 
 The wording remains in a keyboard-focusable scroll region. Existing Arabic language and direction attributes are retained. Signature and upload controls remain disabled until the reading check passes and at least one agreement is selected. Reaching the end is a UI prerequisite, not proof of comprehension. Selection, signer and evidence-method controls are disabled while recording.
 

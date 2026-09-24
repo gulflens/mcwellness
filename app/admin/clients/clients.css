@@ -803,7 +803,7 @@
 
 /* Use the available workspace rather than the physical device category.
    Wide screens can keep the agreements and their signature in view together. */
-@container (min-width: 1400px) {
+@container (min-width: 1200px) {
   .consent-form--bundle {
     display: grid;
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
@@ -829,7 +829,7 @@
   }
 }
 
-@container (max-width: 479px) {
+@container (max-width: 767px) {
   .client-workspace__content,
   .enrolment--page .enrolment__content {
     padding: var(--s-3);
