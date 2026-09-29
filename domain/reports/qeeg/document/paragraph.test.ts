@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { forDrawing } from '@domain/shared/document';
 import type { Op } from '@domain/shared/document';
+import { lineBox } from './metrics';
 import type { Face } from './metrics';
 import {
   drawParagraph,
@@ -448,5 +449,30 @@ describe('numbers that are not numbers', () => {
     expect(() => layoutParagraph(input([{ text: 'one two' }]), () => Number.NaN)).toThrow(
       /measure/,
     );
+  });
+});
+
+describe('the rules a paragraph keeps to', () => {
+  it('sets every line of a right-to-left paragraph on the Arabic face, and a left-to-right one on the Latin', () => {
+    const style = { size: SIZE, lineHeight: 1.5, weight: 'regular' } as const;
+    const rtl = layoutParagraph(input([{ text: 'نص مسطر' }], { paragraph: 'rtl' }), measure);
+    expect(rtl.box).toEqual(lineBox(style, ARABIC));
+    const ltr = layoutParagraph(input([{ text: 'plain text' }]), measure);
+    expect(ltr.box).toEqual(lineBox(style, LATIN));
+    expect(rtl.box.firstBaseline).not.toBe(ltr.box.firstBaseline);
+    const baseline = texts(drawParagraph(rtl, AT))[0]?.y;
+    expect(baseline).toBeCloseTo(AT.top - lineBox(style, ARABIC).firstBaseline, 9);
+  });
+
+  it('sets an end-aligned right-to-left line against the left edge', () => {
+    const [op] = texts(draw([{ text: 'نص قصير' }], { paragraph: 'rtl', align: 'end' }));
+    expect(op?.rtl).toBe(true);
+    expect(left(op as TextOp)).toBe(AT.x);
+  });
+
+  it('draws the underline in the grey of its text', () => {
+    const ops = draw([{ text: 'grey words', underline: true }], { ink: { grey: 0.4 } });
+    expect(rules(ops)[0]?.grey).toBe(0.4);
+    expect(texts(ops)[0]?.style.grey).toBe(0.4);
   });
 });

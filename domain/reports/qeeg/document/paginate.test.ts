@@ -582,3 +582,63 @@ describe('numbers that are not numbers', () => {
     expect(() => reflow([block('a', 10)], () => Number.NaN, new Map(), limits)).toThrow(/height/);
   });
 });
+
+describe('the limits breathing and pinning keep to', () => {
+  it('shares nothing out when each share would be the floor or less', () => {
+    // Slack 6 over one mark: a share of exactly 3, which is the floor.
+    const at = (tall: number) =>
+      breathe(
+        paginate([block('a', 10), block('b', tall, { gapBefore: true })], limits, heightAt),
+        limits,
+        heightAt,
+      )[0]?.[1]?.y;
+    expect(at(84)).toBe(10);
+    expect(at(83.8)).toBeCloseTo(10 + 3.1, 9);
+  });
+
+  it('caps each share at breatheCap', () => {
+    const pages = paginate([block('a', 10), block('b', 10, { gapBefore: true })], limits, heightAt);
+    // Half of 80 is 40, over the cap of 33.75.
+    expect(breathe(pages, limits, heightAt)[0]?.[1]?.y).toBe(10 + 33.75);
+  });
+
+  it('does not lower a pinned block when the lift would be the floor or less', () => {
+    // Spare 4: a quarter, 1, stays below, and the lift of 3 is the floor.
+    const pages = paginate([block('a', 86), block('s', 10, { pinBottom: true })], limits, heightAt);
+    expect(breathe(pages, limits, heightAt)[0]?.[1]?.y).toBe(86);
+  });
+
+  it('keeps no more than pinBelowCap beneath a pinned block', () => {
+    const tall = limitsFor(WIDTH, 200);
+    const pages = paginate([block('a', 10), block('s', 10, { pinBottom: true })], tall, heightAt);
+    const pinned = breathe(pages, tall, heightAt)[0]?.[1];
+    // Spare 180: a quarter is 45, over the cap of 25.5.
+    expect(pinned?.y).toBeCloseTo(200 - 25.5 - 10, 9);
+  });
+});
+
+describe('the rules a fit block keeps to', () => {
+  it('stays after a page that is one kept chain, however little room is left', () => {
+    const pages = paginate(
+      [block('h', 60, { keep: true }), block('map', 200, { fit: true })],
+      limits,
+      heightAt,
+    );
+    expect(ids(pages)).toEqual([['h', 'map']]);
+    expect(pages[0]?.[1]?.fit?.scale).toBe(0.75);
+    expect(overflowing(pages, limits).map((p) => p.block.id)).toEqual(['map']);
+  });
+
+  it('is reported when fitted and still over, even by less than the tolerance', () => {
+    const map = block('map', 100, { fit: true });
+    const page: Placement<Flow>[] = [
+      {
+        block: map,
+        y: 0,
+        height: 100.5,
+        fit: { scale: 0.75, laidWidth: WIDTH / 0.75, height: 100.5, overflow: 0.5 },
+      },
+    ];
+    expect(overflowing([page], limits).map((p) => p.block.id)).toEqual(['map']);
+  });
+});

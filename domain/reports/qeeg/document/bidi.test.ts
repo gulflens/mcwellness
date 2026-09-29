@@ -423,3 +423,12 @@ describe('isPlainNumber', () => {
     }
   });
 });
+
+describe('the Arabic blocks beyond the first', () => {
+  it('counts letters from the supplement and both presentation-form blocks as strong Arabic', () => {
+    for (const letter of ['ݐ', 'ﭐ', 'ﻻ']) {
+      expect(classify(letter)).toBe('R');
+      expect(baseDirection(`${letter} Alpha`, 'ltr')).toBe('rtl');
+    }
+  });
+});
