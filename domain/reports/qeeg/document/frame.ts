@@ -14,8 +14,13 @@
  * way in both languages.
  */
 
-export type Direction = 'ltr' | 'rtl';
-export type Frame = { direction: Direction; left: number; width: number };
+import type { Direction } from './direction';
+
+export type Frame = {
+  readonly direction: Direction;
+  readonly left: number;
+  readonly width: number;
+};
 
 function finite(fn: string, name: string, value: number): void {
   if (!Number.isFinite(value)) {

@@ -24,23 +24,23 @@
  */
 
 export type Rgb = readonly [number, number, number];
-export type Paint = { grey?: number; rgb?: Rgb };
+export type Paint = { readonly grey?: number; readonly rgb?: Rgb };
 export type PathSegment =
   | readonly ['M', number, number]
   | readonly ['L', number, number]
   | readonly ['C', number, number, number, number, number, number]
   | readonly ['Z'];
 export type Stroke = Paint & {
-  width?: number;
-  cap?: 'butt' | 'round' | 'square';
-  join?: 'miter' | 'round' | 'bevel';
+  readonly width?: number;
+  readonly cap?: 'butt' | 'round' | 'square';
+  readonly join?: 'miter' | 'round' | 'bevel';
 };
 export type PathOp = {
-  kind: 'path';
-  segments: readonly PathSegment[];
-  fill?: Paint;
-  stroke?: Stroke;
-  evenOdd?: boolean;
+  readonly kind: 'path';
+  readonly segments: readonly PathSegment[];
+  readonly fill?: Paint;
+  readonly stroke?: Stroke;
+  readonly evenOdd?: boolean;
 };
 
 const QUARTER = Math.PI / 2;

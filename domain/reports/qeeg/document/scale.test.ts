@@ -1,14 +1,14 @@
+/**
+ * Scaling a finished block of ops on the numbers, so that where each thing
+ * finally lands can be read straight off the op a test holds.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { Op } from '@domain/shared/document';
 import { scaleOps, translateOps } from './scale';
 import type { LayoutOp } from './scale';
 import { circle } from './shapes';
 import type { PathOp } from './shapes';
-
-/**
- * Scaling a finished block of ops on the numbers, so that where each thing
- * finally lands can be read straight off the op a test holds.
- */
 
 const text: Op = {
   kind: 'text',

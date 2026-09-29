@@ -15,17 +15,33 @@
  * app wraps `measure` from `domain/shared/document` and in a test counts
  * characters. That keeps this pure and every width in a test exact.
  *
+ * **Two meanings of start and end.** In a `ParagraphInput`, `align: 'start'`
+ * and `'end'` are relative to the paragraph's own direction: 'start' is the
+ * right-hand edge of an Arabic paragraph. The engine's `align` on a text op
+ * is physical: 'start' puts `x` at the text's left, 'end' at its right, in
+ * either language (as `frame.startAlign` also has it). `physicalAlign` is
+ * the one function that turns the first into the second.
+ *
  * **Laid once, drawn anywhere.** `layoutParagraph` positions every piece of
  * every line relative to the paragraph's own box, so `splitParagraph` cuts a
  * laid paragraph between lines without laying it out again, and
  * `drawParagraph` only adds the page position.
  */
 
-import { isArabic, type Op, type Style } from '@domain/shared/document';
-import { runsOf, type Direction } from './bidi';
-import { finite, lineBox, type Face, type LineBox, type TextStyle } from './metrics';
+import { isArabic } from '@domain/shared/document';
+import type { Align, Op, Style } from '@domain/shared/document';
+import { runsOf } from './bidi';
+import type { Direction } from './direction';
+import { finite, lineBox } from './metrics';
+import type { Face, LineBox, TextStyle } from './metrics';
+import type { Paint } from './shapes';
 
-export type Span = { text: string; bold?: boolean; underline?: boolean; accent?: boolean };
+export type Span = {
+  readonly text: string;
+  readonly bold?: boolean;
+  readonly underline?: boolean;
+  readonly accent?: boolean;
+};
 
 export type Measure = (
   text: string,
@@ -34,22 +50,20 @@ export type Measure = (
   rtl: boolean,
 ) => number;
 
-export type Paint = { grey?: number; rgb?: readonly [number, number, number] };
-
 export type ParagraphInput = {
-  spans: readonly Span[];
-  style: TextStyle;
-  width: number;
+  readonly spans: readonly Span[];
+  readonly style: TextStyle;
+  readonly width: number;
   /** The base direction of this paragraph. */
-  paragraph: Direction;
-  /** Relative to the paragraph's direction. */
-  align: 'start' | 'end' | 'centre';
+  readonly paragraph: Direction;
+  /** Relative to the paragraph's direction; `physicalAlign` turns it into the engine's. */
+  readonly align: 'start' | 'end' | 'centre';
   /** Default false. */
-  justify?: boolean;
-  ink: Paint;
+  readonly justify?: boolean;
+  readonly ink: Paint;
   /** What an `accent` span is drawn in. */
-  accent: Paint;
-  faces: { latin: Face; arabic: Face };
+  readonly accent: Paint;
+  readonly faces: { readonly latin: Face; readonly arabic: Face };
 };
 
 /** One op's worth of a line: its text and style, and where its left edge sits in the box. */
@@ -69,7 +83,12 @@ export type Piece = {
 /** A laid line: its pieces in reading order. */
 export type Line = { readonly pieces: readonly Piece[] };
 
-export type Laid = { lines: readonly Line[]; height: number; box: LineBox; input: ParagraphInput };
+export type Laid = {
+  readonly lines: readonly Line[];
+  readonly height: number;
+  readonly box: LineBox;
+  readonly input: ParagraphInput;
+};
 
 /** A word, or the part of one in a single style and direction, before it is placed. */
 type Atom = {
@@ -244,6 +263,16 @@ function breakLines(
 }
 
 /**
+ * The engine's physical `align` for an align relative to the paragraph: the
+ * one place the two meet. 'start' is the paragraph's start edge, so in a
+ * right-to-left paragraph it is the engine's 'end', its right-hand side.
+ */
+export function physicalAlign(align: ParagraphInput['align'], paragraph: Direction): Align {
+  if (align === 'centre') return 'centre';
+  return (align === 'end') !== (paragraph === 'rtl') ? 'end' : 'start';
+}
+
+/**
  * Places a line's groups, left edges from the left of the box.
  *
  * The line is cut into stretches of one direction. The stretches follow the
@@ -259,7 +288,8 @@ function place(
 ): Piece[] {
   const rtl = input.paragraph === 'rtl';
   const spare = input.width - natural;
-  const offset = align === 'centre' ? spare / 2 : (align === 'end') !== rtl ? spare : 0;
+  const side = physicalAlign(align, input.paragraph);
+  const offset = side === 'centre' ? spare / 2 : side === 'end' ? spare : 0;
 
   const stretches: Group[][] = [];
   for (const group of groups) {
@@ -341,7 +371,7 @@ export function layoutParagraph(input: ParagraphInput, given: Measure): Laid {
   return { lines, height: lines.length * box.advance, box, input };
 }
 
-function paintOf(paint: Paint): { grey?: number; rgb?: readonly [number, number, number] } {
+function paintOf(paint: Paint): Paint {
   return {
     ...(paint.grey !== undefined ? { grey: paint.grey } : {}),
     ...(paint.rgb ? { rgb: paint.rgb } : {}),

@@ -34,17 +34,16 @@
  */
 
 import { isArabic } from '@domain/shared/document';
-
-export type Direction = 'ltr' | 'rtl';
+import type { Direction } from './direction';
 
 /** Holds Arabic; holds Latin and no Arabic; holds no letter. */
 export type TokenClass = 'R' | 'L' | 'N';
 
 /** One word, or a piece peeled off one. `glued`: no space before it. */
-export type Token = { text: string; class: TokenClass; glued: boolean };
+export type Token = { readonly text: string; readonly class: TokenClass; readonly glued: boolean };
 
 /** Neighbouring tokens drawn in one direction, in reading order. */
-export type Run = { direction: Direction; tokens: readonly Token[] };
+export type Run = { readonly direction: Direction; readonly tokens: readonly Token[] };
 
 function isLatin(code: number): boolean {
   return (

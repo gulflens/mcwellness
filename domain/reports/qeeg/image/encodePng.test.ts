@@ -1,9 +1,3 @@
-import { deflateRawSync, deflateSync, gzipSync, inflateSync } from 'node:zlib';
-import { describe, expect, it } from 'vitest';
-import { readPng } from '@domain/shared/document';
-import { crc32, encodePng } from './encodePng';
-import type { Deflate } from './encodePng';
-
 /**
  * Writing the one kind of PNG the document engine embeds: 8-bit truecolour,
  * no alpha, not interlaced. The browser hands the encoder
@@ -13,6 +7,12 @@ import type { Deflate } from './encodePng';
  * The test reads its own output back with its own small reader and undoes the
  * filters itself, so "lossless" is proved on the bytes and not assumed.
  */
+
+import { deflateRawSync, deflateSync, gzipSync, inflateSync } from 'node:zlib';
+import { describe, expect, it } from 'vitest';
+import { readPng } from '@domain/shared/document';
+import { crc32, encodePng } from './encodePng';
+import type { Deflate } from './encodePng';
 
 const deflate: Deflate = (bytes) => Promise.resolve(new Uint8Array(deflateSync(bytes)));
 

@@ -1,16 +1,17 @@
+/**
+ * Laying out and drawing a formatted paragraph, in English, in Arabic and in
+ * each other, with a fake measure that counts characters so every width is
+ * exact. Where direction matters, a line is read back as the engine would
+ * put it on the page.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { forDrawing } from '@domain/shared/document';
 import type { Op } from '@domain/shared/document';
 import { lineBox } from './metrics';
 import type { Face } from './metrics';
-import {
-  drawParagraph,
-  layoutParagraph,
-  splitParagraph,
-  type Measure,
-  type ParagraphInput,
-  type Span,
-} from './paragraph';
+import { drawParagraph, layoutParagraph, physicalAlign, splitParagraph } from './paragraph';
+import type { Measure, ParagraphInput, Span } from './paragraph';
 
 /** Half the size per character, whatever the character: every width is exact. */
 const measure: Measure = (text, _weight, size) => ([...text].length * size) / 2;
@@ -449,6 +450,17 @@ describe('numbers that are not numbers', () => {
     expect(() => layoutParagraph(input([{ text: 'one two' }]), () => Number.NaN)).toThrow(
       /measure/,
     );
+  });
+});
+
+describe('physicalAlign', () => {
+  it('turns an align relative to the paragraph into the engine’s physical one', () => {
+    expect(physicalAlign('start', 'ltr')).toBe('start');
+    expect(physicalAlign('end', 'ltr')).toBe('end');
+    expect(physicalAlign('start', 'rtl')).toBe('end');
+    expect(physicalAlign('end', 'rtl')).toBe('start');
+    expect(physicalAlign('centre', 'ltr')).toBe('centre');
+    expect(physicalAlign('centre', 'rtl')).toBe('centre');
   });
 });
 

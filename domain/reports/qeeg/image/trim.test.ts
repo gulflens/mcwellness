@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { crop, trimWhiteBorder } from './trim';
-import type { Crop, Pixels } from './trim';
-
 /**
  * Trimming the blank border off a map export, so it prints as large as the
  * page allows. The first two cases are the Dart tool's own numbers.
  */
+
+import { describe, expect, it } from 'vitest';
+import { crop, trimWhiteBorder } from './trim';
+import type { Crop, Pixels } from './trim';
 
 type Rgba = readonly [number, number, number, number];
 

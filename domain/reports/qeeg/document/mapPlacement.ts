@@ -33,7 +33,8 @@ export const GOOD_PRINT_DPI = 220;
 export const POOR_PRINT_DPI = 140;
 export const MAX_MAP_SCALE = 2.5;
 
-export type Placed = {
+/** A map's drawn size, its scale, and the dots per inch it prints at. Not the engine's `Placed`. */
+export type PlacedImage = {
   readonly width: number;
   readonly height: number;
   readonly scale: number;
@@ -45,7 +46,7 @@ const POINTS_PER_INCH = 72;
 const CSS_PIXELS_PER_INCH = 96;
 
 /** A fresh zero placement for each caller, so no caller's change can reach another. */
-function nothing(): Placed {
+function nothing(): PlacedImage {
   return { width: 0, height: 0, scale: 0, dpi: 0 };
 }
 
@@ -59,7 +60,7 @@ export function placeImage(
   pixels: { width: number; height: number },
   box: { maxWidth: number; maxHeight: number },
   maxScale: number = MAX_MAP_SCALE,
-): Placed {
+): PlacedImage {
   const positive = (n: number): boolean => Number.isFinite(n) && n > 0;
   if (!positive(pixels.width) || !positive(pixels.height)) return nothing();
   if (!positive(box.maxWidth) || !positive(box.maxHeight) || !positive(maxScale)) return nothing();

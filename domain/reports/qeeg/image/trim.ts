@@ -24,8 +24,17 @@
  */
 
 /** RGBA, four bytes a pixel, row by row from the top, as a browser canvas gives it. */
-export type Pixels = { width: number; height: number; data: Uint8ClampedArray };
-export type Crop = { left: number; top: number; width: number; height: number };
+export type Pixels = {
+  readonly width: number;
+  readonly height: number;
+  readonly data: Uint8ClampedArray;
+};
+export type Crop = {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+};
 
 const WHITE_FROM = 247;
 const CLEAR_BELOW = 16;

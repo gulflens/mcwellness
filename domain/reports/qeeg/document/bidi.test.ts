@@ -1,15 +1,13 @@
+/**
+ * Which words of a line are drawn right to left and which left to right: a
+ * table of cases, each asserting the runs and their directions and that the
+ * runs put back together give the text, then the rules one by one.
+ */
+
 import { describe, expect, it } from 'vitest';
-import {
-  baseDirection,
-  classify,
-  isPlainNumber,
-  resolve,
-  runsOf,
-  textOf,
-  tokenise,
-  type Direction,
-  type Run,
-} from './bidi';
+import { baseDirection, classify, isPlainNumber, resolve, runsOf, textOf, tokenise } from './bidi';
+import type { Run } from './bidi';
+import type { Direction } from './direction';
 
 /** The runs as plain pairs, so a table row reads as what is drawn. */
 function drawn(runs: readonly Run[]): { direction: Direction; text: string }[] {

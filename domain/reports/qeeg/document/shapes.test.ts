@@ -1,3 +1,10 @@
+/**
+ * The geometry the report's figures are drawn from, measured as numbers: where
+ * a path starts, where it ends, and how far any point on it strays from the
+ * curve it stands for. Nothing here is drawn; a path that is right as numbers
+ * is right on paper, because the engine only strokes what it is given.
+ */
+
 import { describe, expect, it } from 'vitest';
 import {
   arc,
@@ -12,13 +19,6 @@ import {
   triangle,
 } from './shapes';
 import type { PathSegment } from './shapes';
-
-/**
- * The geometry the report's figures are drawn from, measured as numbers: where
- * a path starts, where it ends, and how far any point on it strays from the
- * curve it stands for. Nothing here is drawn; a path that is right as numbers
- * is right on paper, because the engine only strokes what it is given.
- */
 
 type Point = { x: number; y: number };
 

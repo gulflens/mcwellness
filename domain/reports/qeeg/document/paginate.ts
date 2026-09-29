@@ -40,22 +40,32 @@ export type Flow = {
 };
 
 /** How a fit block was fitted: its scale, the width it was laid at, its drawn height. */
-export type Fit = { scale: number; laidWidth: number; height: number; overflow: number };
+export type Fit = {
+  readonly scale: number;
+  readonly laidWidth: number;
+  readonly height: number;
+  readonly overflow: number;
+};
 
-export type Placement<B extends Flow> = { block: B; y: number; height: number; fit: Fit | null };
+export type Placement<B extends Flow> = {
+  readonly block: B;
+  readonly y: number;
+  readonly height: number;
+  readonly fit: Fit | null;
+};
 
 export type Limits = {
-  bodyWidth: number;
-  bodyHeight: number;
-  sectionGap: number;
-  tolerance: number;
-  fitThreshold: number;
-  minScale: number;
-  breatheShare: number;
-  breatheCap: number;
-  breatheFloor: number;
-  pinBelowShare: number;
-  pinBelowCap: number;
+  readonly bodyWidth: number;
+  readonly bodyHeight: number;
+  readonly sectionGap: number;
+  readonly tolerance: number;
+  readonly fitThreshold: number;
+  readonly minScale: number;
+  readonly breatheShare: number;
+  readonly breatheCap: number;
+  readonly breatheFloor: number;
+  readonly pinBelowShare: number;
+  readonly pinBelowCap: number;
 };
 
 /**

@@ -1,5 +1,11 @@
+/**
+ * The vertical measure of a line of type: a font's face in em, the line box
+ * a browser would give it, a paragraph's height, and the millimetre.
+ */
+
 import { describe, expect, it } from 'vitest';
-import { faceOf, lineBox, mm, MM, paragraphHeight, type Face } from './metrics';
+import { faceOf, lineBox, mm, MM, paragraphHeight } from './metrics';
+import type { Face } from './metrics';
 
 describe('faceOf', () => {
   it('reads a parsed font, whose metrics are already in thousandths of an em', () => {

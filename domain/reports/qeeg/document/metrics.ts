@@ -18,12 +18,20 @@
  */
 
 /** A face's ascent and descent in em; the descent is negative. */
-export type Face = { ascent: number; descent: number };
+export type Face = { readonly ascent: number; readonly descent: number };
 
-export type TextStyle = { size: number; lineHeight: number; weight: 'regular' | 'bold' };
+export type TextStyle = {
+  readonly size: number;
+  readonly lineHeight: number;
+  readonly weight: 'regular' | 'bold';
+};
 
 /** One line's box: its advance, the leading on each side, and where the first baseline falls. */
-export type LineBox = { advance: number; halfLeading: number; firstBaseline: number };
+export type LineBox = {
+  readonly advance: number;
+  readonly halfLeading: number;
+  readonly firstBaseline: number;
+};
 
 /** Points in a millimetre. */
 export const MM = 72 / 25.4;

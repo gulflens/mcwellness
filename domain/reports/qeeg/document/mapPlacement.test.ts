@@ -1,3 +1,9 @@
+/**
+ * How large a brain map is drawn and how sharp it prints there. The first
+ * three cases are the Dart tool's own numbers, on its own page: A4 less 17 mm
+ * margins each side.
+ */
+
 import { describe, expect, it } from 'vitest';
 import {
   GOOD_PRINT_DPI,
@@ -7,14 +13,8 @@ import {
   printQualityKey,
   printQualityOf,
 } from './mapPlacement';
+import { MM } from './metrics';
 
-/**
- * How large a brain map is drawn and how sharp it prints there. The first
- * three cases are the Dart tool's own numbers, on its own page: A4 less 17 mm
- * margins each side.
- */
-
-const MM = 72 / 25.4;
 const BODY_WIDTH = 595.28 - 2 * 17 * MM;
 /** A box tall enough that only the width binds, as the Dart estimate assumed. */
 const fullWidth = { maxWidth: BODY_WIDTH, maxHeight: 10_000 };

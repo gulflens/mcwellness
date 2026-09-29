@@ -1,3 +1,10 @@
+/**
+ * Where each block of a report falls: margin collapse, page breaks, kept
+ * runs, splits, fitting a block to its room, breathing and pinning, and the
+ * refusal of a number that is not a number. Blocks are plain data and
+ * heights are arithmetic, so every position is asserted exactly.
+ */
+
 import { describe, expect, it } from 'vitest';
 import {
   breathe,
@@ -9,10 +16,8 @@ import {
   pageBottom,
   paginate,
   reflow,
-  type Flow,
-  type Limits,
-  type Placement,
 } from './paginate';
+import type { Flow, Limits, Placement } from './paginate';
 
 const WIDTH = 400;
 const HEIGHT = 100;

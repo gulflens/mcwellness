@@ -1,14 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { boxLeft, columns, fromEnd, fromStart, inset, mirror, startAlign } from './frame';
-import type { Frame } from './frame';
-
 /**
  * A frame turns START and END into physical x, so the Arabic report is the
  * English one reflected by construction. These tests hold the reflection to
  * the arithmetic.
  */
 
-const MM = 72 / 25.4;
+import { describe, expect, it } from 'vitest';
+import { boxLeft, columns, fromEnd, fromStart, inset, mirror, startAlign } from './frame';
+import type { Frame } from './frame';
+import { MM } from './metrics';
+
 const ltr: Frame = { direction: 'ltr', left: 17 * MM, width: 595.28 - 34 * MM };
 const rtl: Frame = { ...ltr, direction: 'rtl' };
 const right = (frame: Frame): number => frame.left + frame.width;

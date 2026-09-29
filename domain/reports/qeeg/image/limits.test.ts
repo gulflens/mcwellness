@@ -1,3 +1,8 @@
+/**
+ * The caps on a brain map's size, and the refusal, never a shrinking, of one
+ * over them.
+ */
+
 import { describe, expect, it } from 'vitest';
 import {
   MAX_FILE_BYTES,

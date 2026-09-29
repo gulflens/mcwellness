@@ -1,5 +1,3 @@
-import type { Pixels } from './trim';
-
 /**
  * A map's RGBA pixels laid onto white paper, as three bytes a pixel.
  *
@@ -11,6 +9,8 @@ import type { Pixels } from './trim';
  *
  * `channel = round(alpha/255 * value + (1 - alpha/255) * 255)`.
  */
+
+import type { Pixels } from './trim';
 export function flattenOverWhite(image: Pixels): Uint8Array {
   const count = image.width * image.height;
   if (!Number.isInteger(count) || count < 0 || image.data.length !== count * 4) {

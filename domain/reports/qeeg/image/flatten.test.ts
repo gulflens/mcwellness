@@ -1,3 +1,8 @@
+/**
+ * Laying a map's RGBA pixels onto white paper, three bytes a pixel, rounded
+ * to the nearest byte.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { flattenOverWhite } from './flatten';
 

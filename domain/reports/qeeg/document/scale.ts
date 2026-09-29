@@ -1,6 +1,3 @@
-import type { Op } from '@domain/shared/document';
-import type { PathOp, PathSegment } from './shapes';
-
 /**
  * Zooming a finished block of ops, and moving it, by rewriting the numbers.
  *
@@ -16,6 +13,9 @@ import type { PathOp, PathSegment } from './shapes';
  * Every `switch` over `op.kind` ends in a `never` check. An open change adds a
  * `rect` op to the engine; the day it arrives the compiler points here.
  */
+
+import type { Op } from '@domain/shared/document';
+import type { PathOp, PathSegment } from './shapes';
 
 export type LayoutOp = Op | PathOp;
 
