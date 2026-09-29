@@ -278,16 +278,22 @@ export type QeegInitial = QeegCommon & {
 // A follow-up
 // ---------------------------------------------------------------------------
 
-/** The earlier report this one is compared with, as it stood when chosen. */
+/**
+ * The earlier report this one is compared with, as it stood when chosen.
+ *
+ * A report this app signed has a printed reference. A past record from the
+ * old tool has none, and the two are told apart by the type, so that neither
+ * can be written with the other's.
+ */
 export type ComparedWith = {
   readonly reportId: string;
-  /** Its printed reference. A past record from the old tool has none. */
-  readonly reference: string | null;
   readonly recordedOn: string;
-  readonly origin: 'issued' | 'imported';
   /** Whether it is the client's first report or a later one. Chooses the words. */
   readonly relation: 'initial' | 'previous';
-};
+} & (
+  | { readonly origin: 'issued'; readonly reference: string }
+  | { readonly origin: 'imported'; readonly reference: null }
+);
 
 export type FigureSource = 'typed' | 'calculated';
 
@@ -299,11 +305,8 @@ export type Basis = {
   readonly sitesPaired: number;
 };
 
-/**
- * A figure on the page of what has changed. `basis` is present exactly when
- * the figure was calculated.
- */
-export type ChangeFigure =
+/** What a figure says. */
+export type FigureValue =
   | {
       readonly kind: 'percent';
       readonly direction: 'increase' | 'decrease';
@@ -311,17 +314,31 @@ export type ChangeFigure =
       readonly low: number;
       /** The top of a range, as in "about 25 to 30". Absent for a single figure. */
       readonly high: number | null;
-      readonly source: FigureSource;
-      readonly basis: Basis | null;
     }
-  | {
-      readonly kind: 'no_appreciable_change';
-      readonly source: FigureSource;
-      readonly basis: Basis | null;
-    };
+  | { readonly kind: 'no_appreciable_change' };
 
-/** A headline at the top of the page: a figure, and her words for what it is. */
-export type Tile = { readonly figure: ChangeFigure; readonly caption: Bilingual };
+/** The practitioner's own estimate. It has nothing it was calculated from. */
+export type TypedFigure = FigureValue & { readonly source: 'typed'; readonly basis: null };
+
+/** Arithmetic on two recorded assessments, which it names. */
+export type CalculatedFigure = FigureValue & {
+  readonly source: 'calculated';
+  readonly basis: Basis;
+};
+
+/**
+ * A figure on the page of what has changed. Where it came from and what it
+ * was calculated from are one fact, held by the type: a typed figure has no
+ * basis and a calculated one always has.
+ */
+export type ChangeFigure = TypedFigure | CalculatedFigure;
+
+/**
+ * A headline at the top of the page: a figure, and her words for what it is.
+ * Always hers. A headline such as an overall change is no row of the table
+ * and nothing it could be calculated from.
+ */
+export type Tile = { readonly figure: TypedFigure; readonly caption: Bilingual };
 
 export type Pair = { readonly earlier: FigureRef | null; readonly later: FigureRef | null };
 
@@ -353,6 +370,14 @@ export type FollowUpScore = Score & {
 
 export type QeegFollowUp = QeegCommon & {
   readonly edition: 'follow-up';
+  /** A follow-up is never the first. */
+  readonly stage: 'follow_up' | 'final';
+  /**
+   * Always written in this app. The old tool offered only the first report's
+   * lists, so nothing it wrote is a follow-up, whatever it was called; and a
+   * past record is frozen, so none is ever turned into one.
+   */
+  readonly provenance: { readonly origin: 'app' };
   readonly comparedWith: ComparedWith;
   readonly bands: Readonly<Record<BandId, FollowUpBand>>;
   readonly connectivity: Readonly<
