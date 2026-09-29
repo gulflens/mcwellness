@@ -72,7 +72,7 @@ function parts(input: CardInput, drawing: Drawing) {
   };
 }
 
-/** Where each mark first stands down the page: its place among what the block draws. */
+/** Where each mark first stands down the page, among what the block draws. */
 function placesOf(block: Block, marks: readonly string[]): number[] {
   const down = downThePage(block, measure).map((each) => each.what);
   return marks.map((mark) => down.findIndex((what) => what.includes(mark)));

@@ -15,7 +15,7 @@ const CARD_WIDTH = cardWidth(WIDTH);
 
 const texts = (ops: readonly LayoutOp[]) =>
   ops.filter((op): op is Extract<Op, { kind: 'text' }> => op.kind === 'text');
-/** The panels of the cards, in the order they are drawn: the one shape both filled and edged. */
+/** The cards' panels, as drawn: the only shapes both filled and edged. */
 const panels = (ops: readonly LayoutOp[]) =>
   ops.filter((op): op is PathOp => op.kind === 'path' && !!op.fill && !!op.stroke);
 
