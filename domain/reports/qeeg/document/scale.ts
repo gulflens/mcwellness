@@ -25,7 +25,7 @@ export type LayoutOp = Op | PathOp;
  * must carry it explicitly, or a block zoomed down would keep full-weight
  * hairlines.
  */
-const ENGINE_RULE_THICKNESS = 0.5;
+export const ENGINE_RULE_THICKNESS = 0.5;
 
 /**
  * The line width PDF itself starts every page with. The path op does not yet
@@ -33,7 +33,7 @@ const ENGINE_RULE_THICKNESS = 0.5;
  * be said to have; a scaled stroke carries it explicitly for the same reason
  * a rule does.
  */
-const PDF_LINE_WIDTH = 1;
+export const PDF_LINE_WIDTH = 1;
 
 function finite(name: string, value: number): void {
   if (!Number.isFinite(value)) {
