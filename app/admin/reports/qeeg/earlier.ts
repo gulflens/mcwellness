@@ -39,7 +39,9 @@ export function earlierLabel(row: ReportRow): string {
  * reference the list gave it and no recording day, and says so.
  */
 export function comparedFromRow(row: ReportRow): ComparedWith {
-  const common = { reportId: row.id, recordedOn: '', relation: 'initial' as const };
+  // "Previous" until the server says: it is true of any earlier report, where
+  // "initial" would misname a later one in the overview's sentence.
+  const common = { reportId: row.id, recordedOn: '', relation: 'previous' as const };
   return row.status === 'imported'
     ? { ...common, origin: 'imported', reference: null }
     : { ...common, origin: 'issued', reference: row.reference ?? '' };

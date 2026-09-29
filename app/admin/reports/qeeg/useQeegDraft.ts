@@ -4,7 +4,7 @@ import type { QeegContent } from '../../../../domain/reports/qeeg/types';
 import { QeegDraftResponse, ReportResponse } from '../../../api/reports/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { requestBody, withServerParts } from './draftBody';
-import { DRAFT_REFUSALS, refusalSentence } from './refusals';
+import { refusalSentence } from './refusals';
 
 /**
  * A brain-map draft on screen, and when it is saved
@@ -69,6 +69,8 @@ export type QeegDraft = {
   save: (point: RestPoint) => Promise<boolean>;
   /** Load the version saved elsewhere, setting aside what is on screen. */
   reload: () => Promise<void>;
+  /** Drop what is on screen unsaved: nothing is sent for it, not even on leaving. */
+  discard: () => void;
 };
 
 type Loaded = { content: QeegContent; savedAt: string | null } | null;
@@ -176,7 +178,9 @@ export function useQeegDraft({
         if (!res.ok) {
           const body: unknown = await res.json().catch(() => null);
           const refusal = refusalSentence(res.status, body);
-          if (res.status === 409 && refusal === DRAFT_REFUSALS['stale_draft']) {
+          const code =
+            typeof body === 'object' && body !== null ? (body as { code?: unknown }).code : null;
+          if (res.status === 409 && code === 'stale_draft') {
             staleRef.current = true;
             setStale(true);
             clearTimer();
@@ -263,11 +267,21 @@ export function useQeegDraft({
     settle(loaded);
   }, [read, settle]);
 
+  const discard = useCallback(() => {
+    clearTimer();
+    savedVersionRef.current = versionRef.current;
+    setDirty(false);
+  }, []);
+
   // Closing the browser tab with unsaved changes asks first; the browser
-  // cannot wait for a save while it closes.
+  // cannot wait for a save while it closes. `returnValue` is what older
+  // Safari reads.
   useEffect(() => {
     if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
@@ -295,5 +309,6 @@ export function useQeegDraft({
     edit,
     save,
     reload,
+    discard,
   };
 }

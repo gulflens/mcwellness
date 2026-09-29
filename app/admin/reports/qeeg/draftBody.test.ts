@@ -71,6 +71,34 @@ describe('what a save hands back', () => {
     expect(merged.stage).toBe('final');
   });
 
+  it('keeps a comparison she changed while the save was on its way, and its earlier scores', () => {
+    const other = '00000006-0000-4000-8000-000000000002';
+    const blank = blankFollowUp({ ...COMPARED, reportId: other, recordedOn: '' }, 'follow_up');
+    const local: QeegFollowUp = {
+      ...blank,
+      dashboard: {
+        ...blank.dashboard,
+        mental_energy: { score: 6, evidence: null, earlierScore: null },
+      },
+    };
+    const saved: QeegFollowUp = {
+      ...blankFollowUp(COMPARED, 'follow_up'),
+      subject: { nameAr: null, ageYears: 9, sex: 'female' },
+      dashboard: {
+        ...blank.dashboard,
+        mental_energy: { score: null, evidence: null, earlierScore: 4 },
+      },
+    };
+    const merged = withServerParts(local, saved) as QeegFollowUp;
+    expect(merged.comparedWith.reportId).toBe(other);
+    expect(merged.dashboard.mental_energy).toEqual({
+      score: 6,
+      evidence: null,
+      earlierScore: null,
+    });
+    expect(merged.subject.ageYears).toBe(9);
+  });
+
   it('keeps what she typed while the save was on its way', () => {
     const local = { ...blankInitial(), summary: { en: { text: 'typing ', marks: [] }, ar: null } };
     const merged = withServerParts(local, blankInitial());
