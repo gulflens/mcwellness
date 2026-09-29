@@ -78,6 +78,12 @@ export type Piece = {
   /** Left edge, from the left of the paragraph's box. */
   readonly left: number;
   readonly width: number;
+  /**
+   * A space stood before it in the text. False inside a word, and for the
+   * rest of a word broken by character across lines; what the first piece
+   * of a paragraph says does not matter.
+   */
+  readonly spaced: boolean;
 };
 
 /** A laid line: its pieces in reading order. */
@@ -87,7 +93,19 @@ export type Laid = {
   readonly lines: readonly Line[];
   readonly height: number;
   readonly box: LineBox;
+  /**
+   * The text this paragraph, or this part of one, was laid from. A split
+   * part holds only its own text, so laying it out again gives the same
+   * part.
+   */
   readonly input: ParagraphInput;
+  /**
+   * How far the lowest underline reaches below the last line box, 0 when
+   * none does. An Arabic underline sits deep enough to pass the foot of its
+   * line box on a loose line height; whoever sets what follows may want the
+   * room.
+   */
+  readonly overhang: number;
 };
 
 /** A word, or the part of one in a single style and direction, before it is placed. */
@@ -126,7 +144,9 @@ function atomsOf(input: ParagraphInput): Atom[] {
   const plain = input.spans
     .map((span) => span.text)
     .join('')
-    .replace(/\s/g, ' ');
+    // Every white space but the no-break space folds to one breaking space;
+    // the no-break space stays, inside its word, so no line breaks there.
+    .replace(/[^\S\u00a0]/gu, ' ');
   const spanAt: number[] = [];
   input.spans.forEach((span, index) => {
     for (let at = 0; at < span.text.length; at += 1) spanAt.push(index);
@@ -180,6 +200,7 @@ function groupsOf(
     texts.push({ atom, text: atom.text, gap: index === 0 || atom.glued ? 0 : space });
   });
   return texts.map(({ atom, text, gap }) => ({
+    spaced: !atom.glued,
     text,
     weight: atom.weight,
     underline: atom.underline,
@@ -249,7 +270,8 @@ function breakLines(
             : [...chunk, { ...atom, text: character, glued: chunk.length > 0 || atom.glued }];
         if (chunk.length > 0 && !fits(trial)) {
           lines.push(chunk);
-          chunk = [{ ...atom, text: character, glued: false }];
+          // The rest of the word goes on, glued: no space stood here.
+          chunk = [{ ...atom, text: character, glued: true }];
         } else {
           chunk = trial;
         }
@@ -319,6 +341,7 @@ function place(
         arabic: group.arabic,
         left,
         width: group.width,
+        spaced: group.spaced,
       });
       at = first.rtl ? left : left + group.width;
     });
@@ -368,7 +391,31 @@ export function layoutParagraph(input: ParagraphInput, given: Measure): Laid {
     return { pieces: place(groups, naturalOf(groups), input, input.align) };
   });
 
-  return { lines, height: lines.length * box.advance, box, input };
+  return {
+    lines,
+    height: lines.length * box.advance,
+    box,
+    input,
+    overhang: overhangOf(lines, box, input.style.size),
+  };
+}
+
+/** The thickness of an underline: 0.06 em, and never under half a point. */
+function thicknessOf(size: number): number {
+  return Math.max(0.06 * size, 0.5);
+}
+
+/** How far the lowest underline's lower edge reaches below the last line box. */
+function overhangOf(lines: readonly Line[], box: LineBox, size: number): number {
+  let deepest = 0;
+  lines.forEach((line, index) => {
+    for (const run of underlinesOf(line)) {
+      const edge =
+        index * box.advance + box.firstBaseline + run.drop * size + thicknessOf(size) / 2;
+      deepest = Math.max(deepest, edge - lines.length * box.advance);
+    }
+  });
+  return deepest;
 }
 
 function paintOf(paint: Paint): Paint {
@@ -413,7 +460,7 @@ export function drawParagraph(laid: Laid, at: { x: number; top: number }): Op[] 
         x: at.x + run.from,
         y: baseline - run.drop * size,
         width: run.to - run.from,
-        thickness: Math.max(0.06 * size, 0.5),
+        thickness: thicknessOf(size),
         // The writer strokes an unpainted rule in a light grey; an underline is
         // the colour of its words, which unpainted is black.
         grey: paint.grey ?? 0,
@@ -455,6 +502,22 @@ function underlinesOf(line: Line): Underline[] {
 }
 
 /**
+ * The spans that give back these lines: each piece in reading order, a space
+ * before it where one stood in the text, and a space between lines unless a
+ * word was broken across them.
+ */
+function spansOf(lines: readonly Line[]): Span[] {
+  return lines.flatMap((line, lineIndex) =>
+    line.pieces.map((piece, index) => ({
+      text: (piece.spaced && (lineIndex > 0 || index > 0) ? ' ' : '') + piece.text,
+      ...(piece.weight === 'bold' ? { bold: true } : {}),
+      ...(piece.underline ? { underline: true } : {}),
+      ...(piece.accent ? { accent: true } : {}),
+    })),
+  );
+}
+
+/**
  * Cuts a laid paragraph between lines, as many on the first side as `room`
  * holds. Each side keeps at least two lines, so a paragraph under four lines
  * never splits.
@@ -464,10 +527,13 @@ export function splitParagraph(laid: Laid, room: number): readonly [Laid, Laid] 
   if (count < 4 || !Number.isFinite(room)) return null;
   const take = Math.min(Math.floor(room / laid.box.advance + EPSILON), count - 2);
   if (take < 2) return null;
+  const size = laid.input.style.size;
   const part = (lines: readonly Line[]): Laid => ({
     ...laid,
+    input: { ...laid.input, spans: spansOf(lines) },
     lines,
     height: lines.length * laid.box.advance,
+    overhang: overhangOf(lines, laid.box, size),
   });
   return [part(laid.lines.slice(0, take)), part(laid.lines.slice(take))];
 }

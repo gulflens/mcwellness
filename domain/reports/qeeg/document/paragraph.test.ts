@@ -488,3 +488,66 @@ describe('the rules a paragraph keeps to', () => {
     expect(texts(ops)[0]?.style.grey).toBe(0.4);
   });
 });
+
+describe('what a laid paragraph tells its caller', () => {
+  it('says how far an Arabic underline on its last line reaches below its box', () => {
+    const laid = layoutParagraph(
+      input([{ text: 'نص مسطر', underline: true }], { paragraph: 'rtl' }),
+      measure,
+    );
+    // The box ends 15 - 10.75 = 4.25 below the baseline; the rule's lower
+    // edge is 0.5 em and half its 0.6 thickness below it, at 5.3.
+    expect(laid.overhang).toBeCloseTo(5.3 - 4.25, 9);
+  });
+
+  it('says nothing overhangs when no rule reaches below the last line box', () => {
+    const latin = layoutParagraph(input([{ text: 'underlined', underline: true }]), measure);
+    expect(latin.overhang).toBe(0);
+    const plain = layoutParagraph(input([{ text: 'نص' }], { paragraph: 'rtl' }), measure);
+    expect(plain.overhang).toBe(0);
+    const firstLineOnly = layoutParagraph(
+      input([{ text: 'نص مسطر', underline: true }, { text: ' ثم نص عادي طويل بعده كثيرا' }], {
+        paragraph: 'rtl',
+        width: 50,
+      }),
+      measure,
+    );
+    expect(firstLineOnly.lines.length).toBeGreaterThan(1);
+    expect(firstLineOnly.overhang).toBe(0);
+  });
+
+  it('keeps a no-break space, and never breaks a line there', () => {
+    const laid = layoutParagraph(input([{ text: 'alpha beta gamma delta' }]), measure);
+    expect(lines(drawParagraph(laid, AT)).map((row) => row.map((op) => op.text).join(' '))).toEqual(
+      ['alpha beta', 'gamma delta'],
+    );
+  });
+
+  it('folds every other white space to one breaking space', () => {
+    const ops = texts(draw([{ text: 'alpha\tbeta\ngamma' }]));
+    expect(ops.map((op) => op.text)).toEqual(['alpha beta gamma']);
+  });
+});
+
+describe('a split part laid out again', () => {
+  const six = layoutParagraph(
+    input([
+      { text: 'aaaa bbbb ' },
+      { text: 'cccc dddd', bold: true },
+      { text: ' eeee ffff gggg hhhh ' },
+      { text: 'iiii', underline: true },
+      { text: ` jjjj kkkk llll ${TWELVE_WORDS}` },
+    ]),
+    measure,
+  );
+
+  it('holds only its own text, so laying it out again gives the same part', () => {
+    const [first, second] = splitParagraph(six, 4 * six.box.advance) ?? [six, six];
+    expect(first.lines).toHaveLength(4);
+    for (const part of [first, second]) {
+      expect(layoutParagraph(part.input, measure).lines).toEqual(part.lines);
+    }
+    const text = (spans: readonly Span[]): string => spans.map((span) => span.text).join('');
+    expect(text(first.input.spans) + ' ' + text(second.input.spans)).toBe(text(six.input.spans));
+  });
+});
