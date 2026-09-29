@@ -1,0 +1,162 @@
+/**
+ * The old tool's formatted summary, read into this app's rich text.
+ *
+ * **What the old tool stored.** Its summary editor kept the text as a Quill
+ * delta: a list of inserts, each with the attributes it was typed with, and a
+ * newline at the very end. This app keeps plain text and a list of marks that
+ * are bold, underlined, or both (`RichText` in `../types.ts`).
+ *
+ * **What is carried and what is not, and why it is named.** Bold and
+ * underline are carried. Colour is not: hue in this app belongs to band data
+ * and three states. Italic is not: Arabic has no italic, so a slant could be
+ * honoured in one language only. Direction and alignment are not: the page
+ * sets them from the language it is printed in. Anything else the editor may
+ * have written is not carried either. Each kind that was left out is named
+ * once in `dropped`, so the reader can put a note on the record that says the
+ * summary was not carried exactly as printed.
+ *
+ * **Counting.** Offsets count UTF-16 units of the text, as `Mark` says, which
+ * is what `String.prototype.length` counts. Each insert is written in
+ * composed form (NFC) before it is counted, so a mark lands on the letters it
+ * was typed over.
+ *
+ * It never throws. Whatever cannot be read gives `{ ok: false }`, and the
+ * reader falls back to the plain summary the old file also kept.
+ */
+
+import type { Mark, RichText } from '../types';
+
+export type Dropped = 'colour' | 'slant' | 'direction' | 'embed' | 'other';
+
+const DROPPED_ORDER: readonly Dropped[] = Object.freeze([
+  'colour',
+  'slant',
+  'direction',
+  'embed',
+  'other',
+]);
+
+type Style = { readonly bold: boolean; readonly underline: boolean };
+type Span = Style & { readonly from: number; readonly to: number };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** An attribute that is present and not switched off. */
+function isSet(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== false;
+}
+
+function droppedFor(key: string): Dropped {
+  switch (key) {
+    case 'color':
+      return 'colour';
+    case 'italic':
+      return 'slant';
+    case 'direction':
+    case 'align':
+      return 'direction';
+    default:
+      return 'other';
+  }
+}
+
+/** The text with the newline a delta ends with, and any empty paragraphs before it, taken off. */
+function withoutEmptyEnd(text: string): string {
+  const paragraphs = text.split('\n');
+  let end = paragraphs.length;
+  while (end > 0 && (paragraphs[end - 1] ?? '').trim() === '') end -= 1;
+  return paragraphs.slice(0, end).join('\n');
+}
+
+/** Marks inside the text, joined where two neighbours are alike. */
+function toMarks(spans: readonly Span[], length: number): Mark[] {
+  const marks: Span[] = [];
+  for (const span of spans) {
+    const from = Math.min(span.from, length);
+    const to = Math.min(span.to, length);
+    if (to <= from) continue;
+    const last = marks[marks.length - 1];
+    if (
+      last !== undefined &&
+      last.to === from &&
+      last.bold === span.bold &&
+      last.underline === span.underline
+    ) {
+      marks[marks.length - 1] = { ...last, to };
+    } else {
+      marks.push({ from, to, bold: span.bold, underline: span.underline });
+    }
+  }
+  return marks.map(({ from, to, bold, underline }) => ({
+    from,
+    to,
+    ...(bold ? { bold: true as const } : {}),
+    ...(underline ? { underline: true as const } : {}),
+  }));
+}
+
+export function fromQuillDelta(
+  deltaJson: string,
+): { ok: true; rich: RichText; dropped: Dropped[] } | { ok: false } {
+  try {
+    if (typeof deltaJson !== 'string') return { ok: false };
+    const decoded: unknown = JSON.parse(deltaJson);
+    const ops: unknown = Array.isArray(decoded)
+      ? decoded
+      : isRecord(decoded)
+        ? decoded['ops']
+        : undefined;
+    if (!Array.isArray(ops)) return { ok: false };
+
+    const dropped = new Set<Dropped>();
+    const spans: Span[] = [];
+    let text = '';
+
+    for (const op of ops as readonly unknown[]) {
+      if (!isRecord(op)) {
+        dropped.add('other');
+        continue;
+      }
+      const insert = op['insert'];
+      if (typeof insert !== 'string') {
+        dropped.add(insert === undefined ? 'other' : 'embed');
+        continue;
+      }
+      const attributes = op['attributes'];
+      let bold = false;
+      let underline = false;
+      if (isRecord(attributes)) {
+        for (const [key, value] of Object.entries(attributes)) {
+          if (key === 'bold' || key === 'underline') {
+            if (value === true) {
+              if (key === 'bold') bold = true;
+              else underline = true;
+            } else if (isSet(value)) {
+              dropped.add('other');
+            }
+          } else if (isSet(value)) {
+            dropped.add(droppedFor(key));
+          }
+        }
+      } else if (isSet(attributes)) {
+        dropped.add('other');
+      }
+
+      const piece = insert.normalize('NFC');
+      const from = text.length;
+      text += piece;
+      if (bold || underline) spans.push({ from, to: text.length, bold, underline });
+    }
+
+    const kept = withoutEmptyEnd(text);
+    return {
+      ok: true,
+      rich: { text: kept, marks: toMarks(spans, kept.length) },
+      dropped: DROPPED_ORDER.filter((kind) => dropped.has(kind)),
+    };
+  } catch {
+    return { ok: false };
+  }
+}
