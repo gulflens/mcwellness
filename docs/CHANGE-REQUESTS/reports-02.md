@@ -216,7 +216,14 @@ in the layout. None is asked to be changed here.
 3. The sign for "about" has no glyph in any installed subset. The wording says
    it as a word.
 4. An isolated alef wasla maps to a form the face does not have.
-5. In the Arabic edition of the session and progress reports, some values in
+5. Figures typed on an Arabic keyboard (U+0660 to U+0669, and U+06F0 to
+   U+06F9) are reversed inside a right-to-left op, so "15" is drawn as "51".
+   The face carries the glyphs, so nothing is dropped and nothing says so.
+   Found by the first review of the layout, with the input and what was
+   drawn. The layout now draws them as ops of their own. An invoice or a
+   report that prints a figure typed that way inside an Arabic line is
+   exposed to it today.
+6. In the Arabic edition of the session and progress reports, some values in
    Arabic are drawn without the right-to-left flag
    (`domain/reports/document/render.ts`, the `labelled` values, the rating
    labels and a goal's description). Read from the code. Not seen on a page.
