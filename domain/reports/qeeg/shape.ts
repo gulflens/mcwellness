@@ -577,7 +577,10 @@ export const QeegContentShape: z.ZodType<QeegContent> = z.discriminatedUnion('ed
 
 export type ShapeRefusal = { path: string; reason: string };
 
-/** Every refusal, each naming its field by a dotted path. */
+/** How many refusals are named, at most. */
+const MOST_REFUSALS = 50;
+
+/** Every refusal, up to fifty, each naming its field by a dotted path. */
 export function validateQeegContent(
   input: unknown,
 ): { ok: true; content: QeegContent } | { ok: false; refusals: ShapeRefusal[] } {
@@ -603,5 +606,14 @@ export function validateQeegContent(
       refusals.push({ path: path.join('.'), reason: issue.message });
     }
   }
-  return { ok: false, refusals };
+  if (refusals.length <= MOST_REFUSALS) return { ok: false, refusals };
+  // A body built to raise a refusal per entry would otherwise be answered
+  // with as many; fifty name enough to mend, and the rest are counted.
+  return {
+    ok: false,
+    refusals: [
+      ...refusals.slice(0, MOST_REFUSALS),
+      { path: '', reason: `And ${refusals.length - MOST_REFUSALS} more.` },
+    ],
+  };
 }

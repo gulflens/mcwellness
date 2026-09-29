@@ -206,6 +206,16 @@ describe('validateQeegContent', () => {
     expectRefusedAt({ ...validInitial(), edition: 'second' }, 'edition');
   });
 
+  it('returns at most fifty refusals, and a fifty-first saying how many more there were', () => {
+    const chosen = Array.from({ length: 1000 }, (_, i) => `unknown-${i}`);
+    const answer = validateQeegContent(withValue(validInitial(), 'findings.chosen', chosen));
+    expect(answer.ok).toBe(false);
+    if (answer.ok) return;
+    expect(answer.refusals).toHaveLength(51);
+    expect(answer.refusals[49]?.path).toBe('findings.chosen.49');
+    expect(answer.refusals[50]).toEqual({ path: '', reason: 'And 950 more.' });
+  });
+
   describe('a field it does not know', () => {
     it('is refused by name, at the top', () => {
       const answer = validateQeegContent({ ...validInitial(), colour: 'red' });
