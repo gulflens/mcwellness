@@ -351,7 +351,7 @@ Twelve sections, in the order of the report, one open at a time unless she opens
 3. A follow-up is compared with a first report, brings its scores and maps forward, and prints the page of what has changed with typed figures, with some, and with none.
 4. A past record is brought in, reviewed, kept, and chosen as what a follow-up is compared with. It cannot be signed, sent or seen by the household.
 5. A report is refused signing while its wording is a draft in that language.
-6. No rendered page, in either language, holds a word of another kind of practice beyond the agreement's own standing sentences; a test reads every page and says so.
+6. No rendered page, in either language, holds a word of another kind of practice beyond the agreement's own standing sentences and the comparison's own sentence (section 10, point 8; `assessment.md` section 3.3), each printed from its one source in `domain/reports/document/strings.ts`; a test reads every page and says so, excepting exactly those two parts. *(Amended 2026-09-30: the comparison's sentence is required by section 10 and holds such a word, so this point named one exception where it needed two.)*
 7. On every page, in both languages, nothing leaves the margins and nothing overlaps.
 8. A map is embedded at the size it was given, without loss, and the form says how it will print.
 9. An invoice and a report already filed render to the bytes they were filed as, after the writer's additions.
