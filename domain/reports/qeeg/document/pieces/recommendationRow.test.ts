@@ -148,10 +148,10 @@ describe('recommendationRow', () => {
     expectInside(block, WIDTH);
   });
 
-  it('keeps the padding above and below, with the hairline along the foot', () => {
+  it('keeps the padding above and below, with the hairline under it along the foot', () => {
     const block = row(english);
     const number = styleOf('rowNumber', 'ltr').style;
-    expect(block.height).toBeCloseTo(2 * ROW.padV + number.size * number.lineHeight, 9);
+    expect(block.height).toBeCloseTo(2 * ROW.padV + number.size * number.lineHeight + ROW.rule, 9);
     const [hairline] = rules(block.ops);
     expect(rules(block.ops)).toHaveLength(1);
     expect(hairline?.x).toBe(0);
