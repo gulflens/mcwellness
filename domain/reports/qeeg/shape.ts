@@ -479,8 +479,8 @@ function rangeRises(figure: { low: number; high: number | null }, ctx: z.core.$R
 const percentFields = {
   kind: z.literal('percent'),
   direction: z.enum(['increase', 'decrease']),
-  low: whole(1, 100),
-  high: z.number().int().max(100).nullable(),
+  low: whole(1, LIMITS.percentMost),
+  high: z.number().int().max(LIMITS.percentMost).nullable(),
 };
 
 const typedFields = { source: z.literal('typed'), basis: z.null() };
@@ -639,6 +639,14 @@ const followUpShape = z
 // ---------------------------------------------------------------------------
 // The door
 // ---------------------------------------------------------------------------
+
+/**
+ * The two pieces of the shape a form holds her half-typed numbers to before
+ * they join the content (`choices.ts`), so the form asks the shape and keeps
+ * no copy of its limits.
+ */
+export const TypedFigureShape = typedFigure;
+export const SessionCountShape = whole(1, LIMITS.sessionsMost);
 
 export const QeegInitialShape: z.ZodType<QeegInitial> = initialShape;
 export const QeegFollowUpShape: z.ZodType<QeegFollowUp> = followUpShape;

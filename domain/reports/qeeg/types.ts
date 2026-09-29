@@ -99,6 +99,8 @@ export const LIMITS = Object.freeze({
   placesLeftOut: 20,
   tiles: 2,
   sessionsMost: 200,
+  /** The largest percentage a change figure may give. */
+  percentMost: 100,
 });
 
 // ---------------------------------------------------------------------------
