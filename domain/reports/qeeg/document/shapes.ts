@@ -10,10 +10,10 @@
  * engine only strokes and fills what it is handed, so a path that is right as
  * numbers is right on paper.
  *
- * **Why the path types are declared here.** The document engine in
- * `domain/shared/document` has no path op yet; a later change adds one. The
- * types below are written exactly as that op will be, so the day it lands the
- * only change in this file is where `PathOp` is imported from.
+ * **The path types are the engine's own** (`domain/shared/document`, trunk
+ * round 67). They were declared here until the engine had a path op, written
+ * exactly as it would be, and are now re-exported from it so the pieces keep
+ * importing them from this file.
  *
  * PDF coordinates throughout: `y` grows UPWARD, and an angle is in radians,
  * anticlockwise from the positive x axis, as PDF draws. A NEGATIVE sweep runs
@@ -23,25 +23,20 @@
  * `RangeError` that names the argument, rather than drawn as nothing.
  */
 
+import type {
+  Paint as EnginePaint,
+  PathOp as EnginePathOp,
+  PathSegment,
+  Stroke as EngineStroke,
+} from '@domain/shared/document';
+
+export type { PathSegment } from '@domain/shared/document';
 export type Rgb = readonly [number, number, number];
-export type Paint = { readonly grey?: number; readonly rgb?: Rgb };
-export type PathSegment =
-  | readonly ['M', number, number]
-  | readonly ['L', number, number]
-  | readonly ['C', number, number, number, number, number, number]
-  | readonly ['Z'];
-export type Stroke = Paint & {
-  readonly width?: number;
-  readonly cap?: 'butt' | 'round' | 'square';
-  readonly join?: 'miter' | 'round' | 'bevel';
-};
-export type PathOp = {
-  readonly kind: 'path';
-  readonly segments: readonly PathSegment[];
-  readonly fill?: Paint;
-  readonly stroke?: Stroke;
-  readonly evenOdd?: boolean;
-};
+// Read-only here, as every type of the layout layer is (`homes.test.ts`); the
+// engine's own are writable, and a read-only one is still an engine op.
+export type Paint = Readonly<EnginePaint>;
+export type Stroke = Readonly<EngineStroke>;
+export type PathOp = Readonly<EnginePathOp>;
 
 const QUARTER = Math.PI / 2;
 const FULL_TURN = 2 * Math.PI;
