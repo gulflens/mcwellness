@@ -70,10 +70,21 @@ import { UNCUT, clean, isBlank, isRealDay, isRecord, withoutUnseen } from './tex
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 
-const day = z
-  .string()
-  .regex(ISO_DATE, 'A date is written YYYY-MM-DD.')
-  .refine(isRealDay, 'That day is not in the calendar, or not from 2000 to 2100.');
+/**
+ * A day, refused ONCE when it is none (RC4 note N1): a text not written
+ * `YYYY-MM-DD` is told so and nothing more, since whether it is in the
+ * calendar cannot be asked of it.
+ */
+const day = z.string().superRefine((text, ctx) => {
+  if (!ISO_DATE.test(text)) {
+    ctx.addIssue({ code: 'custom', message: 'A date is written YYYY-MM-DD.' });
+  } else if (!isRealDay(text)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'That day is not in the calendar, or not from 2000 to 2100.',
+    });
+  }
+});
 
 const whole = (least: number, most: number) => z.number().int().min(least).max(most);
 

@@ -1041,6 +1041,25 @@ describe('validateQeegContent', () => {
       }
     });
 
+    it('refuses a day that is no day once, whichever way it is none', () => {
+      // A text that is not written as a day was refused twice at one path:
+      // for its form, and again for not being in the calendar.
+      const reasons = {
+        '': /YYYY-MM-DD/,
+        yesterday: /YYYY-MM-DD/,
+        '2026-3-15': /YYYY-MM-DD/,
+        '2026-02-30': /calendar/,
+        '1999-12-31': /calendar/,
+      };
+      for (const [day, reason] of Object.entries(reasons)) {
+        const answer = validateQeegContent(withValue(validFollowUp(), 'recording.recordedOn', day));
+        if (answer.ok) throw new Error(`${day} was accepted`);
+        expect(answer.refusals, day).toHaveLength(1);
+        expect(answer.refusals[0]?.path, day).toBe('recording.recordedOn');
+        expect(answer.refusals[0]?.reason, day).toMatch(reason);
+      }
+    });
+
     it('does not blame the new recording when the earlier day is no day', () => {
       // The thirty-first of September reads as later than any day of June, and is no day.
       const answer = validateQeegContent(
