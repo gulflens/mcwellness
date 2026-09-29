@@ -837,6 +837,81 @@ describe('fix round 1: races between two people', () => {
 });
 
 describe('fix round 1: what the review found untested', () => {
+  it('refuses to save over a draft read from the old tool’s file', async () => {
+    const { rows } = await h.owner.query<{ id: string }>(
+      'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
+        "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
+      [h.data.tenant.id, clientId, JSON.stringify(earlierContent()), 'f'.repeat(64)],
+    );
+    const res = await save(
+      {
+        id: rows[0]?.id,
+        clientId,
+        kind: 'qeeg',
+        savedAt: '2026-09-30T08:00:00.000000Z',
+        content: sentInitial(),
+      },
+      SEEDED.owner,
+    );
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { code: string }).code).toBe('imported_draft');
+  });
+
+  it('lets a lead practitioner who is nothing else save one', async () => {
+    const userId = '0000000d-0000-4000-8000-0000000000e3';
+    const authId = '0000000d-0000-4000-8000-0000000000e4';
+    await h.owner.query(
+      'insert into app_user (id, tenant_id, auth_id, display_name) values ($1, $2, $3, $4)',
+      [userId, h.data.tenant.id, authId, 'Lead only'],
+    );
+    await h.owner.query(
+      "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'lead_practitioner')",
+      [h.data.tenant.id, userId],
+    );
+    const res = await h.callAs(
+      'POST',
+      '/api/reports/draft',
+      authId,
+      { clientId, kind: 'qeeg', content: sentFollowUp(issuedId) },
+      WITH_REASON,
+    );
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as QeegDraftResponse).report.kind).toBe('qeeg');
+  });
+
+  it('refuses a comparison with a withdrawn past record and with a superseded report', async () => {
+    const withdrawn = await keptRecord('e'.repeat(64));
+    await withdraw(withdrawn);
+    const superseded = await h.owner.query<{ id: string }>(
+      'insert into report (tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
+        'signed_by_practitioner_id, signed_by_name, signed_by_certification, recipient_name, ' +
+        'recipient_record_number, practice_legal_name, content) values ' +
+        "($1, $2, 'qeeg', 'issued', $3, current_date, now(), $4, 'Rowan Ridge', 'bcia_bcn', " +
+        "'Cedar Meadow', 'MW-000001', 'Synthetic Studio', $5::jsonb) returning id",
+      [
+        h.data.tenant.id,
+        clientId,
+        ISSUED_NUMBER + 2,
+        h.practitionerIdOf(SEEDED.owner),
+        JSON.stringify(earlierContent()),
+      ],
+    );
+    const supersededId = superseded.rows[0]?.id ?? '';
+    await h.owner.query("update report set status = 'superseded' where id = $1", [supersededId]);
+
+    for (const [reportId, reason] of [
+      [withdrawn, 'withdrawn'],
+      [supersededId, 'superseded'],
+    ] as const) {
+      const res = await save({ clientId, kind: 'qeeg', content: sentFollowUp(reportId) });
+      expect(res.status, reason).toBe(422);
+      expect((await res.json()) as { code: string; reason: string }, reason).toMatchObject({
+        code: 'cannot_compare',
+        reason,
+      });
+    }
+  });
+
   it('refuses any save for a client whose record was erased, whoever asks', async () => {
     const index = h.data.clients.findIndex(
       (c, i) => c.status === 'active' && i !== clientIndex && c.id !== strangerId,
