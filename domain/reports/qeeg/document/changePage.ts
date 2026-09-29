@@ -252,7 +252,9 @@ export function changeParts(
   // this page compares anything, a page of pictures alone included: the
   // pairs are a comparison of two days as much as the figures are. Small
   // and grey, as the session and progress reports print it.
-  if (tiles.length + pairs.length + rows.length > 0) {
+  // The sessions completed are a count and compare nothing: only her
+  // figures, the pairs and the rows do.
+  if (Object.keys(change.tiles).length + pairs.length + rows.length > 0) {
     after.push(
       part(
         'change.comparison',

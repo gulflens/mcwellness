@@ -812,6 +812,14 @@ describe('a follow-up', () => {
 
   it('prints no comparison sentence where nothing is compared', () => {
     expect(idsOf(build(sparseFollowUp()))).not.toContain('change.comparison');
+    // The sessions completed are a count, and compare nothing.
+    const sessionsOnly: QeegFollowUp = {
+      ...sparseFollowUp(),
+      change: { ...sparseFollowUp().change, sessionsCompleted: { count: 20, source: 'gathered' } },
+    };
+    const ids = idsOf(build(sessionsOnly));
+    expect(ids).toContain('change.headlines');
+    expect(ids).not.toContain('change.comparison');
     for (const make of Object.values(CASES)) {
       const content = make();
       if (content.edition === 'initial') {
