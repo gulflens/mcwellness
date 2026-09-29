@@ -1080,16 +1080,16 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
 
   /** Which of these is printed follows from where the figures came from. */
   'note.figures.typed': later(
-    'The figures on this page are the practitioner’s approximate visual estimates, read from the brain maps shown. They are not calculated from the recording itself and are not a measure of change in brain function.',
-    'الأرقام الواردة في هذه الصفحة تقديرات بصرية تقريبية من الممارس، مأخوذة من خرائط الدماغ المعروضة. وهي غير محسوبة من التسجيل نفسه، وليست مقياسا للتغير في وظائف الدماغ.',
+    'The figures in this section are the practitioner’s approximate visual estimates, read from the brain maps shown. They are not calculated from the recording itself and are not a measure of change in brain function.',
+    'الأرقام الواردة في هذا القسم تقديرات بصرية تقريبية من الممارس، مأخوذة من خرائط الدماغ المعروضة. وهي غير محسوبة من التسجيل نفسه، وليست مقياسا للتغير في وظائف الدماغ.',
   ),
   'note.figures.calculated': later(
-    'The figures on this page are calculated from the two recordings named above, as the mapping software measured them.',
-    'الأرقام الواردة في هذه الصفحة محسوبة من التسجيلين المذكورين أعلاه، كما قاسهما برنامج رسم الخرائط.',
+    'The figures in this section are calculated from the two recordings named above, as the mapping software measured them.',
+    'الأرقام الواردة في هذا القسم محسوبة من التسجيلين المذكورين أعلاه، كما قاسهما برنامج رسم الخرائط.',
   ),
   'note.figures.both': later(
-    'Some figures on this page are the practitioner’s approximate visual estimates, read from the brain maps shown, and the others are calculated from the two recordings. An estimate is not a measure of change in brain function.',
-    'بعض الأرقام الواردة في هذه الصفحة تقديرات بصرية تقريبية من الممارس، مأخوذة من خرائط الدماغ المعروضة، والأخرى محسوبة من التسجيلين. والتقدير ليس مقياسا للتغير في وظائف الدماغ.',
+    'Some figures in this section are the practitioner’s approximate visual estimates, read from the brain maps shown, and the others are calculated from the two recordings. An estimate is not a measure of change in brain function.',
+    'بعض الأرقام الواردة في هذا القسم تقديرات بصرية تقريبية من الممارس، مأخوذة من خرائط الدماغ المعروضة، والأخرى محسوبة من التسجيلين. والتقدير ليس مقياسا للتغير في وظائف الدماغ.',
   ),
   'note.earlier_imported': later(
     'The earlier report was written in the practice’s previous report tool.',

@@ -314,6 +314,17 @@ describe('the sessions completed, on the page of what has changed', () => {
   });
 });
 
+describe('the notes beneath the figures', () => {
+  it('speak of the section and never of the page, which may run to a second sheet', () => {
+    for (const key of ['note.figures.typed', 'note.figures.calculated', 'note.figures.both']) {
+      expect(phrase(key, 'follow-up', 'en'), key).not.toMatch(/this page/i);
+      expect(phrase(key, 'follow-up', 'ar'), key).not.toContain('هذه الصفحة');
+    }
+    expect(phrase('note.figures.typed', 'follow-up', 'en')).toContain('in this section');
+    expect(phrase('note.figures.typed', 'follow-up', 'ar')).toContain('في هذا القسم');
+  });
+});
+
 describe('how many sessions, in Arabic', () => {
   it('has one form for one, one for two, one for three to ten, and one for the rest', () => {
     const ar = (key: string) => phrase(key, 'initial', 'ar');
