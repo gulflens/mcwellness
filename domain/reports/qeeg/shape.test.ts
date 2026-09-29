@@ -955,6 +955,21 @@ describe('validateQeegContent', () => {
     });
   });
 
+  describe('a follow-up is not recorded before what it is compared with', () => {
+    it('refuses a recording made before the earlier one, at its day', () => {
+      expectRefusedAt(
+        withValue(validFollowUp(), 'recording.recordedOn', '2026-05-31'),
+        'recording.recordedOn',
+      );
+    });
+
+    it('allows the same day, and a recording with no day yet', () => {
+      expectAccepted(withValue(validFollowUp(), 'recording.recordedOn', '2026-06-01'));
+      expectAccepted(withValue(validFollowUp(), 'recording.recordedOn', null));
+      expectAccepted(blankFollowUp(EARLIER, 'final'));
+    });
+  });
+
   describe('a follow-up names what it is compared with', () => {
     it('refuses a follow-up with nothing to compare with', () => {
       expectRefusedAt(withValue(validFollowUp(), 'comparedWith', undefined), 'comparedWith');

@@ -25,8 +25,10 @@
  * the very draft being filled, a report never signed or kept, one with a
  * later version, a past record that was withdrawn, a reference that does not
  * fit where the report came from (a signed report has one, a past record
- * from the old tool has none), no day of recording, and last an earlier
- * report recorded after the new recording. The same day is allowed.
+ * from the old tool has none), no day of recording (or one that is no day),
+ * a request whose day is no day (`no_such_day`, never dropped in silence),
+ * and last an earlier report recorded after the new recording. The same day
+ * is allowed.
  *
  * It never throws on what it is handed: a part of the earlier report it
  * cannot read is taken as not there. It returns new values and changes
@@ -98,6 +100,7 @@ export type PrefillRefusal =
   | 'withdrawn'
   | 'erased'
   | 'undated'
+  | 'no_such_day'
   | 'recorded_later'
   | 'no_reference';
 
@@ -213,7 +216,8 @@ function refusalFor(earlier: EarlierReport, request: PrefillRequest): PrefillRef
   const day = own(own(earlier.content, 'recording'), 'recordedOn');
   if (typeof day !== 'string' || !isRealDay(day)) return 'undated';
   const asked = request.recordedOn;
-  if (asked !== null && isRealDay(asked) && day > asked) return 'recorded_later';
+  if (asked !== null && !isRealDay(asked)) return 'no_such_day';
+  if (asked !== null && day > asked) return 'recorded_later';
   return null;
 }
 
@@ -243,7 +247,6 @@ export function prefillFollowUp(earlier: EarlierReport, request: PrefillRequest)
   const maps = own(content, 'maps');
   const bands = own(content, 'bands');
   const connectivity = own(content, 'connectivity');
-  const asked = request.recordedOn;
 
   return {
     ok: true,
@@ -251,7 +254,7 @@ export function prefillFollowUp(earlier: EarlierReport, request: PrefillRequest)
       ...blank,
       recording: {
         ...blank.recording,
-        recordedOn: asked !== null && isRealDay(asked) ? asked : null,
+        recordedOn: request.recordedOn,
         handedness: oneOf<Handedness>(HANDEDNESS, handedness) ? handedness : null,
       },
       dashboard: eachOf(DIMENSION_IDS, (d: DimensionId): FollowUpScore => ({

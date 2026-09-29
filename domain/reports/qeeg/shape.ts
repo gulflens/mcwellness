@@ -593,7 +593,20 @@ const followUpShape = z
     change: changeSection,
     plan: z.object({ sessions, next: z.enum(NEXT_STAGE_IDS).nullable() }).strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((content, ctx) => {
+    // What has changed since an earlier recording is measured from it, so a
+    // follow-up is never recorded before it. The same day is allowed, and a
+    // draft with no day yet is saved before it is filled.
+    const day = content.recording.recordedOn;
+    if (day !== null && day < content.comparedWith.recordedOn) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['recording', 'recordedOn'],
+        message: 'A follow-up is not recorded before the report it is compared with.',
+      });
+    }
+  });
 
 // ---------------------------------------------------------------------------
 // The door

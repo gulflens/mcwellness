@@ -346,6 +346,7 @@ describe('prefillFollowUp', () => {
           asked,
         ],
       ],
+      ['no_such_day', (from, asked) => [from, { ...asked, recordedOn: '2026-02-30' }]],
       ['recorded_later', (from, asked) => [from, { ...asked, recordedOn: '2026-03-13' }]],
     ];
 
@@ -372,6 +373,28 @@ describe('prefillFollowUp', () => {
         ok: false,
         reason: 'no_reference',
       });
+    });
+
+    it('refuses a request whose day is no day, and never drops it in silence', () => {
+      for (const recordedOn of ['2026-02-30', 'yesterday', '', '14/09/2026', '1999-12-31']) {
+        expect(prefillFollowUp(earlier(), request({ recordedOn })), recordedOn).toEqual({
+          ok: false,
+          reason: 'no_such_day',
+        });
+      }
+    });
+
+    it('calls an earlier report whose day is no day undated', () => {
+      for (const recordedOn of ['2026-02-30', 'yesterday', '']) {
+        const content = {
+          ...earlierContent(),
+          recording: { ...earlierContent().recording, recordedOn },
+        };
+        expect(prefillFollowUp(earlier({ content }), request()), recordedOn).toEqual({
+          ok: false,
+          reason: 'undated',
+        });
+      }
     });
 
     it('allows an earlier report recorded the same day', () => {
