@@ -836,6 +836,22 @@ describe('fix round 1: races between two people', () => {
 });
 
 describe('fix round 1: what the review found untested', () => {
+  it('refuses any save for a client whose record was erased, whoever asks', async () => {
+    const index = h.data.clients.findIndex(
+      (c, i) => c.status === 'active' && i !== clientIndex && c.id !== strangerId,
+    );
+    const erasedId = h.clientId(index);
+    await h.owner.query("update client set status = 'erased' where id = $1", [erasedId]);
+    const before = await reportCount();
+    const res = await save(
+      { clientId: erasedId, kind: 'qeeg', content: sentInitial() },
+      SEEDED.owner,
+    );
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { code: string }).code).toBe('client_erased');
+    expect(await reportCount()).toBe(before);
+  });
+
   it('refuses a reason that cleans to nothing, or is no reason worth reading', async () => {
     const before = await reportCount();
     // A header carries bytes, not every character: a no-break space and a

@@ -221,6 +221,12 @@ export async function saveQeegDraft(
     // A client this person cannot reach is not there at all.
     return c.json({ error: 'not_found', requestId }, 404);
   }
+  if (client.status === 'erased') {
+    // Only the owner and the lead practitioner can see an erased record at
+    // all, and a report about a person who asked to be erased is not one to
+    // begin or go on writing, whoever asks.
+    return c.json({ error: 'unprocessable', code: 'client_erased', requestId }, 422);
+  }
   // The record was read, and its details are about to leave in the answer.
   await logRead(db, 'client', input.clientId, input.clientId);
 
@@ -244,7 +250,7 @@ export async function saveQeegDraft(
     const compared = await comparedFrom(db, reportId, {
       clientId: input.clientId,
       draftId: input.id ?? null,
-      erased: client.status === 'erased',
+      erased: false,
     });
     if (!compared.ok) {
       return c.json(
