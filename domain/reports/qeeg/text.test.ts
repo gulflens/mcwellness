@@ -8,6 +8,7 @@ import {
   cleanRich,
   isBlank,
   isEmpty,
+  isMark,
   isRealDay,
   isRecord,
   plain,
@@ -551,6 +552,48 @@ describe('cleanRich', () => {
     }
   });
 
+  it('never throws on what JSON can hold: a list of marks that is no list, a mark that is no mark', () => {
+    const given = (json: string) => JSON.parse(json) as RichText;
+    expect(cleanRich(given('{"text":"ab","marks":null}'), 10)).toEqual(rich('ab'));
+    expect(cleanRich(given('{"text":"ab","marks":{"from":0}}'), 10)).toEqual(rich('ab'));
+    expect(cleanRich(given('{"text":"ab"}'), 10)).toEqual(rich('ab'));
+    expect(
+      cleanRich(
+        given(
+          '{"text":"abcd","marks":[null,5,"x",[],{"from":"0","to":2,"bold":true},{"from":2,"to":4,"underline":true}]}',
+        ),
+        10,
+      ),
+    ).toEqual(rich('abcd', [{ from: 2, to: 4, ...U }]));
+  });
+
+  it('never counts bold of 1 or of "true" as bold', () => {
+    const given = JSON.parse(
+      '{"text":"abcd","marks":[{"from":0,"to":2,"bold":1},{"from":2,"to":4,"bold":"true","underline":true}]}',
+    ) as RichText;
+    expect(cleanRich(given, 10)).toEqual(rich('abcd', [{ from: 2, to: 4, ...U }]));
+  });
+
+  it('drops a mark whose start is after its end, and it changes nothing under it', () => {
+    expect(
+      cleanRich(
+        rich('abcdef', [
+          { from: 0, to: 5, ...B },
+          { from: 4, to: 1, ...B },
+          { from: 4, to: 2, ...U },
+        ]),
+        10,
+      ),
+    ).toEqual(rich('abcdef', [{ from: 0, to: 5, ...B }]));
+  });
+
+  it('refuses text that is no string by name, as it refuses a length', () => {
+    for (const json of ['{"marks":[]}', '{"text":null,"marks":[]}', '{"text":5,"marks":[]}']) {
+      expect(() => cleanRich(JSON.parse(json) as RichText, 10), json).toThrow(TypeError);
+      expect(() => cleanRich(JSON.parse(json) as RichText, 10), json).toThrow(/text/);
+    }
+  });
+
   it('refuses a length that is not a whole number above 0, as clean does', () => {
     for (const most of [0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => cleanRich(rich('abc'), most), String(most)).toThrow(RangeError);
@@ -604,5 +647,34 @@ describe('isBlank', () => {
 
   it('drops a paragraph that draws nothing', () => {
     expect(toParagraphs(rich('abc\n\u200c\u00ad\ndef'))).toEqual([rich('abc'), rich('def')]);
+  });
+});
+
+describe('isMark', () => {
+  it('holds a mark to whole-number edges and bold and underline each absent or true', () => {
+    for (const mark of [
+      { from: 0, to: 1, bold: true },
+      { from: 2, to: 9, underline: true },
+      { from: 0, to: 1, bold: true, underline: true },
+      { from: 0, to: 1 },
+    ]) {
+      expect(isMark(mark), JSON.stringify(mark)).toBe(true);
+    }
+    for (const mark of [
+      null,
+      5,
+      'mark',
+      [],
+      {},
+      { from: 0 },
+      { from: 0.5, to: 1, bold: true },
+      { from: 0, to: Number.POSITIVE_INFINITY, bold: true },
+      { from: '0', to: 1, bold: true },
+      { from: 0, to: 1, bold: 1 },
+      { from: 0, to: 1, bold: 'true' },
+      { from: 0, to: 1, underline: false },
+    ]) {
+      expect(isMark(mark), JSON.stringify(mark)).toBe(false);
+    }
   });
 });

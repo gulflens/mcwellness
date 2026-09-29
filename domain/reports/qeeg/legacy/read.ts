@@ -43,15 +43,24 @@
  * or `images.map-2` for the picture in the file's third place. A picture is
  * keyed by its place in the file, counting the places left out, so a note
  * about a place left out (`images.map-1`) names that place, and one note is
- * written for each. A route that stores a note for good keeps the image's
+ * written for each of the first twenty (`LIMITS.placesLeftOut`); after them,
+ * one note at `images` says more were. A route that stores a note for good keeps the image's
  * key with the upload, or the note names a place that is gone.
  *
  * It is pure and it never throws: whatever it is given, it returns a result.
  * The caller hashes the file's bytes; nothing here does I/O.
  */
 
-import type { ApproachId, BandId, ConnectivityId, DimensionId, RegionId } from '../catalogue/ids';
-import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from '../catalogue/ids';
+import { eachOf } from '../blank';
+import type {
+  ApproachId,
+  BandId,
+  ConnectivityId,
+  DimensionId,
+  InitialConnectivityLevel,
+  RegionId,
+} from '../catalogue/ids';
+import { BAND_IDS, DIMENSION_IDS } from '../catalogue/ids';
 import type {
   Bilingual,
   Condition,
@@ -195,7 +204,7 @@ function ticked<Id extends string>(
   notes: Notes,
 ): Id[] {
   if (!Array.isArray(value)) return [];
-  const row = value as readonly unknown[];
+  const row: readonly unknown[] = value;
   if (row.length > table.length) notes.add('extra_positions_ignored', at);
   return table.filter((_, i) => i < row.length && row[i] === true);
 }
@@ -208,7 +217,8 @@ function customItems(
   notes: Notes,
 ): Ordered<CustomItem> {
   if (!Array.isArray(value)) return {};
-  const items = (value as readonly unknown[])
+  const list: readonly unknown[] = value;
+  const items = list
     .filter(isRecord)
     .filter((item) =>
       ['text', 'textAr'].some((key) => !isBlank(clean(text(field(item, key)), LIMITS.label))),
@@ -266,7 +276,9 @@ function picked<Id extends string>(
 
 /** The entry at `position` of a list the file may or may not hold. */
 function entryAt(list: unknown, position: number): unknown {
-  return Array.isArray(list) ? (list as readonly unknown[])[position] : undefined;
+  if (!Array.isArray(list)) return undefined;
+  const entries: readonly unknown[] = list;
+  return entries[position];
 }
 
 function longerThan(list: unknown, length: number): boolean {
@@ -314,40 +326,45 @@ function dayOf(value: unknown, notes: Notes): string | null {
 function bandsOf(file: Loose, notes: Notes): Readonly<Record<BandId, InitialBand>> {
   const list = field(file, 'bands');
   if (longerThan(list, BANDS_BY_POSITION.length)) notes.add('extra_positions_ignored', 'bands');
-  const out = {} as Record<BandId, InitialBand>;
-  BANDS_BY_POSITION.forEach((band, position) => {
-    const entry = entryAt(list, position);
+  // In this app's order, each read from its place in the old list.
+  return eachOf(BAND_IDS, (band): InitialBand => {
+    const entry = entryAt(list, BANDS_BY_POSITION.indexOf(band));
     const at = `bands.${band}`;
-    out[band] = isRecord(entry)
+    return isRecord(entry)
       ? {
           level: chosenWord(field(entry, 'lvl'), BAND_LEVEL_BY_OLD_WORD, at, notes),
           regions: ticked(field(entry, 'regions'), REGIONS_BY_POSITION, `${at}.regions`, notes),
         }
       : { level: null, regions: [] };
   });
-  // In this app's order, whatever the old order was.
-  return Object.fromEntries(BAND_IDS.map((id) => [id, out[id]])) as Record<BandId, InitialBand>;
+}
+
+/** One kind of connectivity, its level read from that kind's own table. */
+function linkOf<K extends ConnectivityId>(
+  links: unknown,
+  oldKey: keyof typeof CONNECTIVITY_BY_OLD_KEY,
+  id: K,
+  notes: Notes,
+): { level: InitialConnectivityLevel<K> | null; regions: RegionId[] } {
+  const entry = isRecord(links) ? field(links, oldKey) : undefined;
+  const at = `connectivity.${id}`;
+  const levels: Readonly<Record<string, InitialConnectivityLevel<K>>> =
+    CONNECTIVITY_LEVEL_BY_OLD_WORD[id];
+  return isRecord(entry)
+    ? {
+        level: chosenWord(field(entry, 'lvl'), levels, at, notes),
+        regions: ticked(field(entry, 'regions'), REGIONS_BY_POSITION, `${at}.regions`, notes),
+      }
+    : { level: null, regions: [] };
 }
 
 function connectivityOf(file: Loose, notes: Notes): InitialConnectivity {
   const links = field(file, 'links');
-  // Each kind's level comes from that kind's own table, so the loose
-  // type below is narrowed back to `InitialConnectivity` safely at the end.
-  const out = {} as Record<ConnectivityId, { level: string | null; regions: RegionId[] }>;
-  for (const [oldKey, id] of Object.entries(CONNECTIVITY_BY_OLD_KEY)) {
-    const entry = isRecord(links) ? field(links, oldKey) : undefined;
-    const at = `connectivity.${id}`;
-    const levels: Readonly<Record<string, string>> = CONNECTIVITY_LEVEL_BY_OLD_WORD[id];
-    out[id] = isRecord(entry)
-      ? {
-          level: chosenWord(field(entry, 'lvl'), levels, at, notes),
-          regions: ticked(field(entry, 'regions'), REGIONS_BY_POSITION, `${at}.regions`, notes),
-        }
-      : { level: null, regions: [] };
-  }
-  return Object.fromEntries(
-    CONNECTIVITY_IDS.map((id) => [id, out[id]]),
-  ) as unknown as InitialConnectivity;
+  return {
+    connectivity: linkOf(links, 'conn', 'connectivity', notes),
+    asymmetry: linkOf(links, 'asym', 'asymmetry', notes),
+    phase_lag: linkOf(links, 'phase', 'phase_lag', notes),
+  };
 }
 
 /** The whole number the old tool would have read, or null where it would have printed 5. */
@@ -362,9 +379,9 @@ function dashboardOf(file: Loose, notes: Notes): Readonly<Record<DimensionId, Sc
   if (longerThan(list, DIMENSIONS_BY_POSITION.length)) {
     notes.add('extra_positions_ignored', 'dashboard');
   }
-  const out = {} as Record<DimensionId, Score>;
-  DIMENSIONS_BY_POSITION.forEach((dimension, position) => {
-    const entry = entryAt(list, position);
+  // In this app's order, each read from its place in the old list.
+  return eachOf(DIMENSION_IDS, (dimension): Score => {
+    const entry = entryAt(list, DIMENSIONS_BY_POSITION.indexOf(dimension));
     const at = `dashboard.${dimension}`;
     const read = isRecord(entry) ? wholeNumber(field(entry, 'score')) : null;
     let score: number;
@@ -385,9 +402,8 @@ function dashboardOf(file: Loose, notes: Notes): Readonly<Record<DimensionId, Sc
           `${at}.evidence`,
         )
       : null;
-    out[dimension] = { score, evidence };
+    return { score, evidence };
   });
-  return Object.fromEntries(DIMENSION_IDS.map((id) => [id, out[id]])) as Record<DimensionId, Score>;
 }
 
 /**
@@ -491,7 +507,7 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
   const slots = field(file, 'maps');
   if (!Array.isArray(slots)) return [];
   const images: LegacyImage[] = [];
-  const list = slots as readonly unknown[];
+  const list: readonly unknown[] = slots;
   let leftOut = 0;
   for (let place = 0; place < list.length; place += 1) {
     const slot = list[place];

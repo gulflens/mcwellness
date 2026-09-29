@@ -35,7 +35,7 @@
  * nothing it was given.
  */
 
-import { blankFollowUp } from './blank';
+import { blankFollowUp, eachOf } from './blank';
 import {
   BAND_IDS,
   BENEFIT_IDS,
@@ -130,10 +130,6 @@ function own(record: unknown, key: string): unknown {
 
 function oneOf<T extends string>(list: readonly T[], value: unknown): value is T {
   return list.some((item) => item === value);
-}
-
-function eachOf<K extends string, V>(keys: readonly K[], make: (key: K) => V): Record<K, V> {
-  return Object.fromEntries(keys.map((key) => [key, make(key)])) as Record<K, V>;
 }
 
 /** A score as the shape holds one, a whole number from 0 to 10, or none. */

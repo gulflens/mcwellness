@@ -28,7 +28,7 @@
  * Returns new values and never changes what it was given.
  */
 
-import { blankFollowUp } from './blank';
+import { blankFollowUp, eachOf } from './blank';
 import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from './catalogue/ids';
 import type { ComparedWith, QeegCommon, QeegFollowUp, QeegInitial } from './types';
 
@@ -53,10 +53,6 @@ function keptParts(content: QeegCommon): Omit<QeegCommon, 'stage' | 'provenance'
     summary: content.summary,
     benefits: content.benefits,
   });
-}
-
-function eachOf<K extends string, V>(keys: readonly K[], make: (key: K) => V): Record<K, V> {
-  return Object.fromEntries(keys.map((key) => [key, make(key)])) as Record<K, V>;
 }
 
 export type ToFollowUp =

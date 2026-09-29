@@ -30,6 +30,7 @@
  */
 
 import { z } from 'zod';
+import { eachOf } from './blank';
 import {
   APPROACH_IDS,
   BAND_CHANGES,
@@ -59,7 +60,7 @@ import {
   type QeegFollowUp,
   type QeegInitial,
 } from './types';
-import { UNCUT, clean, isBlank, isRealDay, withoutUnseen } from './text';
+import { UNCUT, clean, isBlank, isRealDay, isRecord, withoutUnseen } from './text';
 
 // ---------------------------------------------------------------------------
 // Small pieces
@@ -240,22 +241,24 @@ function ordered<const F extends z.core.$ZodLooseShape>(fields: F, most: number)
         if (keys.length > most) {
           ctx.addIssue({ code: 'custom', path: [], message: `At most ${most} may be kept here.` });
         }
-        checkPositions(items as Readonly<Record<string, { position: number }>>, ctx);
+        checkPositions(items, ctx);
       }),
   );
 }
 
-/** Places run from 0 with no gap and no repeat. Refused at the place that breaks it. */
-function checkPositions(
-  items: Readonly<Record<string, { position: number } | undefined>>,
-  ctx: z.core.$RefinementCtx,
-) {
-  const present = Object.entries(items).filter(
-    (entry): entry is [string, { position: number }] => entry[1] !== undefined,
-  );
+/**
+ * Places run from 0 with no gap and no repeat. Refused at the place that
+ * breaks it. Each item's place is asked for, not assumed: zod has already
+ * refused an item that has none, and such an item is passed over here.
+ */
+function checkPositions(items: Readonly<Record<string, unknown>>, ctx: z.core.$RefinementCtx) {
+  const present: Array<[string, number]> = [];
+  for (const [key, item] of Object.entries(items)) {
+    const position = isRecord(item) ? item['position'] : undefined;
+    if (typeof position === 'number') present.push([key, position]);
+  }
   const seen = new Set<number>();
-  for (const [key, item] of present) {
-    const { position } = item;
+  for (const [key, position] of present) {
     if (position < 0 || position >= present.length || seen.has(position)) {
       ctx.addIssue({
         code: 'custom',
@@ -297,11 +300,12 @@ const mapFields = {
 /**
  * Where an import note points: a dotted path as the old-file reader writes
  * one (`findings.custom.c0.label.en`, `images.map-2`,
- * `provenance.asPrinted`). It begins with a small letter and holds small
- * letters, capitals inside a name, figures, dots, hyphens and underscores,
- * up to 200 in all. The reader writes it, so anything else is a forged body.
+ * `provenance.asPrinted`). It begins with a small letter; each part between
+ * dots is not empty and begins with a letter or a figure, and holds letters
+ * (capitals inside a name), figures, hyphens and underscores; up to 200 in
+ * all. The reader writes it, so anything else is a forged body.
  */
-const NOTE_PATH = /^[a-z][a-zA-Z0-9._-]{0,199}$/;
+const NOTE_PATH = /^[a-z][a-zA-Z0-9_-]*(?:\.[a-zA-Z0-9][a-zA-Z0-9_-]*)*$/;
 
 const provenance = z.discriminatedUnion('origin', [
   z.object({ origin: z.literal('app') }).strict(),
@@ -317,6 +321,7 @@ const provenance = z.discriminatedUnion('origin', [
               code: z.enum(IMPORT_NOTE_CODES),
               at: z
                 .string()
+                .max(200)
                 .regex(NOTE_PATH, 'A note points at a path this app writes.')
                 .nullable(),
             })
@@ -352,10 +357,8 @@ const recording = z
 const sessions = whole(1, LIMITS.sessionsMost).nullable();
 
 /** One entry for every key of a list, each of the same shape. */
-function everyOf<const K extends readonly string[], S extends z.ZodType>(keys: K, shape: S) {
-  return z
-    .object(Object.fromEntries(keys.map((key) => [key, shape])) as { [P in K[number]]: S })
-    .strict();
+function everyOf<K extends string, S extends z.ZodType>(keys: readonly K[], shape: S) {
+  return z.object(eachOf(keys, () => shape)).strict();
 }
 
 const common = {
@@ -505,11 +508,7 @@ const changeRow = z
 const CALCULABLE: ReadonlySet<string> = new Set(CALCULABLE_MEASURES);
 
 const table = z
-  .object(
-    Object.fromEntries(MEASURE_IDS.map((id) => [id, changeRow.optional()])) as {
-      [P in (typeof MEASURE_IDS)[number]]: z.ZodOptional<typeof changeRow>;
-    },
-  )
+  .object(eachOf(MEASURE_IDS, () => changeRow.optional()))
   .strict()
   .superRefine((rows, ctx) => {
     checkPositions(rows, ctx);

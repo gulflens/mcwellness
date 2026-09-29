@@ -38,15 +38,26 @@ export const NOTHING_PICKED: Picked<never> = Object.freeze({
 });
 
 function nothingPicked<Id extends string>(): Picked<Id> {
-  return { chosen: [], custom: {} as Record<string, CustomItem & { position: number }> };
+  const custom: Record<string, CustomItem & { position: number }> = {};
+  return { chosen: [], custom };
 }
 
 function emptySummary(): BilingualRich {
   return { en: { text: '', marks: [] }, ar: null };
 }
 
-function eachOf<K extends string, V>(keys: readonly K[], make: () => V): Record<K, V> {
-  return Object.fromEntries(keys.map((key) => [key, make()])) as Record<K, V>;
+/**
+ * An entry for every key of a list, each made afresh. The one home of this
+ * for the brain-map report: the blanks, the switch between editions and the
+ * prefill all use it.
+ *
+ * The one cast in this code outside a test, and why it is sound:
+ * `Object.fromEntries` is typed to give a record of any string, and cannot
+ * know that the entries are exactly one for each of `keys`. They are, since
+ * each comes from `keys.map`, so the record holds every `K` and nothing else.
+ */
+export function eachOf<K extends string, V>(keys: readonly K[], make: (key: K) => V): Record<K, V> {
+  return Object.fromEntries(keys.map((key) => [key, make(key)])) as Record<K, V>;
 }
 
 function emptyPair(): Pair {

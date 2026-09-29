@@ -210,22 +210,42 @@ const UNDERLINE_BIT = 2;
 const COMBINING = /\p{M}/u;
 
 /**
+ * A mark as the type declares it: whole numbers for `from` and `to`, and
+ * `bold` and `underline` each absent or exactly `true`. What a person's
+ * editor sends is asked this before it is taken for a mark.
+ */
+export function isMark(value: unknown): value is Mark {
+  if (!isRecord(value)) return false;
+  const { from, to, bold, underline } = value;
+  return (
+    Number.isInteger(from) &&
+    Number.isInteger(to) &&
+    (bold === undefined || bold === true) &&
+    (underline === undefined || underline === true)
+  );
+}
+
+/**
  * The style of every UTF-16 unit of a text of `length`: bold, underlined,
  * both, or neither. Marks out of order, overlapping, or running past the
  * text are what a person's editor may hand over, so they are read, never
  * refused: a unit is bold when any bold mark covers it, and so for
  * underline. An edge that is no number covers nothing.
  */
-function unitStyles(marks: readonly Mark[], length: number): Uint8Array {
+function unitStyles(marks: readonly unknown[], length: number): Uint8Array {
   const bold = new Int32Array(length + 1);
   const underline = new Int32Array(length + 1);
   for (const mark of marks) {
-    const isBold = mark.bold === true;
-    const isUnderlined = mark.underline === true;
+    // What JSON can hold and is no mark at all is passed over.
+    if (!isRecord(mark) || typeof mark['from'] !== 'number' || typeof mark['to'] !== 'number') {
+      continue;
+    }
+    const isBold = mark['bold'] === true;
+    const isUnderlined = mark['underline'] === true;
     if (!isBold && !isUnderlined) continue;
     // A unit at `i` is covered when from <= i < to.
-    const from = Math.min(Math.max(Math.ceil(mark.from), 0), length);
-    const to = Math.min(Math.max(Math.ceil(mark.to), 0), length);
+    const from = Math.min(Math.max(Math.ceil(mark['from']), 0), length);
+    const to = Math.min(Math.max(Math.ceil(mark['to']), 0), length);
     if (!(from < to)) continue;
     if (isBold) {
       bold[from] = (bold[from] ?? 0) + 1;
@@ -278,14 +298,23 @@ type Styled = { readonly text: string; readonly style: number };
  * ends up empty, or is neither bold nor underlined, is gone. Cleaning twice
  * is cleaning once.
  *
+ * It never throws on what JSON can hold, but on a `most` that is no length
+ * and a `text` that is no string, each refused by name: `marks` that is no
+ * list is no marks, and a mark that is no mark (no numbers for its edges) is
+ * passed over.
+ *
  * How many marks there may be is not this function's to decide: the shape
  * refuses too many by name (`LIMITS.marks`), and the old-file reader keeps
  * the first ones with a note.
  */
 export function cleanRich(rich: RichText, most: number): RichText {
   checkMost(most);
-  const source = rich.text;
-  const units = unitStyles(rich.marks, source.length);
+  const source: unknown = rich.text;
+  if (typeof source !== 'string') {
+    throw new TypeError('Rich text has a text, and its text is a string.');
+  }
+  const marks: unknown = rich.marks;
+  const units = unitStyles(Array.isArray(marks) ? marks : [], source.length);
 
   // What `withoutUnseen` removes, removed, each character keeping its style.
   const kept: Styled[] = [];

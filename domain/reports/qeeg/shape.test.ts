@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { blankFollowUp, blankInitial } from './blank';
+import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from './catalogue/ids';
 import { validateQeegContent } from './shape';
 import { DRAWS_NOTHING } from './testing/drawsNothing';
 import {
@@ -430,6 +431,51 @@ describe('validateQeegContent', () => {
       for (const at of written) expectAccepted(withNoteAt(at));
     });
 
+    it('accepts every path the old-file reader can write, listed from its code', () => {
+      const lists = ['findings', 'focus', 'recommendations', 'benefits'];
+      const keys = Array.from({ length: LIMITS.customPerList }, (_, i) => `c${i}`);
+      const places = Array.from({ length: 40 }, (_, i) => `images.map-${i}`);
+      const paths = [
+        'stage',
+        'recording.recordedOn',
+        'recording.eyes',
+        'recording.handedness',
+        ...['name', 'nameAr', 'age', 'sex'].map((field) => `asTyped.${field}`),
+        ...lists.flatMap((list) => [list, `${list}.custom`]),
+        ...lists.flatMap((list) =>
+          keys.flatMap((key) =>
+            ['label', ...(list === 'recommendations' ? ['note'] : [])].flatMap((part) =>
+              ['en', 'ar'].map((half) => `${list}.custom.${key}.${part}.${half}`),
+            ),
+          ),
+        ),
+        'bands',
+        ...BAND_IDS.flatMap((band) => [`bands.${band}`, `bands.${band}.regions`]),
+        ...CONNECTIVITY_IDS.flatMap((id) => [`connectivity.${id}`, `connectivity.${id}.regions`]),
+        'dashboard',
+        ...DIMENSION_IDS.flatMap((d) => [
+          `dashboard.${d}`,
+          `dashboard.${d}.evidence.en`,
+          `dashboard.${d}.evidence.ar`,
+        ]),
+        ...['en', 'ar'].flatMap((half) => [`summary.${half}`, `summary.${half}.marks`]),
+        'plan.sessions',
+        'plan.approach',
+        'provenance.asPrinted',
+        'provenance.asPrinted.signerName',
+        'provenance.asPrinted.signerRole',
+        'images',
+        ...places,
+        ...places.map((place) => `${place}.caption.en`),
+      ];
+      expect(new Set(paths).size).toBe(paths.length);
+      expect(paths.length).toBeGreaterThan(260);
+      const notes = paths.map((at) => ({ code: 'value_not_recognised' as const, at }));
+      const answer = validateQeegContent(withValue(withNoteAt(null), 'provenance.notes', notes));
+      if (!answer.ok) expect(answer.refusals).toEqual([]);
+      expect(answer.ok).toBe(true);
+    });
+
     it('refuses a place that is not a path this app writes', () => {
       for (const at of [
         '',
@@ -441,6 +487,11 @@ describe('validateQeegContent', () => {
         'summary en',
         'summary/en',
         'summary.en\n',
+        'a..b',
+        'a.',
+        'summary..en',
+        'a.__proto__.b',
+        'images.-map',
         'سجل',
         `a${'b'.repeat(200)}`,
       ]) {

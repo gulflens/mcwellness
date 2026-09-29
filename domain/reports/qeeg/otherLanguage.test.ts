@@ -531,6 +531,18 @@ describe('withOtherLanguageFrom', () => {
       expectShapeAccepts(result);
     });
 
+    it('takes only what is a mark from a formatted half, and never throws on the rest', () => {
+      const summary = JSON.parse(
+        '{"text":"أكثر ثباتا","marks":[null,7,{"from":0.5,"to":2,"bold":true},{"from":0,"to":1,"bold":1},{"from":5,"to":9,"underline":true}]}',
+      ) as RichText;
+      const result = withOtherLanguageFrom(filledFollowUp(), sentWithArabic('ب', summary), 'ar');
+      expect(result.summary.ar).toEqual({
+        text: 'أكثر ثباتا',
+        marks: [{ from: 5, to: 9, underline: true }],
+      });
+      expectShapeAccepts(result);
+    });
+
     it('never cuts a half that is too long: the shape refuses it by name', () => {
       // The specification: text that is too long is refused, never cut.
       const ar = 'ب'.repeat(LIMITS.note + 1);

@@ -52,14 +52,13 @@
  */
 
 import { DIMENSION_IDS, type DimensionId } from './catalogue/ids';
-import { UNCUT, clean, cleanRich, isBlank, isEmpty, isRecord } from './text';
+import { UNCUT, clean, cleanRich, isBlank, isEmpty, isMark, isRecord } from './text';
 import type {
   Bilingual,
   BilingualRich,
   CustomItem,
   Locale,
   MapEntry,
-  Mark,
   Ordered,
   Picked,
   QeegCommon,
@@ -88,7 +87,7 @@ function sentRich(typed: unknown, locale: Locale): RichText | null {
   if (typeof text !== 'string') return null;
   return {
     text,
-    marks: Array.isArray(marks) ? marks.filter((m): m is Mark => isRecord(m)) : [],
+    marks: Array.isArray(marks) ? marks.filter(isMark) : [],
   };
 }
 

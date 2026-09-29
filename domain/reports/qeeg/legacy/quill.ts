@@ -80,12 +80,13 @@ export function fromQuillDelta(
         ? decoded['ops']
         : undefined;
     if (!Array.isArray(ops)) return { ok: false };
+    const list: readonly unknown[] = ops;
 
     const dropped = new Set<Dropped>();
     const spans: Span[] = [];
     let text = '';
 
-    for (const op of ops as readonly unknown[]) {
+    for (const op of list) {
       if (!isRecord(op)) {
         dropped.add('other');
         continue;
