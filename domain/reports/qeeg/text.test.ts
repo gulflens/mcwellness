@@ -188,8 +188,6 @@ describe('clean', () => {
       '\u2028',
       '\u2029',
       '\u200b',
-      '\u200c',
-      '\u200d',
       '\u2060',
       '\u200e',
       '\u200f',
@@ -199,6 +197,17 @@ describe('clean', () => {
     for (const character of removed) {
       expect(clean(`a${character}b`, 100), character.codePointAt(0)?.toString(16)).toBe('ab');
     }
+  });
+
+  it('keeps the two characters that part letters and join them', () => {
+    // Neither has a glyph, and both are part of what she typed. The first parts
+    // two letters that would otherwise join, in Persian and sometimes in Arabic,
+    // and the document writer honours it: removing it changes the printed word.
+    // The second joins the parts of a sign made of several. What is stored is
+    // the record, and a character taken out of it cannot be put back.
+    expect(clean('\u0628\u200c\u0628', 100)).toBe('\u0628\u200c\u0628');
+    expect(clean('a\u200db', 100)).toBe('a\u200db');
+    expect(clean('\u{1F468}\u200d\u{1F469}', 100)).toBe('\u{1F468}\u200d\u{1F469}');
   });
 
   it('removes a lone half of a surrogate pair and keeps a whole pair', () => {

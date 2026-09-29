@@ -97,10 +97,17 @@ const SPACE = ' ';
  * A character with no glyph, which the document writer would drop in
  * silence, or one that would move what follows it about the page: the two
  * blocks of controls, a carriage return (so a Windows line end becomes a
- * newline), the line and paragraph separators, the zero-width characters,
- * the direction marks, embeddings and isolates, and the byte-order mark. A
- * lone half of a surrogate pair is removed too: it is no letter, and the
- * database refuses it.
+ * newline), the line and paragraph separators, the zero-width space and the
+ * word joiner, the direction marks, embeddings and isolates, and the
+ * byte-order mark. A lone half of a surrogate pair is removed too: it is no
+ * letter, and the database refuses it.
+ *
+ * **Two characters with no glyph are KEPT**: U+200C, which parts two letters
+ * that would otherwise join, and U+200D, which joins. Both are part of what
+ * she typed. The document writer honours the first when it shapes a word, so
+ * taking it out would change the word on the page; and a name gathered from
+ * a client's record would no longer equal the record it came from. What is
+ * stored is the record, and a character removed from it cannot be put back.
  */
 function isRemoved(code: number): boolean {
   return (
@@ -110,7 +117,9 @@ function isRemoved(code: number): boolean {
     (code >= 0x0d && code <= 0x1f) ||
     (code >= 0x7f && code <= 0x9f) ||
     code === 0x061c ||
-    (code >= 0x200b && code <= 0x200f) ||
+    code === 0x200b ||
+    code === 0x200e ||
+    code === 0x200f ||
     (code >= 0x2028 && code <= 0x202e) ||
     code === 0x2060 ||
     (code >= 0x2066 && code <= 0x2069) ||
