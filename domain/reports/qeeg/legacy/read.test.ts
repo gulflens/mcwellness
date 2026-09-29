@@ -243,6 +243,7 @@ describe('a full report from the old tool', () => {
     expect(readOk(fullFile()).images).toEqual([
       {
         key: 'map-0',
+        position: 0,
         dataUrl: PNG,
         widthPx: 800,
         heightPx: 600,
@@ -251,6 +252,7 @@ describe('a full report from the old tool', () => {
       },
       {
         key: 'map-1',
+        position: 1,
         dataUrl: PNG,
         widthPx: 640,
         heightPx: 480,
@@ -683,9 +685,26 @@ describe('what the reader tolerates, following the old tool', () => {
       { label: 'EC: Eyes Closed', name: 'b.png', img: { url: PNG, w: 10, h: 20 } },
     ];
     const result = readOk(withFile({ maps }));
-    expect(result.images.map((i) => i.key)).toEqual(['map-0']);
+    expect(result.images.map((i) => [i.key, i.position])).toEqual([['map-3', 0]]);
     expect(result.images[0]?.condition).toBe('eyes_closed');
-    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
+    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images.map-2' }]);
+  });
+
+  it('keys each picture by its place in the file, and notes each place left out', () => {
+    const map = { label: 'EO: Eyes Open', name: '', img: { url: PNG, w: 1, h: 1 } };
+    const unreadable = { label: '', name: '', img: { url: 'https://example.com/a.png' } };
+    const maps = [map, unreadable, map, { label: 'Her own view', img: null }, map];
+    const result = readOk(withFile({ maps }));
+    expect(result.images.map((i) => [i.key, i.position])).toEqual([
+      ['map-0', 0],
+      ['map-2', 1],
+      ['map-4', 2],
+    ]);
+    expect(result.notes).toEqual([
+      { code: 'map_without_image_dropped', at: 'images.map-1' },
+      { code: 'map_without_image_dropped', at: 'images.map-3' },
+    ]);
+    expect(validateQeegContent(result.content)).toMatchObject({ ok: true });
   });
 
   it('keeps any other label of a map as its caption, and says so', () => {
@@ -694,6 +713,7 @@ describe('what the reader tolerates, following the old tool', () => {
     expect(result.images).toEqual([
       {
         key: 'map-0',
+        position: 0,
         dataUrl: PNG,
         widthPx: 1,
         heightPx: 2,
@@ -722,7 +742,7 @@ describe('what the reader tolerates, following the old tool', () => {
     ];
     const result = readOk(withFile({ maps }));
     expect(result.images).toEqual([]);
-    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
+    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images.map-0' }]);
   });
 
   it('carries a PNG, JPEG, WebP or BMP picture and nothing else, and says what it dropped', () => {
@@ -739,19 +759,20 @@ describe('what the reader tolerates, following the old tool', () => {
       const maps = [{ label: 'EO: Eyes Open', name: '', img: { url, w: 1, h: 1 } }];
       const result = readOk(withFile({ maps }));
       expect(result.images, type).toEqual([]);
-      expect(result.notes, type).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
+      expect(result.notes, type).toEqual([
+        { code: 'map_without_image_dropped', at: 'images.map-0' },
+      ]);
     }
   });
 
-  it('keeps at most eight maps', () => {
-    const maps = Array.from({ length: 10 }, () => ({
-      label: 'EO: Eyes Open',
-      name: '',
-      img: { url: PNG, w: 1, h: 1 },
-    }));
+  it('keeps at most eight pictures, and names the first place not kept', () => {
+    const map = { label: 'EO: Eyes Open', name: '', img: { url: PNG, w: 1, h: 1 } };
+    const maps = [{ label: '', img: null }, ...Array.from({ length: 10 }, () => map)];
     const result = readOk(withFile({ maps }));
     expect(result.images).toHaveLength(8);
-    expect(result.notes).toEqual([{ code: 'extra_positions_ignored', at: 'images' }]);
+    expect(result.images.map((i) => i.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(result.images.at(-1)?.key).toBe('map-8');
+    expect(result.notes).toEqual([{ code: 'extra_positions_ignored', at: 'images.map-9' }]);
   });
 
   it('does not carry a signature image, and says so', () => {

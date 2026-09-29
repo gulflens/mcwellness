@@ -85,8 +85,13 @@ import {
 } from './v1Tables';
 
 export type LegacyImage = {
-  /** 'map-0', 'map-1', and so on, in the file's order. */
+  /**
+   * `map-` and the picture's place in the file, counting the places left
+   * out: a file whose second place was empty hands back `map-0` and `map-2`.
+   */
   key: string;
+  /** Its place among the pictures kept, from 0 with no gap: `position` in `maps`. */
+  position: number;
   /** As the file held it; the browser decodes it. */
   dataUrl: string;
   widthPx: number;
@@ -460,26 +465,35 @@ function pixels(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
 }
 
+/**
+ * The pictures the file held, each keyed by ITS PLACE IN THE FILE (`map-0`,
+ * `map-2`), so a note about a place left out (`images.map-1`) names that
+ * place and no other. `position` keeps their order, from 0 with no gap, as
+ * the shape requires of `maps`. At most `LIMITS.maps` are kept; the note
+ * names the first place with a picture that was not.
+ */
 function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
   const slots = field(file, 'maps');
   if (!Array.isArray(slots)) return [];
   const images: LegacyImage[] = [];
-  for (const slot of slots as readonly unknown[]) {
+  const list = slots as readonly unknown[];
+  for (let place = 0; place < list.length; place += 1) {
+    const slot = list[place];
     if (!isRecord(slot)) continue;
+    const key = `map-${place}`;
     const label = text(field(slot, 'label')).trim();
     const img = field(slot, 'img');
     const url = imageUrl(img);
     if (url === null || !isRecord(img)) {
       const held = isRecord(img) && typeof field(img, 'url') === 'string';
       const herLabel = label !== '' && lookUp(CONDITION_BY_OLD_LABEL, label) === undefined;
-      if (held || herLabel) notes.add('map_without_image_dropped', 'images');
+      if (held || herLabel) notes.add('map_without_image_dropped', `images.${key}`);
       continue;
     }
     if (images.length === LIMITS.maps) {
-      notes.add('extra_positions_ignored', 'images');
+      notes.add('extra_positions_ignored', `images.${key}`);
       break;
     }
-    const key = `map-${images.length}`;
     const condition = label === '' ? null : (lookUp(CONDITION_BY_OLD_LABEL, label) ?? null);
     let caption: Bilingual | null = null;
     if (label !== '' && condition === null) {
@@ -488,6 +502,7 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
     }
     images.push({
       key,
+      position: images.length,
       dataUrl: url,
       widthPx: pixels(field(img, 'w')),
       heightPx: pixels(field(img, 'h')),
