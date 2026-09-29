@@ -667,6 +667,16 @@ describe('validateQeegContent', () => {
         'comparedWith.recordedOn',
       );
     });
+
+    it('holds a date to a year from 2000 to 2100, as the reader does', () => {
+      for (const bad of ['0000-01-01', '0000-02-29', '0050-06-01', '9999-12-31', '1999-12-31']) {
+        expectRefusedAt(
+          withValue(validInitial(), 'recording.recordedOn', bad),
+          'recording.recordedOn',
+        );
+      }
+      expectAccepted(withValue(validInitial(), 'recording.recordedOn', '2000-01-01'));
+    });
   });
 
   describe('a figure reference', () => {

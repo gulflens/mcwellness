@@ -53,28 +53,19 @@ import {
   type QeegFollowUp,
   type QeegInitial,
 } from './types';
+import { isRealDay } from './text';
 
 // ---------------------------------------------------------------------------
 // Small pieces
 // ---------------------------------------------------------------------------
 
-const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
-
-function isRealDay(value: string): boolean {
-  const parts = ISO_DATE.exec(value);
-  if (!parts) return false;
-  const [year, month, day] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
-  if (month < 1 || month > 12 || day < 1) return false;
-  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
-  return day <= days;
-}
 
 const day = z
   .string()
   .regex(ISO_DATE, 'A date is written YYYY-MM-DD.')
-  .refine(isRealDay, 'That day is not in the calendar.');
+  .refine(isRealDay, 'That day is not in the calendar, or not from 2000 to 2100.');
 
 const whole = (least: number, most: number) => z.number().int().min(least).max(most);
 

@@ -1,7 +1,7 @@
 /**
  * Typed text in a brain-map report: which language to print, how it breaks
- * into paragraphs, how the wording's bold is read, and how what a person
- * typed is made safe to store.
+ * into paragraphs, how the wording's bold is read, how what a person typed
+ * is made safe to store, and what counts as a day.
  *
  * **Her English stands in for a missing Arabic.** A practitioner types once
  * in English and may add Arabic. An Arabic report prints her Arabic where she
@@ -130,4 +130,26 @@ export function clean(typed: string, most: number): string {
     text = text.slice(0, cut).trimEnd();
   }
   return text;
+}
+
+const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** The years a recording can have been made in. Anything else is a slip of the keyboard. */
+const FIRST_YEAR = 2000;
+const LAST_YEAR = 2100;
+
+/**
+ * A real day, written `YYYY-MM-DD`, in a year from 2000 to 2100. The one rule
+ * for both the shape and the old-file reader, so the two cannot disagree. It
+ * works from the length of each month and constructs no `Date`, which reads
+ * a year below 100 as the 1900s.
+ */
+export function isRealDay(text: string): boolean {
+  const parts = ISO_DAY.exec(text);
+  if (!parts) return false;
+  const [year, month, day] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+  if (year < FIRST_YEAR || year > LAST_YEAR || month < 1 || month > 12 || day < 1) return false;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+  return day <= days;
 }

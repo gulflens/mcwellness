@@ -735,7 +735,16 @@ describe('what the reader tolerates, following the old tool', () => {
   });
 
   it('reads a date that is not a real day as unset, and says so', () => {
-    for (const date of ['2026-02-30', '14/03/2026', '2026-3-14', '2026-13-01', 'soon']) {
+    for (const date of [
+      '2026-02-30',
+      '14/03/2026',
+      '2026-3-14',
+      '2026-13-01',
+      'soon',
+      '0050-06-01',
+      '0000-01-01',
+      '9999-12-31',
+    ]) {
       const result = readOk(withSubject({ date }));
       expect(result.content.recording.recordedOn).toBeNull();
       expect(result.notes).toEqual([{ code: 'value_not_recognised', at: 'recording.recordedOn' }]);

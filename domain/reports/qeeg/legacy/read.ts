@@ -55,7 +55,7 @@ import type {
   Score,
   Stage,
 } from '../types';
-import { clean } from '../text';
+import { clean, isRealDay } from '../text';
 import { LIMITS } from '../types';
 import { LEGACY_FORMAT, LEGACY_SUBJECT_KEY, LEGACY_VERSION } from './keys';
 import { fromQuillDelta } from './quill';
@@ -266,22 +266,11 @@ function stageOf(value: unknown, notes: Notes): Stage {
   return chosenWord(value, STAGE_BY_OLD_WORD, 'stage', notes) ?? 'initial';
 }
 
-/** A real day written as YYYY-MM-DD, as the old tool's date picker wrote it. */
+/** A real day written as YYYY-MM-DD, as the old tool's date picker wrote it, by the shape's rule. */
 function dayOf(value: unknown, notes: Notes): string | null {
   const day = text(value).trim();
   if (day === '') return null;
-  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
-  if (parts !== null) {
-    const [year, month, date] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
-    const probe = new Date(Date.UTC(year, month - 1, date));
-    if (
-      probe.getUTCFullYear() === year &&
-      probe.getUTCMonth() === month - 1 &&
-      probe.getUTCDate() === date
-    ) {
-      return day;
-    }
-  }
+  if (isRealDay(day)) return day;
   notes.add('value_not_recognised', 'recording.recordedOn');
   return null;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clean, isEmpty, plain, richFor, spansOf, textFor, toParagraphs } from './text';
+import { clean, isEmpty, isRealDay, plain, richFor, spansOf, textFor, toParagraphs } from './text';
 import type { RichText } from './types';
 
 /** Part 2 of brief C1: typed text, in either language, and the wording's bold marks. */
@@ -169,5 +169,33 @@ describe('clean', () => {
     const cut = clean('ab\u{1F600}cd', 3);
     expect(cut).toBe('ab');
     expect(clean('ab\u{1F600}cd', 4)).toBe('ab\u{1F600}');
+  });
+});
+
+describe('isRealDay', () => {
+  it('accepts a real day written YYYY-MM-DD, from 2000 to 2100', () => {
+    for (const day of ['2000-01-01', '2026-09-29', '2024-02-29', '2000-02-29', '2100-12-31']) {
+      expect(isRealDay(day), day).toBe(true);
+    }
+  });
+
+  it('refuses a day that is not in the calendar', () => {
+    for (const day of ['0000-00-00', '2026-02-30', '2026-04-31', '2026-13-01', '2027-02-29']) {
+      expect(isRealDay(day), day).toBe(false);
+    }
+    expect(isRealDay('2100-02-29')).toBe(false);
+  });
+
+  it('refuses a year before the practice had an instrument, or far past it', () => {
+    for (const day of ['0000-01-01', '0000-02-29', '0050-06-01', '1999-12-31', '2101-01-01']) {
+      expect(isRealDay(day), day).toBe(false);
+    }
+    expect(isRealDay('9999-12-31')).toBe(false);
+  });
+
+  it('refuses anything not written YYYY-MM-DD', () => {
+    for (const day of ['2026-9-1', '01/09/2026', ' 2026-09-01', '2026-09-01T00:00', '']) {
+      expect(isRealDay(day), day).toBe(false);
+    }
   });
 });
