@@ -100,6 +100,12 @@ create policy report_readers on public.report as restrictive for select to app_r
 --    on their own schedule. An admin reads and delivers and never drafts
 --    (section 7.1); finance is nowhere near it.
 --
+--    **Bringing a file in is the owner's and the lead practitioner's**
+--    (docs/CHANGE-REQUESTS/reports-02.md, request 6: `report.import`). A row
+--    that carries a source — a draft read from the old tool's file — is
+--    written, inserted or updated, by those two alone, so the rule is not only
+--    the route's. A practitioner drafts and edits the brain maps written here.
+--
 --    **Never a past record in one step.** A row brought in from the old tool
 --    is saved as a draft, read over, and kept by `app.keep_imported_report`
 --    (603), which the guard lets only the owner and the lead practitioner
@@ -119,6 +125,8 @@ drop policy if exists report_writers on public.report;
 create policy report_writers on public.report as restrictive for insert to app_role
   with check (
     status <> 'imported'
+    and (imported_from is null or app.actor_has_role('owner')
+         or app.actor_has_role('lead_practitioner'))
     and app.client_erasure_gate(app.client_status_for(client_id)) and (
       app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
       or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
@@ -134,7 +142,9 @@ create policy report_amenders on public.report as restrictive for update to app_
     )
   )
   with check (
-    app.client_erasure_gate(app.client_status_for(client_id)) and (
+    (imported_from is null or app.actor_has_role('owner')
+     or app.actor_has_role('lead_practitioner'))
+    and app.client_erasure_gate(app.client_status_for(client_id)) and (
       app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
       or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
     )

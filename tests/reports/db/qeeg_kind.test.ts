@@ -7,7 +7,9 @@ import {
   rolledBack,
   seedClient,
   seedContact,
+  seedLocation,
   seedPractitioner,
+  seedServiceType,
   seedTenant,
   seedUser,
   setAuditContext,
@@ -35,6 +37,9 @@ const KEPT = '00000000-0000-4000-8000-0000000006c3';
 const PROGRESS_DRAFT = '00000000-0000-4000-8000-0000000006c4';
 const OTHER_CLIENT_QEEG = '00000000-0000-4000-8000-0000000006c5';
 const LEAD_USER = '00000000-0000-4000-8000-0000000000a4';
+const ISSUED_QEEG = '00000000-0000-4000-8000-0000000006c6';
+const ISSUED_PROGRESS = '00000000-0000-4000-8000-0000000006c7';
+const APPOINTMENT = '00000000-0000-4000-8000-0000000006c8';
 
 const SHA = 'a'.repeat(64);
 const OTHER_SHA = 'b'.repeat(64);
@@ -50,6 +55,18 @@ async function seedKept(id: string, sha: string): Promise<void> {
     [id, IDS.tenantA, IDS.clientA, FORMAT, sha],
   );
   await client.query("update report set status = 'imported' where id = $1", [id]);
+}
+
+/** A signed report of client A, written as the table owner. */
+async function seedIssued(id: string, kind: string, number: number): Promise<void> {
+  await client.query(
+    'insert into report (id, tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
+      'signed_by_practitioner_id, signed_by_name, signed_by_certification, ' +
+      'recipient_name, recipient_record_number, practice_legal_name, content) values ' +
+      "($1, $2, $3, $4::report_kind, 'issued', $5, current_date, now(), $6, 'Rowan Ridge', " +
+      "'bcia_bcn', 'Cedar Meadow', 'MW-000001', 'Synthetic Studio', '{}'::jsonb)",
+    [id, IDS.tenantA, IDS.clientA, kind, number, MORE_IDS.practitionerA],
+  );
 }
 
 beforeAll(async () => {
@@ -108,6 +125,27 @@ beforeAll(async () => {
     [OTHER_CLIENT_QEEG, IDS.tenantA, IDS.clientB],
   );
   await seedKept(KEPT, SHA);
+  await seedIssued(ISSUED_QEEG, 'qeeg', 1);
+  await seedIssued(ISSUED_PROGRESS, 'progress', 2);
+
+  // Practitioner A with a visit for client A, so the row policy admits them
+  // to client A's reports (app.client_visible_to_practitioner, 201).
+  await seedLocation(client, IDS.tenantA, IDS.locationA, IDS.clientA, IDS.ownerA);
+  await seedServiceType(client, IDS.tenantA, MORE_IDS.serviceTypeA, 'nf-session');
+  await client.query(
+    'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+      'location_id, delivery_mode, window_start, window_end, status) values ' +
+      "($1, $2, $3, $4, $5, $6, 'home', now() - interval '2 days', " +
+      "now() - interval '2 days' + interval '45 minutes', 'completed')",
+    [
+      APPOINTMENT,
+      IDS.tenantA,
+      IDS.clientA,
+      MORE_IDS.practitionerA,
+      MORE_IDS.serviceTypeA,
+      IDS.locationA,
+    ],
+  );
 }, 180_000);
 
 afterAll(async () => {
@@ -148,12 +186,182 @@ describe('the new kind and the new status', () => {
     await rolledBack(client, async () =>
       asApiRole(client, IDS.tenantA, async () => {
         const { rowCount } = await client.query(
-          'insert into report (tenant_id, client_id, kind, content, twin_of_id, compared_with_id) ' +
-            "values (app.current_tenant_id(), $1, 'qeeg', '{}'::jsonb, $2, $3)",
+          'insert into report (tenant_id, client_id, kind, locale, content, twin_of_id, ' +
+            "compared_with_id) values (app.current_tenant_id(), $1, 'qeeg', 'ar', '{}'::jsonb, " +
+            '$2, $3)',
           [IDS.clientA, DRAFT, KEPT],
         );
         expect(rowCount).toBe(1);
       }),
+    );
+  });
+});
+
+describe('a twin is the same brain map in the other language', () => {
+  it('refuses a twin that is not a brain map', async () => {
+    await rolledBack(client, async () => {
+      await rejectsWith(
+        client,
+        '23503',
+        'insert into report (tenant_id, client_id, kind, locale, content, twin_of_id) ' +
+          "values ($1, $2, 'qeeg', 'ar', '{}'::jsonb, $3)",
+        [IDS.tenantA, IDS.clientA, PROGRESS_DRAFT],
+      );
+    });
+  });
+
+  it('refuses a twin in the same language', async () => {
+    await rolledBack(client, async () => {
+      await rejectsWith(
+        client,
+        '23503',
+        'insert into report (tenant_id, client_id, kind, locale, content, twin_of_id) ' +
+          "values ($1, $2, 'qeeg', 'en', '{}'::jsonb, $3)",
+        [IDS.tenantA, IDS.clientA, DRAFT],
+      );
+    });
+  });
+
+  it('refuses moving a report into its twin’s language once it has one', async () => {
+    await rolledBack(client, async () => {
+      await client.query(
+        'insert into report (tenant_id, client_id, kind, locale, content, twin_of_id) ' +
+          "values ($1, $2, 'qeeg', 'ar', '{}'::jsonb, $3)",
+        [IDS.tenantA, IDS.clientA, DRAFT],
+      );
+      await rejectsWith(client, '23503', "update report set locale = 'ar' where id = $1", [DRAFT]);
+    });
+  });
+});
+
+describe('a comparison is with a signed brain map or a kept past record', () => {
+  const COMPARE =
+    'insert into report (tenant_id, client_id, kind, content, compared_with_id) ' +
+    "values ($1, $2, 'qeeg', '{}'::jsonb, $3)";
+
+  it('admits a signed brain-map report and a kept past record', async () => {
+    await rolledBack(client, async () => {
+      for (const target of [ISSUED_QEEG, KEPT]) {
+        const { rowCount } = await client.query(COMPARE, [IDS.tenantA, IDS.clientA, target]);
+        expect(rowCount, target).toBe(1);
+      }
+    });
+  });
+
+  it('admits one that has since been replaced, which is still signed', async () => {
+    await rolledBack(client, async () => {
+      await client.query("update report set status = 'superseded' where id = $1", [ISSUED_QEEG]);
+      const { rowCount } = await client.query(COMPARE, [IDS.tenantA, IDS.clientA, ISSUED_QEEG]);
+      expect(rowCount).toBe(1);
+    });
+  });
+
+  it('refuses an unsigned draft, and a past record not yet kept', async () => {
+    await rolledBack(client, async () => {
+      await rejectsWith(client, '23503', COMPARE, [IDS.tenantA, IDS.clientA, DRAFT]);
+      await rejectsWith(client, '23503', COMPARE, [IDS.tenantA, IDS.clientA, IMPORT_DRAFT]);
+    });
+  });
+
+  it('refuses a signed report that is not a brain map', async () => {
+    await rolledBack(client, async () => {
+      await rejectsWith(client, '23503', COMPARE, [IDS.tenantA, IDS.clientA, ISSUED_PROGRESS]);
+    });
+  });
+
+  it('refuses a past record that has been withdrawn', async () => {
+    await rolledBack(client, async () => {
+      await client.query(
+        "update report set content = '{}'::jsonb, withdrawn_at = now(), " +
+          "withdraw_reason = 'Kept against the wrong client.' where id = $1",
+        [KEPT],
+      );
+      await rejectsWith(client, '23503', COMPARE, [IDS.tenantA, IDS.clientA, KEPT]);
+    });
+  });
+
+  it('refuses withdrawing a past record while a report is compared with it', async () => {
+    // The follow-up is re-pointed first, or it would be left comparing with
+    // something that no longer says anything.
+    await rolledBack(client, async () => {
+      await client.query(COMPARE, [IDS.tenantA, IDS.clientA, KEPT]);
+      await rejectsWith(
+        client,
+        '23503',
+        "update report set content = '{}'::jsonb, withdrawn_at = now(), " +
+          "withdraw_reason = 'Kept against the wrong client.' where id = $1",
+        [KEPT],
+      );
+    });
+  });
+});
+
+describe('bringing a file in is the owner’s and the lead practitioner’s', () => {
+  const IMPORT =
+    'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
+    "values (app.current_tenant_id(), $1, 'qeeg', '{}'::jsonb, $2, $3)";
+
+  async function asPractitioner(fn: () => Promise<void>): Promise<void> {
+    await rolledBack(client, async () =>
+      asApiRole(
+        client,
+        IDS.tenantA,
+        async () => {
+          await client.query("select set_config('app.actor_id', $1, true)", [
+            MORE_IDS.practitionerUserA,
+          ]);
+          await fn();
+        },
+        'practitioner',
+      ),
+    );
+  }
+
+  it('lets a practitioner on the client’s schedule draft a brain map', async () => {
+    await asPractitioner(async () => {
+      const { rowCount } = await client.query(
+        'insert into report (tenant_id, client_id, kind, content) ' +
+          "values (app.current_tenant_id(), $1, 'qeeg', '{}'::jsonb)",
+        [IDS.clientA],
+      );
+      expect(rowCount).toBe(1);
+    });
+  });
+
+  it('refuses the same practitioner a draft brought in from a file', async () => {
+    await asPractitioner(async () => {
+      await rejectsWith(client, '42501', IMPORT, [IDS.clientA, FORMAT, 'f'.repeat(64)]);
+    });
+  });
+
+  it('refuses the same practitioner writing a source onto a draft, or editing an import', async () => {
+    await asPractitioner(async () => {
+      await rejectsWith(
+        client,
+        '42501',
+        'update report set imported_from = $2, source_sha256 = $3 where id = $1',
+        [DRAFT, FORMAT, 'f'.repeat(64)],
+      );
+      await rejectsWith(
+        client,
+        '42501',
+        'update report set content = \'{"note":"edited"}\'::jsonb where id = $1',
+        [IMPORT_DRAFT],
+      );
+    });
+  });
+
+  it('lets the lead practitioner bring one in', async () => {
+    await rolledBack(client, async () =>
+      asApiRole(
+        client,
+        IDS.tenantA,
+        async () => {
+          const { rowCount } = await client.query(IMPORT, [IDS.clientA, FORMAT, 'f'.repeat(64)]);
+          expect(rowCount).toBe(1);
+        },
+        'lead_practitioner',
+      ),
     );
   });
 });
@@ -233,6 +441,20 @@ describe('where the new columns may be used', () => {
           "values ($1, $2, 'qeeg', '{}'::jsonb, $3, 'not a fingerprint')",
         [IDS.tenantA, IDS.clientA, FORMAT],
       );
+    });
+  });
+
+  it('refuses a source that reads as a file name rather than a format', async () => {
+    await rolledBack(client, async () => {
+      for (const name of ['Report for Cedar.json', 'qeeg.json', 'QEEG.JSON/1', '/1']) {
+        await rejectsWith(
+          client,
+          '23514',
+          'insert into report (tenant_id, client_id, kind, content, imported_from, ' +
+            "source_sha256) values ($1, $2, 'qeeg', '{}'::jsonb, $3, $4)",
+          [IDS.tenantA, IDS.clientA, name, 'c'.repeat(64)],
+        );
+      }
     });
   });
 
@@ -488,6 +710,24 @@ describe('a kept past record is frozen but for one withdraw', () => {
       ]) {
         await rejectsWith(client, '23001', sql, sql.includes('$2') ? [KEPT, DRAFT] : [KEPT]);
       }
+    });
+  });
+
+  it('refuses a withdraw reason longer than the house’s two hundred characters', async () => {
+    await rolledBack(client, async () => {
+      await rejectsWith(
+        client,
+        '23514',
+        "update report set content = '{}'::jsonb, withdrawn_at = now(), withdraw_reason = $2 " +
+          'where id = $1',
+        [KEPT, 'x'.repeat(201)],
+      );
+      const { rowCount } = await client.query(
+        "update report set content = '{}'::jsonb, withdrawn_at = now(), withdraw_reason = $2 " +
+          'where id = $1',
+        [KEPT, 'x'.repeat(200)],
+      );
+      expect(rowCount).toBe(1);
     });
   });
 

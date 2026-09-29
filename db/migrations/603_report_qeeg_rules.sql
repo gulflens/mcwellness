@@ -102,7 +102,8 @@ alter table public.report
   add constraint report_source_never_signed
     check (imported_from is null or status in ('draft', 'imported')),
 
-  -- A twin and a comparison are the brain map's alone.
+  -- A twin and a comparison are the brain map's alone. With 602's key (a
+  -- twin is of the same kind) this also makes the twin a brain map.
   add constraint report_links_on_qeeg
     check ((twin_of_id is null and compared_with_id is null) or kind = 'qeeg'),
 
@@ -111,7 +112,42 @@ alter table public.report
     check (withdrawn_at is null or status = 'imported');
 
 ------------------------------------------------------------------------------
--- 2. The guard, restated whole from 600.
+-- 2. What a follow-up may be compared with (section 11, point 9): a signed
+--    brain-map report — issued, or superseded, which is still signed — or a
+--    kept past record that has not been withdrawn. Never a draft, never a
+--    withdrawn record, never a session or progress report, never another
+--    client's.
+--
+--    **A key, not a trigger**, for 602's reason: the target's status moves
+--    after the link is made, and a trigger on the linking row would not see
+--    it. `comparable_id` is the row's own id while it is something a
+--    follow-up may be compared with and null otherwise, and the link
+--    references it. So a comparison with a draft is refused at insert, and a
+--    past record that a report is compared with cannot be withdrawn until
+--    that report is re-pointed (no action) — a follow-up is never left
+--    comparing with a record that no longer says anything. Issued to
+--    superseded keeps the id, so a correction never strands a comparison.
+------------------------------------------------------------------------------
+alter table public.report
+  add column comparable_id uuid generated always as (
+    case
+      when kind = 'qeeg'
+       and (status in ('issued', 'superseded') or (status = 'imported' and withdrawn_at is null))
+      then id
+    end
+  ) stored,
+  add constraint report_tenant_id_comparable_client_key
+    unique (tenant_id, comparable_id, client_id),
+  add constraint report_compared_with_comparable
+    foreign key (tenant_id, compared_with_id, client_id)
+    references public.report (tenant_id, comparable_id, client_id);
+
+comment on column public.report.comparable_id is
+  'This row''s id while a brain-map follow-up may be compared with it (signed, or a kept past '
+  'record not withdrawn), null otherwise. What compared_with_id references (migration 603).';
+
+------------------------------------------------------------------------------
+-- 3. The guard, restated whole from 600.
 ------------------------------------------------------------------------------
 create or replace function app.guard_report_write() returns trigger
 language plpgsql security definer
@@ -167,10 +203,10 @@ begin
     if old.withdrawn_at is null and new.withdrawn_at is not null
        and new.content = '{}'::jsonb
        and (to_jsonb(new) - array['content', 'withdrawn_at', 'withdraw_reason',
-                                  'reference', 'updated_at'])
+                                  'reference', 'other_locale', 'comparable_id', 'updated_at'])
            is not distinct from
            (to_jsonb(old) - array['content', 'withdrawn_at', 'withdraw_reason',
-                                  'reference', 'updated_at'])
+                                  'reference', 'other_locale', 'comparable_id', 'updated_at'])
     then
       if v_owner_or_lead then
         return new;
@@ -196,11 +232,15 @@ begin
   --     carries the value. It would therefore read as a change on every row
   --     that has a number. Nothing is lost by leaving it out: it is generated
   --     from `number`, which is compared, so a reference cannot move unless
-  --     the number it is made from does.
+  --     the number it is made from does. `other_locale` (602) and
+  --     `comparable_id` (above) are generated too, and left out for the same
+  --     reason: each is made from columns that are compared.
   if old.document_id is null and new.document_id is not null
-     and (to_jsonb(new) - array['document_id', 'reference', 'updated_at'])
+     and (to_jsonb(new) - array['document_id', 'reference', 'other_locale', 'comparable_id',
+                                'updated_at'])
          is not distinct from
-         (to_jsonb(old) - array['document_id', 'reference', 'updated_at'])
+         (to_jsonb(old) - array['document_id', 'reference', 'other_locale', 'comparable_id',
+                                'updated_at'])
   then
     return new;
   end if;
@@ -208,9 +248,11 @@ begin
   -- (b) The standing version being replaced by a later one, by the owner or
   --     the lead practitioner and nobody else.
   if old.status::text = 'issued' and new.status::text = 'superseded'
-     and (to_jsonb(new) - array['status', 'reference', 'updated_at'])
+     and (to_jsonb(new) - array['status', 'reference', 'other_locale', 'comparable_id',
+                                'updated_at'])
          is not distinct from
-         (to_jsonb(old) - array['status', 'reference', 'updated_at'])
+         (to_jsonb(old) - array['status', 'reference', 'other_locale', 'comparable_id',
+                                'updated_at'])
   then
     if v_owner_or_lead then
       return new;
@@ -230,7 +272,7 @@ $$;
 revoke execute on function app.guard_report_write() from public;
 
 ------------------------------------------------------------------------------
--- 3. Keeping a past record.
+-- 4. Keeping a past record.
 --
 --    security invoker, and deliberately: the caller's own row security and
 --    update grant decide which rows it can reach, exactly as a direct update
@@ -293,6 +335,10 @@ comment on function app.keep_imported_report(uuid) is
 
 -- rollback:
 --   drop function if exists app.keep_imported_report(uuid);
+--   alter table public.report
+--     drop constraint if exists report_compared_with_comparable,
+--     drop constraint if exists report_tenant_id_comparable_client_key,
+--     drop column if exists comparable_id;
 --   -- Restore app.guard_report_write() exactly as 600 wrote it (section 3 of
 --   -- that file). Any `imported` row must first be deleted by the owner's own
 --   -- maintenance, inside an erasure marker, or the restored checks below

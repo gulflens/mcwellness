@@ -35,13 +35,22 @@
 -- All empty by default, so every row that exists today reads exactly as it
 -- did, and the two kinds that exist behave exactly as before.
 --
--- **Same client, not only the same practice.** Both links reference
--- `report (tenant_id, id, client_id)`, the key 600 declared for
--- `report_delivery`, so a twin or a comparison can never be another
--- household's report — refused by the key at write time rather than by a
--- query that happens to filter. `client_id` is not null on every row, so a
--- link that is null is simply not checked (match simple), as `supersedes_id`
--- is not.
+-- **A twin is the same client's report of the same kind, in the other
+-- language, and the key says so.** `other_locale` is generated from `locale`
+-- (the one of `en` and `ar` this row is not), and the twin link references
+-- `report (tenant_id, id, client_id, kind, locale)` from
+-- `(tenant_id, twin_of_id, client_id, kind, other_locale)`. So the twin is
+-- never another household's, never another kind — and 603 holds a row with
+-- a twin to `qeeg`, so the twin is a brain map too — and never in the same
+-- language. A composite key rather than a trigger, because a key holds in
+-- both directions: a trigger on the row that names its twin would not see the
+-- twin itself being moved into the same language afterwards, and the key
+-- refuses that update (no action) as it refuses the insert. A null link is
+-- not checked (match simple), as `supersedes_id` is not.
+--
+-- The comparison link needs the target's STATUS as well — a signed report or
+-- a kept past record, never a draft or a withdrawn one — and a status
+-- names the new value, so its key is 603's.
 --
 -- Needs: 600 (report, report_kind, report_status, the client-scoped key).
 
@@ -55,12 +64,19 @@ alter table public.report
   add column source_sha256    text,
   add column withdrawn_at     timestamptz,
   add column withdraw_reason  text,
+  -- The language this row's twin must be in. `locale` is 020's two-value
+  -- enum, so "not English" is Arabic and the reverse.
+  add column other_locale     locale generated always as (
+                                case when locale = 'en' then 'ar'::locale else 'en'::locale end
+                              ) stored,
 
-  add constraint report_twin_of_same_client
-    foreign key (tenant_id, twin_of_id, client_id) references public.report (tenant_id, id, client_id),
-  add constraint report_compared_with_same_client
-    foreign key (tenant_id, compared_with_id, client_id)
-    references public.report (tenant_id, id, client_id),
+  -- What the twin link references: a superset of the primary key, so it can
+  -- never fail on existing rows.
+  add constraint report_tenant_id_client_kind_locale_key
+    unique (tenant_id, id, client_id, kind, locale),
+  add constraint report_twin_of_same_client_kind_other_locale
+    foreign key (tenant_id, twin_of_id, client_id, kind, other_locale)
+    references public.report (tenant_id, id, client_id, kind, locale),
 
   add constraint report_twin_is_another
     check (twin_of_id is null or twin_of_id <> id),
@@ -68,23 +84,30 @@ alter table public.report
     check (compared_with_id is null or compared_with_id <> id),
 
   -- A source is a format and a fingerprint together, or nothing. The
-  -- fingerprint is the one domain/reports/qeeg/shape.ts accepts.
+  -- fingerprint is the one domain/reports/qeeg/shape.ts accepts. The format
+  -- is held to the shape of one (`qeeg.json/1`: small letters, figures and
+  -- dots, a slash, a version number), so "a format, never a file name" is
+  -- this row's promise and not only the route's.
   add constraint report_source_together
     check ((imported_from is null) = (source_sha256 is null)),
   add constraint report_source_format
-    check (imported_from is null or char_length(btrim(imported_from)) between 1 and 40),
+    check (imported_from is null or (
+      char_length(imported_from) <= 40 and imported_from ~ '^[a-z0-9.]+/[0-9]+$'
+    )),
   add constraint report_source_fingerprint
     check (source_sha256 is null or source_sha256 ~ '^[0-9a-f]{64}$'),
 
   -- The withdraw stamp: both or neither, and a reason that is more than
-  -- white space (969's rule for a void). The `coalesce` is not decoration: a
+  -- white space and no longer than the house's two hundred (403's waiver and
+  -- extension reasons). The `coalesce` is not decoration: a
   -- check that comes out null passes, and `length(btrim(null)) > 0` is null,
   -- so without it a stamp with no reason at all would be admitted. That the
   -- stamp sits only on a past record is 603's, since it has to name the
   -- status.
   add constraint report_withdraw_together check (
     (withdrawn_at is null and withdraw_reason is null)
-    or (withdrawn_at is not null and coalesce(length(btrim(withdraw_reason)), 0) > 0)
+    or (withdrawn_at is not null
+        and coalesce(length(btrim(withdraw_reason)), 0) between 1 and 200)
   );
 
 -- The same file, once per client (section 11, point 6). A past record
@@ -127,8 +150,9 @@ comment on column public.report.withdraw_reason is
 --     drop constraint if exists report_source_together,
 --     drop constraint if exists report_compared_with_another,
 --     drop constraint if exists report_twin_is_another,
---     drop constraint if exists report_compared_with_same_client,
---     drop constraint if exists report_twin_of_same_client,
+--     drop constraint if exists report_twin_of_same_client_kind_other_locale,
+--     drop constraint if exists report_tenant_id_client_kind_locale_key,
+--     drop column if exists other_locale,
 --     drop column if exists withdraw_reason,
 --     drop column if exists withdrawn_at,
 --     drop column if exists source_sha256,
