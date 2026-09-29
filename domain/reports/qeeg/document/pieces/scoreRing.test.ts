@@ -22,7 +22,6 @@ const ring = (score: number | null, tier: ScoreRingInput['tier']): ScoreRingInpu
   score,
   tier,
   outOf: '/10',
-  unset: '-',
 });
 
 describe('scoreRing', () => {
@@ -124,15 +123,42 @@ describe('scoreRing', () => {
     expect(kinds).toEqual(['path', 'path', 'text', 'text']);
   });
 
-  it('draws the track and the words for no score where the score would be, and nothing else', () => {
-    const block = scoreRing({ ...ring(null, null), unset: 'n/a' }, SIZE, ENGLISH);
-    expect(paths(block.ops)).toHaveLength(1);
-    const [only, ...rest] = texts(block.ops);
+  it('marks a score not yet given with a short grey bar across its middle, and nothing else', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = scoreRing(ring(null, null), SIZE, drawing);
+      expect(texts(block.ops)).toEqual([]);
+      const [track, mark, ...rest] = paths(block.ops);
+      expect(rest).toEqual([]);
+      expect(track?.stroke).toEqual({ ...RING_TRACK, width: RING.line * UNIT });
+      expect(mark?.fill).toEqual(MUTED);
+      expect(mark?.stroke).toBeUndefined();
+      const bounds = boundsOf(mark?.segments ?? []);
+      expect(bounds.right - bounds.left).toBeCloseTo(RING.unsetDash * UNIT, 9);
+      expect(bounds.top - bounds.bottom).toBeCloseTo(RING.unsetLine * UNIT, 9);
+      expect((bounds.left + bounds.right) / 2).toBeCloseTo(CENTRE.x, 9);
+      expect((bounds.top + bounds.bottom) / 2).toBeCloseTo(CENTRE.y, 9);
+    }
+  });
+
+  it('draws an arc for a score of 1, a tenth of a turn', () => {
+    const [, arc, ...rest] = paths(scoreRing(ring(1, 'low'), SIZE, ENGLISH).ops);
     expect(rest).toEqual([]);
-    expect(only?.text).toBe('n/a');
-    expect(only?.x).toBe(CENTRE.x);
-    expect(only?.y).toBe(-RING.scoreBaseline * UNIT);
-    expect(only?.align).toBe('centre');
+    const segments = arc?.segments ?? [];
+    const end = segments[segments.length - 1];
+    const angle = Math.PI / 2 - 2 * Math.PI * 0.1;
+    if (end?.[0] === 'C') {
+      expect(end[5]).toBeCloseTo(CENTRE.x + R * Math.cos(angle), 9);
+      expect(end[6]).toBeCloseTo(CENTRE.y + R * Math.sin(angle), 9);
+    } else {
+      expect.unreachable('an arc ends in a curve');
+    }
+  });
+
+  it('draws the arc in the hue of its own tier', () => {
+    for (const tier of ['low', 'middle', 'high'] as const) {
+      const [, arc] = paths(scoreRing(ring(5, tier), SIZE, ENGLISH).ops);
+      expect(arc?.stroke?.rgb).toEqual(TIER_PAINT[tier]);
+    }
   });
 
   it('refuses a score that is not a whole number from 0 to 10, by name', () => {

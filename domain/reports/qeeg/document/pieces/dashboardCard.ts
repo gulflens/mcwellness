@@ -47,7 +47,6 @@ export type CardInput = {
   readonly score: number | null;
   readonly tier: Tier | null;
   readonly outOf: string;
-  readonly unset: string;
   readonly category: string;
   readonly title: string;
   readonly summary: string;

@@ -32,7 +32,6 @@ const EN_INPUT: CardInput = {
   score: 6,
   tier: 'middle',
   outOf: '/10',
-  unset: '-',
   category: 'Room to grow',
   title: 'Attention',
   summary: 'Focus held steady for short stretches.',
@@ -326,6 +325,9 @@ describe('dashboardCard', () => {
     const category = texts(block.ops).find((op) => op.text === 'Not yet scored');
     expect(category?.style.size).toBe(6.8);
     expect(category?.style.grey).toBe(MUTED.grey);
+    // Its ring holds the mark for no score: a filled path, and no figures.
+    expect(texts(block.ops).some((op) => op.text === '/10')).toBe(false);
+    expect(paths(block.ops)[3]?.fill).toEqual(MUTED);
   });
 
   it('draws a word wider than its column, and a line of 400 characters, inside its box', () => {

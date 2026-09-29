@@ -25,7 +25,6 @@ function card(index: number, summary = 'Focus held steady for short stretches.')
     score: index,
     tier: 'middle',
     outOf: '/10',
-    unset: '-',
     category: `Card ${index}`,
     title: 'Attention',
     summary,
