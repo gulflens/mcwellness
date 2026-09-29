@@ -599,6 +599,34 @@ describe('validateQeegContent', () => {
       ).toMatchObject({ reference: 'RPT-000001' });
     });
 
+    it('hands back a formatted Arabic of nothing but white space as none, in both summaries', () => {
+      const spaces = { text: '   ', marks: [] };
+      const first = validateQeegContent(withValue(validInitial(), 'summary.ar', spaces));
+      expect(first.ok && first.content.summary.ar).toBeNull();
+      let input = withValue(validFollowUp(), 'summary.ar', { text: ' \n ', marks: [] });
+      input = withValue(input, 'change.summary.ar', spaces);
+      const answer = validateQeegContent(input);
+      expect(answer.ok).toBe(true);
+      if (!answer.ok || answer.content.edition !== 'follow-up') return;
+      expect(answer.content.summary.ar).toBeNull();
+      expect(answer.content.change.summary.ar).toBeNull();
+    });
+
+    it('keeps a formatted English of nothing as empty rich text, since English is never none', () => {
+      const answer = validateQeegContent(
+        withValue(validFollowUp(), 'change.summary.en', { text: '   ', marks: [] }),
+      );
+      expect(
+        answer.ok && answer.content.edition === 'follow-up' && answer.content.change.summary.en,
+      ).toEqual({ text: '   ', marks: [] });
+    });
+
+    it('keeps a formatted Arabic with words in it', () => {
+      const arabic = { text: 'ملخص مهم', marks: [{ from: 5, to: 8, bold: true }] };
+      const answer = validateQeegContent(withValue(validInitial(), 'summary.ar', arabic));
+      expect(answer.ok && answer.content.summary.ar).toEqual(arabic);
+    });
+
     it('refuses rich text holding a character the editor removes, since marks count from it', () => {
       expectRefusedAt(
         withValue(validInitial(), 'summary.en', { text: 'a\u0000b', marks: [] }),

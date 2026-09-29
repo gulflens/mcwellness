@@ -59,7 +59,7 @@ import {
   type QeegFollowUp,
   type QeegInitial,
 } from './types';
-import { clean, isRealDay, withoutUnseen } from './text';
+import { clean, isEmpty, isRealDay, withoutUnseen } from './text';
 
 // ---------------------------------------------------------------------------
 // Small pieces
@@ -175,8 +175,21 @@ function splitsPair(text: string, at: number): boolean {
   return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff;
 }
 
+/**
+ * A formatted summary. An Arabic of nothing but white space is handed back as
+ * none, as a plain Arabic is (`typedOrNone`), and as the page reads it anyway
+ * (`richFor`). The English is never none, so an English of nothing stays as
+ * it was given.
+ */
 const bilingualRich = (most: number) =>
-  z.object({ en: richText(most), ar: richText(most).nullable() }).strict();
+  z
+    .object({
+      en: richText(most),
+      ar: richText(most)
+        .nullable()
+        .transform((value) => (value !== null && isEmpty(value) ? null : value)),
+    })
+    .strict();
 
 /** The keys the app makes for an ordered list's items: `c0`, `map-0`, `t1`. */
 const ORDERED_KEY = /^[a-z][a-z0-9-]{0,31}$/;
