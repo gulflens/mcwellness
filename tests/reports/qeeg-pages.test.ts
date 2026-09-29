@@ -200,14 +200,17 @@ describe('the words a report prints', () => {
   });
 
   it('print the agreement’s sentences where the old report had its own, and nothing else there', () => {
-    for (const locale of LOCALES) {
-      const standing = laid('full', locale)
-        .sheets.flatMap((sheet) => sheet.parts)
-        .filter((part) => part.id.startsWith('final.standing'));
-      const squeezed = (text: string) => [...text.replace(/\s+/g, '')].sort().join('');
-      expect(squeezed(standing.map((part) => textOf(part.ops)).join(''))).toBe(
-        squeezed(STANDING_SENTENCES.map((sentence) => sentence[locale]).join('')),
-      );
+    const squeezed = (text: string) => [...text.replace(/\s+/g, '')].sort().join('');
+    for (const name of CASE_NAMES) {
+      for (const locale of LOCALES) {
+        const standing = laid(name, locale)
+          .sheets.flatMap((sheet) => sheet.parts)
+          .filter((part) => part.id.startsWith('final.standing'));
+        expect(
+          squeezed(standing.map((part) => textOf(part.ops)).join('')),
+          `${name} ${locale}`,
+        ).toBe(squeezed(STANDING_SENTENCES.map((sentence) => sentence[locale]).join('')));
+      }
     }
   });
 
