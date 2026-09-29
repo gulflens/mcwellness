@@ -503,6 +503,21 @@ describe('a save made over a newer one', () => {
   });
 });
 
+describe('a stale save is known by its code', () => {
+  it('is not taken for a 409 that carries another code', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({ saveAnswer: () => json({ error: 'conflict', code: 'other' }, 409) });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Key findings');
+    await user.click(screen.getByLabelText('Mental Fatigue'));
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }));
+    expect(
+      await screen.findByText('The draft could not be saved. Check the connection and try again.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Load the newer version' })).toBeNull();
+  });
+});
+
 describe('every refusal has its own sentence', () => {
   const answers: [string, number, Record<string, unknown>][] = [
     ['invalid_request', 400, { error: 'bad_request', code: 'invalid_request' }],
