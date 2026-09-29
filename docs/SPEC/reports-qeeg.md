@@ -81,6 +81,8 @@ Rules of the shape:
 9. **The key of a typed thing is one the app makes**: a small letter, then up to thirty-one small letters, figures or hyphens, and never a name every object answers to. The keys are read as they were sent, before anything else looks at the list.
 10. **The day of the recording is a real day**, from 2000 to 2100.
 11. **What the server works out is never taken from a request**: the client, where a report came from, a calculated figure. A request that carries one is refused by the route.
+12. **What counts as nothing.** Text is nothing when nothing in it would be drawn: white space, the two characters that part letters and join them, a soft hyphen, a mark with no letter to stand on. English that must not be empty is refused when it is nothing in this sense, and an Arabic of nothing is none. What is STORED still keeps the two characters of rule 7.
+13. **A follow-up is not recorded before what it is compared with.** The same day is allowed. A recording with no day yet is allowed: a draft is saved before it is filled.
 
 ## 5. The lists
 
@@ -174,7 +176,7 @@ Reports written in the old tool are brought in so that a follow-up can be compar
 2. **She chooses the client.** The name, age and sex the file held are shown beside the client she picks, with a warning where they disagree with the record. They are never stored.
 3. **Positions become names, once.** The old file counted its ticks by position. Fixed tables turn each position into a name, and a test pins every table in full.
 4. **Kept, not signed.** A past record has the status `imported`. It is frozen. It has no reference, no signer's snapshot and no PDF, because it was printed once, by the old tool, in the old tool's words. It is invisible to the household and refused by deliver and by supersede. **It cannot be issued**: its fixed wording would be today's and not what the household received.
-5. **Honest about what it could not carry.** Each thing the reader changed or dropped is recorded as a note naming the field, never what was typed: a score the old tool defaulted, a value with no name here, colour in the summary, the picture of a signature.
+5. **Honest about what it could not carry.** Each thing the reader changed or dropped is recorded as a note naming the field, never what was typed: a score the old tool defaulted, a value with no name here, colour in the summary, the picture of a signature. A picture keeps the place it had in the file, so a note can say which was left out. After twenty places left out, one note says that more were, and no more are written: a record must never earn more notes than can be kept.
 6. **The same file twice** for one client is refused.
 7. **Kept against the wrong client**, it is withdrawn by an owner or a lead practitioner, with a reason: content cleared, maps removed, the stamp kept.
 8. **What the old tool called a follow-up** is kept as a first-report edition that says it was a follow-up. The old tool offered only the first report's lists.
@@ -188,11 +190,11 @@ The writer is `domain/shared/document`. The layout is this piece's own, under `d
 2. **What keeps a page whole:** a heading stays with what follows it; a paragraph splits between lines and leaves two on each side; a pair of maps, and a row of headlines, never split; the signature is lowered to the foot and never left alone on a page.
 3. **The dashboard is scaled to fit**, and never below three quarters of its size. Below that it takes two pages, and the editor is told.
 4. **Text is set even at its starting side.** There is no hyphenation and a narrow column stretched to both edges opens rivers. Setting it to both edges is built and off. _The practice chooses by eye from two sample pages (section 18, point 12)._
-5. **Arabic is a right-to-left page, not a mirrored English one.** Pieces are written once in terms of start and end. A figure, a range, a telephone number and an address inside an Arabic line are drawn left to right, in order.
+5. **Arabic is a right-to-left page, not a mirrored English one.** Pieces are written once in terms of start and end. A figure, a range, a telephone number and an address inside an Arabic line are drawn left to right, in order. **Fixed wording reads the way its report does. What she typed reads the report's way when it holds a letter of the report's script, and otherwise the way of the letters it holds**: an Arabic sentence that begins with "EEG" is still an Arabic one, and an English note printed in an Arabic report, because she gave no Arabic for it, is still read left to right and ends with its full stop. Either is set against the report's starting edge.
 6. **One typeface**, the system's own, with a bold Arabic face added to the writer by change request. No slanted face: Arabic has none.
-7. **Colour.** Ink and two greys; the brand violet as the one accent; the band hues on the band icons; the three status hues on the score rings. No colour in text a person typed.
+7. **Colour.** Ink and two greys; the brand violet as the one accent; the band hues on the band icons; the three status hues on the score rings. No colour in text a person typed, with one exception: a title she typed, which is a map's label, is set as every title is.
 8. **No label in capitals, no middle dot as a separator.**
-9. **The signature block is text**: a rule, the signer's name, certification, certifying body and certificate number, from the snapshot.
+9. **The signature block is text**: room left clear, a rule, a label in grey, then the signer's name, certification, certifying body and certificate number, from the snapshot. A draft has no signer yet, and its preview shows the room, the rule and the label.
 10. **What it tells the editor**, beside the pages: how many pages, the scale the dashboard was drawn at, anything that ran over, any character the typeface could not draw, and how sharply each map will print.
 
 **Two rules of `docs/DESIGN-BRIEF.md` give way for this document**, because the operator's decision keeps the practice's layout (section 18, decision 2):
@@ -210,8 +212,10 @@ The writer is `domain/shared/document`. The layout is this piece's own, under `d
 | --- | --- | --- |
 | The hue of high beta | The fifth hue of the app's own scale of bands | The app's scale ends in a band the report does not have, and the report's fifth is a band the app's scale does not have. The five icons of a report are then the five hues of a ribbon, slow to fast |
 | The number of a recommendation | The violet | The old report had a second colour for it. This one has one accent |
+| A score not yet given, in the preview of a draft | The ring's track and a short mark across its middle | A report's scores start empty. Words for it were too wide for the ring, and a mark needs no translating. A signed report always has its scores |
+| The mark before a line of a card's list | A short drawn dash in grey | The old report set a dash as a letter. Its length is the old report's; its thickness and its height on the line are estimates |
 | A card, and the panel at the head of a report | Filled with the violet's wash, edged with the violet's pale | The old report's were cream, edged in grey. These are the two tints the app already has |
-| A line of Arabic | Never set tighter than 1.5 times its size on the page, and 1.45 in a card | The Arabic face is taller than the Latin. Set as tightly as the English, one line would print over the next |
+| A line of Arabic | Never set tighter than 1.5 times its size, on the page or in a card | The installed Arabic face stands 1.5 times its size from the top of its tallest letter to the foot of its deepest, and the Latin 1.3. Set as tightly as the English, one line would print over the next. A card was first given 1.45 and the review measured the face |
 | Over the signature's line | 12 mm left clear | There is no picture of a signature. A printed copy can still be signed by hand |
 | The smallest type | 6.6 points, in a card's category, as the old report has it | The layout is kept. If it reads too small once it is no longer in capitals, it is one number to change |
 
@@ -231,6 +235,9 @@ The writer is `domain/shared/document`. The layout is this piece's own, under `d
 | A fitted block takes a fresh page before it overflows | When it cannot shrink into the room left, and the page holds other things, it moves on and is fitted there |
 | A split makes progress | A block is split only when its first part has height and its second is shorter than the block it came from |
 | A number is a number | A height, a width or a limit that is not finite is refused by name. What a person supplied is answered with a value and never thrown |
+| A line takes no room | A box is as tall and as wide as what it holds and its padding, as in the report a household knows. The line round it, over it or under it is drawn wholly inside its edge |
+| Words are mirrored too | On an Arabic page every shape and every line of words stands where the English one would in a mirror. A test holds each piece to it |
+| The practice's numbers are written twice | Every measurement and every style is in one file, and again in a table its test holds it to, so a number changed by a slip no longer agrees with its table |
 
 **Known limits, accepted.**
 
@@ -332,6 +339,7 @@ Twelve sections, in the order of the report, one open at a time unless she opens
 | 10 | The follow-up summary's opening is printed every time | yes |
 | 11 | The label for sex stays as the practice has it | yes |
 | 12 | Text is set even at its starting side | yes |
+| 13 | When a follow-up is compared with an earlier FOLLOW-UP, its "before" pictures are the maps that earlier report printed as its own | yes |
 | — | When a change in score counts as a change | any difference |
 
 ## 19. Done when
