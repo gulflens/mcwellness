@@ -401,6 +401,22 @@ const CHANGE_SUMMARY_AR = [
   'يقول العميل إن الأمسيات أصبحت أهدأ وإن النوم يأتي بسهولة أكبر.',
 ].join('\n');
 
+const FOLLOW_UP_SUMMARY_EN = [
+  `${given.en}'s evenings have been calmer since June, and the busy pattern at the front of the head has eased, most of all with the eyes closed.`,
+  'The next stage keeps the calming approach for twenty more sessions, and we will look at the maps together again at the halfway point.',
+].join('\n');
+
+const FOLLOW_UP_SUMMARY_AR = [
+  'أصبحت الأمسيات أهدأ منذ يونيو، وخف النمط النشط في مقدمة الرأس، وأوضح ما يكون ذلك عند إغلاق العينين.',
+  'تستمر المرحلة التالية بنهج التهدئة لعشرين جلسة أخرى، وسننظر في الخرائط معا مرة أخرى في منتصف الطريق.',
+].join('\n');
+
+/** A follow-up's summary as a practitioner writes one: what has moved, and what comes next. */
+const FOLLOW_UP_SUMMARY: QeegFollowUp['summary'] = {
+  en: { text: FOLLOW_UP_SUMMARY_EN, marks: [{ from: 0, to: given.en.length, bold: true }] },
+  ar: { text: FOLLOW_UP_SUMMARY_AR, marks: [] },
+};
+
 /** Nothing filled in yet but what it is compared with: a draft previewed before it is filled. */
 export function sparseFollowUp(): QeegFollowUp {
   return blankFollowUp({ ...COMPARED_WITH }, 'follow_up');
@@ -444,7 +460,7 @@ export function fullFollowUp(): QeegFollowUp {
     focus: first.focus,
     maps: first.maps,
     recommendations: first.recommendations,
-    summary: first.summary,
+    summary: FOLLOW_UP_SUMMARY,
     benefits: first.benefits,
     bands: {
       delta: { change: 'unchanged', regions: ['widespread'] },

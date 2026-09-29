@@ -830,6 +830,15 @@ describe('a follow-up', () => {
     expect(() => phrase('heading.change_summary', 'initial', 'en')).toThrow();
   });
 
+  it('carries in its fixture a summary of its own, as a practitioner writes a follow-up’s', () => {
+    for (const locale of ['en', 'ar'] as const) {
+      const own = fullFollowUp().summary[locale]?.text ?? '';
+      expect(own).not.toBe(fullReport().summary[locale]?.text);
+      expect(own.split('\n')).toHaveLength(2);
+    }
+    expect(fullFollowUp().summary.en.text).toContain('since June');
+  });
+
   it('prints its heading and a dash when nothing of the page is filled in yet', () => {
     const parts = build(sparseFollowUp());
     expect(changeIds(parts)).toEqual(['change.heading', 'change.none']);
