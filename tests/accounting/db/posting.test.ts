@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PostResponse, SettingsResponse } from '../../../app/api/accounting/schema';
 import type { SellSessionResponse } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
-import { buildActivity, eraseHousehold, type Activity } from './fixture';
+import { buildActivity, deliverVisit, eraseHousehold, type Activity } from './fixture';
 import { FINANCE, SEEDED, seedFinanceUser, startHarness, type Harness } from './support';
 
 /**
@@ -509,5 +509,86 @@ describe('two posting runs at once', () => {
       [h.data.tenant.id],
     );
     expect(numbers.rows[0]?.n).toBe(numbers.rows[0]?.highest);
+  });
+});
+
+describe('a session given free stays out of the books, and out of their way', () => {
+  /**
+   * The fault of 29 September 2026, through billing's own routes. A single
+   * session sold at a whole-price discount is an invoice for nought and a
+   * credit worth nought. The posting rule refused it as unbalanced, and
+   * because the overview and the poster both walk every event not yet in the
+   * books, that one invoice stopped the Books page opening and stopped every
+   * event behind it being posted.
+   *
+   * What is proved here is the whole of what the owner needs: the page
+   * answers, nothing is counted as waiting, nothing of nought is written, and
+   * the money that comes after it is still posted.
+   */
+  let sale: SellSessionResponse;
+
+  async function entriesFor(table: string, id: string): Promise<number> {
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from journal_entry ' +
+        'where tenant_id = $1 and source_table = $2 and source_id = $3',
+      [h.data.tenant.id, table, id],
+    );
+    return Number(rows[0]?.n ?? 0);
+  }
+
+  it('is sold for nought by the route that sells a session', async () => {
+    const sold = await h.call('POST', '/api/billing/session-purchases', SEEDED.owner, {
+      clientId: h.clientId(3),
+      serviceTypeId: h.serviceTypeId('nf-session'),
+      purchasedOn: SEED_TODAY,
+      extraDiscount: {
+        discount: { kind: 'percent', basisPoints: 10_000 },
+        reason: 'A first visit, given free.',
+      },
+    });
+    expect(sold.status).toBe(201);
+    sale = (await sold.json()) as SellSessionResponse;
+    expect(sale.grossFils).toBe(0);
+    expect(sale.netFils).toBe(0);
+  });
+
+  it('lets the books be brought up to date, and writes nothing for the invoice', async () => {
+    const res = await h.call('POST', '/api/accounting/post', SEEDED.owner, {}, REASON);
+    expect(res.status).toBe(200);
+    expect(await entriesFor('invoice', sale.invoiceId)).toBe(0);
+  });
+
+  it('lets the overview answer, with nothing counted as waiting', async () => {
+    const res = await h.call('GET', '/api/accounting/overview', SEEDED.owner);
+    expect(res.status).toBe(200);
+    const overview = (await res.json()) as { unpostedCount: number };
+    expect(overview.unpostedCount).toBe(0);
+  });
+
+  it('writes nothing when the free credit is used, and posts the payment that follows', async () => {
+    await deliverVisit(h, h.clientId(3));
+    const used = await h.owner.query<{ status: string }>(
+      'select status::text as status from entitlement where id = $1',
+      [sale.entitlementId],
+    );
+    expect(used.rows[0]?.status).toBe('consumed');
+
+    const paid = await h.call('POST', '/api/billing/payments', SEEDED.owner, {
+      clientId: h.clientId(3),
+      method: 'cash',
+      amountFils: 10_000,
+    });
+    expect(paid.status).toBe(201);
+
+    const report = await post(SEEDED.owner);
+    expect(report.posted).toBe(1);
+    expect(await entriesFor('entitlement', sale.entitlementId)).toBe(0);
+  });
+
+  it('leaves the books balanced, and answers nothing the second time', async () => {
+    const again = await post(SEEDED.owner);
+    expect(again.posted).toBe(0);
+    const books = await balances();
+    expect(books.totalDebitFils).toBe(books.totalCreditFils);
   });
 });
