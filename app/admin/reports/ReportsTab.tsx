@@ -3,9 +3,12 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
 import type { ReportRow } from '../../api/reports/schema';
+import type { QeegContent } from '../../../domain/reports/qeeg/types';
 import { editorKindFor, kindWord, statusTone, statusWord } from './kinds';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
+import { QeegEditor } from './qeeg/QeegEditor';
+import { QeegStart } from './qeeg/QeegStart';
 import { canDeliverReports, canDraftReports, canSupersedeReports } from './reportsAccess';
 import { inChains, useReports } from './useReports';
 import './reports.css';
@@ -24,7 +27,9 @@ import './reports.css';
  *
  * Three things open from here: **Write a report**, which is the draft editor
  * for whichever kind was chosen; a row, which opens the report itself; and
- * nothing else. Signing, superseding and sending all live inside those two,
+ * nothing else. A brain-map report has a form of its own
+ * (`qeeg/QeegEditor.tsx`), started as a first report or a follow-up, and a
+ * brain-map draft row opens there. Signing, superseding and sending all live inside those two,
  * beside the thing they act on.
  *
  * **A draft opens in the editor, not the viewer.** Every row used to open in
@@ -97,6 +102,12 @@ export function ReportsTab({
   /** The draft being edited, if the editor was opened on one. */
   const [draftId, setDraftId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  /** Choosing which brain-map report to start. */
+  const [startingQeeg, setStartingQeeg] = useState(false);
+  /** The brain-map report being written: a draft to open, or a blank to start. */
+  const [qeeg, setQeeg] = useState<{ reportId: string | null; start: QeegContent | null } | null>(
+    null,
+  );
 
   const mayWrite = canDraftReports(actor, now, clientId) && !erased;
   const maySupersede = canSupersedeReports(actor, now, clientId) && !erased;
@@ -109,6 +120,21 @@ export function ReportsTab({
     setWriting(null);
     setDraftId(null);
     void refetch();
+  }
+
+  if (qeeg !== null) {
+    return (
+      <QeegEditor
+        clientId={clientId}
+        reportId={qeeg.reportId}
+        start={qeeg.start}
+        reports={state.reports}
+        onDone={() => {
+          setQeeg(null);
+          void refetch();
+        }}
+      />
+    );
   }
 
   if (writing !== null) {
@@ -151,10 +177,14 @@ export function ReportsTab({
   }
 
   /**
-   * A draft is edited; anything signed is read. A brain-map draft has an
-   * editor of its own that this tab does not yet open, so it is read here.
+   * A draft is edited; anything signed is read. A brain-map draft opens in
+   * the brain-map form.
    */
   function open(report: ReportRow): void {
+    if (report.kind === 'qeeg' && report.status === 'draft' && mayWrite) {
+      setQeeg({ reportId: report.id, start: null });
+      return;
+    }
     const editor = editorKindFor(report.kind);
     if (report.status === 'draft' && mayWrite && editor !== null) {
       setDraftId(report.id);
@@ -174,7 +204,19 @@ export function ReportsTab({
             Write a progress report
           </Button>
           <Button onClick={() => setWriting('session')}>Write a session report</Button>
+          <Button onClick={() => setStartingQeeg(true)}>New brain-map report</Button>
         </div>
+      ) : null}
+
+      {mayWrite && startingQeeg ? (
+        <QeegStart
+          reports={state.reports}
+          onStart={(start) => {
+            setStartingQeeg(false);
+            setQeeg({ reportId: null, start });
+          }}
+          onCancel={() => setStartingQeeg(false)}
+        />
       ) : null}
 
       {chains.length === 0 ? (
