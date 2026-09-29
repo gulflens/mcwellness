@@ -223,7 +223,11 @@ describe('infoPanel', () => {
     const input = { first: PERSON, second: RECORDING };
     expect(() => infoPanel(input, Number.NaN, ENGLISH)).toThrow(/infoPanel needs a finite width/);
     expect(() => infoPanel(input, -1, ENGLISH)).toThrow(/infoPanel needs a width of zero or more/);
-    expect(() => infoPanel(input, 10, ENGLISH)).toThrow(/panelColumnWidth is left no column/);
+    const least = 2 * PANEL.padH + PANEL.gutter;
+    expect(() => infoPanel(input, least, ENGLISH)).toThrow(
+      /infoPanel is left no room for its columns by a width of/,
+    );
+    expect(() => infoPanel(input, least + 10, ENGLISH)).not.toThrow();
   });
 
   it('changes nothing it was given', () => {

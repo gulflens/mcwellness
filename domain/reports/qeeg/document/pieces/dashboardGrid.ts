@@ -18,7 +18,7 @@ import { beside, stack } from '../block';
 import type { Block } from '../block';
 import { columns } from '../frame';
 import type { Frame } from '../frame';
-import { GRID, cardWidth } from '../geometry';
+import { CARD, GRID, cardWidth } from '../geometry';
 import { finite } from '../metrics';
 import type { Drawing } from '../typeset';
 import { dashboardCard } from './dashboardCard';
@@ -37,6 +37,14 @@ export function dashboardGrid(input: GridInput, width: number, drawing: Drawing)
     throw new RangeError(
       `dashboardGrid needs ${COUNT} cards, and was given ${input.cards.length}.`,
     );
+  }
+  // Each card must hold its ring and some words beside it, as a card itself
+  // asks: refused here, under this piece's name, before anything is set.
+  const least =
+    GRID.columns * (2 * CARD.padH + CARD.ring + CARD.ringGutter) +
+    (GRID.columns - 1) * GRID.columnGap;
+  if (width <= least) {
+    throw new RangeError(`dashboardGrid is left no room for its cards by a width of ${width}.`);
   }
   const frame: Frame = { direction: drawing.direction, left: 0, width };
   const across = columns(frame, GRID.columns, GRID.columnGap);

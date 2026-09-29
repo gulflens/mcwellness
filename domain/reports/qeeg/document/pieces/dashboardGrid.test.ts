@@ -133,6 +133,16 @@ describe('dashboardGrid', () => {
     expect(() => dashboardGrid({ cards: SIX }, -1, ENGLISH)).toThrow(
       /dashboardGrid needs a width of zero or more/,
     );
+    // Three cards each just too narrow for a ring and its words, and the gaps.
+    const least =
+      GRID.columns * (2 * CARD.padH + CARD.ring + CARD.ringGutter) +
+      (GRID.columns - 1) * GRID.columnGap;
+    expect(() => dashboardGrid({ cards: SIX }, least, ENGLISH)).toThrow(
+      /dashboardGrid is left no room for its cards by a width of/,
+    );
+    expect(() => dashboardGrid({ cards: SIX }, 0, ENGLISH)).toThrow(
+      /dashboardGrid is left no room for its cards/,
+    );
   });
 
   it('changes nothing it was given', () => {

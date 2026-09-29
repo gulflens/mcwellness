@@ -57,6 +57,9 @@ export function infoPanel(input: InfoPanelInput, width: number, drawing: Drawing
   if (width < 0) {
     throw new RangeError(`infoPanel needs a width of zero or more, and was given ${width}.`);
   }
+  if (width <= 2 * PANEL.padH + PANEL.gutter) {
+    throw new RangeError(`infoPanel is left no room for its columns by a width of ${width}.`);
+  }
   const each = panelColumnWidth(width);
   const inner = width - 2 * PANEL.padH;
   const frame: Frame = { direction: drawing.direction, left: 0, width: inner };
