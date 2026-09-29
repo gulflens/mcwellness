@@ -181,6 +181,8 @@ export const IMPORT_NOTE_CODES = Object.freeze([
   'extra_positions_ignored',
   'summary_colour_dropped',
   'summary_slant_dropped',
+  /** A picture, or formatting of a kind this app does not keep, inside the old summary. */
+  'summary_content_dropped',
   'summary_formatting_unreadable',
   'signature_image_dropped',
   'map_label_kept_as_caption',
