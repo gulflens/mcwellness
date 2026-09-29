@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Hono } from 'hono';
 import { renderReport } from '../../../domain/reports/document';
+import { hasRole } from '../../../domain/shared';
 import { DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../../domain/shared/storage';
 import { isUuid } from '../billing/ids';
 import { documentFonts } from '../billing/fonts';
@@ -142,7 +143,11 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
         expiresInSeconds: url === null ? null : DEFAULT_SIGNED_URL_TTL_SECONDS,
         // What a brain-map draft's next save names, so a page opened here
         // cannot save over one made since (app/api/reports/qeegDraft.ts).
-        savedAt: record.saved_at,
+        // The practice's alone: a household edits nothing, and when the
+        // practice last touched a row is not theirs to read.
+        ...(hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner')
+          ? { savedAt: record.saved_at }
+          : {}),
       }),
     );
   });

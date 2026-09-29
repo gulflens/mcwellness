@@ -869,4 +869,12 @@ describe('fix round 1: what the review found untested', () => {
     }
     expect(await reportCount()).toBe(before);
   });
+
+  it('never hands a household the stamp a draft’s next save names', async () => {
+    const theirs = await h.callAs('GET', `/api/reports/${issuedId}`, household.authId);
+    expect(theirs.status).toBe(200);
+    expect(Object.keys((await theirs.json()) as object)).not.toContain('savedAt');
+    const staff = await h.call('GET', `/api/reports/${issuedId}`, SEEDED.owner);
+    expect(((await staff.json()) as ReportResponse).savedAt).toMatch(/Z$/);
+  });
 });
