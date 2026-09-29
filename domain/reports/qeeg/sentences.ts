@@ -117,13 +117,17 @@ export function measureSentence(
 
 /**
  * English has one and many. Arabic agrees with the number: one, two, three
- * to ten, and eleven upwards each take their own form.
+ * to ten, and eleven upwards each take their own form. From a hundred on,
+ * the noun follows the last two figures, so 103 to 110 take the plural of
+ * three to ten; 101 and 102 keep the form of many, which print accepts
+ * beside figures.
  */
 function sessionForm(count: number, locale: Locale): string {
   if (count === 1) return 'sessions.one';
   if (locale === 'en') return 'sessions.many';
   if (count === 2) return 'sessions.two';
-  if (count >= 3 && count <= 10) return 'sessions.few';
+  const lastTwo = count >= 100 ? count % 100 : count;
+  if (lastTwo >= 3 && lastTwo <= 10) return 'sessions.few';
   return 'sessions.many';
 }
 

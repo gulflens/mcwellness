@@ -330,16 +330,24 @@ describe('sessionLabel', () => {
     expect(sessionLabel(20, 'en')).toBe('20 Sessions');
   });
 
-  it('agrees with the number in Arabic at 1, 2, 3, 10, 11 and 40', () => {
-    const ar = (key: string, count: number) =>
-      fill(w(`sessions.${key}`, 'initial', 'ar'), { count });
-    expect(sessionLabel(1, 'ar')).toBe(ar('one', 1));
-    expect(sessionLabel(2, 'ar')).toBe(ar('two', 2));
-    expect(sessionLabel(3, 'ar')).toBe(ar('few', 3));
-    expect(sessionLabel(10, 'ar')).toBe(ar('few', 10));
-    expect(sessionLabel(11, 'ar')).toBe(ar('many', 11));
-    expect(sessionLabel(40, 'ar')).toBe(ar('many', 40));
-    expect(sessionLabel(3, 'ar')).not.toBe(sessionLabel(11, 'ar').replace('11', '3'));
+  it('agrees with the number in Arabic, pinned to the letter', () => {
+    const expected: Array<[number, string]> = [
+      [1, 'جلسة واحدة'],
+      [2, 'جلستان'],
+      [3, '3 جلسات'],
+      [10, '10 جلسات'],
+      [11, '11 جلسة'],
+      [99, '99 جلسة'],
+      [100, '100 جلسة'],
+      [101, '101 جلسة'],
+      [102, '102 جلسة'],
+      [103, '103 جلسات'],
+      [110, '110 جلسات'],
+      [111, '111 جلسة'],
+      [200, '200 جلسة'],
+    ];
+    for (const [count, label] of expected)
+      expect(sessionLabel(count, 'ar'), String(count)).toBe(label);
   });
 });
 
