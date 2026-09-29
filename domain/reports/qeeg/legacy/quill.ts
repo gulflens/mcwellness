@@ -18,12 +18,15 @@
  * **Counting.** Offsets count UTF-16 units of the text, as `Mark` says, which
  * is what `String.prototype.length` counts. Each insert is written in
  * composed form (NFC) before it is counted, so a mark lands on the letters it
- * was typed over.
+ * was typed over. What `clean` would remove (control characters and the
+ * like, `../text.ts`) is removed from each insert before it is counted too,
+ * for the same reason, and `removed` says whether anything was.
  *
  * It never throws. Whatever cannot be read gives `{ ok: false }`, and the
  * reader falls back to the plain summary the old file also kept.
  */
 
+import { withoutUnseen } from '../text';
 import type { Mark, RichText } from '../types';
 
 export type Dropped = 'colour' | 'slant' | 'direction' | 'embed' | 'other';
@@ -99,7 +102,7 @@ function toMarks(spans: readonly Span[], length: number): Mark[] {
 
 export function fromQuillDelta(
   deltaJson: string,
-): { ok: true; rich: RichText; dropped: Dropped[] } | { ok: false } {
+): { ok: true; rich: RichText; dropped: Dropped[]; removed: boolean } | { ok: false } {
   try {
     if (typeof deltaJson !== 'string') return { ok: false };
     const decoded: unknown = JSON.parse(deltaJson);
@@ -113,6 +116,7 @@ export function fromQuillDelta(
     const dropped = new Set<Dropped>();
     const spans: Span[] = [];
     let text = '';
+    let removed = false;
 
     for (const op of ops as readonly unknown[]) {
       if (!isRecord(op)) {
@@ -144,7 +148,9 @@ export function fromQuillDelta(
         dropped.add('other');
       }
 
-      const piece = insert.normalize('NFC');
+      const composed = insert.normalize('NFC');
+      const piece = withoutUnseen(composed);
+      if (piece.length < composed.length) removed = true;
       const from = text.length;
       text += piece;
       if (bold || underline) spans.push({ from, to: text.length, bold, underline });
@@ -155,6 +161,7 @@ export function fromQuillDelta(
       ok: true,
       rich: { text: kept, marks: toMarks(spans, kept.length) },
       dropped: DROPPED_ORDER.filter((kind) => dropped.has(kind)),
+      removed,
     };
   } catch {
     return { ok: false };

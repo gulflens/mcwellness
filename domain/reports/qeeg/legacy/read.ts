@@ -55,6 +55,7 @@ import type {
   Score,
   Stage,
 } from '../types';
+import { clean } from '../text';
 import { LIMITS } from '../types';
 import { LEGACY_FORMAT, LEGACY_SUBJECT_KEY, LEGACY_VERSION } from './keys';
 import { fromQuillDelta } from './quill';
@@ -129,14 +130,6 @@ function text(value: unknown): string {
   return '';
 }
 
-/** At most `limit` UTF-16 units, never cutting a letter written as a pair of units in half. */
-function cut(value: string, limit: number): string {
-  if (value.length <= limit) return value;
-  const last = value.charCodeAt(limit - 1);
-  const end = last >= 0xd800 && last <= 0xdbff ? limit - 1 : limit;
-  return value.slice(0, end);
-}
-
 // ---------------------------------------------------------------------------
 // The notes
 // ---------------------------------------------------------------------------
@@ -148,20 +141,22 @@ class Notes {
     if (!this.list.some((n) => n.code === code && n.at === at)) this.list.push({ code, at });
   }
 
-  /** Typed text, cut at its limit with a note when it was longer. */
+  /**
+   * Typed text made fit to store by the rule the editor uses (`clean`), with
+   * a note when that left out more than the white space at its two ends.
+   */
   limited(value: string, limit: number, at: string): string {
-    const kept = cut(value, limit);
-    if (kept.length < value.length) this.add('text_shortened', at);
+    const kept = clean(value, limit);
+    if (kept.length < value.normalize('NFC').trim().length) this.add('text_shortened', at);
     return kept;
   }
 
   /** Her English and her Arabic, or null when she typed neither. */
   bilingual(en: string, ar: string, limit: number, at: string): Bilingual | null {
-    if (en.trim() === '' && ar.trim() === '') return null;
-    return {
-      en: this.limited(en, limit, `${at}.en`),
-      ar: ar.trim() === '' ? null : this.limited(ar, limit, `${at}.ar`),
-    };
+    const english = this.limited(en, limit, `${at}.en`);
+    const arabic = this.limited(ar, limit, `${at}.ar`);
+    if (english === '' && arabic === '') return null;
+    return { en: english, ar: arabic === '' ? null : arabic };
   }
 }
 
@@ -192,7 +187,7 @@ function customItems(
   if (!Array.isArray(value)) return {};
   const items = (value as readonly unknown[])
     .filter(isRecord)
-    .filter((item) => text(field(item, 'text')).trim() !== '');
+    .filter((item) => clean(text(field(item, 'text')), LIMITS.label) !== '');
   if (items.length > LIMITS.customPerList) notes.add('extra_positions_ignored', `${at}.custom`);
   const out: Record<string, CustomItem & { position: number }> = {};
   items.slice(0, LIMITS.customPerList).forEach((item, position) => {
@@ -374,12 +369,22 @@ function dashboardOf(file: Loose, notes: Notes): Readonly<Record<DimensionId, Sc
   return Object.fromEntries(DIMENSION_IDS.map((id) => [id, out[id]])) as Record<DimensionId, Score>;
 }
 
-/** Rich text held to its limits, its marks kept inside what is left. */
-function limitedRich(rich: RichText, at: string, notes: Notes): RichText {
-  const kept = notes.limited(rich.text, LIMITS.summary, at);
+/**
+ * Rich text made fit to store: trimmed and cut as `clean` would, with its
+ * marks moved by what was trimmed from the start and kept inside what is
+ * left. `removed` says the delta reader already took characters out.
+ */
+function limitedRich(rich: RichText, at: string, notes: Notes, removed: boolean): RichText {
+  const lead = rich.text.length - rich.text.trimStart().length;
+  const kept = clean(rich.text.slice(lead), LIMITS.summary);
+  if (removed || kept.length < rich.text.trim().length) notes.add('text_shortened', at);
   const marks: Mark[] = rich.marks
-    .filter((m) => m.from < kept.length)
-    .map((m) => (m.to > kept.length ? { ...m, to: kept.length } : m));
+    .map((m) => ({
+      ...m,
+      from: Math.max(0, m.from - lead),
+      to: Math.min(kept.length, m.to - lead),
+    }))
+    .filter((m) => m.from < m.to);
   if (marks.length > LIMITS.marks) notes.add('extra_positions_ignored', `${at}.marks`);
   return { text: kept, marks: marks.slice(0, LIMITS.marks) };
 }
@@ -389,20 +394,23 @@ function limitedRich(rich: RichText, at: string, notes: Notes): RichText {
  * as the old tool printed it; otherwise the plain one, with no marks.
  */
 function summaryIn(plainValue: unknown, richValue: unknown, at: string, notes: Notes): RichText {
-  const plain: RichText = { text: text(plainValue), marks: [] };
-  if (typeof richValue !== 'string') return limitedRich(plain, at, notes);
+  const plain = (): RichText => ({
+    text: notes.limited(text(plainValue), LIMITS.summary, at),
+    marks: [],
+  });
+  if (typeof richValue !== 'string') return plain();
   const read = fromQuillDelta(richValue);
   if (!read.ok) {
     notes.add('summary_formatting_unreadable', at);
-    return limitedRich(plain, at, notes);
+    return plain();
   }
-  if (read.rich.text.trim() === '') return limitedRich(plain, at, notes);
+  if (read.rich.text.trim() === '') return plain();
   if (read.dropped.includes('colour')) notes.add('summary_colour_dropped', at);
   if (read.dropped.includes('slant')) notes.add('summary_slant_dropped', at);
   if (read.dropped.includes('embed') || read.dropped.includes('other')) {
     notes.add('summary_content_dropped', at);
   }
-  return limitedRich(read.rich, at, notes);
+  return limitedRich(read.rich, at, notes, read.removed);
 }
 
 function sessionsOf(value: unknown, notes: Notes): number | null {
@@ -480,8 +488,8 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
 
 /** Who the old report named beneath its signature, or null where it named nobody. */
 function printed(value: unknown, at: string, notes: Notes): string | null {
-  const written = text(value).trim();
-  return written === '' ? null : notes.limited(written, LIMITS.label, at);
+  const written = notes.limited(text(value), LIMITS.label, at);
+  return written === '' ? null : written;
 }
 
 // ---------------------------------------------------------------------------

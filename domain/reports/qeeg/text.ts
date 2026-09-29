@@ -102,18 +102,28 @@ function isRemoved(code: number): boolean {
 const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
 
 /**
+ * What `clean` removes, removed, and nothing else: no trimming, no cutting,
+ * no composing. A tab becomes a space, so the length changes only where a
+ * character went. The old summary's reader uses it on each piece of text
+ * before counting, so a mark still lands on the letters it was typed over.
+ */
+export function withoutUnseen(typed: string): string {
+  let kept = '';
+  for (const character of typed) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code === TAB) kept += SPACE;
+    else if (!isRemoved(code)) kept += character;
+  }
+  return kept;
+}
+
+/**
  * What a person typed, made fit to store: composed, trimmed, with control
  * characters removed, and cut at `most` UTF-16 units without splitting a
  * character in two.
  */
 export function clean(typed: string, most: number): string {
-  let kept = '';
-  for (const character of typed.normalize('NFC')) {
-    const code = character.codePointAt(0) ?? 0;
-    if (code === TAB) kept += SPACE;
-    else if (!isRemoved(code)) kept += character;
-  }
-  let text = kept.trim();
+  let text = withoutUnseen(typed.normalize('NFC')).trim();
   if (text.length > most) {
     let cut = most;
     if (cut > 0 && isHighSurrogate(text.charCodeAt(cut - 1))) cut -= 1;

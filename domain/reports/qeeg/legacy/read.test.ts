@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { validateQeegContent } from '../shape';
 import type { ImportNote, QeegInitial } from '../types';
 import { LEGACY_SUBJECT_KEY } from './keys';
 import { readLegacyReport } from './read';
@@ -745,6 +746,86 @@ describe('what the reader tolerates, following the old tool', () => {
     const file = fullFile();
     delete file['v'];
     expect(readLegacyReport(file, SHA).ok).toBe(true);
+  });
+});
+
+describe('typed text is made fit to store', () => {
+  const HOSTILE = 'a\u0000b\u202Ec';
+
+  it('trims a label of white space and a letter to the letter, without a note', () => {
+    const customKF = [{ text: `${' '.repeat(160)}x`, checked: true }];
+    const result = readOk(withFile({ customKF }));
+    expect(result.content.findings.custom['c0']?.label).toEqual({ en: 'x', ar: null });
+    expect(result.notes).toEqual([]);
+    expect(validateQeegContent(result.content)).toMatchObject({ ok: true });
+  });
+
+  it('removes a control character from a label, and says the label was shortened', () => {
+    const customKF = [{ text: HOSTILE, textAr: HOSTILE, checked: true }];
+    const result = readOk(withFile({ customKF }));
+    expect(result.content.findings.custom['c0']?.label).toEqual({ en: 'abc', ar: 'abc' });
+    expect(result.notes).toEqual([
+      { code: 'text_shortened', at: 'findings.custom.c0.label.en' },
+      { code: 'text_shortened', at: 'findings.custom.c0.label.ar' },
+    ]);
+    expect(validateQeegContent(result.content)).toMatchObject({ ok: true });
+  });
+
+  it('removes a control character from a plain summary, and says so', () => {
+    const result = readOk(withFile({ summary: HOSTILE, summaryRich: undefined }));
+    expect(result.content.summary.en).toEqual({ text: 'abc', marks: [] });
+    expect(result.notes).toEqual([{ code: 'text_shortened', at: 'summary.en' }]);
+  });
+
+  it('removes a control character from a formatted summary before its marks are counted', () => {
+    const summaryRich = JSON.stringify({
+      ops: [
+        { insert: 'a\u0000b\u202E ' },
+        { insert: 'bold', attributes: { bold: true } },
+        { insert: '\n' },
+      ],
+    });
+    const result = readOk(withFile({ summaryRich }));
+    expect(result.content.summary.en).toEqual({
+      text: 'ab bold',
+      marks: [{ from: 3, to: 7, bold: true }],
+    });
+    expect(result.notes).toEqual([{ code: 'text_shortened', at: 'summary.en' }]);
+  });
+
+  it('trims a formatted summary at its start and keeps its marks on their letters', () => {
+    const summaryRich = JSON.stringify({
+      ops: [{ insert: '  lead ' }, { insert: 'x', attributes: { bold: true } }, { insert: '\n' }],
+    });
+    const result = readOk(withFile({ summaryRich }));
+    expect(result.content.summary.en).toEqual({
+      text: 'lead x',
+      marks: [{ from: 5, to: 6, bold: true }],
+    });
+    expect(result.notes).toEqual([]);
+  });
+
+  it('trims what was padded, without a note', () => {
+    const result = readOk(
+      withFile({
+        customBN: [{ text: '  padded  ', note: '  padded  ', checked: true }],
+        dims: [{ score: '5', evid: '  padded  ', evidAr: '  padded  ' }],
+        signer: '  padded  ',
+      }),
+    );
+    expect(result.content.benefits.custom['c0']?.label).toEqual({ en: 'padded', ar: null });
+    expect(result.content.dashboard.mental_energy.evidence).toEqual({
+      en: 'padded',
+      ar: 'padded',
+    });
+    expect(result.content.provenance).toMatchObject({ asPrinted: { signerName: 'padded' } });
+    expect(result.notes.filter((note) => note.code === 'text_shortened')).toEqual([]);
+  });
+
+  it('cleans what the file typed about the person', () => {
+    const result = readOk(withSubject({ name: `  ${HOSTILE} `, age: ' 34 ', gender: 'Female' }));
+    expect(result.asTyped).toMatchObject({ name: 'abc', age: '34', sex: 'Female' });
+    expect(result.notes).toEqual([{ code: 'text_shortened', at: 'asTyped.name' }]);
   });
 });
 
