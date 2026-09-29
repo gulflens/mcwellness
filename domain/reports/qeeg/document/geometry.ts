@@ -306,8 +306,8 @@ export const CHANGE = frozen({
 });
 
 /**
- * The shape that says a figure moved: a triangle in the ink, its base on the
- * baseline of the words it stands before, as tall as it is wide. Pointing up
+ * The shape that says a figure moved: a triangle in the ink, in a square
+ * whose foot is on the baseline of the words it stands before. Pointing up
  * for a figure that rose, down for one that fell, and none for one that held
  * (section 10, point 7). Sized to the words beside it, below their capitals.
  */
