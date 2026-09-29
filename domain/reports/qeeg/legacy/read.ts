@@ -63,7 +63,7 @@ import type {
   Score,
   Stage,
 } from '../types';
-import { clean, isRealDay } from '../text';
+import { clean, isRealDay, isRecord } from '../text';
 import { LIMITS } from '../types';
 import { LEGACY_FORMAT, LEGACY_SUBJECT_KEY, LEGACY_VERSION } from './keys';
 import { fromQuillDelta } from './quill';
@@ -79,7 +79,7 @@ import {
   FINDINGS_BY_POSITION,
   FOCUS_BY_POSITION,
   HAND_BY_OLD_WORD,
-  MEASURE_BY_OLD_KEY,
+  CONNECTIVITY_BY_OLD_KEY,
   RECOMMENDATIONS_BY_POSITION,
   REGIONS_BY_POSITION,
   STAGE_BY_OLD_WORD,
@@ -122,10 +122,6 @@ export type LegacyRead =
 // ---------------------------------------------------------------------------
 
 type Loose = Readonly<Record<string, unknown>>;
-
-function isRecord(value: unknown): value is Loose {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /** A key's own value, never one inherited from the object's prototype. */
 function field(record: Loose, key: string): unknown {
@@ -322,14 +318,14 @@ function bandsOf(file: Loose, notes: Notes): Readonly<Record<BandId, InitialBand
 
 function connectivityOf(file: Loose, notes: Notes): InitialConnectivity {
   const links = field(file, 'links');
-  // Each measure's level comes from that measure's own table, so the loose
+  // Each kind's level comes from that kind's own table, so the loose
   // type below is narrowed back to `InitialConnectivity` safely at the end.
   const out = {} as Record<ConnectivityId, { level: string | null; regions: RegionId[] }>;
-  for (const [oldKey, measure] of Object.entries(MEASURE_BY_OLD_KEY)) {
+  for (const [oldKey, id] of Object.entries(CONNECTIVITY_BY_OLD_KEY)) {
     const entry = isRecord(links) ? field(links, oldKey) : undefined;
-    const at = `connectivity.${measure}`;
-    const levels: Readonly<Record<string, string>> = CONNECTIVITY_LEVEL_BY_OLD_WORD[measure];
-    out[measure] = isRecord(entry)
+    const at = `connectivity.${id}`;
+    const levels: Readonly<Record<string, string>> = CONNECTIVITY_LEVEL_BY_OLD_WORD[id];
+    out[id] = isRecord(entry)
       ? {
           level: chosenWord(field(entry, 'lvl'), levels, at, notes),
           regions: ticked(field(entry, 'regions'), REGIONS_BY_POSITION, `${at}.regions`, notes),

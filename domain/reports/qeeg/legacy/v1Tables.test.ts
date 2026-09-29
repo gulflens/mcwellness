@@ -25,7 +25,7 @@ import {
   FINDINGS_BY_POSITION,
   FOCUS_BY_POSITION,
   HAND_BY_OLD_WORD,
-  MEASURE_BY_OLD_KEY,
+  CONNECTIVITY_BY_OLD_KEY,
   RECOMMENDATIONS_BY_POSITION,
   REGIONS_BY_POSITION,
   STAGE_BY_OLD_WORD,
@@ -140,8 +140,8 @@ describe('what each position of the old file means', () => {
 });
 
 describe('what each word of the old file means', () => {
-  it('names the three measures by the keys the old file uses', () => {
-    expect(MEASURE_BY_OLD_KEY).toEqual({
+  it('names the three kinds of connectivity by the keys the old file uses', () => {
+    expect(CONNECTIVITY_BY_OLD_KEY).toEqual({
       conn: 'connectivity',
       asym: 'asymmetry',
       phase: 'phase_lag',
@@ -214,7 +214,7 @@ describe('every table is whole', () => {
     exactlyOnce(DIMENSIONS_BY_POSITION, DIMENSION_IDS));
   it('holds every approach exactly once', () => exactlyOnce(APPROACHES_BY_POSITION, APPROACH_IDS));
   it('holds every measure exactly once', () =>
-    exactlyOnce(Object.values(MEASURE_BY_OLD_KEY), CONNECTIVITY_IDS));
+    exactlyOnce(Object.values(CONNECTIVITY_BY_OLD_KEY), CONNECTIVITY_IDS));
   it('holds every band level exactly once', () =>
     exactlyOnce(Object.values(BAND_LEVEL_BY_OLD_WORD), INITIAL_BAND_LEVELS));
   it('holds every level of every measure exactly once', () => {
@@ -243,7 +243,7 @@ describe('every table is whole', () => {
       BANDS_BY_POSITION,
       DIMENSIONS_BY_POSITION,
       APPROACHES_BY_POSITION,
-      MEASURE_BY_OLD_KEY,
+      CONNECTIVITY_BY_OLD_KEY,
       BAND_LEVEL_BY_OLD_WORD,
       CONNECTIVITY_LEVEL_BY_OLD_WORD,
       CONNECTIVITY_LEVEL_BY_OLD_WORD.connectivity,

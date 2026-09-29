@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { blankFollowUp, blankInitial } from './blank';
 import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from './catalogue/ids';
-import { bandIsComplete, measureIsComplete, missingForIssue } from './complete';
+import { bandIsComplete, connectivityIsComplete, missingForIssue } from './complete';
 import type { ComparedWith, Missing, QeegContent, QeegFollowUp, QeegInitial } from './types';
 import { phrase } from './wording';
 
@@ -287,21 +287,21 @@ describe('bandIsComplete', () => {
   });
 });
 
-describe('measureIsComplete', () => {
+describe('connectivityIsComplete', () => {
   it('needs a level and a region on a first report: either alone is not enough', () => {
     const blank = blankInitial();
     const withAsymmetry = (asymmetry: QeegInitial['connectivity']['asymmetry']): QeegInitial => ({
       ...blank,
       connectivity: { ...blank.connectivity, asymmetry },
     });
-    expect(measureIsComplete(withAsymmetry({ level: 'left', regions: [] }), 'asymmetry')).toBe(
+    expect(connectivityIsComplete(withAsymmetry({ level: 'left', regions: [] }), 'asymmetry')).toBe(
       false,
     );
     expect(
-      measureIsComplete(withAsymmetry({ level: null, regions: ['frontal'] }), 'asymmetry'),
+      connectivityIsComplete(withAsymmetry({ level: null, regions: ['frontal'] }), 'asymmetry'),
     ).toBe(false);
     expect(
-      measureIsComplete(withAsymmetry({ level: 'left', regions: ['frontal'] }), 'asymmetry'),
+      connectivityIsComplete(withAsymmetry({ level: 'left', regions: ['frontal'] }), 'asymmetry'),
     ).toBe(true);
   });
 
@@ -311,14 +311,14 @@ describe('measureIsComplete', () => {
       ...blank,
       connectivity: { ...blank.connectivity, phase_lag },
     });
-    expect(measureIsComplete(withLag({ change: 'unchanged', regions: [] }), 'phase_lag')).toBe(
+    expect(connectivityIsComplete(withLag({ change: 'unchanged', regions: [] }), 'phase_lag')).toBe(
       true,
     );
-    expect(measureIsComplete(withLag({ change: 'improved', regions: [] }), 'phase_lag')).toBe(
+    expect(connectivityIsComplete(withLag({ change: 'improved', regions: [] }), 'phase_lag')).toBe(
       false,
     );
     expect(
-      measureIsComplete(withLag({ change: 'improved', regions: ['parietal'] }), 'phase_lag'),
+      connectivityIsComplete(withLag({ change: 'improved', regions: ['parietal'] }), 'phase_lag'),
     ).toBe(true);
   });
 });

@@ -93,25 +93,25 @@ export function bandSentence(content: QeegContent, band: BandId, locale: Locale)
   return sentence(edition, locale, base, clause, regions);
 }
 
-export function measureSentence(
+export function connectivitySentence(
   content: QeegContent,
-  measure: ConnectivityId,
+  id: ConnectivityId,
   locale: Locale,
 ): string {
   const { edition } = content;
   if (content.edition === 'initial') {
-    const { level, regions } = content.connectivity[measure];
+    const { level, regions } = content.connectivity[id];
     if (level === null) return NOTHING_YET;
-    const base = fill(phrase(`sentence.${measure}`, edition, locale), {
-      level: phrase(`level.${measure}.${level}.word`, edition, locale),
+    const base = fill(phrase(`sentence.${id}`, edition, locale), {
+      level: phrase(`level.${id}.${level}.word`, edition, locale),
     });
     const clause =
-      measure === 'asymmetry' ? 'clause.asymmetry.involving' : 'clause.connectivity.involving';
+      id === 'asymmetry' ? 'clause.asymmetry.involving' : 'clause.connectivity.involving';
     return sentence(edition, locale, base, clause, regions);
   }
-  const { change, regions } = content.connectivity[measure];
+  const { change, regions } = content.connectivity[id];
   if (change === null) return NOTHING_YET;
-  const base = phrase(`change.${measure}.${change}.sentence`, edition, locale);
+  const base = phrase(`change.${id}.${change}.sentence`, edition, locale);
   return sentence(edition, locale, base, 'clause.connectivity.involving', regions);
 }
 

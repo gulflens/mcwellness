@@ -17,7 +17,7 @@ import {
   bandHeading,
   bandSentence,
   earlierTerm,
-  measureSentence,
+  connectivitySentence,
   paragraph,
   regionPhrase,
   sessionLabel,
@@ -168,7 +168,7 @@ describe('bandSentence on a first report', () => {
   }
 });
 
-describe('measureSentence on a first report', () => {
+describe('connectivitySentence on a first report', () => {
   for (const locale of LOCALES) {
     for (const measure of ['connectivity', 'phase_lag'] as const) {
       it(`builds ${measure} from its base and the connectivity clause, in ${locale}`, () => {
@@ -180,7 +180,7 @@ describe('measureSentence on a first report', () => {
         const clause = fill(w('clause.connectivity.involving', 'initial', locale), {
           regions: regionPhrase(['temporal'], locale),
         });
-        expect(measureSentence(content, measure, locale)).toBe(
+        expect(connectivitySentence(content, measure, locale)).toBe(
           base + clause + w('sentence.end', 'initial', locale),
         );
       });
@@ -194,7 +194,7 @@ describe('measureSentence on a first report', () => {
       const clause = fill(w('clause.asymmetry.involving', 'initial', locale), {
         regions: regionPhrase(['frontal', 'right_hemisphere'], locale),
       });
-      expect(measureSentence(content, 'asymmetry', locale)).toBe(
+      expect(connectivitySentence(content, 'asymmetry', locale)).toBe(
         base + clause + w('sentence.end', 'initial', locale),
       );
     });
@@ -233,7 +233,7 @@ describe('sentences on a follow-up', () => {
         const clause = fill(w('clause.connectivity.involving', 'follow-up', locale), {
           regions: regionPhrase(['bilateral'], locale),
         });
-        expect(measureSentence(content, measure, locale)).toBe(
+        expect(connectivitySentence(content, measure, locale)).toBe(
           w(`change.${measure}.mixed_changes.sentence`, 'follow-up', locale) +
             clause +
             w('sentence.end', 'follow-up', locale),
@@ -270,14 +270,14 @@ describe('every sentence', () => {
             const content = initialWithMeasure(measure, level, regions);
             found.push({
               at: `${measure} ${level}`,
-              text: measureSentence(content, measure, locale),
+              text: connectivitySentence(content, measure, locale),
             });
           }
           for (const change of CONNECTIVITY_CHANGES) {
             const content = followUpWithMeasure(measure, change, regions);
             found.push({
               at: `${measure} ${change}`,
-              text: measureSentence(content, measure, locale),
+              text: connectivitySentence(content, measure, locale),
             });
           }
         }
@@ -311,7 +311,7 @@ describe('an unfinished draft', () => {
       for (const content of [blankInitial(), blankFollowUp(EARLIER, 'final')]) {
         for (const band of BAND_IDS) expect(bandSentence(content, band, locale)).toBe(NOTHING);
         for (const measure of CONNECTIVITY_IDS) {
-          expect(measureSentence(content, measure, locale)).toBe(NOTHING);
+          expect(connectivitySentence(content, measure, locale)).toBe(NOTHING);
         }
       }
     }

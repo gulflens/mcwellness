@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { clean, isEmpty, isRealDay, plain, richFor, spansOf, textFor, toParagraphs } from './text';
+import {
+  clean,
+  isEmpty,
+  isRealDay,
+  isRecord,
+  plain,
+  richFor,
+  spansOf,
+  textFor,
+  toParagraphs,
+} from './text';
 import type { RichText } from './types';
 
 /** Part 2 of brief C1: typed text, in either language, and the wording's bold marks. */
@@ -238,5 +248,13 @@ describe('isRealDay', () => {
     for (const day of ['2026-9-1', '01/09/2026', ' 2026-09-01', '2026-09-01T00:00', '']) {
       expect(isRealDay(day), day).toBe(false);
     }
+  });
+});
+
+describe('isRecord', () => {
+  it('holds a plain set of fields and nothing else', () => {
+    expect(isRecord({})).toBe(true);
+    expect(isRecord({ a: 1 })).toBe(true);
+    for (const value of [null, undefined, [], 'text', 3, true]) expect(isRecord(value)).toBe(false);
   });
 });

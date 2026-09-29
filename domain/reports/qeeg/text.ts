@@ -24,6 +24,11 @@ import type { Bilingual, BilingualRich, Locale, Mark, RichText } from './types';
 
 const hasSomething = (text: string) => text.trim().length > 0;
 
+/** A plain set of fields: an object that is not an array. The one test of it here. */
+export function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export function textFor(locale: Locale, text: Bilingual): string {
   if (locale === 'ar' && text.ar !== null && hasSomething(text.ar)) return text.ar;
   return text.en;

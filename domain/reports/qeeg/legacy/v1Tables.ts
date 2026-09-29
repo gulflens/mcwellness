@@ -133,7 +133,7 @@ export const APPROACHES_BY_POSITION: readonly ApproachId[] = positions(
 );
 
 /** The keys of the old file's `links`. */
-export const MEASURE_BY_OLD_KEY: Readonly<Record<'conn' | 'asym' | 'phase', ConnectivityId>> =
+export const CONNECTIVITY_BY_OLD_KEY: Readonly<Record<'conn' | 'asym' | 'phase', ConnectivityId>> =
   Object.freeze({
     conn: 'connectivity',
     asym: 'asymmetry',
@@ -148,7 +148,7 @@ export const BAND_LEVEL_BY_OLD_WORD: Readonly<Record<string, InitialBandLevel>> 
 });
 
 /**
- * Each measure's old levels, as a link's `lvl`. The old words and this app's
+ * Each kind of connectivity's old levels, as a link's `lvl`. The old words and this app's
  * names happen to be spelt alike; the table says so rather than assuming it.
  */
 export const CONNECTIVITY_LEVEL_BY_OLD_WORD: {

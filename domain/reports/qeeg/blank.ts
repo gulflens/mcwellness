@@ -8,7 +8,7 @@
  * give before the report can be signed. A blank still validates, because an
  * unfinished draft has to be saved.
  *
- * **Every band, measure and dimension has its entry from the start.** The
+ * **Every band, kind of connectivity and dimension has its entry from the start.** The
  * form, the preview and the completeness list all walk the same keys, so none
  * of them has to ask whether an entry exists.
  *

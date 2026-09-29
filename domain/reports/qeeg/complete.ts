@@ -12,11 +12,11 @@
  * can say both in whichever language it is showing, through `phrase`, and a
  * test can hold the list exactly.
  *
- * **What counts as done for a band or a measure.** A sentence about a band
+ * **What counts as done for a band or a kind of connectivity.** A sentence about a band
  * names the regions it involves, so a level with no region, or a region with
  * no level, is half a sentence. The exceptions are the choices that need no
  * place named: a band within normal limits on a first report, and on a
- * follow-up anything unchanged or now within normal limits. A measure on a
+ * follow-up anything unchanged or now within normal limits. Connectivity on a
  * first report always names its regions, as the tool this was rebuilt from
  * required.
  *
@@ -57,12 +57,12 @@ export function bandIsComplete(content: QeegContent, band: BandId): boolean {
   return choiceIsComplete(change, regions, change !== null && NEEDS_NO_REGION.has(change));
 }
 
-export function measureIsComplete(content: QeegContent, measure: ConnectivityId): boolean {
+export function connectivityIsComplete(content: QeegContent, id: ConnectivityId): boolean {
   if (content.edition === 'initial') {
-    const { level, regions } = content.connectivity[measure];
+    const { level, regions } = content.connectivity[id];
     return choiceIsComplete(level, regions, false);
   }
-  const { change, regions } = content.connectivity[measure];
+  const { change, regions } = content.connectivity[id];
   return choiceIsComplete(change, regions, change !== null && NEEDS_NO_REGION.has(change));
 }
 
@@ -84,8 +84,8 @@ export function missingForIssue(content: QeegContent): Missing[] {
   for (const band of BAND_IDS) {
     need(bandIsComplete(content, band), 'heading.brain', `band.${band}.name`);
   }
-  for (const measure of CONNECTIVITY_IDS) {
-    need(measureIsComplete(content, measure), 'label.findings', `connectivity.${measure}.title`);
+  for (const id of CONNECTIVITY_IDS) {
+    need(connectivityIsComplete(content, id), 'label.findings', `connectivity.${id}.title`);
   }
   for (const dimension of DIMENSION_IDS) {
     need(

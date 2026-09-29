@@ -29,7 +29,7 @@
  * reader falls back to the plain summary the old file also kept.
  */
 
-import { withoutUnseen } from '../text';
+import { isRecord, withoutUnseen } from '../text';
 import type { Mark, RichText } from '../types';
 
 export type Dropped = 'colour' | 'slant' | 'direction' | 'embed' | 'other';
@@ -44,10 +44,6 @@ const DROPPED_ORDER: readonly Dropped[] = Object.freeze([
 
 type Style = { readonly bold: boolean; readonly underline: boolean };
 type Span = Style & { readonly from: number; readonly to: number };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /** An attribute that is present and not switched off. */
 function isSet(value: unknown): boolean {

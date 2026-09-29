@@ -4,7 +4,7 @@
  * **Nothing is mapped from one list to the other.** A first report says what
  * was seen; a follow-up says what changed. "Increased" is not "moved further",
  * and a guess made here would be a judgement nobody made printed under her
- * signature. So every band's and measure's choice is cleared, with the
+ * signature. So every band's and every connectivity choice is cleared, with the
  * approach or the next stage, and each one cleared is listed in `setAside`
  * so the form can show her what she had. Every band then shows as unfinished
  * (`complete.ts`) until she chooses again.
@@ -78,9 +78,9 @@ export function toFollowUp(
     setAsideIf(`bands.${band}`, content.bands[band].level);
     return { change: null, regions: [...content.bands[band].regions] };
   });
-  const connectivity = eachOf(CONNECTIVITY_IDS, (measure) => {
-    setAsideIf(`connectivity.${measure}`, content.connectivity[measure].level);
-    return { change: null, regions: [...content.connectivity[measure].regions] };
+  const connectivity = eachOf(CONNECTIVITY_IDS, (id) => {
+    setAsideIf(`connectivity.${id}`, content.connectivity[id].level);
+    return { change: null, regions: [...content.connectivity[id].regions] };
   });
   setAsideIf('plan.approach', content.plan.approach);
 
@@ -113,9 +113,9 @@ export function toInitial(content: QeegFollowUp): { content: QeegInitial; setAsi
     setAsideIf(`bands.${band}`, content.bands[band].change);
     return { level: null, regions: [...content.bands[band].regions] };
   });
-  const connectivity = eachOf(CONNECTIVITY_IDS, (measure) => {
-    setAsideIf(`connectivity.${measure}`, content.connectivity[measure].change);
-    return { level: null, regions: [...content.connectivity[measure].regions] };
+  const connectivity = eachOf(CONNECTIVITY_IDS, (id) => {
+    setAsideIf(`connectivity.${id}`, content.connectivity[id].change);
+    return { level: null, regions: [...content.connectivity[id].regions] };
   });
   setAsideIf('plan.next', content.plan.next);
 
