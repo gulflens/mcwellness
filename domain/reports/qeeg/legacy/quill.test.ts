@@ -217,6 +217,22 @@ describe('a mark and a letter written as a pair', () => {
   });
 });
 
+describe('what the delta reader takes out, and what it leaves', () => {
+  it('says when it removed something, and not when it did not', () => {
+    expect(read({ ops: [{ insert: 'a\u0000b\u202e c\n' }] }).removed).toBe(true);
+    expect(read({ ops: [{ insert: 'a\u200bb\n' }] }).removed).toBe(true);
+    expect(read({ ops: [{ insert: '  plain\ttext  \n\n' }] }).removed).toBe(false);
+    expect(read({ ops: [{ insert: '\u0628\u200c\u0628\n' }] }).removed).toBe(false);
+  });
+
+  it('never cuts, however long the summary', () => {
+    const long = 'x'.repeat(10_000);
+    const result = read({ ops: [{ insert: long }, { insert: 'y', attributes: { bold: true } }] });
+    expect(result.rich.text).toHaveLength(10_001);
+    expect(result.rich.marks).toEqual([{ from: 10_000, to: 10_001, bold: true }]);
+  });
+});
+
 describe('what cannot be read', () => {
   const unreadable: ReadonlyArray<readonly [string, unknown]> = [
     ['a broken string', '{"ops": [ { "insert": '],

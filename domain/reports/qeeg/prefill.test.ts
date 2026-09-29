@@ -233,6 +233,48 @@ describe('prefillFollowUp', () => {
       expect(content.provenance).toEqual({ origin: 'app' });
     });
 
+    it('brings forward an earlier follow-up own scores, never its earlier scores', () => {
+      const followUp: QeegFollowUp = {
+        ...blankFollowUp(ISSUED, 'follow_up'),
+        recording: { recordedOn: '2026-06-01', eyes: null, handedness: null },
+        dashboard: {
+          mental_energy: { score: 4, evidence: null, earlierScore: 1 },
+          attention_focus: { score: 5, evidence: null, earlierScore: 2 },
+          cognitive_flexibility: { score: 6, evidence: null, earlierScore: 3 },
+          stress_regulation: { score: 7, evidence: null, earlierScore: 0 },
+          recovery_capacity: { score: 8, evidence: null, earlierScore: 10 },
+          decision_making: { score: 9, evidence: null, earlierScore: null },
+        },
+      };
+      const { dashboard } = prefilled(earlier({ content: followUp })).content;
+      expect(DIMENSION_IDS.map((d) => dashboard[d].earlierScore)).toEqual([4, 5, 6, 7, 8, 9]);
+      const unscored: QeegFollowUp = {
+        ...followUp,
+        dashboard: {
+          ...followUp.dashboard,
+          mental_energy: { score: null, evidence: null, earlierScore: 1 },
+        },
+      };
+      const again = prefilled(earlier({ content: unscored })).content.dashboard;
+      expect(again.mental_energy.earlierScore).toBeNull();
+    });
+
+    it('trims the reference it brings forward', () => {
+      const from = earlier({ reference: '  RPT-000001\u200e ' });
+      expect(prefilled(from).content.comparedWith).toMatchObject({ reference: 'RPT-000001' });
+    });
+
+    it('brings forward no score that is not a whole number, and no hand it does not know', () => {
+      const content = {
+        ...earlierContent(),
+        recording: { ...earlierContent().recording, handedness: 'both' },
+        dashboard: { ...earlierContent().dashboard, mental_energy: { score: 5.5, evidence: null } },
+      } as unknown as QeegContent;
+      const answer = prefilled(earlier({ content }));
+      expect(answer.content.dashboard.mental_energy.earlierScore).toBeNull();
+      expect(answer.content.recording.handedness).toBeNull();
+    });
+
     it('passes the shape, as a first report and as a past record are followed up', () => {
       for (const from of [earlier(), earlier({ status: 'imported', reference: null })]) {
         const answer = validateQeegContent(prefilled(from).content);
@@ -298,6 +340,33 @@ describe('prefillFollowUp', () => {
         asymmetry: ['frontal'],
         phase_lag: ['widespread'],
       });
+    });
+
+    it('offers what she added in the order of its places, not of its keys', () => {
+      const item = (en: string, position: number) => ({
+        label: { en, ar: null },
+        note: null,
+        chosen: true,
+        position,
+      });
+      const content = {
+        ...earlierContent(),
+        focus: { chosen: [], custom: { c0: item('Second', 1), c1: item('First', 0) } },
+      };
+      const { focus } = prefilled(earlier({ content })).offered;
+      expect(focus.custom['c1']).toMatchObject({ position: 0, label: { en: 'First' } });
+      expect(focus.custom['c0']).toMatchObject({ position: 1, label: { en: 'Second' } });
+    });
+
+    it('offers no region it does not know', () => {
+      const content = {
+        ...earlierContent(),
+        bands: {
+          ...earlierContent().bands,
+          delta: { level: 'increased', regions: ['frontal', 'nowhere'] },
+        },
+      } as unknown as QeegContent;
+      expect(prefilled(earlier({ content })).offered.regions.bands.delta).toEqual(['frontal']);
     });
 
     it('puts nothing it offers inside the content', () => {

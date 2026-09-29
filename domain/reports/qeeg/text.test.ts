@@ -594,6 +594,49 @@ describe('cleanRich', () => {
     }
   });
 
+  it('moves the edge of a mark between an Arabic letter and the marks over it outward', () => {
+    // Beh, shadda, fatha: Arabic never composes, yet the marks are one letter
+    // with the beh. Composing puts fatha before shadda.
+    const given = rich('\u0628\u0651\u064e \u0628', [
+      { from: 0, to: 2, ...B },
+      { from: 2, to: 5, ...U },
+    ]);
+    expect(cleanRich(given, 10)).toEqual(
+      rich('\u0628\u064e\u0651 \u0628', [
+        { from: 0, to: 3, ...B },
+        { from: 3, to: 5, ...U },
+      ]),
+    );
+    const overBehOnly = rich('\u0628\u0651\u064e \u0628', [{ from: 0, to: 1, ...B }]);
+    expect(cleanRich(overBehOnly, 10)).toEqual(
+      rich('\u0628\u064e\u0651 \u0628', [{ from: 0, to: 3, ...B }]),
+    );
+  });
+
+  it('gives a letter two marks meet in to the earlier, in one style and not both', () => {
+    const given = rich('e\u0301x', [
+      { from: 0, to: 1, ...B },
+      { from: 1, to: 3, ...U },
+    ]);
+    expect(cleanRich(given, 10)).toEqual(
+      rich('\u00e9x', [
+        { from: 0, to: 1, ...B },
+        { from: 1, to: 2, ...U },
+      ]),
+    );
+    const jamo = rich('\u1100\u1161', [
+      { from: 0, to: 1, ...U },
+      { from: 1, to: 2, ...B },
+    ]);
+    expect(cleanRich(jamo, 10)).toEqual(rich('\uac00', [{ from: 0, to: 1, ...U }]));
+  });
+
+  it('leaves no white space at the end where the cut falls after it', () => {
+    expect(cleanRich(rich('ab cd', [{ from: 0, to: 5, ...B }]), 3)).toEqual(
+      rich('ab', [{ from: 0, to: 2, ...B }]),
+    );
+  });
+
   it('refuses a length that is not a whole number above 0, as clean does', () => {
     for (const most of [0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => cleanRich(rich('abc'), most), String(most)).toThrow(RangeError);

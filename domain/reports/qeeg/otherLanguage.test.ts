@@ -162,19 +162,29 @@ function nullsOf(value: unknown, path = ''): string[] {
   return [];
 }
 
-/** A copy with every typed half replaced by `tag` and the half's name. */
+/**
+ * A copy with every typed half replaced by `tag` and a marker that NAMES ITS
+ * OWN PLACE (`SENT findings.custom.c0.label.ar`), so a half read from the
+ * wrong item, or the wrong list, is seen.
+ */
 function tagged<T>(value: T, tag: string): T {
-  const walk = (v: unknown): unknown => {
+  const walk = (v: unknown, path: string): unknown => {
     if (isTyped(v)) {
-      const half = (old: unknown, name: string) =>
-        isObject(old) ? { text: `${tag} ${name}`, marks: [] } : `${tag} ${name}`;
+      const half = (old: unknown, name: string) => {
+        const marker = `${tag} ${path}.${name}`;
+        return isObject(old) ? { text: marker, marks: [] } : marker;
+      };
       return { en: half(v.en, 'en'), ar: half(v.ar ?? v.en, 'ar') };
     }
-    if (Array.isArray(v)) return v.map(walk);
-    if (isObject(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    if (Array.isArray(v)) return v.map((x, i) => walk(x, `${path}.${i}`));
+    if (isObject(v)) {
+      return Object.fromEntries(
+        Object.entries(v).map(([k, x]) => [k, walk(x, path ? `${path}.${k}` : k)]),
+      );
+    }
     return v;
   };
-  return walk(value) as T;
+  return walk(value, '') as T;
 }
 
 /** A copy with the `locale` half of every typed text set to null, to compare the rest. */
@@ -229,8 +239,8 @@ describe('withOtherLanguageFrom', () => {
           expect(found.length).toBe(typedTexts(first).length);
           expect(found.length).toBeGreaterThan(20);
           for (const [path, text] of found) {
-            expect(textOf(text[locale]), path).toBe(`SENT ${locale}`);
-            expect(textOf(text[other]), path).toBe(`FIRST ${other}`);
+            expect(textOf(text[locale]), path).toBe(`SENT ${path}.${locale}`);
+            expect(textOf(text[other]), path).toBe(`FIRST ${path}.${other}`);
           }
           expectShapeAccepts(result);
         });
@@ -256,6 +266,32 @@ describe('withOtherLanguageFrom', () => {
       expect(result.findings.custom['c0']?.label).toEqual(both('Finding 0', 'ثاني'));
       expect(result.findings.custom['c1']?.label).toEqual(both('Finding 1', 'أول'));
       expect(result.findings.custom['c0']?.position).toBe(0);
+    });
+
+    it('keeps the first report place of every item, whatever place was sent', () => {
+      const first = filledFollowUp();
+      const sent = filledFollowUp();
+      const moved: QeegFollowUp = {
+        ...sent,
+        findings: {
+          ...sent.findings,
+          custom: {
+            c0: { ...sent.findings.custom['c0']!, position: 1 },
+            c1: { ...sent.findings.custom['c1']!, position: 0 },
+          },
+        },
+        maps: { 'map-0': { ...sent.maps['map-0']!, position: 4 } },
+        change: {
+          ...sent.change,
+          tiles: { t0: { ...sent.change.tiles['t0']!, position: 3 } },
+        },
+      };
+      const result = withOtherLanguageFrom(first, moved, 'ar');
+      if (result.edition !== 'follow-up') throw new Error('expected a follow-up');
+      expect(result.findings.custom['c0']?.position).toBe(0);
+      expect(result.findings.custom['c1']?.position).toBe(1);
+      expect(result.maps['map-0']?.position).toBe(0);
+      expect(result.change.tiles['t0']?.position).toBe(0);
     });
 
     it('ignores an item the first report does not hold', () => {
@@ -406,17 +442,57 @@ describe('withOtherLanguageFrom', () => {
     });
   });
 
+  describe('what was sent is read only as it was sent', () => {
+    it('reads no typed text a sent body only inherits', () => {
+      const first = filledInitial();
+      const inherited: unknown = Object.create(tagged(filledInitial(), 'INHERITED'));
+      const result = withOtherLanguageFrom(first, inherited as QeegContent, 'ar');
+      expect(result).toEqual(first);
+    });
+
+    it('reads no page of what has changed from a body that says it is a first report', () => {
+      const first = tagged(filledFollowUp(), 'FIRST');
+      const forged = {
+        ...tagged(filledInitial(), 'SENT'),
+        change: tagged(filledFollowUp(), 'SENT').change,
+      };
+      const result = withOtherLanguageFrom(first, forged as QeegContent, 'ar');
+      if (result.edition !== 'follow-up') throw new Error('expected a follow-up');
+      expect(textOf(result.change.summary.ar)).toBe('FIRST change.summary.ar');
+      expect(textOf(result.change.tiles['t0']?.caption.ar)).toBe(
+        'FIRST change.tiles.t0.caption.ar',
+      );
+    });
+
+    it('shares no typed text with the first report, not even a half it kept', () => {
+      const first = filledFollowUp();
+      const result = withOtherLanguageFrom(first, filledFollowUp(), 'ar');
+      if (result.edition !== 'follow-up') throw new Error('expected a follow-up');
+      expect(result.summary.en).toEqual(first.summary.en);
+      expect(result.summary.en).not.toBe(first.summary.en);
+      expect(result.change.summary.en).not.toBe(first.change.summary.en);
+      const english = withOtherLanguageFrom(first, filledFollowUp(), 'en');
+      expect(english.summary.ar).not.toBe(first.summary.ar);
+    });
+  });
+
   describe('when what was sent is of the other edition', () => {
     it('takes only the typed texts both editions share', () => {
       const first = tagged(filledFollowUp(), 'FIRST');
       const sent = tagged(filledInitial(), 'SENT');
       const result = withOtherLanguageFrom(first, sent, 'ar');
       if (result.edition !== 'follow-up') throw new Error('expected a follow-up');
-      expect(textOf(result.summary.ar)).toBe('SENT ar');
-      expect(textOf(result.findings.custom['c0']?.label.ar)).toBe('SENT ar');
-      expect(textOf(result.dashboard.decision_making.evidence?.ar)).toBe('SENT ar');
-      expect(textOf(result.change.summary.ar)).toBe('FIRST ar');
-      expect(textOf(result.change.tiles['t0']?.caption.ar)).toBe('FIRST ar');
+      expect(textOf(result.summary.ar)).toBe('SENT summary.ar');
+      expect(textOf(result.findings.custom['c0']?.label.ar)).toBe(
+        'SENT findings.custom.c0.label.ar',
+      );
+      expect(textOf(result.dashboard.decision_making.evidence?.ar)).toBe(
+        'SENT dashboard.decision_making.evidence.ar',
+      );
+      expect(textOf(result.change.summary.ar)).toBe('FIRST change.summary.ar');
+      expect(textOf(result.change.tiles['t0']?.caption.ar)).toBe(
+        'FIRST change.tiles.t0.caption.ar',
+      );
       expectShapeAccepts(result);
     });
 

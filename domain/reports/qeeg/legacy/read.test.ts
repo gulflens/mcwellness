@@ -647,6 +647,23 @@ describe('what the reader tolerates, following the old tool', () => {
     expect(result.notes).toEqual([{ code: 'summary_content_dropped', at: 'summary.en' }]);
   });
 
+  it('keeps the first two hundred marks of a summary, and says more were left out', () => {
+    const summaryRich = JSON.stringify({
+      ops: [
+        ...Array.from({ length: 250 }, (_, i) => [
+          { insert: 'w', attributes: i % 2 === 0 ? { bold: true } : { underline: true } },
+          { insert: ' ' },
+        ]).flat(),
+        { insert: '\n' },
+      ],
+    });
+    const result = readOk(withFile({ summaryRich }));
+    expect(result.content.summary.en.marks).toHaveLength(LIMITS.marks);
+    expect(result.content.summary.en.marks.at(-1)).toEqual({ from: 398, to: 399, underline: true });
+    expect(result.notes).toEqual([{ code: 'extra_positions_ignored', at: 'summary.en.marks' }]);
+    expect(validateQeegContent(result.content)).toEqual({ ok: true, content: result.content });
+  });
+
   it('falls back to the plain summary when the formatted one cannot be read', () => {
     const result = readOk(withFile({ summary: 'Plain words', summaryRich: '{"ops": [' }));
     expect(result.content.summary.en).toEqual({ text: 'Plain words', marks: [] });

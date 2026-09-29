@@ -769,6 +769,13 @@ describe('validateQeegContent', () => {
       expect(answer.content.change.summary.ar).toBeNull();
     });
 
+    it('hands back a formatted Arabic of no text at all as none', () => {
+      const answer = validateQeegContent(
+        withValue(validInitial(), 'summary.ar', { text: '', marks: [] }),
+      );
+      expect(answer.ok && answer.content.summary.ar).toBeNull();
+    });
+
     it('keeps a formatted English of nothing as empty rich text, since English is never none', () => {
       const answer = validateQeegContent(
         withValue(validFollowUp(), 'change.summary.en', { text: '   ', marks: [] }),
