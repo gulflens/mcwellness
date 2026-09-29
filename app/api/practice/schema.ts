@@ -162,7 +162,7 @@ const ReviewUrl = optional(400).refine(
 
 /**
  * The practice's bank account (migration 924, round 61): what the invoice's
- * "Pay by bank transfer" block prints. Business facts of the practice, not
+ * "Payment details" card prints. Business facts of the practice, not
  * personal data, so the trail records them like any other `tenant` column.
  *
  * The checks are the columns' own, and one more: the IBAN's mod-97 check
