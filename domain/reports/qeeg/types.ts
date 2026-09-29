@@ -4,10 +4,10 @@
  * **Two editions, one report.** A first report says what was seen. A
  * follow-up says what has changed since an earlier report and what comes
  * next. They share their layout and most of their content; they differ in
- * the choices a practitioner is offered for a band or a measure, and in the
- * page a follow-up adds. `edition` tells them apart, and each validates
- * against its own lists (`catalogue/ids.ts`), so a choice made in one can
- * never be read as a choice made in the other.
+ * the choices a practitioner is offered for a band or a kind of connectivity,
+ * and in the page a follow-up adds. `edition` tells them apart, and each
+ * validates against its own lists (`catalogue/ids.ts`), so a choice made in
+ * one can never be read as a choice made in the other.
  *
  * **Judgement lives here and nowhere else.** The app's measurements carry no
  * word beside a figure (`docs/SPEC/assessment.md` section 3). A level, a

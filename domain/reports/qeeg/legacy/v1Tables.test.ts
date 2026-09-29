@@ -213,11 +213,11 @@ describe('every table is whole', () => {
   it('holds every dimension exactly once', () =>
     exactlyOnce(DIMENSIONS_BY_POSITION, DIMENSION_IDS));
   it('holds every approach exactly once', () => exactlyOnce(APPROACHES_BY_POSITION, APPROACH_IDS));
-  it('holds every measure exactly once', () =>
+  it('holds every kind of connectivity exactly once', () =>
     exactlyOnce(Object.values(CONNECTIVITY_BY_OLD_KEY), CONNECTIVITY_IDS));
   it('holds every band level exactly once', () =>
     exactlyOnce(Object.values(BAND_LEVEL_BY_OLD_WORD), INITIAL_BAND_LEVELS));
-  it('holds every level of every measure exactly once', () => {
+  it('holds every level of every kind of connectivity exactly once', () => {
     for (const id of CONNECTIVITY_IDS) {
       exactlyOnce(
         Object.values(CONNECTIVITY_LEVEL_BY_OLD_WORD[id]),

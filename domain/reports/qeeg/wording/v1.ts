@@ -17,9 +17,10 @@
  *   named what is given elsewhere.
  * - The follow-up's headings, its opening paragraphs and its lists of choices
  *   are the founder's, from her request of 29 September 2026.
- * - The follow-up's sentences for a band or a measure that has changed, the
- *   sentence printed for each next stage, and everything on the page headed
- *   "What Has Changed" were drafted for this version and are hers to alter.
+ * - The follow-up's sentences for a band or a kind of connectivity that has
+ *   changed, the sentence printed for each next stage, and everything on the
+ *   page headed "What Has Changed" were drafted for this version and are hers
+ *   to alter.
  * - The Arabic follows the terms of the pages a household has already signed
  *   (`docs/CONSENT/*.ar.md`). The old tool used other terms for the training
  *   and for the brain map; a household should meet in its report the words it

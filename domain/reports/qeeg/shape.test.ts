@@ -298,7 +298,7 @@ describe('validateQeegContent', () => {
       expectRefusedAt(input, 'findings.chosen.1');
     });
 
-    it('refuses a region chosen twice, in a band and in a measure', () => {
+    it('refuses a region chosen twice, in a band and in a kind of connectivity', () => {
       expectRefusedAt(
         withValue(validInitial(), 'bands.delta.regions', ['frontal', 'central', 'frontal']),
         'bands.delta.regions.2',
