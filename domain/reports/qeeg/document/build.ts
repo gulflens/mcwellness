@@ -43,7 +43,7 @@
  */
 
 import type { DocumentImage } from '@domain/shared/document';
-import { NOT_A_CLINIC, NOT_A_DIAGNOSIS, WORDS } from '../../document/strings';
+import { STANDING_SENTENCES, WORDS } from '../../document/strings';
 import type { SignerSnapshot } from '../../types';
 import {
   BAND_IDS,
@@ -66,7 +66,15 @@ import {
   sessionLabel,
 } from '../sentences';
 import { isBlank, richFor, spansOf, textFor, toParagraphs } from '../text';
-import type { CustomItem, Locale, Ordered, Picked, QeegInitial, RichText } from '../types';
+import type {
+  CustomItem,
+  Locale,
+  Ordered,
+  Picked,
+  QeegContent,
+  QeegInitial,
+  RichText,
+} from '../types';
 import { fill, phrase } from '../wording';
 import type { Block } from './block';
 import { BODY_WIDTH, GAP } from './geometry';
@@ -346,7 +354,10 @@ export function footerOf(input: ReportInput): {
 }
 
 /** The file's title, in English whatever the language of its pages: a browser tab reads it. */
-export function titleOf(input: ReportInput): string {
+export function titleOf(input: {
+  readonly content: { readonly stage: QeegContent['stage'] };
+  readonly facts: { readonly reference: string | null };
+}): string {
   const stage = phrase(`value.stage.${input.content.stage}`, 'initial', 'en');
   return input.facts.reference === null ? stage : `${stage} ${input.facts.reference}`;
 }
@@ -756,7 +767,7 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
     part(
       'final.standing',
       'final',
-      words('body', `${NOT_A_CLINIC[locale]} ${NOT_A_DIAGNOSIS[locale]}`),
+      words('body', STANDING_SENTENCES.map((sentence) => sentence[locale]).join(' ')),
       { marginBottom: GAP.afterParagraph, keep: true },
     ),
   );

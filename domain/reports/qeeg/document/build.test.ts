@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NOT_A_CLINIC, NOT_A_DIAGNOSIS, WORDS } from '../../document/strings';
+import { STANDING_SENTENCES, WORDS } from '../../document/strings';
 import { BAND_IDS, CONNECTIVITY_IDS } from '../catalogue/ids';
 import { sessionLabel } from '../sentences';
 import {
@@ -328,7 +328,7 @@ describe('the words of each part', () => {
       );
       const squeezed = (text: string) => text.replace(/\s+/g, '');
       expect(squeezed(words).length).toBe(
-        squeezed(`${NOT_A_CLINIC[locale]}${NOT_A_DIAGNOSIS[locale]}`).length,
+        squeezed(STANDING_SENTENCES.map((sentence) => sentence[locale]).join('')).length,
       );
     }
   });
@@ -349,7 +349,7 @@ describe('the words of each part', () => {
     expect(signature.at(BODY_WIDTH).ops.some((op) => op.kind === 'rule')).toBe(true);
   });
 
-  it('name no electrode site and nothing unfinished as a brace', () => {
+  it('leave no gap of the wording unfilled and no bold mark showing', () => {
     for (const make of Object.values(CASES)) {
       for (const locale of LOCALES) {
         const words = wordsDrawn(build(make(), locale), drawingOf(locale));
