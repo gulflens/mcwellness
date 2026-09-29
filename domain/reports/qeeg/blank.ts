@@ -51,7 +51,9 @@ function emptySummary(): BilingualRich {
  * for the brain-map report: the blanks, the switch between editions and the
  * prefill all use it.
  *
- * The one cast in this code outside a test, and why it is sound:
+ * It holds a cast, and why it is sound (three older ones stand in
+ * `wording/index.ts`, `legacy/v1Tables.ts` and `catalogue/ids.ts`, each with
+ * its own reason beside it):
  * `Object.fromEntries` is typed to give a record of any string, and cannot
  * know that the entries are exactly one for each of `keys`. They are, since
  * each comes from `keys.map`, so the record holds every `K` and nothing else.

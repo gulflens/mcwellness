@@ -804,6 +804,40 @@ describe('what the reader tolerates, following the old tool', () => {
     ]);
   });
 
+  it('notes twenty places one by one and no fewer: the twentieth has a note of its own', () => {
+    expect(LIMITS.placesLeftOut).toBe(20);
+    const left = (count: number) =>
+      readOk(
+        withFile({
+          maps: Array.from({ length: count }, () => ({ label: 'Her own view', img: null })),
+        }),
+      ).notes;
+    expect(left(20)).toHaveLength(20);
+    expect(left(20).at(-1)).toEqual({ code: 'map_without_image_dropped', at: 'images.map-19' });
+    expect(left(21)).toHaveLength(21);
+    expect(left(21).at(-1)).toEqual({ code: 'extra_positions_ignored', at: 'images' });
+    expect(left(500)).toHaveLength(21);
+  });
+
+  it('counts the places left out wherever they stand, a picture kept between them or not', () => {
+    const kept = { label: 'EO: Eyes Open', name: '', img: { url: PNG, w: 1, h: 1 } };
+    const empty = { label: 'Her own view', img: null };
+    // Three pictures kept, at places 0, 30 and 59, and 57 places left out round them.
+    const maps = Array.from({ length: 60 }, (_, place) =>
+      place === 0 || place === 30 || place === 59 ? kept : empty,
+    );
+    const result = readOk(withFile({ maps }));
+    expect(result.images.map((image) => image.key)).toEqual(['map-0', 'map-30', 'map-59']);
+    expect(result.images.map((image) => image.position)).toEqual([0, 1, 2]);
+    expect(result.notes).toEqual([
+      ...Array.from({ length: 20 }, (_, i) => ({
+        code: 'map_without_image_dropped',
+        at: `images.map-${i + 1}`,
+      })),
+      { code: 'extra_positions_ignored', at: 'images' },
+    ]);
+  });
+
   it('keeps at most eight pictures, and names the first place not kept', () => {
     const map = { label: 'EO: Eyes Open', name: '', img: { url: PNG, w: 1, h: 1 } };
     const maps = [{ label: '', img: null }, ...Array.from({ length: 10 }, () => map)];

@@ -596,9 +596,12 @@ const followUpShape = z
   .superRefine((content, ctx) => {
     // What has changed since an earlier recording is measured from it, so a
     // follow-up is never recorded before it. The same day is allowed, and a
-    // draft with no day yet is saved before it is filled.
+    // draft with no day yet is saved before it is filled. Two days are
+    // compared only when both are days: one that is none has been refused
+    // for that already, and nothing more can be known of it.
     const day = content.recording.recordedOn;
-    if (day !== null && day < content.comparedWith.recordedOn) {
+    const earlier = content.comparedWith.recordedOn;
+    if (day !== null && isRealDay(day) && isRealDay(earlier) && day < earlier) {
       ctx.addIssue({
         code: 'custom',
         path: ['recording', 'recordedOn'],

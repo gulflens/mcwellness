@@ -1026,6 +1026,29 @@ describe('validateQeegContent', () => {
       expectAccepted(withValue(validFollowUp(), 'recording.recordedOn', null));
       expectAccepted(blankFollowUp(EARLIER, 'final'));
     });
+
+    it('says of a day that is no day only that it is none, and never that it is too early', () => {
+      // Two days are compared only when both are days. A day that is none was
+      // refused for being too early as well, which nobody could know of it.
+      for (const day of ['2026-02-30', '', 'yesterday', '1999-12-31']) {
+        const answer = validateQeegContent(withValue(validFollowUp(), 'recording.recordedOn', day));
+        if (answer.ok) throw new Error(`${day} was accepted`);
+        expect(answer.refusals.length, day).toBeGreaterThan(0);
+        for (const refusal of answer.refusals) {
+          expect(refusal.path, day).toBe('recording.recordedOn');
+          expect(refusal.reason, day).not.toMatch(/compared with/);
+        }
+      }
+    });
+
+    it('does not blame the new recording when the earlier day is no day', () => {
+      // The thirty-first of September reads as later than any day of June, and is no day.
+      const answer = validateQeegContent(
+        withValue(validFollowUp(), 'comparedWith.recordedOn', '2026-09-31'),
+      );
+      if (answer.ok) throw new Error('accepted');
+      expect(answer.refusals.map((refusal) => refusal.path)).toEqual(['comparedWith.recordedOn']);
+    });
   });
 
   describe('a follow-up names what it is compared with', () => {
