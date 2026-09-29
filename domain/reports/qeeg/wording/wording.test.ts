@@ -300,6 +300,19 @@ describe('what the page can print', () => {
   });
 });
 
+describe('the sessions completed, on the page of what has changed', () => {
+  it('says where the number came from, for each place it can come from', () => {
+    // docs/SPEC/reports-qeeg.md section 10: counted from visits, or typed when
+    // some were elsewhere, and the figure says which.
+    for (const source of ['gathered', 'typed'] as const) {
+      for (const locale of LOCALES) {
+        expect(phrase(`tile.sessions.${source}`, 'follow-up', locale).trim()).not.toBe('');
+      }
+      expect(() => phrase(`tile.sessions.${source}`, 'initial', 'en')).toThrow();
+    }
+  });
+});
+
 describe('how many sessions, in Arabic', () => {
   it('has one form for one, one for two, one for three to ten, and one for the rest', () => {
     const ar = (key: string) => phrase(key, 'initial', 'ar');

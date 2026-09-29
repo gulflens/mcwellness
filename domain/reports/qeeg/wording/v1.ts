@@ -1045,6 +1045,10 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
     'Neurofeedback sessions completed',
     'جلسات الارتجاع العصبي المنجزة',
   ),
+  // Where the number of sessions completed came from: the client's visits,
+  // or her own count when some were elsewhere (section 10).
+  'tile.sessions.gathered': later('Counted from visits', 'محسوبة من الزيارات'),
+  'tile.sessions.typed': later('As recorded by the practitioner', 'كما سجلها الممارس'),
   'pair.earlier.initial': later('Initial recording', 'التسجيل الأولي'),
   'pair.earlier.previous': later('Previous recording', 'التسجيل السابق'),
   'pair.later': later('Follow-up recording', 'تسجيل المتابعة'),
