@@ -407,6 +407,28 @@ describe('underline', () => {
     expect(arabicBaseline - arabicRule.y).toBeCloseTo(0.5 * SIZE, 9);
   });
 
+  it('drops each underline by the deepest of its own run: an English run and an Arabic run on one line', () => {
+    const ops = draw(
+      [{ text: 'Read', underline: true }, { text: ' then ' }, { text: 'صباح', underline: true }],
+      { width: 200 },
+    );
+    const baseline = texts(ops)[0]?.y ?? 0;
+    const drops = rules(ops)
+      .sort((a, b) => a.x - b.x)
+      .map((rule) => (baseline - rule.y) / SIZE);
+    expect(drops).toHaveLength(2);
+    expect(drops[0]).toBeCloseTo(0.275, 9);
+    expect(drops[1]).toBeCloseTo(0.5, 9);
+  });
+
+  it('drops a run that opens in English and goes on in Arabic by the Arabic, not by its first word', () => {
+    const ops = draw([{ text: 'Read صباح', underline: true }], { width: 200 });
+    const baseline = texts(ops)[0]?.y ?? 0;
+    const all = rules(ops);
+    expect(all).toHaveLength(1);
+    expect((baseline - (all[0]?.y ?? 0)) / SIZE).toBeCloseTo(0.5, 9);
+  });
+
   it('is never thinner than half a point, and takes the paint of its text', () => {
     const ops = draw([{ text: 'small', underline: true, accent: true }], {
       style: { size: 5, lineHeight: 1.5, weight: 'regular' },

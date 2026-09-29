@@ -266,6 +266,22 @@ describe('encoding pixels as a PNG the engine embeds', () => {
     }
   });
 
+  it('refuses a header whose two bytes divide by 31 but whose method is not deflate', async () => {
+    // 0x79 0x18: method 9, and 0x7918 is 31 times 1000.
+    expect((0x79 * 256 + 0x18) % 31).toBe(0);
+    const compressor: Deflate = (bytes) =>
+      Promise.resolve(new Uint8Array([0x79, 0x18, ...deflateSync(bytes).subarray(2)]));
+    await expect(encodePng(flat, 64, 48, compressor)).rejects.toThrow(/zlib/);
+  });
+
+  it('refuses a header whose method is deflate but whose two bytes do not divide by 31', async () => {
+    // 0x78 0x9d: method 8, one more than the valid 0x789c.
+    expect((0x78 * 256 + 0x9d) % 31).not.toBe(0);
+    const compressor: Deflate = (bytes) =>
+      Promise.resolve(new Uint8Array([0x78, 0x9d, ...deflateSync(bytes).subarray(2)]));
+    await expect(encodePng(flat, 64, 48, compressor)).rejects.toThrow(/zlib/);
+  });
+
   it('refuses a length that does not match the size', async () => {
     await expect(encodePng(new Uint8Array(10), 2, 2, deflate)).rejects.toThrow(RangeError);
     await expect(encodePng(new Uint8Array(0), 0, 0, deflate)).rejects.toThrow(RangeError);

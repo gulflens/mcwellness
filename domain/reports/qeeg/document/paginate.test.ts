@@ -388,6 +388,22 @@ describe('paginate', () => {
     expect(ids(pages)).toEqual([['big']]);
   });
 
+  it('does not count a split whose first part is empty, even when its second part is shorter', () => {
+    let calls = 0;
+    const emptyFirst = (b: Flow): readonly [Flow, Flow] => {
+      calls += 1;
+      if (calls > 100) throw new Error('split was asked a hundred times');
+      return [
+        { ...b, height: 0 },
+        { ...b, height: b.height - 1 },
+      ];
+    };
+    const pages = paginate([block('big', 150)], limits, (b) => b.height, emptyFirst);
+    expect(ids(pages)).toEqual([['big']]);
+    expect(pages[0]?.[0]?.height).toBe(150);
+    expect(overflowing(pages, limits).map((p) => p.block.id)).toEqual(['big']);
+  });
+
   it('moves a fit block that would overflow at the floor to a fresh page that holds it', () => {
     const pages = paginate([block('a', 40), block('map', 170, { fit: true })], limits, heightAt);
     expect(ids(pages)).toEqual([['a'], ['map']]);
