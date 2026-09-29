@@ -232,8 +232,8 @@ export function footerOf(input: ReportInput): {
   readonly lines: readonly Words[];
   readonly page: (page: number, total: number) => string;
 } {
-  const { locale, facts } = input;
-  const say = (key: string) => phrase(key, 'initial', locale);
+  const { content, locale, facts } = input;
+  const say = (key: string) => phrase(key, content.edition, locale);
   const between = say('list.between');
   const { practice } = facts;
   const name =
@@ -261,10 +261,10 @@ export function footerOf(input: ReportInput): {
 
 /** The file's title, in English whatever the language of its pages: a browser tab reads it. */
 export function titleOf(input: {
-  readonly content: { readonly stage: QeegContent['stage'] };
+  readonly content: Pick<QeegContent, 'stage' | 'edition'>;
   readonly facts: { readonly reference: string | null };
 }): string {
-  const stage = phrase(`value.stage.${input.content.stage}`, 'initial', 'en');
+  const stage = phrase(`value.stage.${input.content.stage}`, input.content.edition, 'en');
   return input.facts.reference === null ? stage : `${stage} ${input.facts.reference}`;
 }
 

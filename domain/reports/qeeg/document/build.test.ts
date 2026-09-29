@@ -45,6 +45,15 @@ import type { Drawing } from './typeset';
  * its pages, in the order of the practice's report.
  */
 
+/** This module's builder and the sentences' module, as written: read to hold them to one rule. */
+const SOURCES = import.meta.glob<string>(['./build.ts', '../sentences.ts'], {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+const BUILD_SOURCE = SOURCES['./build.ts'] ?? '';
+const SENTENCES_SOURCE = SOURCES['../sentences.ts'] ?? '';
+
 /** A body as tall as a page leaves under the practice's header and a footer. */
 const BODY_HEIGHT = 680;
 
@@ -487,6 +496,17 @@ describe('the frame of every page', () => {
   it('titles the file in English, with its reference once it has one', () => {
     expect(titleOf(inputOf(fullReport(), 'ar'))).toBe('Initial QEEG RPT-000042');
     expect(titleOf(inputOf(fullReport(), 'en', false))).toBe('Initial QEEG');
+  });
+
+  it('asks the wording for its frame in the edition the content carries', () => {
+    expect(titleOf(inputOf(fullFollowUp(), 'ar'))).toBe('Follow-up QEEG RPT-000042');
+    expect(footerOf(inputOf(fullFollowUp(), 'ar')).page(2, 9)).toBe('صفحة 2 من 9');
+    const source = BUILD_SOURCE.slice(BUILD_SOURCE.indexOf('export function footerOf'));
+    const frame = source.slice(0, source.indexOf('/** The shape a score'));
+    expect(frame).not.toContain("'initial'");
+    // The sentences both editions share are asked for as shared, never as a first report's.
+    expect(SENTENCES_SOURCE).not.toMatch(/phrase\([^)]*'initial'/);
+    expect(BUILD_SOURCE.length).toBeGreaterThan(0);
   });
 });
 

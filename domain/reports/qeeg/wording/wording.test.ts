@@ -21,6 +21,7 @@ import {
   fill,
   keysOf,
   phrase,
+  sharedPhrase,
   WORDING,
   WORDING_STATUS,
   WORDING_VERSION,
@@ -364,6 +365,20 @@ describe('phrase', () => {
       if (!belongs) continue;
       for (const locale of LOCALES) expect(phrase(key, edition, locale)).not.toBe('');
     }
+  });
+});
+
+describe('sharedPhrase', () => {
+  it('gives a sentence both editions share, in the language asked for', () => {
+    expect(sharedPhrase('list.between', 'ar')).toBe(phrase('list.between', 'follow-up', 'ar'));
+    expect(sharedPhrase('sessions.many', 'en')).toBe(phrase('sessions.many', 'initial', 'en'));
+  });
+
+  it('refuses, by name, a sentence that is an edition’s own', () => {
+    expect(() => sharedPhrase('heading.approach', 'en')).toThrow(
+      /The sentence heading\.approach is not one both editions share/,
+    );
+    expect(() => sharedPhrase('no.such.key', 'en')).toThrow(/no\.such\.key/);
   });
 });
 
