@@ -774,6 +774,21 @@ describe('validateQeegContent', () => {
       );
     });
 
+    it('refuses a calculated figure whose two assessments are one and the same', () => {
+      const path = 'change.table.delta.eyesOpen.basis';
+      const same = { ...calculatedFigure.basis, laterAssessmentId: ID(2) };
+      expectRefusedAt(withValue(validFollowUp(), path, same), `${path}.laterAssessmentId`);
+    });
+
+    it('refuses a headline with no words for what it is', () => {
+      for (const en of ['', '   ']) {
+        expectRefusedAt(
+          withValue(validFollowUp(), 'change.tiles.t1.caption', { en, ar: null }),
+          'change.tiles.t1.caption.en',
+        );
+      }
+    });
+
     it('refuses a basis whose assessments are not uuids', () => {
       const path = 'change.table.delta.eyesOpen.basis.laterAssessmentId';
       expectRefusedAt(withValue(validFollowUp(), path, 'later'), path);

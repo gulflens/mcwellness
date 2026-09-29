@@ -393,7 +393,17 @@ const basis = z
     unit: z.literal('uV2'),
     sitesPaired: z.number().int().min(1),
   })
-  .strict();
+  .strict()
+  .superRefine((basis, ctx) => {
+    // A change is between two recordings; one recording beside itself is none.
+    if (basis.earlierAssessmentId === basis.laterAssessmentId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['laterAssessmentId'],
+        message: 'A figure is calculated from two different assessments.',
+      });
+    }
+  });
 
 /** The top of a range is above its bottom. */
 function rangeRises(figure: { low: number; high: number | null }, ctx: z.core.$RefinementCtx) {
@@ -444,7 +454,13 @@ const changeFigure = z.discriminatedUnion('source', [typedFigure, calculatedFigu
 const tileFields = {
   // A headline is always hers: a calculated figure is refused at `source`.
   figure: typedFigure,
-  caption: bilingual(LIMITS.caption),
+  // A figure with no words for what it is tells a household nothing.
+  caption: z
+    .object({
+      en: typed(LIMITS.caption, 1, 'A headline always says what it is.'),
+      ar: typedOrNone(LIMITS.caption),
+    })
+    .strict(),
 };
 
 const changeRow = z
