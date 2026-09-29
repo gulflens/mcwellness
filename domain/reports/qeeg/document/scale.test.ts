@@ -43,6 +43,8 @@ function numbersOf(op: LayoutOp): number[] {
         ...op.segments.flatMap((segment) => segment.slice(1) as number[]),
         op.stroke?.width ?? 0,
       ];
+    case 'rect':
+      return [op.x, op.y, op.width, op.height, op.radius ?? 0, op.stroke?.thickness ?? 0];
     default: {
       const unknown: never = op;
       throw new Error(`unknown op ${String(unknown)}`);
@@ -167,5 +169,71 @@ describe('scaling ops about an origin', () => {
     expect(() => scaleOps(block, -1, origin)).toThrow(RangeError);
     expect(() => scaleOps(block, Number.NaN, origin)).toThrow(/scale/);
     expect(() => translateOps(block, Number.POSITIVE_INFINITY, 0)).toThrow(/dx/);
+  });
+});
+
+describe('a rectangle, which the engine draws for the practice’s invoice', () => {
+  const rect: LayoutOp = {
+    kind: 'rect',
+    x: 120,
+    y: 140,
+    width: 60,
+    height: 20,
+    radius: 4,
+    fill: { rgb: [0.9, 0.8, 1] },
+    stroke: { grey: 0.5, thickness: 2 },
+  };
+
+  it('is scaled about the origin: its corner, its sides, its corner’s radius and its line', () => {
+    expect(scaleOps([rect], 0.5, { x: 100, y: 100 })).toEqual([
+      {
+        kind: 'rect',
+        x: 110,
+        y: 120,
+        width: 30,
+        height: 10,
+        radius: 2,
+        fill: { rgb: [0.9, 0.8, 1] },
+        stroke: { grey: 0.5, thickness: 1 },
+      },
+    ]);
+  });
+
+  it('carries the line the engine would have drawn when it names none', () => {
+    const [scaled] = scaleOps(
+      [{ kind: 'rect', x: 0, y: 0, width: 10, height: 10, stroke: { grey: 0 } }],
+      0.5,
+      { x: 0, y: 0 },
+    );
+    expect(scaled).toMatchObject({ stroke: { grey: 0, thickness: 0.25 } });
+  });
+
+  it('is given no line and no corner it did not have', () => {
+    const [scaled] = scaleOps(
+      [{ kind: 'rect', x: 0, y: 0, width: 10, height: 10, fill: { grey: 0.9 } }],
+      0.5,
+      { x: 0, y: 0 },
+    );
+    expect(scaled).toEqual({
+      kind: 'rect',
+      x: 0,
+      y: 0,
+      width: 5,
+      height: 5,
+      fill: { grey: 0.9 },
+    });
+  });
+
+  it('is moved whole, its lengths untouched', () => {
+    expect(translateOps([rect], 10, -5)).toEqual([{ ...rect, x: 130, y: 135 }]);
+  });
+
+  it('is copied at a scale of one, and shares nothing with what it was made from', () => {
+    const [copy] = scaleOps([rect], 1, { x: 0, y: 0 });
+    expect(copy).toEqual(rect);
+    expect(copy).not.toBe(rect);
+    if (copy?.kind !== 'rect' || rect.kind !== 'rect') throw new Error('not a rectangle');
+    expect(copy.fill).not.toBe(rect.fill);
+    expect(copy.stroke).not.toBe(rect.stroke);
   });
 });

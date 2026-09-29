@@ -83,6 +83,13 @@ function notNegative(fn: string, name: string, value: number): void {
   }
 }
 
+/** A part's own numbers, which a stack, a row and a box would otherwise take on trust. */
+function checkedPart(fn: string, what: string, part: Block): void {
+  notNegative(fn, `${what} width`, part.width);
+  notNegative(fn, `${what} height`, part.height);
+  notNegative(fn, `${what} overhang`, part.overhang);
+}
+
 /** Room, and nothing drawn in it. */
 export function blank(width: number, height: number): Block {
   notNegative('blank', 'width', width);
@@ -101,6 +108,10 @@ export function drawn(block: Block, at: { left: number; top: number }): LayoutOp
  * Parts one under another, from the top. A number is a gap in points, and
  * gaps that stand together add. A gap after a part is never less than what
  * hangs below that part.
+ *
+ * A part narrower than the stack is set at the stack's LEFT, in either
+ * language: a stack knows nothing of reading direction. A piece that wants
+ * a narrow part at its start edge asks a frame, and sets it with `beside`.
  */
 export function stack(width: number, parts: readonly (Block | number)[]): Block {
   notNegative('stack', 'width', width);
@@ -116,6 +127,7 @@ export function stack(width: number, parts: readonly (Block | number)[]): Block 
       gap += part;
       continue;
     }
+    checkedPart('stack', 'part', part);
     if (part.width > width + EPSILON) {
       throw new RangeError(`stack holds a part ${part.width} wide in ${width}.`);
     }
@@ -142,6 +154,7 @@ export function beside(width: number, cells: readonly Cell[]): Block {
   for (const { block, left, down = 0 } of cells) {
     finite('beside', 'left', left);
     notNegative('beside', 'down', down);
+    checkedPart('beside', 'cell', block);
     const right = left + block.width;
     if (left < -EPSILON || right > width + EPSILON) {
       throw new RangeError(`beside holds a cell from ${left} to ${right} in a box ${width} wide.`);
@@ -175,6 +188,13 @@ export function boxed(inside: Block, width: number, box: Box): Block {
   notNegative('boxed', 'padV', box.padV);
   notNegative('boxed', 'radius', box.radius);
   if (box.height !== undefined) notNegative('boxed', 'height', box.height);
+  checkedPart('boxed', 'inside', inside);
+  const edge = box.edge ? (box.edge.width ?? PDF_LINE_WIDTH) : 0;
+  notNegative('boxed', 'edge width', edge);
+  const padding = Math.min(box.padH, box.padV);
+  if (edge > padding) {
+    throw new RangeError(`boxed has an edge ${edge} wide over a padding of ${padding}.`);
+  }
   const room = width - 2 * box.padH;
   if (inside.width > room + EPSILON) {
     throw new RangeError(
@@ -182,7 +202,7 @@ export function boxed(inside: Block, width: number, box: Box): Block {
     );
   }
   const height = Math.max(box.height ?? 0, inside.height + inside.overhang + 2 * box.padV);
-  const inset = box.edge ? (box.edge.width ?? PDF_LINE_WIDTH) / 2 : 0;
+  const inset = edge / 2;
   const panel: LayoutOp = {
     kind: 'path',
     segments: roundedRect(
@@ -232,8 +252,9 @@ function extentOfOp(op: LayoutOp, measure: Measure): Extent {
         op.style.size,
         op.rtl === true,
       );
-      const left =
-        op.align === 'end' ? op.x - width : op.align === 'centre' ? op.x - width / 2 : op.x;
+      // An op that reads right to left and names no edge is anchored at its right.
+      const align = op.align ?? (op.rtl === true ? 'end' : 'start');
+      const left = align === 'end' ? op.x - width : align === 'centre' ? op.x - width / 2 : op.x;
       return { left, right: left + width, top: op.y, bottom: op.y };
     }
     case 'rule': {
@@ -252,6 +273,15 @@ function extentOfOp(op: LayoutOp, measure: Measure): Extent {
     }
     case 'image':
       return { left: op.x, right: op.x + op.width, top: op.y + op.height, bottom: op.y };
+    case 'rect': {
+      const half = op.stroke ? (op.stroke.thickness ?? ENGINE_RULE_THICKNESS) / 2 : 0;
+      return {
+        left: op.x - half,
+        right: op.x + op.width + half,
+        top: op.y + op.height + half,
+        bottom: op.y - half,
+      };
+    }
     case 'path': {
       const bounds = boundsOf(op.segments);
       const half = op.stroke ? (op.stroke.width ?? PDF_LINE_WIDTH) / 2 : 0;

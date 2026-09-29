@@ -10,8 +10,10 @@
  * an image's box, a stroke's width, every number in a path — so each op stays
  * flat and a test can measure exactly where it will print.
  *
- * Every `switch` over `op.kind` ends in a `never` check. An open change adds a
- * `rect` op to the engine; the day it arrives the compiler points here.
+ * Every `switch` over `op.kind` ends in a `never` check, so the day the
+ * engine learns a new op the compiler points here. It did for `rect`, which
+ * the practice's invoice brought: a rectangle's line is a rule's, half a
+ * point when it names none, and is scaled as a rule's is.
  */
 
 import type { Op } from '@domain/shared/document';
@@ -99,11 +101,28 @@ function copyOf(op: LayoutOp): LayoutOp {
         ...(op.stroke ? { stroke: copyPaint(op.stroke) } : {}),
       };
     }
+    case 'rect':
+      return {
+        ...op,
+        ...(op.fill ? { fill: copyFill(op.fill) } : {}),
+        ...(op.stroke ? { stroke: copyPaint(op.stroke) } : {}),
+      };
     default: {
       const unknown: never = op;
       throw new RangeError(`scaleOps does not know the op ${String(unknown)}.`);
     }
   }
+}
+
+type RectFill = NonNullable<Extract<Op, { kind: 'rect' }>['fill']>;
+
+/** A rectangle's fill is a colour or a grey and never both, so each is copied as what it is. */
+function copyFill(fill: RectFill): RectFill {
+  if ('rgb' in fill) {
+    const [red, green, blue] = fill.rgb;
+    return { rgb: [red, green, blue] };
+  }
+  return { grey: fill.grey };
 }
 
 /** A paint, or anything carrying one, with its colour triple copied too. */
@@ -155,6 +174,23 @@ export function scaleOps(
           stroke: { ...op.stroke, width: (op.stroke.width ?? PDF_LINE_WIDTH) * k },
         };
       }
+      case 'rect':
+        return {
+          ...op,
+          x: sx(op.x),
+          y: sy(op.y),
+          width: op.width * k,
+          height: op.height * k,
+          ...(op.radius === undefined ? {} : { radius: op.radius * k }),
+          ...(op.stroke
+            ? {
+                stroke: {
+                  ...op.stroke,
+                  thickness: (op.stroke.thickness ?? ENGINE_RULE_THICKNESS) * k,
+                },
+              }
+            : {}),
+        };
       default: {
         const unknown: never = op;
         throw new RangeError(`scaleOps does not know the op ${String(unknown)}.`);
@@ -176,6 +212,7 @@ export function translateOps(ops: readonly LayoutOp[], dx: number, dy: number): 
       case 'text':
       case 'rule':
       case 'image':
+      case 'rect':
         return { ...op, x: op.x + dx, y: op.y + dy };
       case 'path':
         return {

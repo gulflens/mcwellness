@@ -400,3 +400,132 @@ describe('where the first line of type stands', () => {
     ).toBeNull();
   });
 });
+
+describe('extentOf, for the ops it did not know at first', () => {
+  const style = { font: 'regular' as const, size: 10 };
+
+  it('reads a right-to-left op that names no edge from its right, as the engine draws it', () => {
+    expect(
+      extentOf([{ kind: 'text', x: 100, y: -10, text: 'abcd', style, rtl: true }], measure),
+    ).toEqual({ left: 80, right: 100, top: -10, bottom: -10 });
+  });
+
+  it('reads a right-to-left op from the edge it names, when it names one', () => {
+    expect(
+      extentOf(
+        [{ kind: 'text', x: 100, y: -10, text: 'abcd', style, rtl: true, align: 'start' }],
+        measure,
+      ),
+    ).toMatchObject({ left: 100, right: 120 });
+  });
+
+  it('measures heavier type as heavier', () => {
+    const wider: Measure = (text, weight, size) =>
+      [...text].length * size * (weight === 'bold' ? 0.6 : 0.5);
+    expect(
+      extentOf(
+        [{ kind: 'text', x: 0, y: -10, text: 'abcd', style: { font: 'bold', size: 10 } }],
+        wider,
+      ).right,
+    ).toBe(24);
+  });
+
+  it('reads a picture from its foot to its top', () => {
+    expect(
+      extentOf([{ kind: 'image', image: 'map', x: 10, y: -80, width: 30, height: 40 }], measure),
+    ).toEqual({ left: 10, right: 40, top: -40, bottom: -80 });
+  });
+
+  it('reads a rectangle from its corner, and half its line beyond each side', () => {
+    expect(
+      extentOf(
+        [{ kind: 'rect', x: 10, y: -30, width: 50, height: 20, fill: { grey: 0.9 } }],
+        measure,
+      ),
+    ).toEqual({ left: 10, right: 60, top: -10, bottom: -30 });
+    expect(
+      extentOf(
+        [
+          {
+            kind: 'rect',
+            x: 10,
+            y: -30,
+            width: 50,
+            height: 20,
+            stroke: { grey: 0, thickness: 2 },
+          },
+        ],
+        measure,
+      ),
+    ).toEqual({ left: 9, right: 61, top: -9, bottom: -31 });
+  });
+});
+
+describe('what a stack, a row and a box refuse of their parts', () => {
+  const bad = (change: Partial<Block>): Block => ({ ...marked(40, 20), ...change });
+
+  it('refuses a part whose height or width is no number, or below nothing, by name', () => {
+    expect(() => stack(100, [bad({ height: Number.NaN })])).toThrow(
+      /stack needs a finite part height/,
+    );
+    expect(() => stack(100, [bad({ height: -1 })])).toThrow(
+      /stack needs a part height of zero or more/,
+    );
+    expect(() => stack(100, [bad({ overhang: -1 })])).toThrow(
+      /stack needs a part overhang of zero or more/,
+    );
+    expect(() => stack(100, [bad({ width: Number.NaN })])).toThrow(
+      /stack needs a finite part width/,
+    );
+  });
+
+  it('refuses the same of a cell', () => {
+    expect(() => beside(100, [{ block: bad({ height: Number.NaN }), left: 0 }])).toThrow(
+      /beside needs a finite cell height/,
+    );
+    expect(() => beside(100, [{ block: bad({ overhang: -2 }), left: 0 }])).toThrow(
+      /beside needs a cell overhang of zero or more/,
+    );
+  });
+
+  it('refuses the same of what a box holds', () => {
+    const box = { padH: 6, padV: 4, radius: 3, fill: { grey: 0.9 } };
+    expect(() => boxed(bad({ height: Number.NaN }), 100, box)).toThrow(
+      /boxed needs a finite inside height/,
+    );
+  });
+
+  it('refuses an edge wider than the padding it would be drawn over, by name', () => {
+    expect(() =>
+      boxed(marked(88, 20), 100, {
+        padH: 6,
+        padV: 4,
+        radius: 3,
+        edge: { grey: 0, width: 5 },
+      }),
+    ).toThrow(/boxed has an edge 5 wide over a padding of 4/);
+  });
+});
+
+describe('a box, in what the first tests of it let through', () => {
+  const box = {
+    padH: 6,
+    padV: 4,
+    radius: 3,
+    fill: { grey: 0.9 },
+    edge: { grey: 0.78, width: 0.6 },
+  };
+
+  it('makes room for what hangs under what it holds', () => {
+    expect(boxed(marked(88, 20, 5), 100, box).height).toBe(33);
+  });
+
+  it('draws its corner in by half its edge, as it draws its sides', () => {
+    const [panel] = paths(boxed(marked(88, 20), 100, box).ops);
+    // The path begins where the foot's straight side does: past the corner.
+    const [first] = panel?.segments ?? [];
+    expect(first?.[0]).toBe('M');
+    expect(Number(first?.[1])).toBeCloseTo(3, 9);
+    expect(Number(first?.[2])).toBeCloseTo(-28 + 0.3, 9);
+  });
+});
