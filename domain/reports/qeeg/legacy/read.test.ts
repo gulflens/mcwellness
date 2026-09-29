@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateQeegContent } from '../shape';
-import type { ImportNote, QeegInitial } from '../types';
+import { LIMITS, type ImportNote, type QeegInitial } from '../types';
 import { LEGACY_SUBJECT_KEY } from './keys';
 import { readLegacyReport } from './read';
 
@@ -772,6 +772,18 @@ describe('what the reader tolerates, following the old tool', () => {
         { code: 'map_without_image_dropped', at: 'images.map-0' },
       ]);
     }
+  });
+
+  it('notes twenty places left out, and then one note that more were', () => {
+    const maps = Array.from({ length: 25 }, () => ({ label: 'Her own view', img: null }));
+    const result = readOk(withFile({ maps }));
+    expect(result.notes).toEqual([
+      ...Array.from({ length: LIMITS.placesLeftOut }, (_, i) => ({
+        code: 'map_without_image_dropped',
+        at: `images.map-${i}`,
+      })),
+      { code: 'extra_positions_ignored', at: 'images' },
+    ]);
   });
 
   it('keeps at most eight pictures, and names the first place not kept', () => {

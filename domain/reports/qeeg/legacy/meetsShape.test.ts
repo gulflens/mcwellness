@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateQeegContent } from '../shape';
+import { IMPORT_NOTE_CODES } from '../types';
 import { LEGACY_SUBJECT_KEY } from './keys';
 import { readLegacyReport } from './read';
 
@@ -196,5 +197,85 @@ describe('what the old-file reader hands back meets the shape', () => {
 
   it('for a file whose typed text was never cleaned', () => {
     expectMeetsShape(hostileFile());
+  });
+
+  it('for a file of a thousand places left out under a label of her own', () => {
+    const maps = Array.from({ length: 1000 }, () => ({ label: 'Her own view', img: null }));
+    expectMeetsShape({ ...fullFile(), maps });
+  });
+
+  it('for a file made to earn every kind of note at once', () => {
+    const long = 'z'.repeat(500);
+    const items = (withNote: boolean) =>
+      Array.from({ length: 14 }, () => ({
+        text: long,
+        textAr: long,
+        ...(withNote ? { note: long, noteAr: long } : {}),
+        checked: true,
+      }));
+    const base = fullFile();
+    const file: OldFile = {
+      ...base,
+      [LEGACY_SUBJECT_KEY]: {
+        ...(base[LEGACY_SUBJECT_KEY] as object),
+        name: long,
+        nameAr: long,
+        age: long,
+        gender: long,
+        hand: 'Sideways',
+        eyes: 'Squinting',
+        date: '2026-02-30',
+        assess: 'Midway',
+      },
+      kf: ticks(14, [13]),
+      fa: ticks(14, [13]),
+      rc: ticks(14, [13]),
+      bn: ticks(14, [13]),
+      customKF: items(false),
+      customFA: items(false),
+      customRC: items(true),
+      customBN: items(false),
+      maps: [
+        ...Array.from({ length: 1000 }, () => ({ label: 'Her own view', img: null })),
+        ...Array.from({ length: 12 }, () => ({ label: long, img: { url: PNG, w: 1, h: 1 } })),
+      ],
+      bands: Array.from({ length: 7 }, () => ({ lvl: 'Loud', regions: ticks(12, [11]) })),
+      links: {
+        conn: { lvl: 'odd', regions: ticks(12) },
+        asym: { lvl: 'odd', regions: ticks(12) },
+        phase: { lvl: 'odd', regions: ticks(12) },
+      },
+      dims: [
+        ...Array.from({ length: 3 }, () => ({ evid: long, evidAr: long })),
+        ...Array.from({ length: 5 }, () => ({ score: '40', evid: long, evidAr: long })),
+      ],
+      summary: long,
+      summaryRich: '{"ops": [',
+      summaryAr: long,
+      summaryRichAr: JSON.stringify({
+        ops: [
+          { insert: 'a\u0000' },
+          ...Array.from({ length: 300 }, (_, i) => ({
+            insert: 'b',
+            attributes: i % 2 === 0 ? { bold: true } : { underline: true },
+          })),
+          { insert: 'c', attributes: { color: 'red', italic: true, link: 'https://example.com' } },
+          { insert: { image: 'x' } },
+          { insert: long.repeat(10) },
+          { insert: '\n' },
+        ],
+      }),
+      sessions: 'many',
+      approach: '9',
+      signer: long,
+      role: long,
+      signature: { url: PNG, name: 'sig.png' },
+    };
+    const read = readLegacyReport(file, SHA);
+    if (!read.ok) throw new Error(read.reason);
+    expect([...new Set(read.notes.map((note) => note.code))].sort()).toEqual(
+      [...IMPORT_NOTE_CODES].sort(),
+    );
+    expectMeetsShape(file);
   });
 });

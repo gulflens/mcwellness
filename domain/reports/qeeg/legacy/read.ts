@@ -478,13 +478,17 @@ function pixels(value: unknown): number {
  * `map-2`), so a note about a place left out (`images.map-1`) names that
  * place and no other. `position` keeps their order, from 0 with no gap, as
  * the shape requires of `maps`. At most `LIMITS.maps` are kept; the note
- * names the first place with a picture that was not.
+ * names the first place with a picture that was not. At most
+ * `LIMITS.placesLeftOut` places left out are noted one by one; after them
+ * one `extra_positions_ignored` at `images` says that more were, so a file
+ * of endless empty cards still earns no more notes than the shape keeps.
  */
 function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
   const slots = field(file, 'maps');
   if (!Array.isArray(slots)) return [];
   const images: LegacyImage[] = [];
   const list = slots as readonly unknown[];
+  let leftOut = 0;
   for (let place = 0; place < list.length; place += 1) {
     const slot = list[place];
     if (!isRecord(slot)) continue;
@@ -495,7 +499,14 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
     if (url === null || !isRecord(img)) {
       const held = isRecord(img) && typeof field(img, 'url') === 'string';
       const herLabel = label !== '' && lookUp(CONDITION_BY_OLD_LABEL, label) === undefined;
-      if (held || herLabel) notes.add('map_without_image_dropped', `images.${key}`);
+      if (held || herLabel) {
+        leftOut += 1;
+        if (leftOut <= LIMITS.placesLeftOut) {
+          notes.add('map_without_image_dropped', `images.${key}`);
+        } else if (leftOut === LIMITS.placesLeftOut + 1) {
+          notes.add('extra_positions_ignored', 'images');
+        }
+      }
       continue;
     }
     if (images.length === LIMITS.maps) {
