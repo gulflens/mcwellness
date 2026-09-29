@@ -15,6 +15,7 @@
  */
 
 import type { Direction } from './direction';
+import type { PathSegment } from './shapes';
 
 export type Frame = {
   readonly direction: Direction;
@@ -130,4 +131,40 @@ export function mirror(frame: Frame): Frame {
     left: frame.left,
     width: frame.width,
   };
+}
+
+/**
+ * A path drawn in distances from the start edge, turned into physical x. A
+ * shape that belongs to one edge (a bar down the start of a card, a corner
+ * that follows a panel's) is drawn once, as the English page has it with its
+ * start at nothing, and lands on the right of an Arabic one. Up and down are
+ * not the frame's business and are left as they are.
+ */
+export function pathFromStart(frame: Frame, segments: readonly PathSegment[]): PathSegment[] {
+  checked('pathFromStart', frame);
+  const x = (offset: number): number => fromStart(frame, offset);
+  return segments.map((segment): PathSegment => {
+    switch (segment[0]) {
+      case 'M':
+        return ['M', x(segment[1]), segment[2]];
+      case 'L':
+        return ['L', x(segment[1]), segment[2]];
+      case 'C':
+        return [
+          'C',
+          x(segment[1]),
+          segment[2],
+          x(segment[3]),
+          segment[4],
+          x(segment[5]),
+          segment[6],
+        ];
+      case 'Z':
+        return ['Z'];
+      default: {
+        const unknown: never = segment;
+        throw new RangeError(`pathFromStart does not know the segment ${String(unknown)}.`);
+      }
+    }
+  });
 }

@@ -27,7 +27,7 @@
 
 import { beside, boxed, stack } from '../block';
 import type { Block, Box } from '../block';
-import { boxLeft, fromStart } from '../frame';
+import { boxLeft, fromStart, pathFromStart } from '../frame';
 import type { Frame } from '../frame';
 import { CARD } from '../geometry';
 import { finite } from '../metrics';
@@ -122,35 +122,6 @@ function itemOf(item: string, inner: number, drawing: Drawing): Block {
   };
 }
 
-/** A path drawn in distances from the start edge, turned into x by the frame. */
-function fromStartEdge(frame: Frame, segments: readonly PathSegment[]): PathSegment[] {
-  const x = (offset: number) => fromStart(frame, offset);
-  return segments.map((segment): PathSegment => {
-    switch (segment[0]) {
-      case 'M':
-        return ['M', x(segment[1]), segment[2]];
-      case 'L':
-        return ['L', x(segment[1]), segment[2]];
-      case 'C':
-        return [
-          'C',
-          x(segment[1]),
-          segment[2],
-          x(segment[3]),
-          segment[4],
-          x(segment[5]),
-          segment[6],
-        ];
-      case 'Z':
-        return ['Z'];
-      default: {
-        const unknown: never = segment;
-        throw new RangeError(`dashboardCard does not know the segment ${String(unknown)}.`);
-      }
-    }
-  });
-}
-
 /**
  * The bar down the start edge: the part of the panel's rounded outline that
  * lies within `CARD.accent` of that edge, its inner side straight.
@@ -177,7 +148,7 @@ function accentBar(frame: Frame, height: number, paint: Paint): LayoutOp {
         ['L', width, -height],
         ['Z'],
       ];
-  return { kind: 'path', segments: fromStartEdge(frame, segments), fill: paint };
+  return { kind: 'path', segments: pathFromStart(frame, segments), fill: paint };
 }
 
 export function dashboardCard(

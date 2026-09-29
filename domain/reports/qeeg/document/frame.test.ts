@@ -5,7 +5,16 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { boxLeft, columns, fromEnd, fromStart, inset, mirror, startAlign } from './frame';
+import {
+  boxLeft,
+  columns,
+  fromEnd,
+  fromStart,
+  inset,
+  mirror,
+  pathFromStart,
+  startAlign,
+} from './frame';
 import type { Frame } from './frame';
 import { MM } from './metrics';
 
@@ -147,5 +156,57 @@ describe('a count of columns', () => {
   it('refuses more than 12 columns', () => {
     expect(() => columns(ltr, 13, 1)).toThrow(/12/);
     expect(columns(ltr, 12, 1)).toHaveLength(12);
+  });
+});
+
+describe('a path drawn from the start edge', () => {
+  const shape = [['M', 0, 0], ['L', 10, -5], ['C', 12, -6, 14, -8, 20, -10], ['Z']] as const;
+
+  it('is where it was drawn in a left-to-right frame that begins at nothing', () => {
+    expect(pathFromStart({ direction: 'ltr', left: 0, width: 100 }, shape)).toEqual(shape);
+  });
+
+  it('is moved with a frame that begins further in', () => {
+    expect(pathFromStart({ direction: 'ltr', left: 30, width: 100 }, shape)).toEqual([
+      ['M', 30, 0],
+      ['L', 40, -5],
+      ['C', 42, -6, 44, -8, 50, -10],
+      ['Z'],
+    ]);
+  });
+
+  it('is measured from the right in a right-to-left frame, and no higher or lower', () => {
+    expect(pathFromStart({ direction: 'rtl', left: 30, width: 100 }, shape)).toEqual([
+      ['M', 130, 0],
+      ['L', 120, -5],
+      ['C', 118, -6, 116, -8, 110, -10],
+      ['Z'],
+    ]);
+  });
+
+  it('is the mirror of itself in the frame read the other way', () => {
+    const frame: Frame = { direction: 'ltr', left: 30, width: 100 };
+    const english = pathFromStart(frame, shape);
+    const arabic = pathFromStart(mirror(frame), shape);
+    const middle = frame.left + frame.width / 2;
+    english.forEach((segment, index) => {
+      const other = arabic[index];
+      for (let at = 1; at < segment.length; at += 2) {
+        expect(Number(other?.[at])).toBeCloseTo(2 * middle - Number(segment[at]), 9);
+        expect(other?.[at + 1]).toBe(segment[at + 1]);
+      }
+    });
+  });
+
+  it('leaves what it was given as it was', () => {
+    const given = [['M', 5, 5]] as const;
+    pathFromStart({ direction: 'rtl', left: 0, width: 100 }, given);
+    expect(given).toEqual([['M', 5, 5]]);
+  });
+
+  it('refuses a frame of no width, by name', () => {
+    expect(() => pathFromStart({ direction: 'ltr', left: 0, width: Number.NaN }, shape)).toThrow(
+      /pathFromStart needs a finite frame width/,
+    );
   });
 });
