@@ -363,6 +363,16 @@ describe('paginate', () => {
     expect(ids(pages)).toEqual([['big']]);
   });
 
+  it('moves a fit block that would overflow at the floor to a fresh page that holds it', () => {
+    const pages = paginate([block('a', 40), block('map', 170, { fit: true })], limits, heightAt);
+    expect(ids(pages)).toEqual([['a'], ['map']]);
+    const map = pages[1]?.[0];
+    expect(map?.fit?.scale).toBeCloseTo(Math.sqrt(100 / 170), 2);
+    expect(map?.height).toBeLessThanOrEqual(100);
+    expect(map?.fit?.overflow).toBe(0);
+    expect(overflowing(pages, limits)).toEqual([]);
+  });
+
   it('fits a fit block into the room left when there is enough of it', () => {
     const pages = paginate([block('a', 20), block('map', 100, { fit: true })], limits, heightAt);
     expect(ids(pages)).toEqual([['a', 'map']]);

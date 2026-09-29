@@ -263,16 +263,19 @@ export function paginate<B extends Flow>(
     if (block.fit) {
       const y = yFor(block);
       const page = current();
-      if (
-        page.length > 0 &&
-        limits.bodyHeight - y < limits.fitThreshold * limits.bodyHeight &&
-        !isOneKeptChain(page)
-      ) {
+      const movable = page.length > 0 && !isOneKeptChain(page);
+      if (movable && limits.bodyHeight - y < limits.fitThreshold * limits.bodyHeight) {
         moveOn(block);
         continue;
       }
       const fit = fitBlock((width) => heightAt(block, width), limits.bodyHeight - y, limits);
-      current().push({ block, height: fit.height, fit });
+      // Still over at the floor, with room above it that a fresh page would
+      // give back: move on and fit again there.
+      if (movable && fit.overflow > 0) {
+        moveOn(block);
+        continue;
+      }
+      page.push({ block, height: fit.height, fit });
       continue;
     }
 
