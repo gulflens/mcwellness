@@ -59,7 +59,7 @@ describe('classifyScoreChange: the rule as it stands, until the practice sets it
     expect(classifyScoreChange(7, 6)).toBe('lower');
   });
 
-  it('treats a rise and a fall alike', () => {
+  it('reads a rise and a fall the same way', () => {
     for (const earlier of SCORES) {
       for (const later of SCORES) {
         const there = classifyScoreChange(earlier, later);
