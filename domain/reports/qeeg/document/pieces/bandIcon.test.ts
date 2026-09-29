@@ -1,19 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { extentOf } from '../block';
 import { BAND_ICON, BAND_WAVE } from '../geometry';
 import { BAND_PAINT, REPORT_BANDS, bandDisc } from '../palette';
-import type { Measure } from '../paragraph';
 import type { LayoutOp } from '../scale';
 import { boundsOf } from '../shapes';
 import type { PathOp } from '../shapes';
-import type { Drawing } from '../typeset';
+import { ARABIC, ENGLISH, measure, outside } from './checks';
 import { bandIcon } from './bandIcon';
-
-/** Every character is half its size wide, so every width in a test is exact. */
-const measure: Measure = (text, _weight, size) => [...text].length * size * 0.5;
-const FACE = { ascent: 1, descent: -0.25 };
-const english: Drawing = { direction: 'ltr', measure, faces: { latin: FACE, arabic: FACE } };
-const arabic: Drawing = { ...english, direction: 'rtl' };
 
 const SIZE = BAND_ICON.size;
 const UNIT = SIZE / BAND_ICON.box;
@@ -22,7 +14,7 @@ const paths = (ops: readonly LayoutOp[]) => ops.filter((op): op is PathOp => op.
 
 describe('bandIcon', () => {
   it('is a square block as wide as it is told, holding no type', () => {
-    const block = bandIcon({ band: 'alpha' }, SIZE, english);
+    const block = bandIcon({ band: 'alpha' }, SIZE, ENGLISH);
     expect(block.width).toBe(SIZE);
     expect(block.height).toBe(SIZE);
     expect(block.overhang).toBe(0);
@@ -30,25 +22,21 @@ describe('bandIcon', () => {
   });
 
   it('keeps every part inside its box, in either language, for every band', () => {
-    for (const drawing of [english, arabic]) {
+    for (const drawing of [ENGLISH, ARABIC]) {
       for (const band of REPORT_BANDS) {
-        const extent = extentOf(bandIcon({ band }, SIZE, drawing).ops, measure);
-        expect(extent.left).toBeGreaterThanOrEqual(0);
-        expect(extent.right).toBeLessThanOrEqual(SIZE);
-        expect(extent.top).toBeLessThanOrEqual(0);
-        expect(extent.bottom).toBeGreaterThanOrEqual(-SIZE);
+        expect(outside(bandIcon({ band }, SIZE, drawing), measure)).toEqual([]);
       }
     }
   });
 
   it('is the same in both languages: a figure is not mirrored', () => {
     for (const band of REPORT_BANDS) {
-      expect(bandIcon({ band }, SIZE, arabic)).toEqual(bandIcon({ band }, SIZE, english));
+      expect(bandIcon({ band }, SIZE, ARABIC)).toEqual(bandIcon({ band }, SIZE, ENGLISH));
     }
   });
 
   it('draws the disc, then the ring, then the wave', () => {
-    const [disc, ring, wave, ...rest] = paths(bandIcon({ band: 'theta' }, SIZE, english).ops);
+    const [disc, ring, wave, ...rest] = paths(bandIcon({ band: 'theta' }, SIZE, ENGLISH).ops);
     expect(rest).toEqual([]);
     expect(disc?.fill).toEqual({ rgb: bandDisc('theta') });
     expect(disc?.stroke).toBeUndefined();
@@ -64,7 +52,7 @@ describe('bandIcon', () => {
   });
 
   it('centres the disc and its ring on the icon, at the radius of its grid', () => {
-    const [disc, ring] = paths(bandIcon({ band: 'delta' }, SIZE, english).ops);
+    const [disc, ring] = paths(bandIcon({ band: 'delta' }, SIZE, ENGLISH).ops);
     const r = BAND_ICON.discRadius * UNIT;
     for (const shape of [disc, ring]) {
       const bounds = boundsOf(shape?.segments ?? []);
@@ -77,7 +65,7 @@ describe('bandIcon', () => {
 
   it('runs the wave across the grid from its start to its end, rising first', () => {
     for (const band of REPORT_BANDS) {
-      const [, , wave] = paths(bandIcon({ band }, SIZE, english).ops);
+      const [, , wave] = paths(bandIcon({ band }, SIZE, ENGLISH).ops);
       const segments = wave?.segments ?? [];
       const [start, first] = segments;
       const last = segments[segments.length - 1];
@@ -94,13 +82,13 @@ describe('bandIcon', () => {
 
   it('draws a slower band with fewer waves than a faster one', () => {
     const count = (band: (typeof REPORT_BANDS)[number]) =>
-      paths(bandIcon({ band }, SIZE, english).ops)[2]?.segments.length ?? 0;
+      paths(bandIcon({ band }, SIZE, ENGLISH).ops)[2]?.segments.length ?? 0;
     expect(count('delta')).toBeLessThan(count('high_beta'));
   });
 
   it('grows every length with its size', () => {
-    const small = bandIcon({ band: 'beta' }, SIZE, english);
-    const large = bandIcon({ band: 'beta' }, 2 * SIZE, english);
+    const small = bandIcon({ band: 'beta' }, SIZE, ENGLISH);
+    const large = bandIcon({ band: 'beta' }, 2 * SIZE, ENGLISH);
     const small3 = paths(small.ops)[2];
     const large3 = paths(large.ops)[2];
     expect(large3?.stroke?.width).toBeCloseTo(2 * (small3?.stroke?.width ?? 0), 9);
@@ -110,17 +98,17 @@ describe('bandIcon', () => {
   });
 
   it('refuses a size that is not a number, or is below nothing, by name', () => {
-    expect(() => bandIcon({ band: 'alpha' }, Number.NaN, english)).toThrow(
+    expect(() => bandIcon({ band: 'alpha' }, Number.NaN, ENGLISH)).toThrow(
       /bandIcon needs a finite size/,
     );
-    expect(() => bandIcon({ band: 'alpha' }, -1, english)).toThrow(
+    expect(() => bandIcon({ band: 'alpha' }, -1, ENGLISH)).toThrow(
       /bandIcon needs a size of zero or more/,
     );
   });
 
   it('changes nothing it was given', () => {
     const input = Object.freeze({ band: 'alpha' as const });
-    expect(() => bandIcon(input, SIZE, Object.freeze({ ...english }))).not.toThrow();
+    expect(() => bandIcon(input, SIZE, Object.freeze({ ...ENGLISH }))).not.toThrow();
     expect(input).toEqual({ band: 'alpha' });
   });
 });
