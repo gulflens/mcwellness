@@ -20,6 +20,13 @@
  * web build wrote them, so its natural size in points is `pixels * 72 / 96`.
  * It is never magnified past `MAX_MAP_SCALE`, so a small capture is not blown
  * up into a blur.
+ *
+ * **Why this answers and never throws.** Everywhere else on the report's
+ * pages a number that is not finite is a programming error and is refused
+ * with a `RangeError` naming it. `placeImage` is the exception, with
+ * `refuseSize` in `image/limits.ts`: the SCREEN asks it about what a person
+ * supplied, a map half attached or a slot not yet filled, so it answers with
+ * a value the screen can show, and never throws.
  */
 
 export const GOOD_PRINT_DPI = 220;

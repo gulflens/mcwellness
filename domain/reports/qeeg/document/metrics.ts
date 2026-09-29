@@ -32,6 +32,17 @@ export function mm(value: number): number {
   return value * MM;
 }
 
+/**
+ * Refuses a number that is not finite, naming the argument, as every module
+ * of the report's pages does: a bad number is a programming error, and
+ * carried on it would print nothing, or print in the wrong place, silently.
+ */
+export function finite(fn: string, name: string, value: number): void {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${fn} needs a finite ${name}, and was given ${String(value)}.`);
+  }
+}
+
 /** A parsed font's ascent and descent, in em. `unitsPerEm` is already folded in by `readFont`. */
 export function faceOf(font: { ascent: number; descent: number; unitsPerEm: number }): Face {
   return { ascent: font.ascent / 1000, descent: font.descent / 1000 };
@@ -43,6 +54,10 @@ export function faceOf(font: { ascent: number; descent: number; unitsPerEm: numb
  * the box, as they do in a browser, and nothing below needs to know.
  */
 export function lineBox(style: TextStyle, strut: Face): LineBox {
+  finite('lineBox', 'size', style.size);
+  finite('lineBox', 'lineHeight', style.lineHeight);
+  finite('lineBox', 'strut ascent', strut.ascent);
+  finite('lineBox', 'strut descent', strut.descent);
   const advance = style.lineHeight * style.size;
   const halfLeading = (advance - (strut.ascent - strut.descent) * style.size) / 2;
   return { advance, halfLeading, firstBaseline: halfLeading + strut.ascent * style.size };

@@ -13,6 +13,13 @@
  * printed across an A4 page is well past 300 dpi, so nothing a print needs is
  * turned away. Eight maps covers every montage the practice exports with room
  * to spare, and bounds the size of one report's file.
+ *
+ * **Why this answers and never throws.** Everywhere else on the report's
+ * pages a number that is not finite is a programming error and is refused
+ * with a `RangeError` naming it. `refuseSize` is the exception, with
+ * `placeImage` in `document/mapPlacement.ts`: the SCREEN asks it about what a
+ * person supplied, so it answers with a refusal the screen can show, and
+ * never throws.
  */
 
 export const MAX_LONG_EDGE_PX = 4096;

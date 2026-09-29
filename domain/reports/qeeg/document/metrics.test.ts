@@ -53,3 +53,18 @@ describe('mm', () => {
     expect(mm(25.4)).toBeCloseTo(72, 9);
   });
 });
+
+describe('lineBox and numbers that are not numbers', () => {
+  it('refuses a size, a line height or a face that is not finite', () => {
+    const strut: Face = { ascent: 1, descent: -0.3 };
+    expect(() => lineBox({ size: Number.NaN, lineHeight: 1.5, weight: 'regular' }, strut)).toThrow(
+      /size/,
+    );
+    expect(() => lineBox({ size: 10, lineHeight: Number.NaN, weight: 'regular' }, strut)).toThrow(
+      /lineHeight/,
+    );
+    expect(() =>
+      lineBox({ size: 10, lineHeight: 1.5, weight: 'regular' }, { ascent: 1, descent: Number.NaN }),
+    ).toThrow(/descent/);
+  });
+});

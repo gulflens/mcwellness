@@ -23,7 +23,7 @@
 
 import { isArabic, type Op, type Style } from '@domain/shared/document';
 import { runsOf, type Direction } from './bidi';
-import { lineBox, type Face, type LineBox, type TextStyle } from './metrics';
+import { finite, lineBox, type Face, type LineBox, type TextStyle } from './metrics';
 
 export type Span = { text: string; bold?: boolean; underline?: boolean; accent?: boolean };
 
@@ -297,11 +297,27 @@ function place(
   return pieces;
 }
 
-export function layoutParagraph(input: ParagraphInput, measure: Measure): Laid {
+export function layoutParagraph(input: ParagraphInput, given: Measure): Laid {
+  finite('layoutParagraph', 'width', input.width);
+  if (input.width <= 0) {
+    throw new RangeError(
+      `layoutParagraph needs a width above nothing, and was given ${input.width}.`,
+    );
+  }
+  finite('layoutParagraph', 'size', input.style.size);
+  for (const face of [input.faces.latin, input.faces.arabic]) {
+    finite('layoutParagraph', 'face ascent', face.ascent);
+    finite('layoutParagraph', 'face descent', face.descent);
+  }
   const box = lineBox(
     input.style,
     input.paragraph === 'rtl' ? input.faces.arabic : input.faces.latin,
   );
+  const measure: Measure = (text, weight, size, rtl) => {
+    const width = given(text, weight, size, rtl);
+    finite('layoutParagraph', 'width from its measure', width);
+    return width;
+  };
   const space = measure(' ', input.style.weight, input.style.size, false);
   const broken = breakLines(atomsOf(input), input, measure, space);
 

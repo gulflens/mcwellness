@@ -528,3 +528,57 @@ describe('overflowing', () => {
     expect(overflowing(pages, limits)).toEqual([]);
   });
 });
+
+describe('numbers that are not numbers', () => {
+  it('refuses a body that is not a finite size', () => {
+    expect(() => limitsFor(Number.NaN, HEIGHT)).toThrow(/bodyWidth/);
+    expect(() => limitsFor(WIDTH, Number.POSITIVE_INFINITY)).toThrow(/bodyHeight/);
+    expect(() => limitsFor(WIDTH, 0)).toThrow(RangeError);
+  });
+
+  it('refuses a block whose height is not a number, rather than placing it', () => {
+    expect(() =>
+      paginate([block('a', Number.NaN), block('b', 10), block('c', 200)], limits, heightAt),
+    ).toThrow(/height/);
+    expect(() => paginate([block('a', 10)], limits, () => Number.NaN)).toThrow(RangeError);
+  });
+
+  it('refuses a margin that is not a number', () => {
+    expect(() => paginate([block('a', 10, { marginTop: Number.NaN })], limits, heightAt)).toThrow(
+      /marginTop/,
+    );
+    expect(() =>
+      reflow([block('a', 10, { marginBottom: Number.NaN })], (b) => b.height, new Map(), limits),
+    ).toThrow(/marginBottom/);
+  });
+
+  it('refuses a fit whose height or room is not a number', () => {
+    expect(() => fitBlock(() => Number.NaN, 50, limits)).toThrow(/height/);
+    expect(() => fitBlock(() => 100, Number.NaN, limits)).toThrow(/room/);
+  });
+
+  it('refuses a limit that is not a number, and a floor outside (0, 1]', () => {
+    expect(() => fitBlock(() => 100, 50, { ...limits, tolerance: Number.NaN })).toThrow(
+      /tolerance/,
+    );
+    expect(() => fitBlock(() => 100, 50, { ...limits, minScale: 0 })).toThrow(/minScale/);
+    expect(() => paginate([block('a', 10)], { ...limits, minScale: 1.5 }, heightAt)).toThrow(
+      /minScale/,
+    );
+    expect(() => fitBlock(() => 100, 50, { ...limits, minScale: 1 })).not.toThrow();
+  });
+
+  it('refuses to breathe a page holding a placement that is not a number', () => {
+    const page: Placement<Flow>[] = [
+      { block: block('a', 10), y: 0, height: Number.NaN, fit: null },
+    ];
+    expect(() => breathe([page], limits, heightAt)).toThrow(/height/);
+    expect(() => breathe([], { ...limits, breatheCap: Number.NaN }, heightAt)).toThrow(
+      /breatheCap/,
+    );
+  });
+
+  it('refuses a height from reflow that is not a number', () => {
+    expect(() => reflow([block('a', 10)], () => Number.NaN, new Map(), limits)).toThrow(/height/);
+  });
+});

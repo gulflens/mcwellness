@@ -423,3 +423,30 @@ describe('splitParagraph', () => {
     expect(baseline).toBeCloseTo(AT.top - six.box.firstBaseline, 9);
   });
 });
+
+describe('numbers that are not numbers', () => {
+  it('refuses a width that is not a number, or is nothing or less', () => {
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, 0, -5]) {
+      expect(() => layoutParagraph(input([{ text: EIGHT_WORDS }], { width }), measure)).toThrow(
+        /width/,
+      );
+    }
+  });
+
+  it('refuses a size that is not a number', () => {
+    expect(() =>
+      layoutParagraph(
+        input([{ text: 'one' }], {
+          style: { size: Number.NaN, lineHeight: 1.5, weight: 'regular' },
+        }),
+        measure,
+      ),
+    ).toThrow(/size/);
+  });
+
+  it('refuses a measure that gives a width that is not a number', () => {
+    expect(() => layoutParagraph(input([{ text: 'one two' }]), () => Number.NaN)).toThrow(
+      /measure/,
+    );
+  });
+});

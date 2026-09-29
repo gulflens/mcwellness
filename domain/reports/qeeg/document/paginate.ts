@@ -21,7 +21,7 @@
  * `y` is measured down from the top of the page body, in points.
  */
 
-import { mm } from './metrics';
+import { finite, mm } from './metrics';
 
 /** One block to be placed: its natural height and how it behaves at a break. */
 export type Flow = {
@@ -63,7 +63,7 @@ export type Limits = {
  * were pixel values there (45 px and 34 px at three quarters of a point each).
  */
 export function limitsFor(bodyWidth: number, bodyHeight: number): Limits {
-  return {
+  return checkedLimits('limitsFor', {
     bodyWidth,
     bodyHeight,
     sectionGap: mm(3),
@@ -75,7 +75,50 @@ export function limitsFor(bodyWidth: number, bodyHeight: number): Limits {
     breatheFloor: 3,
     pinBelowShare: 0.25,
     pinBelowCap: 25.5,
-  };
+  });
+}
+
+/**
+ * Refuses limits that are not finite numbers, a body of no size, and a
+ * floor for `minScale` outside (0, 1]: a bisection between a floor of 0 and
+ * 1 would lay a block out infinitely wide.
+ */
+function checkedLimits(fn: string, limits: Limits): Limits {
+  finite(fn, 'bodyWidth', limits.bodyWidth);
+  finite(fn, 'bodyHeight', limits.bodyHeight);
+  finite(fn, 'sectionGap', limits.sectionGap);
+  finite(fn, 'tolerance', limits.tolerance);
+  finite(fn, 'fitThreshold', limits.fitThreshold);
+  finite(fn, 'minScale', limits.minScale);
+  finite(fn, 'breatheShare', limits.breatheShare);
+  finite(fn, 'breatheCap', limits.breatheCap);
+  finite(fn, 'breatheFloor', limits.breatheFloor);
+  finite(fn, 'pinBelowShare', limits.pinBelowShare);
+  finite(fn, 'pinBelowCap', limits.pinBelowCap);
+  if (limits.bodyWidth <= 0 || limits.bodyHeight <= 0) {
+    throw new RangeError(
+      `${fn} needs a body wider and taller than nothing, and was given ${limits.bodyWidth} by ${limits.bodyHeight}.`,
+    );
+  }
+  if (limits.minScale <= 0 || limits.minScale > 1) {
+    throw new RangeError(
+      `${fn} needs a minScale above 0 and at most 1, and was given ${limits.minScale}.`,
+    );
+  }
+  return limits;
+}
+
+/** Refuses a block whose height or margins are not finite numbers. */
+function checkBlock(fn: string, b: Flow): void {
+  finite(fn, 'height', b.height);
+  finite(fn, 'marginTop', b.marginTop);
+  finite(fn, 'marginBottom', b.marginBottom);
+}
+
+/** A caller's height, refused when it is not a finite number. */
+function measured(fn: string, height: number): number {
+  finite(fn, 'height', height);
+  return height;
 }
 
 /** Margin collapse as a browser does it: the larger positive plus the more negative. */
@@ -130,8 +173,11 @@ export function reflow<B extends Flow>(
   overrides: ReadonlyMap<string, number>,
   limits: Limits,
 ): Placement<B>[] {
+  checkedLimits('reflow', limits);
+  for (const block of blocks) checkBlock('reflow', block);
+  for (const value of overrides.values()) finite('reflow', 'override', value);
   return stack(
-    blocks.map((block) => ({ block, height: heightOf(block), fit: null })),
+    blocks.map((block) => ({ block, height: measured('reflow', heightOf(block)), fit: null })),
     overrides,
     limits,
   );
@@ -160,7 +206,9 @@ const FIT_STEPS = 30;
  * the search that is right on a step.
  */
 export function fitBlock(heightAt: (width: number) => number, room: number, limits: Limits): Fit {
-  const natural = heightAt(limits.bodyWidth);
+  checkedLimits('fitBlock', limits);
+  finite('fitBlock', 'room', room);
+  const natural = measured('fitBlock', heightAt(limits.bodyWidth));
   if (room <= 0 || natural <= room) {
     return {
       scale: 1,
@@ -169,7 +217,8 @@ export function fitBlock(heightAt: (width: number) => number, room: number, limi
       overflow: Math.max(0, natural - room),
     };
   }
-  const drawn = (scale: number): number => scale * heightAt(limits.bodyWidth / scale);
+  const drawn = (scale: number): number =>
+    scale * measured('fitBlock', heightAt(limits.bodyWidth / scale));
   const floor = drawn(limits.minScale);
   if (floor > room) {
     return {
@@ -219,6 +268,9 @@ export function paginate<B extends Flow>(
   heightAt: (b: B, width: number) => number,
   split?: (b: B, room: number) => readonly [B, B] | null,
 ): Placement<B>[][] {
+  checkedLimits('paginate', limits);
+  for (const block of blocks) checkBlock('paginate', block);
+  const heightOf = (b: B, width: number): number => measured('paginate', heightAt(b, width));
   const pages: Sized<B>[][] = [[]];
   const none = new Map<string, number>();
   const current = (): Sized<B>[] => pages[pages.length - 1] ?? [];
@@ -279,7 +331,7 @@ export function paginate<B extends Flow>(
       continue;
     }
 
-    const height = heightAt(block, limits.bodyWidth);
+    const height = heightOf(block, limits.bodyWidth);
     const y = yFor(block);
     if (y + height <= limits.bodyHeight + limits.tolerance) {
       current().push({ block, height, fit: null });
@@ -290,8 +342,8 @@ export function paginate<B extends Flow>(
     // height, and a second part shorter than the block. Anything else would
     // open page after page and never end.
     const parts = split ? split(block, limits.bodyHeight - y) : null;
-    const firstHeight = parts ? heightAt(parts[0], limits.bodyWidth) : 0;
-    if (parts && firstHeight > 0 && heightAt(parts[1], limits.bodyWidth) < height) {
+    const firstHeight = parts ? heightOf(parts[0], limits.bodyWidth) : 0;
+    if (parts && firstHeight > 0 && heightOf(parts[1], limits.bodyWidth) < height) {
       const [first, second] = parts;
       current().push({ block: first, height: firstHeight, fit: null });
       queue.unshift({ block: second, continued: true });
@@ -324,6 +376,14 @@ export function breathe<B extends Flow>(
   limits: Limits,
   heightAt: (b: B, width: number) => number,
 ): Placement<B>[][] {
+  checkedLimits('breathe', limits);
+  for (const page of pages) {
+    for (const p of page) {
+      checkBlock('breathe', p.block);
+      finite('breathe', 'y', p.y);
+      finite('breathe', 'height', p.height);
+    }
+  }
   return pages.map((page) => {
     let placed = stack(page, new Map(), limits);
     const overrides = new Map<string, number>();
