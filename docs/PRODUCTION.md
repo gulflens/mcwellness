@@ -3309,3 +3309,64 @@ once and `/api/accounting/overview` three times, each 500 with
 hour, seven seconds apart, which reads as two worker processes each running
 the scheduler the tenth pass warned must run once. Neither was looked into
 here; both are reported to the operator.
+
+## What was done on 2026-09-30: the thirty-ninth live pass — a session given free stays out of the books
+
+Production runs `main` `0b13f656` (pull request 231, trunk round 66), build
+`01a0eef9`. **No migration, no policy file**: both databases stay at 115, and
+nothing was written to either by the pass.
+
+**Why it began.** The Books page had stopped opening: both of its routes
+answered 500 with `UnbalancedEntryError`. An event worth nothing — a session
+sold at a whole-price discount — made the posting rule build an entry of
+nought, which the journal rightly refuses, and both routes walk every event
+not yet in the books. Round 66 (`docs/CHANGE-REQUESTS/trunk-round-66.md`):
+an event worth nothing posts nothing, and a year closes over what the books
+are owed.
+
+**The word.** "go", at 00:54 +04 on 30 September, to a report asking for the
+word on this pass alone; read as that, and not as the word on the rate
+limits the same report raised, which are unchanged.
+
+**The merge, checked for age as well as colour.** Pull request 231 read both
+checks `SUCCESS`, `MERGEABLE CLEAN`, with main's head inside the branch; it
+was merged by squash at 20:54 UTC on 29 September. **Main's own checks on the
+merge commit read `SUCCESS` before the archive was made** — the rule the
+thirty-eighth pass wrote down.
+
+**The hold.** Two other sessions were listed; neither answered this pass's
+notice, and both had said earlier the same night that they would deploy
+nothing. Recorded as silence, not clearance: the upload harms nobody, and the
+build was started on the strength of their earlier word.
+
+**Before-state, 20:55 UTC.** Journal 2 entries; both ledgers 115;
+`app.verify_audit_chain()` null; health 200 in 0.51 s, deep 0.50 s.
+
+**The pass.** Archive `mcwellness-0b13f656.tar.gz` from main's merge commit,
+7,034,671 bytes, with its `mcwellness/` root folder and the round's two
+changed server files inside. The host's build list showed no build since the
+thirty-eighth pass. Stored settings read back and sent unchanged. TUS create
+201, PATCH 204 with `upload-offset` equal to the size, the keys read by
+`curl` from a file of mode 0600 deleted in the same command. Build asked
+21:01:43 UTC, read `completed` 21:03:35.
+
+**Proved to be this build.** The entry's name did not move
+(`index-BrjtYHAd.js`): no screen changed, and the host's npm resolved the
+same versions as the night before, so the served files were the same. The
+proof was the server's: the build log names its source, "uploaded archive
+mcwellness-0b13f656.tar.gz"; the runtime log shows fresh start-up blocks from
+21:03:29 UTC with no error line; health 200, deep 200; a nonsense asset name
+404. No restart was needed.
+
+**The proof that mattered, read the next morning.** At 22:00 UTC (02:00 +04)
+the Books page was opened and brought the books up to date: the journal went
+from two entries to four, numbered 1 to 4 with no gap, none unbalanced, no
+source posted twice. At 23:00 UTC (03:00 +04) the scheduler ran on both of
+the host's workers and each answered "posted 0, unknown 0", as a second run
+should. No `UnbalancedEntryError` has been written since the build; the only
+warning is the database driver's notice about queries run at once on one
+connection, recorded in round 66 as not mended.
+
+**For the owner.** The Books page opens. A session given free shows on its
+invoice as before and appears nowhere in the books, because it moved no
+money.
