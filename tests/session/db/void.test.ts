@@ -942,15 +942,19 @@ describe('voiding a visit logged from the records', () => {
       on: '2026-03-31',
       billing: 'settled_outside',
     });
-    const refusedBy = async (table: 'session' | 'appointment', id: string) => {
+    const refusedBy = async (
+      table: 'session' | 'appointment',
+      id: string,
+      reason: string | null = null,
+    ) => {
       await h.owner.query('begin');
       try {
         await h.owner.query(`alter table ${table} disable trigger user`);
         await h.owner.query("select set_config('app.tenant_id', $1, true)", [tenantId]);
         const written = await h.owner.query(
           `update ${table} set status = 'voided', voided_at = now(), voided_by = $2, ` +
-            'void_reason = null where id = $1',
-          [id, userId(SEEDED.owner)],
+            'void_reason = $3 where id = $1',
+          [id, userId(SEEDED.owner), reason],
         );
         return `went through, ${written.rowCount} row(s)`;
       } catch (error) {
@@ -962,6 +966,14 @@ describe('voiding a visit logged from the records', () => {
     expect(await refusedBy('session', target.sessionId)).toBe('session_void_columns_together');
     expect(await refusedBy('appointment', target.appointmentId)).toBe(
       'appointment_void_columns_together',
+    );
+    // An empty reason is refused as before, and a stamp with a reason passes.
+    expect(await refusedBy('session', target.sessionId, '  ')).toBe(
+      'session_void_columns_together',
+    );
+    expect(await refusedBy('session', target.sessionId, 'by hand')).toBe('went through, 1 row(s)');
+    expect(await refusedBy('appointment', target.appointmentId, 'by hand')).toBe(
+      'went through, 1 row(s)',
     );
   });
 

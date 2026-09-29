@@ -10,14 +10,23 @@
 -- refuses an empty reason and 970's guards refuse every void written outside
 -- it), and no voided row exists without one, so this restates both checks
 -- with `coalesce(..., 0)`, making the second line hold on its own as it was
--- meant to. Both constraints keep their names, so the route's and the tests'
--- reading of them is unchanged.
+-- meant to. Both constraints keep their names, so the tests that name them
+-- read them unchanged.
+--
+-- Any later restatement of `app.erase_client` (972, the brain-map erasure,
+-- is reserved for it) must keep writing the fixed phrase into a voided row's
+-- reason, as 971 does, never NULL: under this check a NULL there fails the
+-- whole erasure.
+--
+-- **Why 973.** Trunk range, second half (950-999), as 969 and 970. 972 is
+-- skipped on purpose: it is claimed by the brain-map report's erasure step.
 --
 -- Validated in place: the table is scanned once under the lock `add
 -- constraint` takes; every existing row satisfies the stricter form (a voided
 -- row without a reason could only come from a write the guards refuse).
 --
--- Needs: 969, 970, 971.
+-- Needs: 969 (the two checks restated here); 970 and 971 are listed because
+-- they are the guards and the erasure step whose rows must still pass.
 
 alter table public.session
   drop constraint session_void_columns_together,
