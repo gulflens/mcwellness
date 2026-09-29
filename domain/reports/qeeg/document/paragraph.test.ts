@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { forDrawing } from '@domain/shared/document';
 import type { Op } from '@domain/shared/document';
 import type { Face } from './metrics';
 import {
@@ -69,6 +70,27 @@ function lines(ops: readonly Op[]): TextOp[][] {
   return [...byBaseline.entries()]
     .sort((a, b) => b[0] - a[0])
     .map(([, row]) => [...row].sort((a, b) => left(a) - left(b)));
+}
+
+/** An Arabic string as the engine's `rtl` op puts it on the page, left to right. */
+function engine(text: string): string {
+  return String.fromCodePoint(...forDrawing(text));
+}
+
+/**
+ * The first line as it reaches the page, read left to right: an `rtl` op in
+ * the order the engine draws it, any other as typed, a space wherever two ops
+ * stand apart.
+ */
+function onPage(ops: readonly Op[]): string {
+  let out = '';
+  let edge: number | null = null;
+  for (const op of lines(ops)[0] ?? []) {
+    if (edge !== null && left(op) > edge + 1e-9) out += ' ';
+    out += op.rtl === true ? engine(op.text) : op.text;
+    edge = right(op);
+  }
+  return out;
 }
 
 const EIGHT_WORDS = 'alpha beta gamma delta epsilon zeta eta theta';
@@ -222,6 +244,16 @@ describe('layoutParagraph', () => {
     const phrase = ops[1] as TextOp;
     expect(phrase).toMatchObject({ rtl: true, align: 'end', x: AT.x + 23 * CHAR + 10 * CHAR });
     expect(left(ops[2] as TextOp)).toBe(right(phrase) + CHAR);
+  });
+
+  it('draws a figure typed on an Arabic keyboard in the order it was typed', () => {
+    const ops = draw([{ text: 'بعد ١٥ جلسة' }], { paragraph: 'rtl' });
+    expect(onPage(ops)).toBe(`${engine('جلسة')} ١٥ ${engine('بعد')}`);
+  });
+
+  it('draws a percentage typed on an Arabic keyboard in the order it was typed', () => {
+    const ops = draw([{ text: 'انخفاض بنسبة ٢٥٪' }], { paragraph: 'rtl' });
+    expect(onPage(ops)).toBe(`٪٢٥ ${engine('انخفاض بنسبة')}`);
   });
 
   it('keeps a plain number inside the Arabic op of an Arabic line', () => {

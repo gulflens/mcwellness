@@ -128,6 +128,61 @@ const CASES: Case[] = [
     runs: [{ direction: 'ltr', text: '8–12' }],
   },
   {
+    name: 'a figure typed on an Arabic keyboard',
+    text: 'بعد ١٥ جلسة',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'بعد' },
+      { direction: 'ltr', text: '١٥' },
+      { direction: 'rtl', text: 'جلسة' },
+    ],
+  },
+  {
+    name: 'a percentage typed on an Arabic keyboard',
+    text: 'انخفاض بنسبة ٢٥٪',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'انخفاض بنسبة' },
+      { direction: 'ltr', text: '٢٥' },
+      { direction: 'rtl', text: '٪' },
+    ],
+  },
+  {
+    name: 'a Persian figure',
+    text: 'بعد ۱۲ جلسة',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'بعد' },
+      { direction: 'ltr', text: '۱۲' },
+      { direction: 'rtl', text: 'جلسة' },
+    ],
+  },
+  {
+    name: 'a figure with an Arabic decimal separator',
+    text: 'ألفا ١٢٫٥ هرتز',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'ألفا' },
+      { direction: 'ltr', text: '١٢٫٥' },
+      { direction: 'rtl', text: 'هرتز' },
+    ],
+  },
+  {
+    name: 'a word that runs Arabic letters into Arabic figures',
+    text: 'جلسة١٥ اليوم',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'جلسة' },
+      { direction: 'ltr', text: '١٥' },
+      { direction: 'rtl', text: 'اليوم' },
+    ],
+  },
+  {
     name: 'an empty string, right to left',
     text: '',
     paragraph: { detect: 'rtl' },
@@ -193,6 +248,14 @@ describe('baseDirection', () => {
     expect(baseDirection('12:30 — 14:00', 'rtl')).toBe('rtl');
     expect(baseDirection('', 'ltr')).toBe('ltr');
   });
+
+  it('counts no figure and no mark of either script as strong', () => {
+    expect(baseDirection('١٥ Alpha', 'rtl')).toBe('ltr');
+    expect(baseDirection('۱۲٫۵ Alpha', 'rtl')).toBe('ltr');
+    expect(baseDirection('، ؛ ؟ ٪ Alpha', 'rtl')).toBe('ltr');
+    expect(baseDirection('١٥٪', 'ltr')).toBe('ltr');
+    expect(baseDirection('١٥٪', 'rtl')).toBe('rtl');
+  });
 });
 
 describe('classify', () => {
@@ -203,6 +266,22 @@ describe('classify', () => {
     expect(classify('+971')).toBe('N');
     expect(classify('25%')).toBe('N');
     expect(classify('')).toBe('N');
+  });
+
+  it('counts figures typed on an Arabic or a Persian keyboard as figures, not letters', () => {
+    expect(classify('١٥')).toBe('N');
+    expect(classify('۱۲')).toBe('N');
+    expect(classify('١٢٫٥')).toBe('N');
+    expect(classify('١٬٢٣٤')).toBe('N');
+    expect(classify('٢٥٪')).toBe('N');
+    expect(classify('،')).toBe('N');
+  });
+});
+
+describe('isPlainNumber and Arabic figures', () => {
+  it('stays ASCII only, so an Arabic figure never joins an Arabic run', () => {
+    expect(isPlainNumber('١٥')).toBe(false);
+    expect(isPlainNumber('۱۲')).toBe(false);
   });
 });
 
