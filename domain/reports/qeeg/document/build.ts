@@ -1,6 +1,7 @@
 /**
- * A first brain-map report turned into the parts of its pages: what is
- * drawn, in what order, and how each part behaves at a page break.
+ * A brain-map report turned into the parts of its pages: what is drawn, in
+ * what order, and how each part behaves at a page break. A first report and
+ * a follow-up both.
  *
  * **The one place a report's content meets the pieces.** A piece knows
  * nothing of a finding or a score (`pieces/`), and the pages know nothing of
@@ -20,11 +21,16 @@
  * paragraphs, the final note, the agreement's standing sentences and the
  * signature.
  *
- * **A part is laid at a width, not once.** The dashboard is scaled to fit
- * its page, which lays it out wider and draws it smaller, so every part is a
- * function from a width to a block (`at`), and its height is its height at
- * the width of the page body. A part laid at the same width twice gives the
- * same block, and is laid once.
+ * **A follow-up is the same report**, in the same order, with its own words
+ * (every phrase is asked for in the edition the content carries): its own
+ * lists of changes, the earlier score beside each score of the dashboard,
+ * the summary's standing opening above her own, and the next stage of
+ * training where a first report has the approach it begins with. It adds
+ * what it is compared with to the recording's column, and one page of its
+ * own, what has changed, after the brain maps (`changePage.ts`). It has no
+ * brain-map-only choice: a follow-up comes after training.
+ *
+ * **A part is laid at a width, not once** (`parts.ts`).
  *
  * **One part a paragraph.** A long summary runs over a page; set as one part
  * per paragraph, each can be cut between its lines (`Block.split`) and the
@@ -56,29 +62,26 @@ import {
   tierOf,
 } from '../catalogue/ids';
 import type { DimensionId } from '../catalogue/ids';
+import { classifyScoreChange } from '../scoreChange';
+import type { ScoreMovement } from '../scoreChange';
 import {
   approachLine,
   bandHeading,
   bandSentence,
   connectivitySentence,
+  earlierTerm,
   paragraph,
   programmeAgreed,
   sessionLabel,
 } from '../sentences';
 import { isBlank, richFor, spansOf, textFor, toParagraphs } from '../text';
-import type {
-  CustomItem,
-  Locale,
-  Ordered,
-  Picked,
-  QeegContent,
-  QeegInitial,
-  RichText,
-} from '../types';
+import type { CustomItem, Locale, Ordered, Picked, QeegContent } from '../types';
 import { fill, phrase } from '../wording';
 import type { Block } from './block';
-import { BODY_WIDTH, GAP } from './geometry';
-import type { Flow } from './paginate';
+import { changeParts } from './changePage';
+import { GAP } from './geometry';
+import { dayOf, mapImageKey, NOTHING_YET, part, spansOfRich } from './parts';
+import type { Part } from './parts';
 import type { Span } from './paragraph';
 import { bandBlock } from './pieces/bandBlock';
 import { bulletList } from './pieces/bulletList';
@@ -93,41 +96,14 @@ import { recommendationRow } from './pieces/recommendationRow';
 import { sessionsPill } from './pieces/sessionsPill';
 import { signatureBlock } from './pieces/signatureBlock';
 import { fixed, typed } from './pieces/words';
+import type { Points } from './pieces/followup/figureLine';
 import type { Words } from './pieces/words';
 import { typeset } from './typeset';
 import type { Drawing } from './typeset';
 import type { Role } from './styles';
 
-/** The sections of a first report, in the order they are printed. */
-export const SECTIONS = Object.freeze([
-  'client',
-  'overview',
-  'findings',
-  'focus',
-  'maps',
-  'brain',
-  'connectivity',
-  'dashboard',
-  'recommendations',
-  'summary',
-  'benefits',
-  'programme',
-  'approach',
-  'closing',
-  'final',
-  'signature',
-] as const);
-export type Section = (typeof SECTIONS)[number];
-
-/**
- * A part of a page: how it behaves at a break (`Flow`), which section it
- * belongs to, and the part laid at a width. `height` is its height at the
- * width of the page body, what hangs below it included.
- */
-export type Part = Flow & {
-  readonly section: Section;
-  readonly at: (width: number) => Block;
-};
+export { mapImageKey, SECTIONS } from './parts';
+export type { Part, Section } from './parts';
 
 /** The practice, as its lines at the foot of every page print it. */
 export type PracticeLines = {
@@ -154,11 +130,13 @@ export type ReportFacts = {
   readonly logo: DocumentImage | null;
   /** Each brain map's picture, by the figure id the content records. */
   readonly pictures: Readonly<Record<string, DocumentImage>>;
+  // A follow-up's pairs name the earlier report's maps as well as its own:
+  // each is looked up here by its figure id, as the report's own maps are.
 };
 
 export type ReportInput = {
-  /** Content that has passed the shape (`validateQeegContent`). */
-  readonly content: QeegInitial;
+  /** Content that has passed the shape (`validateQeegContent`), of either edition. */
+  readonly content: QeegContent;
   readonly locale: Locale;
   readonly facts: ReportFacts;
 };
@@ -194,88 +172,9 @@ export const LEFT_OUT_WITHOUT_PROGRAMME: readonly string[] = Object.freeze([
 /** The key the engine looks the logo up by. */
 export const LOGO_IMAGE = 'logo';
 
-/** The key the engine looks a brain map up by. */
-export function mapImageKey(figureId: string): string {
-  return `map:${figureId}`;
-}
-
-/** What a sentence reads as before anything is chosen, as `sentences.ts` prints it. A mark, not a word. */
-const NOTHING_YET = '—';
-
-/** How a part behaves at a break. Each is false and each margin nothing unless said. */
-type Flags = Partial<
-  Pick<
-    Flow,
-    | 'marginTop'
-    | 'marginBottom'
-    | 'keep'
-    | 'newPage'
-    | 'gapBefore'
-    | 'sectionStart'
-    | 'pinBottom'
-    | 'fit'
-  >
->;
-
-/** A part, laid at the body's width once to learn its height, and at any width once. */
-function part(id: string, section: Section, make: (width: number) => Block, flags: Flags): Part {
-  const laid = new Map<number, Block>();
-  const at = (width: number): Block => {
-    const known = laid.get(width);
-    if (known) return known;
-    const block = make(width);
-    laid.set(width, block);
-    return block;
-  };
-  const natural = at(BODY_WIDTH);
-  return {
-    id,
-    section,
-    at,
-    height: natural.height + natural.overhang,
-    marginTop: flags.marginTop ?? 0,
-    marginBottom: flags.marginBottom ?? 0,
-    keep: flags.keep ?? false,
-    newPage: flags.newPage ?? false,
-    gapBefore: flags.gapBefore ?? false,
-    sectionStart: flags.sectionStart ?? false,
-    pinBottom: flags.pinBottom ?? false,
-    fit: flags.fit ?? false,
-  };
-}
-
-/** A day as the practice writes it, `DD/MM/YYYY`, in Latin figures in either language. */
-function dayOf(iso: string | null): string {
-  if (iso === null) return '';
-  const [year, month, day] = iso.split('-');
-  return year && month && day ? `${day}/${month}/${year}` : iso;
-}
-
 /** The wording's `**bold**` read into spans. */
 function spansFrom(marked: string): Span[] {
   return spansOf(marked).map((span) => (span.bold ? { text: span.text, bold: true } : span));
-}
-
-/** Her formatted text as spans: a span for each stretch between two edges of a mark. */
-function spansOfRich(rich: RichText): Span[] {
-  const edges = new Set([0, rich.text.length]);
-  for (const mark of rich.marks) {
-    edges.add(mark.from);
-    edges.add(mark.to);
-  }
-  const sorted = [...edges].sort((one, other) => one - other);
-  const spans: Span[] = [];
-  sorted.forEach((from, index) => {
-    const to = sorted[index + 1];
-    if (to === undefined || to <= from) return;
-    const mark = rich.marks.find((each) => each.from <= from && each.to >= to);
-    spans.push({
-      text: rich.text.slice(from, to),
-      ...(mark?.bold ? { bold: true } : {}),
-      ...(mark?.underline ? { underline: true } : {}),
-    });
-  });
-  return spans;
 }
 
 /** Her own items of a list that she chose, in the order she placed them. */
@@ -290,12 +189,11 @@ function listed<Id extends string>(
   picked: Picked<Id>,
   ids: readonly Id[],
   keyOf: (id: Id) => string,
+  say: (key: string) => string,
   locale: Locale,
 ): Words[] {
   return [
-    ...ids
-      .filter((id) => picked.chosen.includes(id))
-      .map((id) => fixed(phrase(keyOf(id), 'initial', locale))),
+    ...ids.filter((id) => picked.chosen.includes(id)).map((id) => fixed(say(keyOf(id)))),
     ...customChosen(picked.custom).map((item) => typed(textFor(locale, item.label))),
   ];
 }
@@ -370,11 +268,37 @@ export function titleOf(input: {
   return input.facts.reference === null ? stage : `${stage} ${input.facts.reference}`;
 }
 
+/** The shape a score's movement is marked by: none for one that held. */
+const POINTS: Readonly<Record<ScoreMovement, Points | null>> = Object.freeze({
+  higher: 'up',
+  lower: 'down',
+  steady: null,
+});
+
+/**
+ * A follow-up's earlier score, "was 4", marked by the way the score moved
+ * when both are set. Whether it moved is the practice's rule
+ * (`classifyScoreChange`), asked and never restated here.
+ */
+function earlierOf(content: QeegContent, id: DimensionId, locale: Locale): CardInput['earlier'] {
+  if (content.edition !== 'follow-up') return null;
+  const { score, earlierScore } = content.dashboard[id];
+  if (earlierScore === null) return null;
+  const words = fill(phrase('label.earlier_score', content.edition, locale), {
+    score: earlierScore,
+  });
+  return {
+    words: fixed(words),
+    points: score === null ? null : POINTS[classifyScoreChange(earlierScore, score)],
+  };
+}
+
 /** The six cards of the dashboard. A card with no score yet says nothing of what a score would mean. */
-function cardsOf(content: QeegInitial, locale: Locale): CardInput[] {
-  const say = (key: string) => phrase(key, 'initial', locale);
+function cardsOf(content: QeegContent, locale: Locale): CardInput[] {
+  const say = (key: string) => phrase(key, content.edition, locale);
   return DIMENSION_IDS.map((id: DimensionId): CardInput => {
     const { score, evidence } = content.dashboard[id];
+    const earlier = earlierOf(content, id, locale);
     const title = say(`dimension.${id}.title`);
     const outOf = say('label.out_of_ten');
     const given =
@@ -392,6 +316,7 @@ function cardsOf(content: QeegInitial, locale: Locale): CardInput[] {
         evidence: given,
         meaning: { label: '', items: [] },
         advice: [],
+        earlier,
       };
     }
     const tier = tierOf(score);
@@ -409,14 +334,17 @@ function cardsOf(content: QeegInitial, locale: Locale): CardInput[] {
         items: [1, 2, 3].map((point) => say(`${at}.point.${point}`)),
       },
       advice: spansFrom(`**${say('label.advice')}** ${say(`${at}.advice`)}`),
+      earlier,
     };
   });
 }
 
-/** The parts of a first report's pages, in order. `bodyHeight` is the room a map may fill. */
+/** The parts of a report's pages, in order. `bodyHeight` is the room a map may fill. */
 export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight: number): Part[] {
   const { content, locale, facts } = input;
-  const say = (key: string) => phrase(key, 'initial', locale);
+  // Every phrase in the edition the content carries: a sentence both share
+  // reads the same either way, and one that differs is the edition's own.
+  const say = (key: string) => phrase(key, content.edition, locale);
   const colon = (key: string) => `${say(key)}:`;
   const parts: Part[] = [];
   // Asked first: a brain map with no programme opens fewer sections.
@@ -442,6 +370,18 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
   const recordingLines: InfoLine[] = [
     line('label.date', dayOf(recording.recordedOn)),
     line('label.assessment', say(`value.stage.${content.stage}`)),
+    ...(content.edition === 'follow-up'
+      ? [
+          line(
+            'label.compared_with',
+            [
+              earlierTerm(content, locale),
+              dayOf(content.comparedWith.recordedOn),
+              ...(content.comparedWith.reference === null ? [] : [content.comparedWith.reference]),
+            ].join(say('list.between')),
+          ),
+        ]
+      : []),
     ...(facts.reference !== null
       ? [{ label: `${WORDS.reference[locale]}:`, value: facts.reference }]
       : []),
@@ -517,13 +457,13 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
       'findings',
       'heading.findings',
       'text.findings',
-      listed(content.findings, FINDING_IDS, (id) => `finding.${id}`, locale),
+      listed(content.findings, FINDING_IDS, (id) => `finding.${id}`, say, locale),
     ),
     ...section(
       'focus',
       'heading.focus',
       'text.focus',
-      listed(content.focus, FOCUS_IDS, (id) => `focus.${id}`, locale),
+      listed(content.focus, FOCUS_IDS, (id) => `focus.${id}`, say, locale),
     ),
   );
 
@@ -565,6 +505,11 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
         { newPage: true },
       ),
     );
+  }
+
+  // A follow-up's own page: what has changed since the report it is compared with.
+  if (content.edition === 'follow-up') {
+    parts.push(...changeParts(content, locale, facts, drawing, bodyHeight));
   }
 
   // Understanding your brain: the bands, then the kinds of connectivity.
@@ -681,8 +626,21 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
 
   const late = { marginTop: GAP.beforeLateHeading, marginBottom: GAP.afterSubheading, keep: true };
   parts.push(part('summary.heading', 'summary', title('heading.summary', 'subheading'), late));
+  // A follow-up's summary opens with the practice's own paragraph, above hers,
+  // every time (the wording sheet of 29 September 2026, point 10).
+  const lead = content.edition === 'follow-up';
+  if (lead) {
+    parts.push(
+      part(
+        'summary.lead',
+        'summary',
+        words('body', paragraph('text.summary_lead', content, locale)),
+        { marginBottom: GAP.afterParagraph },
+      ),
+    );
+  }
   const paragraphs = toParagraphs(richFor(locale, content.summary));
-  if (paragraphs.length === 0) {
+  if (paragraphs.length === 0 && !lead) {
     parts.push(
       part('summary.none', 'summary', words('empty', NOTHING_YET), {
         marginBottom: GAP.afterParagraph,
@@ -702,14 +660,14 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
       'benefits.list',
       'benefits',
       listOf(
-        listed(content.benefits, BENEFIT_IDS, (id) => `benefit.${id}`, locale),
+        listed(content.benefits, BENEFIT_IDS, (id) => `benefit.${id}`, say, locale),
         'two',
       ),
       { marginBottom: GAP.afterList },
     ),
   );
 
-  // The programme and the approach training begins with.
+  // The programme, and the approach training begins with or its next stage.
   const sessions = content.plan.sessions;
   const pill = typeof sessions === 'number' ? sessionLabel(sessions, locale) : NOTHING_YET;
   parts.push(

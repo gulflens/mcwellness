@@ -3,7 +3,6 @@ import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { reportFonts } from '../../app/api/billing/fonts';
 import { STANDING_SENTENCES, WORDS } from '../../domain/reports/document/strings';
-import { blankFollowUp } from '../../domain/reports/qeeg/blank';
 import { extentOf } from '../../domain/reports/qeeg/document/block';
 import { BODY_WIDTH, bodyTop, PAD } from '../../domain/reports/qeeg/document/geometry';
 import {
@@ -14,10 +13,16 @@ import {
 import type { Laid, QeegReportInput } from '../../domain/reports/qeeg/document/index';
 import type { LayoutOp } from '../../domain/reports/qeeg/document/scale';
 import { validateQeegContent } from '../../domain/reports/qeeg/shape';
-import { CASES, factsFor, fullReport, MAP_PIXELS } from '../../domain/reports/qeeg/testing/reports';
+import {
+  CASES,
+  factsFor,
+  fullFollowUp,
+  fullReport,
+  MAP_PIXELS,
+} from '../../domain/reports/qeeg/testing/reports';
 import type { CaseName } from '../../domain/reports/qeeg/testing/reports';
 import { speaksOfAnotherPractice } from '../../domain/reports/qeeg/testing/vocabulary';
-import type { Locale, QeegInitial } from '../../domain/reports/qeeg/types';
+import type { Locale, QeegContent, QeegInitial } from '../../domain/reports/qeeg/types';
 import { phrase } from '../../domain/reports/qeeg/wording';
 import { PAGE_WIDTH } from '../../domain/shared/document';
 import type { DocumentImage } from '../../domain/shared/document';
@@ -60,7 +65,7 @@ function syntheticMap(width: number, height: number): DocumentImage {
 const MAP = syntheticMap(MAP_PIXELS.width, MAP_PIXELS.height);
 const LOGO = syntheticMap(52, 26);
 
-function inputOf(content: QeegInitial, locale: Locale): QeegReportInput {
+function inputOf(content: QeegContent, locale: Locale): QeegReportInput {
   const facts = factsFor(content);
   const pictures = Object.fromEntries(Object.keys(facts.pictures).map((id) => [id, MAP]));
   return { content, locale, facts: { ...facts, logo: LOGO, pictures } };
@@ -86,7 +91,7 @@ describe('the fixtures of these tests', () => {
   });
 });
 
-describe('a first report on paper', () => {
+describe('a report on paper, a first report or a follow-up', () => {
   it('runs nothing over the foot of any page, in either language', () => {
     for (const name of CASE_NAMES) {
       for (const locale of LOCALES) {
@@ -244,6 +249,68 @@ describe('the words a report prints', () => {
   });
 });
 
+describe('a follow-up on paper', () => {
+  it('prints its page of what has changed on one page, in either language', () => {
+    for (const name of ['followUpFull', 'followUpPictures'] as const) {
+      for (const locale of LOCALES) {
+        const pages = laid(name, locale).sheets.filter((sheet) =>
+          sheet.parts.some((part) => part.id.startsWith('change.')),
+        );
+        expect(pages, `${name} ${locale}`).toHaveLength(1);
+      }
+    }
+  });
+
+  it('breaks a page of what has changed that cannot be one only between whole parts', () => {
+    for (const locale of LOCALES) {
+      const ids = laid('followUpLong', locale).sheets.flatMap((sheet) =>
+        sheet.parts.map((part) => part.id),
+      );
+      expect(ids.filter((id) => /^change\.(pair\.|row\.|headlines).*\/[0-9]+$/.test(id))).toEqual(
+        [],
+      );
+    }
+  });
+
+  it('draws a figure’s direction as a filled path in the ink, and never as a sign in its words', () => {
+    for (const locale of LOCALES) {
+      const parts = laid('followUpFull', locale)
+        .sheets.flatMap((sheet) => sheet.parts)
+        .filter((part) => part.id.startsWith('change.') || part.id === 'dashboard.grid');
+      const triangles = parts.flatMap((part) =>
+        part.ops.filter(
+          (op) => op.kind === 'path' && op.fill?.grey === 0 && op.segments.length === 4,
+        ),
+      );
+      // Seven on the page of what has changed, and four on the dashboard.
+      expect(triangles, locale).toHaveLength(11);
+      expect(parts.map((part) => textOf(part.ops)).join(' ')).not.toMatch(/[▲▼△▽↑↓≈]/);
+    }
+  });
+
+  it('embeds every map it names once, without loss, drawn smooth: its own and the earlier ones', () => {
+    const bytes = renderQeegReport(inputOf(fullFollowUp(), 'ar'), fonts);
+    const text = new TextDecoder('latin1').decode(bytes);
+    expect(text).not.toContain('/DCTDecode');
+    const maps = text.match(
+      new RegExp(
+        `/Width ${MAP_PIXELS.width} /Height ${MAP_PIXELS.height} [^>]*/Filter /FlateDecode[^]*?/Interpolate true`,
+        'g',
+      ),
+    );
+    expect(maps).toHaveLength(4);
+  });
+
+  it('renders to the same bytes twice', () => {
+    for (const locale of LOCALES) {
+      const input = inputOf(fullFollowUp(), locale);
+      const digest = () =>
+        createHash('sha256').update(renderQeegReport(input, fonts)).digest('hex');
+      expect(digest()).toBe(digest());
+    }
+  });
+});
+
 describe('the file', () => {
   it('renders to the same bytes twice', () => {
     for (const locale of LOCALES) {
@@ -275,21 +342,13 @@ describe('the file', () => {
     );
   });
 
-  it('refuses a follow-up by name, until its pages are built', () => {
-    const followUp = blankFollowUp(
-      {
-        reportId: '00000001-0000-4000-8000-000000000001',
-        reference: 'RPT-000001',
-        recordedOn: '2026-06-01',
-        origin: 'issued',
-        relation: 'initial',
-      },
-      'follow_up',
-    );
-    const input = { content: followUp, locale: 'en' as const, facts: factsFor(fullReport()) };
-    expect(() => layoutQeegReport(input, fonts)).toThrow(RangeError);
-    expect(() => layoutQeegReport(input, fonts)).toThrow("the follow-up's pages are not built yet");
-    expect(() => renderQeegReport(input, fonts)).toThrow("the follow-up's pages are not built yet");
+  it('lays out a follow-up and files it, where the first report’s refusal once stood', () => {
+    for (const locale of LOCALES) {
+      const input = inputOf(fullFollowUp(), locale);
+      expect(layoutQeegReport(input, fonts).overflowing).toEqual([]);
+      const bytes = renderQeegReport(input, fonts);
+      expect(new TextDecoder('latin1').decode(bytes.slice(0, 5))).toBe('%PDF-');
+    }
   });
 
   it('refuses content the shape does not accept, naming the field', () => {

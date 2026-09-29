@@ -6,8 +6,9 @@ import type { Locale } from '../types';
 import { extentOf } from './block';
 import { buildQeegReport } from './build';
 import type { ReportInput } from './build';
-import { bodyTop, GAP, PAD } from './geometry';
+import { bodyTop, CHANGE, GAP, PAD } from './geometry';
 import { ARABIC, ENGLISH, across } from './pieces/checks';
+import { limitsFor } from './paginate';
 import { placeQeegReport } from './place';
 import type { Laid, PlacedPart } from './place';
 import type { Drawing } from './typeset';
@@ -25,6 +26,9 @@ const drawingOf = (locale: Locale): Drawing => (locale === 'en' ? ENGLISH : ARAB
 
 /** What two lengths that should be equal may differ by: the writer keeps two decimals. */
 const SLACK = 0.01;
+
+/** How far past the foot `paginate` lets a part end, and `overflowing` does not count. */
+const TOLERANCE = limitsFor(1, 1).tolerance;
 
 function inputOf(name: CaseName, locale: Locale): ReportInput {
   const content = CASES[name]();
@@ -146,7 +150,10 @@ describe('the pages of a first report', () => {
             expect(reach.bottom, where).toBeGreaterThanOrEqual(
               bodyTop() - part.y - part.height - SLACK,
             );
-            expect(reach.bottom, where).toBeGreaterThanOrEqual(foot - SLACK);
+            // The pages' own rule lets a part end within `tolerance` of the
+            // foot (`paginate`, `overflowing`); the long follow-up in Arabic
+            // is the one case whose ink meets that allowance.
+            expect(reach.bottom, where).toBeGreaterThanOrEqual(foot - TOLERANCE - SLACK);
           }
         }
       }
@@ -236,3 +243,70 @@ function overlaps(parts: readonly PlacedPart[]): string[] {
   });
   return found;
 }
+
+describe('the page of what has changed', () => {
+  const changeSheets = (name: CaseName, locale: Locale) =>
+    laid(name, locale).sheets.filter((sheet) =>
+      sheet.parts.some((part) => part.id.startsWith('change.')),
+    );
+
+  it('fits one page when it can, in both languages', () => {
+    for (const name of ['followUpFull', 'followUpPictures', 'followUpSparse'] as const) {
+      for (const locale of LOCALES) {
+        const sheets = changeSheets(name, locale);
+        expect(sheets, `${name} ${locale}`).toHaveLength(1);
+        expect(sheets[0]?.parts[0]?.id).toBe('change.heading');
+        expect(sheets[0]?.parts.every((part) => part.id.startsWith('change.'))).toBe(true);
+      }
+    }
+  });
+
+  it('breaks, when it cannot, only between whole pairs, rows and headlines', () => {
+    for (const locale of LOCALES) {
+      const sheets = changeSheets('followUpLong', locale);
+      expect(sheets.length, locale).toBeGreaterThan(1);
+      const ids = sheets.flatMap((sheet) => sheet.parts.map((part) => part.id));
+      const whole = /^change\.(pair\.|row\.|headlines)/;
+      expect(ids.filter((id) => whole.test(id) && baseOf(id) !== id)).toEqual([]);
+    }
+  });
+
+  it('never leaves the table’s head at the foot of a page, nor with fewer than two rows', () => {
+    for (const name of ['followUpFull', 'followUpLong'] as const) {
+      for (const locale of LOCALES) {
+        for (const sheet of changeSheets(name, locale)) {
+          const at = sheet.parts.findIndex((part) => part.id === 'change.table.head');
+          if (at < 0) continue;
+          const after = sheet.parts.slice(at + 1, at + 3).map((part) => part.id);
+          expect(after, `${name} ${locale}`).toHaveLength(2);
+          for (const id of after) expect(id.startsWith('change.row.'), id).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('draws the maps of its pairs no larger than the preferred height, and says how each prints', () => {
+    for (const locale of LOCALES) {
+      const result = laid('followUpFull', locale);
+      expect(result.pairs.map((print) => `${print.condition} ${print.side}`)).toEqual([
+        'eyes_closed earlier',
+        'eyes_closed later',
+        'eyes_open earlier',
+        'eyes_open later',
+      ]);
+      for (const print of result.pairs) {
+        expect(print.dpi).toBeGreaterThan(0);
+        expect(['good', 'fair', 'poor']).toContain(print.quality);
+      }
+      const images = result.sheets
+        .flatMap((sheet) => sheet.parts)
+        .filter((part) => part.id.startsWith('change.pair.'))
+        .flatMap((part) => part.ops.filter((op) => op.kind === 'image'));
+      expect(images).toHaveLength(4);
+      for (const op of images) {
+        expect(op.kind === 'image' && op.height).toBeLessThanOrEqual(CHANGE.mapPreferred + SLACK);
+      }
+    }
+    expect(laid('full', 'en').pairs).toEqual([]);
+  });
+});

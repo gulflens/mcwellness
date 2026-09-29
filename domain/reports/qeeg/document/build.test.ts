@@ -2,18 +2,27 @@ import { describe, expect, it } from 'vitest';
 import { STANDING_SENTENCES, WORDS } from '../../document/strings';
 import { BAND_IDS, CONNECTIVITY_IDS } from '../catalogue/ids';
 import { sessionLabel } from '../sentences';
+import { classifyScoreChange } from '../scoreChange';
 import {
   CASES,
   CLIENT_NAME,
+  COMPARED_WITH,
+  earlierFigureOf,
   factsFor,
   figureIdOf,
+  fullFollowUp,
   fullReport,
+  longFollowUp,
   longReport,
+  NO_CHANGE,
   pictureOf,
+  picturesOnlyFollowUp,
   qeegOnlyReport,
+  sparseFollowUp,
   sparseReport,
+  typedPercent,
 } from '../testing/reports';
-import type { Locale, QeegInitial } from '../types';
+import type { CalculatedFigure, Locale, QeegContent, QeegFollowUp, QeegInitial } from '../types';
 import { phrase } from '../wording';
 import {
   buildQeegReport,
@@ -24,7 +33,9 @@ import {
   titleOf,
 } from './build';
 import type { Part, ReportInput } from './build';
-import { BODY_WIDTH, GAP, MAP } from './geometry';
+import { BODY_WIDTH, CHANGE, GAP, MAP } from './geometry';
+import { INK } from './palette';
+import type { LayoutOp } from './scale';
 import { ARABIC, ENGLISH, across } from './pieces/checks';
 import type { Drawing } from './typeset';
 
@@ -41,11 +52,11 @@ const LOCALES: readonly Locale[] = ['en', 'ar'];
 const drawingOf = (locale: Locale): Drawing => (locale === 'en' ? ENGLISH : ARABIC);
 const say = (key: string, locale: Locale) => phrase(key, 'initial', locale);
 
-function inputOf(content: QeegInitial, locale: Locale = 'en', signed = true): ReportInput {
+function inputOf(content: QeegContent, locale: Locale = 'en', signed = true): ReportInput {
   return { content, locale, facts: factsFor(content, { signed }) };
 }
 
-function build(content: QeegInitial, locale: Locale = 'en', signed = true): Part[] {
+function build(content: QeegContent, locale: Locale = 'en', signed = true): Part[] {
   return buildQeegReport(inputOf(content, locale, signed), drawingOf(locale), BODY_HEIGHT);
 }
 
@@ -84,7 +95,9 @@ describe('the parts of a first report', () => {
 
   it('hold every section but the maps in a report with no map', () => {
     const sections = new Set(build(sparseReport()).map((part) => part.section));
-    expect([...sections]).toEqual(SECTIONS.filter((section) => section !== 'maps'));
+    expect([...sections]).toEqual(
+      SECTIONS.filter((section) => section !== 'maps' && section !== 'change'),
+    );
   });
 
   it('are set out as the practice report sets them, part by part', () => {
@@ -474,5 +487,362 @@ describe('the frame of every page', () => {
   it('titles the file in English, with its reference once it has one', () => {
     expect(titleOf(inputOf(fullReport(), 'ar'))).toBe('Initial QEEG RPT-000042');
     expect(titleOf(inputOf(fullReport(), 'en', false))).toBe('Initial QEEG');
+  });
+});
+
+describe('a follow-up', () => {
+  const later = (key: string, locale: Locale) => phrase(key, 'follow-up', locale);
+  const changeIds = (parts: readonly Part[]) =>
+    parts.filter((part) => part.section === 'change').map((part) => part.id);
+  /** The triangles a list of parts draws: every path filled with the ink. */
+  const markersIn = (parts: readonly Part[]): LayoutOp[] =>
+    parts.flatMap((part) =>
+      part.at(BODY_WIDTH).ops.filter((op) => op.kind === 'path' && op.fill === INK),
+    );
+
+  it('keeps the first report’s order, with the page of what has changed after the maps', () => {
+    const ids = idsOf(build(fullFollowUp()));
+    const initial = idsOf(build(fullReport()));
+    expect(ids.filter((id) => !id.startsWith('change.') && id !== 'summary.lead')).toEqual(initial);
+    expect(ids.indexOf('change.heading')).toBe(ids.indexOf('map.1') + 1);
+    expect(ids.indexOf('brain.heading')).toBe(ids.indexOf('change.note') + 1);
+    expect(ids.indexOf('summary.lead')).toBe(ids.indexOf('summary.heading') + 1);
+  });
+
+  it('sets out its page of what has changed as section 10 lists it', () => {
+    expect(changeIds(build(fullFollowUp()))).toEqual([
+      'change.heading',
+      'change.headlines',
+      'change.pairs.heading',
+      'change.pair.eyes_closed',
+      'change.pair.eyes_open',
+      'change.table.heading',
+      'change.table.head',
+      'change.row.delta',
+      'change.row.theta',
+      'change.row.alpha',
+      'change.row.beta_2',
+      'change.summary.heading',
+      'change.summary.1',
+      'change.summary.2',
+      'change.note',
+    ]);
+  });
+
+  it('starts its page of what has changed on a page of its own', () => {
+    const parts = build(fullFollowUp());
+    expect(partOf(parts, 'change.heading').newPage).toBe(true);
+    expect(parts.filter((part) => part.section === 'change' && part.newPage)).toHaveLength(1);
+  });
+
+  it('keeps each heading of the page with what follows it, and the table’s head with two rows', () => {
+    const parts = build(fullFollowUp());
+    for (const id of [
+      'change.heading',
+      'change.pairs.heading',
+      'change.table.heading',
+      'change.table.head',
+      'change.row.delta',
+      'change.summary.heading',
+    ]) {
+      expect(partOf(parts, id).keep, id).toBe(true);
+    }
+    for (const id of ['change.row.theta', 'change.row.beta_2', 'change.pair.eyes_open']) {
+      expect(partOf(parts, id).keep, id).toBe(false);
+    }
+    const one: QeegFollowUp = {
+      ...fullFollowUp(),
+      change: {
+        ...fullFollowUp().change,
+        table: { theta: { position: 0, eyesOpen: NO_CHANGE, eyesClosed: null } },
+      },
+    };
+    const single = build(one);
+    expect(partOf(single, 'change.table.head').keep).toBe(true);
+    expect(partOf(single, 'change.row.theta').keep).toBe(false);
+  });
+
+  it('never lets a pair, the headlines or a row of the table be cut', () => {
+    const parts = build(longFollowUp()).filter(
+      (part) =>
+        part.id.startsWith('change.pair.') ||
+        part.id.startsWith('change.row.') ||
+        part.id === 'change.headlines',
+    );
+    expect(parts.length).toBeGreaterThan(10);
+    for (const part of parts) expect(part.at(BODY_WIDTH).split, part.id).toBeUndefined();
+  });
+
+  it('speaks in a follow-up’s own words, in both languages', () => {
+    for (const locale of LOCALES) {
+      const words = wordsDrawn(build(fullFollowUp(), locale), drawingOf(locale));
+      expect(words).toContain(later('heading.approach', locale));
+      expect(words).not.toContain(say('heading.approach', locale));
+      expect(words).toContain(later('next.continue_calming.label', locale));
+      expect(words).toContain(later('heading.change', locale));
+      expect(words).toContain(later('term.earlier.initial', locale).split(' ')[0]);
+      expect(words).toContain(later('change.band.improved.sentence', locale).split('**')[0]);
+    }
+  });
+
+  it('says what it is compared with at its head: the earlier report, its day and its reference', () => {
+    for (const locale of LOCALES) {
+      const words = wordsDrawn(
+        [partOf(build(fullFollowUp(), locale), 'client')],
+        drawingOf(locale),
+      );
+      expect(words).toContain(later('label.compared_with', locale).split(' ')[0]);
+      expect(words).toContain('10/06/2026');
+      expect(words).toContain('RPT-000041');
+    }
+    const imported: QeegFollowUp = {
+      ...fullFollowUp(),
+      comparedWith: { ...COMPARED_WITH, origin: 'imported', reference: null },
+    };
+    const parts = build(imported);
+    expect(wordsDrawn([partOf(parts, 'client')], ENGLISH)).not.toContain('RPT-000041');
+    expect(wordsDrawn([partOf(parts, 'change.earlier')], ENGLISH)).toBe(
+      later('note.earlier_imported', 'en'),
+    );
+  });
+
+  it('opens its summary with the practice’s paragraph, above hers, every time', () => {
+    for (const make of [fullFollowUp, sparseFollowUp]) {
+      const parts = build(make()).filter((part) => part.section === 'summary');
+      expect(parts[1]?.id).toBe('summary.lead');
+      expect(wordsDrawn([parts[1] as Part], ENGLISH)).toContain('The follow-up QEEG demonstrates');
+    }
+    expect(idsOf(build(sparseFollowUp()))).not.toContain('summary.none');
+  });
+
+  it('shows the earlier score beside each score that has one, marked only when it moved', () => {
+    const content = fullFollowUp();
+    const grid = partOf(build(content), 'dashboard.grid');
+    const words = wordsDrawn([grid], ENGLISH);
+    for (const earlier of [3, 5, 8, 2, 10]) expect(words).toContain(`was ${earlier}`);
+    const moved = Object.values(content.dashboard).filter(
+      ({ score, earlierScore }) =>
+        score !== null &&
+        earlierScore !== null &&
+        classifyScoreChange(earlierScore, score) !== 'steady',
+    );
+    expect(moved).toHaveLength(4);
+    expect(markersIn([grid])).toHaveLength(moved.length);
+    // A first report's dashboard has no earlier score and no marker.
+    expect(markersIn([partOf(build(fullReport()), 'dashboard.grid')])).toEqual([]);
+  });
+
+  it('prints her headlines, and the sessions completed with where the number came from', () => {
+    for (const locale of LOCALES) {
+      const words = wordsDrawn(
+        [partOf(build(fullFollowUp(), locale), 'change.headlines')],
+        drawingOf(locale),
+      );
+      expect(words).toContain('40%');
+      expect(words).toContain('20');
+      expect(words).toContain(later('tile.sessions_completed', locale).split(' ')[0]);
+      expect(words).toContain(later('tile.sessions.gathered', locale).split(' ')[0]);
+    }
+    const typedCount: QeegFollowUp = {
+      ...fullFollowUp(),
+      change: { ...fullFollowUp().change, sessionsCompleted: { count: 12, source: 'typed' } },
+    };
+    expect(wordsDrawn([partOf(build(typedCount), 'change.headlines')], ENGLISH)).toContain(
+      later('tile.sessions.typed', 'en'),
+    );
+  });
+
+  it('writes a figure in words, about and a range included, and no appreciable change as such', () => {
+    const parts = build(fullFollowUp());
+    const delta = wordsDrawn([partOf(parts, 'change.row.delta')], ENGLISH);
+    expect(delta).toContain('Delta, 1–4 Hz');
+    expect(delta).toContain('about 25–30% lower');
+    expect(delta).toContain('about 40% lower');
+    expect(wordsDrawn([partOf(parts, 'change.row.theta')], ENGLISH)).toContain(
+      'No appreciable change',
+    );
+    expect(wordsDrawn([partOf(parts, 'change.headlines')], ENGLISH)).toMatch(
+      // A tile is narrow, and its figure may wrap before its last word.
+      /about 15–20% higher|about 15–20%\n?.*higher/,
+    );
+  });
+
+  it('marks every figure that moved with a triangle in the ink, and none that held, never in words', () => {
+    for (const locale of LOCALES) {
+      const parts = build(fullFollowUp(), locale).filter((part) => part.section === 'change');
+      // Two headlines, and five figures of the table that rose or fell.
+      expect(markersIn(parts)).toHaveLength(7);
+      for (const op of markersIn(parts)) {
+        expect(op.kind === 'path' && op.segments).toHaveLength(4);
+      }
+      expect(wordsDrawn(parts, drawingOf(locale))).not.toMatch(/[▲▼△▽↑↓≈]/);
+    }
+    const held = picturesOnlyFollowUp();
+    expect(markersIn(build(held).filter((part) => part.section === 'change'))).toEqual([]);
+  });
+
+  it('labels each map of a pair by its recording, its eyes and its day, the earlier first', () => {
+    for (const locale of LOCALES) {
+      const words = wordsDrawn(
+        [partOf(build(fullFollowUp(), locale), 'change.pair.eyes_closed')],
+        drawingOf(locale),
+      );
+      expect(words).toContain(later('pair.earlier.initial', locale).split(' ')[0]);
+      expect(words).toContain(later('pair.later', locale).split(' ')[0]);
+      expect(words).toContain('10/06/2026');
+      expect(words).toContain('14/09/2026');
+    }
+    const images = partOf(build(fullFollowUp()), 'change.pair.eyes_closed')
+      .at(BODY_WIDTH)
+      .ops.flatMap((op) => (op.kind === 'image' ? [op.image] : []));
+    expect(images).toEqual([mapImageKey(earlierFigureOf(0).figureId), mapImageKey(figureIdOf(0))]);
+  });
+
+  it('draws the maps of a pair between the least and the preferred height', () => {
+    for (const make of [fullFollowUp, longFollowUp]) {
+      const pair = partOf(build(make()), 'change.pair.eyes_open').at(BODY_WIDTH);
+      for (const op of pair.ops) {
+        if (op.kind !== 'image') continue;
+        expect(op.height).toBeLessThanOrEqual(CHANGE.mapPreferred + 1e-9);
+      }
+    }
+  });
+
+  it('prints the words for a map not recorded, and leaves out a pair with neither map', () => {
+    const content = fullFollowUp();
+    const oneSided: QeegFollowUp = {
+      ...content,
+      change: {
+        ...content.change,
+        pairs: {
+          eyes_closed: { earlier: null, later: content.change.pairs.eyes_closed.later },
+          eyes_open: { earlier: null, later: null },
+        },
+      },
+    };
+    const parts = build(oneSided);
+    expect(wordsDrawn([partOf(parts, 'change.pair.eyes_closed')], ENGLISH)).toContain(
+      later('pair.not_recorded', 'en'),
+    );
+    expect(idsOf(parts)).not.toContain('change.pair.eyes_open');
+  });
+
+  it('works with pictures and words alone: no headline, no table, no note', () => {
+    expect(changeIds(build(picturesOnlyFollowUp()))).toEqual([
+      'change.heading',
+      'change.pairs.heading',
+      'change.pair.eyes_closed',
+      'change.pair.eyes_open',
+      'change.summary.heading',
+      'change.summary.1',
+      'change.summary.2',
+    ]);
+  });
+
+  it('leaves out a row with no figure, and a headline she left empty', () => {
+    const content = fullFollowUp();
+    const empty: QeegFollowUp = {
+      ...content,
+      change: {
+        ...content.change,
+        tiles: {},
+        sessionsCompleted: null,
+        table: {
+          ...content.change.table,
+          delta: { position: 0, eyesOpen: null, eyesClosed: null },
+        },
+      },
+    };
+    const ids = changeIds(build(empty));
+    expect(ids).not.toContain('change.row.delta');
+    expect(ids).not.toContain('change.headlines');
+    expect(ids).toContain('change.row.theta');
+  });
+
+  it('prints its heading and a dash when nothing of the page is filled in yet', () => {
+    const parts = build(sparseFollowUp());
+    expect(changeIds(parts)).toEqual(['change.heading', 'change.none']);
+    expect(wordsDrawn([partOf(parts, 'change.none')], ENGLISH)).toBe('—');
+  });
+
+  it('prints the note that follows from where the figures came from, in both languages', () => {
+    const content = fullFollowUp();
+    const calculated = (figure: ReturnType<typeof typedPercent>): CalculatedFigure => ({
+      ...figure,
+      source: 'calculated',
+      basis: {
+        earlierAssessmentId: '0000000a-0000-4000-8000-000000000001',
+        laterAssessmentId: '0000000a-0000-4000-8000-000000000002',
+        unit: 'uV2',
+        sitesPaired: 19,
+      },
+    });
+    const onlyCalculated: QeegFollowUp = {
+      ...content,
+      change: {
+        ...content.change,
+        tiles: {},
+        table: {
+          delta: {
+            position: 0,
+            eyesOpen: calculated(typedPercent('decrease', 30)),
+            eyesClosed: null,
+          },
+        },
+      },
+    };
+    const mixed: QeegFollowUp = {
+      ...onlyCalculated,
+      change: {
+        ...onlyCalculated.change,
+        table: {
+          ...onlyCalculated.change.table,
+          theta: { position: 1, eyesOpen: typedPercent('increase', 10), eyesClosed: null },
+        },
+      },
+    };
+    for (const locale of LOCALES) {
+      const noteOf = (made: QeegFollowUp) =>
+        wordsDrawn([partOf(build(made, locale), 'change.note')], drawingOf(locale));
+      const opening = (key: string) => later(key, locale).split(' ').slice(0, 3).join(' ');
+      expect(noteOf(content)).toContain(opening('note.figures.typed'));
+      expect(noteOf(onlyCalculated)).toContain(opening('note.figures.calculated'));
+      expect(noteOf(mixed)).toContain(opening('note.figures.both'));
+      expect(idsOf(build(picturesOnlyFollowUp(), locale))).not.toContain('change.note');
+    }
+  });
+
+  it('keeps its programme: a follow-up has no brain-map-only choice', () => {
+    const ids = idsOf(build(fullFollowUp()));
+    for (const id of LEFT_OUT_WITHOUT_PROGRAMME) expect(ids, id).toContain(id);
+    for (const locale of LOCALES) {
+      const words = wordsDrawn(
+        [partOf(build(fullFollowUp(), locale), 'programme.sessions')],
+        drawingOf(locale),
+      );
+      for (const word of sessionLabel(20, locale).split(' ')) expect(words).toContain(word);
+    }
+  });
+
+  it('refuses a pair whose picture was not handed over, by which map it is', () => {
+    const content = fullFollowUp();
+    const facts = factsFor(content);
+    const pictures = { ...facts.pictures };
+    delete pictures[earlierFigureOf(1).figureId];
+    expect(() =>
+      buildQeegReport(
+        { content, locale: 'en', facts: { ...facts, pictures } },
+        ENGLISH,
+        BODY_HEIGHT,
+      ),
+    ).toThrow(/buildQeegReport was given no picture for the earlier map of the eyes open pair/);
+  });
+
+  it('changes nothing it is given', () => {
+    const content = deepFreeze(longFollowUp());
+    const facts = deepFreeze(factsFor(content));
+    expect(() =>
+      buildQeegReport({ content, locale: 'ar', facts }, ARABIC, BODY_HEIGHT),
+    ).not.toThrow();
   });
 });

@@ -16,11 +16,12 @@
  * but by that face, so the caller is trusted with it and the pages' tests
  * render with the set of four.
  *
- * **Content that has passed the shape, and a first report.** Whoever builds
+ * **Content that has passed the shape, of either edition.** Whoever builds
  * the pages takes only content that `validateQeegContent` accepts, and says
  * so here by asking it again: a report that the shape refuses is refused by
- * name, never drawn. A follow-up is refused by name too, until its pages are
- * built: this is the one place they will start from.
+ * name, never drawn. A first report and a follow-up take the same door; a
+ * follow-up's pages are the first report's, in its own words, with its page
+ * of what has changed (`changePage.ts`).
  *
  * **Maps are drawn smooth.** A brain map is printed far larger than it was
  * captured, so each is embedded with `/Interpolate`, which asks a reader to
@@ -42,7 +43,7 @@ import type { Drawing } from './typeset';
 
 export { LEFT_OUT_WITHOUT_PROGRAMME, SECTIONS } from './build';
 export type { PracticeLines, ReportFacts } from './build';
-export type { Laid, MapPrint, PlacedPart, Sheet } from './place';
+export type { Laid, MapPrint, PairPrint, PlacedPart, Sheet } from './place';
 
 export type QeegReportInput = {
   readonly content: QeegContent;
@@ -59,13 +60,8 @@ export function drawingFor(fonts: FontSet, direction: Direction): Drawing {
   };
 }
 
-/** A first report's pages, and what the editor is told of them. */
+/** A report's pages, and what the editor is told of them. */
 export function layoutQeegReport(input: QeegReportInput, fonts: FontSet): Laid {
-  if (input.content.edition === 'follow-up') {
-    throw new RangeError(
-      "layoutQeegReport was given a follow-up, and the follow-up's pages are not built yet.",
-    );
-  }
   const checked = validateQeegContent(input.content);
   if (!checked.ok) {
     // The field and nothing of what it holds: an error reaches a log.
@@ -74,14 +70,8 @@ export function layoutQeegReport(input: QeegReportInput, fonts: FontSet): Laid {
       `layoutQeegReport takes only a report the shape accepts, and was given one refused at ${at === '' ? 'its top' : at}.`,
     );
   }
-  const { content } = checked;
-  if (content.edition !== 'initial') {
-    throw new RangeError(
-      "layoutQeegReport was given a follow-up, and the follow-up's pages are not built yet.",
-    );
-  }
   return placeQeegReport(
-    { content, locale: input.locale, facts: input.facts },
+    { content: checked.content, locale: input.locale, facts: input.facts },
     drawingFor(fonts, input.locale === 'ar' ? 'rtl' : 'ltr'),
   );
 }
@@ -96,7 +86,7 @@ function imagesOf(facts: ReportFacts): ImageSet {
   return images;
 }
 
-/** A first report as a PDF, set in the faces handed in. Refused while anything runs over. */
+/** A report as a PDF, set in the faces handed in. Refused while anything runs over. */
 export function renderQeegReport(input: QeegReportInput, fonts: FontSet): Uint8Array {
   const laid = layoutQeegReport(input, fonts);
   if (laid.overflowing.length > 0) {
