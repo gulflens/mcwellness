@@ -44,10 +44,16 @@ const row = (drawing: Drawing, text: string | null = 'Ten minutes of quiet breat
     drawing,
   );
 
-const numberOps = (block: Block) => texts(block.ops).filter((op) => op.style.rgb === ACCENT.rgb);
-const nameOps = (block: Block) =>
-  texts(block.ops).filter((op) => op.style.font === 'bold' && op.style.grey === INK.grey);
-const textOps = (block: Block) => texts(block.ops).filter((op) => op.style.grey === MUTED.grey);
+/** Text ops in a role's size and weight: how a test tells the three cells apart. */
+const inRole = (block: Block, role: 'rowNumber' | 'rowName' | 'rowText') => {
+  const { style } = styleOf(role, 'ltr');
+  return texts(block.ops).filter(
+    (op) => op.style.size === style.size && op.style.font === style.weight,
+  );
+};
+const numberOps = (block: Block) => inRole(block, 'rowNumber');
+const nameOps = (block: Block) => inRole(block, 'rowName');
+const textOps = (block: Block) => inRole(block, 'rowText');
 
 describe('recommendationRow', () => {
   for (const [name, drawing] of [
@@ -69,6 +75,18 @@ describe('recommendationRow', () => {
         expect(unmirrored(en, ar, measure)).toEqual([]);
       }
     }
+  });
+
+  it('sets the number in the accent, the name in ink and the text in the muted grey', () => {
+    const block = row(ENGLISH);
+    const ink = (ops: readonly Extract<LayoutOp, { kind: 'text' }>[]) =>
+      ops.map((op) => op.style.rgb ?? op.style.grey);
+    expect(numberOps(block).map((op) => op.text)).toEqual(['03']);
+    expect(ink(numberOps(block))).toEqual([ACCENT.rgb]);
+    expect(nameOps(block).map((op) => op.text)).toEqual(['Breathing']);
+    expect(ink(nameOps(block))).toEqual([INK.grey]);
+    expect(textOps(block).length).toBeGreaterThan(0);
+    for (const colour of ink(textOps(block))) expect(colour).toBe(MUTED.grey);
   });
 
   it('writes the number as two figures in the accent', () => {
