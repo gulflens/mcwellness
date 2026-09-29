@@ -263,7 +263,67 @@ describe('layoutParagraph', () => {
 });
 
 describe('underline', () => {
-  it('runs from the first underlined piece to the last, once per line', () => {
+  /** Each rule as where it starts, how long it is and its paint, leftmost first. */
+  const spans = (ops: readonly Op[]) =>
+    rules(ops)
+      .map((rule) => ({ x: rule.x, width: rule.width, grey: rule.grey, rgb: rule.rgb }))
+      .sort((a, b) => a.x - b.x);
+
+  it('draws two rules for two underlined phrases on one line, and none under the words between', () => {
+    const ops = draw([
+      { text: 'first', underline: true },
+      { text: ' plain ' },
+      { text: 'last', underline: true },
+    ]);
+    expect(spans(ops)).toEqual([
+      { x: AT.x, width: 5 * CHAR, grey: 0, rgb: undefined },
+      { x: AT.x + 12 * CHAR, width: 4 * CHAR, grey: 0, rgb: undefined },
+    ]);
+  });
+
+  it('draws an accent word underlined after an ink word as two rules in two paints', () => {
+    const ops = draw([
+      { text: 'ink ', underline: true },
+      { text: 'accent', underline: true, accent: true },
+    ]);
+    expect(spans(ops)).toEqual([
+      { x: AT.x, width: 3 * CHAR, grey: 0, rgb: undefined },
+      { x: AT.x + 4 * CHAR, width: 6 * CHAR, grey: 0, rgb: [0.2, 0.1, 0.4] },
+    ]);
+  });
+
+  it('draws one rule under two underlined words side by side, the space between included', () => {
+    const ops = draw([
+      { text: 'bold', underline: true, bold: true },
+      { text: ' plain', underline: true },
+    ]);
+    expect(texts(ops)).toHaveLength(2);
+    expect(spans(ops)).toEqual([{ x: AT.x, width: 10 * CHAR, grey: 0, rgb: undefined }]);
+  });
+
+  it('draws the same rules on a right-to-left line', () => {
+    const apart = draw(
+      [{ text: 'أول', underline: true }, { text: ' عادي ' }, { text: 'آخر', underline: true }],
+      { paragraph: 'rtl' },
+    );
+    expect(spans(apart)).toEqual([
+      { x: AT.x + 100 - 12 * CHAR, width: 3 * CHAR, grey: 0, rgb: undefined },
+      { x: AT.x + 100 - 3 * CHAR, width: 3 * CHAR, grey: 0, rgb: undefined },
+    ]);
+    const together = draw(
+      [
+        { text: 'نص', underline: true, bold: true },
+        { text: ' مسطر', underline: true },
+      ],
+      { paragraph: 'rtl' },
+    );
+    expect(texts(together)).toHaveLength(2);
+    expect(spans(together)).toEqual([
+      { x: AT.x + 100 - 7 * CHAR, width: 7 * CHAR, grey: 0, rgb: undefined },
+    ]);
+  });
+
+  it('runs under the underlined words of each line, once per line when they are unbroken', () => {
     const ops = draw([{ text: 'aaaa ' }, { text: 'bbbb cccc dddd eeee ffff', underline: true }]);
     const lines = rules(ops);
     expect(lines).toHaveLength(2);

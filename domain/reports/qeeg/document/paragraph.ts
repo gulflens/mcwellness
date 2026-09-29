@@ -360,26 +360,52 @@ export function drawParagraph(laid: Laid, at: { x: number; top: number }): Op[] 
       );
     }
 
-    const underlined = line.pieces.filter((piece) => piece.underline);
-    const first = [...underlined].sort((a, b) => a.left - b.left)[0];
-    if (!first) return;
-    const from = Math.min(...underlined.map((piece) => piece.left));
-    const to = Math.max(...underlined.map((piece) => piece.left + piece.width));
-    const drop = (underlined.some((piece) => piece.arabic) ? 0.5 : 0.275) * size;
-    const paint = paintOf(first.accent ? input.accent : input.ink);
-    ops.push({
-      kind: 'rule',
-      x: at.x + from,
-      y: baseline - drop,
-      width: to - from,
-      thickness: Math.max(0.06 * size, 0.5),
-      // The writer strokes an unpainted rule in a light grey; an underline is
-      // the colour of its words, which unpainted is black.
-      grey: paint.grey ?? 0,
-      ...(paint.rgb ? { rgb: paint.rgb } : {}),
-    });
+    for (const run of underlinesOf(line)) {
+      const paint = paintOf(run.accent ? input.accent : input.ink);
+      ops.push({
+        kind: 'rule',
+        x: at.x + run.from,
+        y: baseline - run.drop * size,
+        width: run.to - run.from,
+        thickness: Math.max(0.06 * size, 0.5),
+        // The writer strokes an unpainted rule in a light grey; an underline is
+        // the colour of its words, which unpainted is black.
+        grey: paint.grey ?? 0,
+        ...(paint.rgb ? { rgb: paint.rgb } : {}),
+      });
+    }
   });
   return ops;
+}
+
+/** One underline: its span from the left of the box, its paint, and its drop below the baseline in em. */
+type Underline = { from: number; to: number; accent: boolean; drop: number };
+
+/**
+ * The underlines of a line: one for each UNBROKEN run of underlined pieces,
+ * walked in order of their left edge. A piece that is not underlined, or a
+ * change of paint, ends a run; the space between two underlined neighbours
+ * in one run is underlined with them. A run holding Arabic sits lower, below
+ * the deeper Arabic descenders.
+ */
+function underlinesOf(line: Line): Underline[] {
+  const runs: Underline[] = [];
+  let open: Underline | null = null;
+  for (const piece of [...line.pieces].sort((a, b) => a.left - b.left)) {
+    if (!piece.underline) {
+      open = null;
+      continue;
+    }
+    const drop = piece.arabic ? 0.5 : 0.275;
+    if (open && open.accent === piece.accent) {
+      open.to = piece.left + piece.width;
+      open.drop = Math.max(open.drop, drop);
+      continue;
+    }
+    open = { from: piece.left, to: piece.left + piece.width, accent: piece.accent, drop };
+    runs.push(open);
+  }
+  return runs;
 }
 
 /**
