@@ -19,7 +19,8 @@
  *
  * **Why the person is not in `content`.** A report's name, age and sex are
  * gathered from the client's record by the server, never typed. The old file
- * typed them, so they are handed back beside the content, in `asTyped`, for
+ * typed them, with a name in Arabic, so they are handed back beside the
+ * content, in `asTyped`, for
  * the screen to show next to the client the practitioner chooses. They are
  * never put in `content`.
  *
@@ -89,7 +90,13 @@ export type LegacyImage = {
 };
 
 /** What the old file typed about the person, for the screen to show beside the chosen client. */
-export type AsTyped = { name: string; age: string; sex: string };
+export type AsTyped = {
+  name: string;
+  /** The Arabic name the file held: the one a client who reads Arabic may be known by. */
+  nameAr: string;
+  age: string;
+  sex: string;
+};
 
 export type LegacyRefusal = 'not_an_object' | 'not_a_report_file' | 'unknown_version';
 
@@ -187,7 +194,9 @@ function customItems(
   if (!Array.isArray(value)) return {};
   const items = (value as readonly unknown[])
     .filter(isRecord)
-    .filter((item) => clean(text(field(item, 'text')), LIMITS.label) !== '');
+    .filter((item) =>
+      ['text', 'textAr'].some((key) => clean(text(field(item, key)), LIMITS.label) !== ''),
+    );
   if (items.length > LIMITS.customPerList) notes.add('extra_positions_ignored', `${at}.custom`);
   const out: Record<string, CustomItem & { position: number }> = {};
   items.slice(0, LIMITS.customPerList).forEach((item, position) => {
@@ -200,8 +209,15 @@ function customItems(
       `${where}.label`,
     );
     out[key] = {
-      // Never null: an item with no text was left out above.
-      label: label ?? { en: '', ar: null },
+      // Never null: an item with no text in either language was left out
+      // above. One typed in Arabic only prints her Arabic in either report,
+      // since her words are what a report prints where a translation is none.
+      label:
+        label === null
+          ? { en: '', ar: null }
+          : label.en === ''
+            ? { en: label.ar ?? '', ar: label.ar }
+            : label,
       note: withNote
         ? notes.bilingual(
             text(field(item, 'note')),
@@ -509,6 +525,7 @@ function read(file: unknown, sourceSha256: string): LegacyRead {
 
   const asTyped: AsTyped = {
     name: notes.limited(text(field(subject, 'name')), LIMITS.label, 'asTyped.name'),
+    nameAr: notes.limited(text(field(subject, 'nameAr')), LIMITS.label, 'asTyped.nameAr'),
     age: notes.limited(text(field(subject, 'age')), LIMITS.label, 'asTyped.age'),
     sex: notes.limited(text(field(subject, 'gender')), LIMITS.label, 'asTyped.sex'),
   };

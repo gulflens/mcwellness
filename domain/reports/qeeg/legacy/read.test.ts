@@ -276,9 +276,9 @@ describe('what the practitioner called it', () => {
 });
 
 describe('the person the old file named', () => {
-  it('puts the name, age and sex beside the content, never in it', () => {
+  it('puts the name, the Arabic name, age and sex beside the content, never in it', () => {
     const result = readOk(fullFile());
-    expect(result.asTyped).toEqual({ name: NAME, age: '34', sex: 'Female' });
+    expect(result.asTyped).toEqual({ name: NAME, nameAr: 'بندق مرج', age: '34', sex: 'Female' });
     const serialised = JSON.stringify(result.content);
     expect(serialised).not.toContain(NAME);
     expect(serialised).not.toContain('Hazel');
@@ -289,9 +289,9 @@ describe('the person the old file named', () => {
     expect(readOk(withSubject({ age: 34 })).asTyped.age).toBe('34');
   });
 
-  it('reads an absent name, age and sex as empty', () => {
+  it('reads an absent name, Arabic name, age and sex as empty', () => {
     const file = withFile({ [LEGACY_SUBJECT_KEY]: {} });
-    expect(readOk(file).asTyped).toEqual({ name: '', age: '', sex: '' });
+    expect(readOk(file).asTyped).toEqual({ name: '', nameAr: '', age: '', sex: '' });
   });
 });
 
@@ -542,6 +542,15 @@ describe('what the reader tolerates, following the old tool', () => {
     const result = readOk(withFile({ customFA }));
     expect(result.content.focus.custom).toEqual({
       c0: { label: { en: 'Kept', ar: null }, note: null, chosen: true, position: 0 },
+    });
+    expect(result.notes).toEqual([]);
+  });
+
+  it('keeps a custom item typed in Arabic only, printing her Arabic in either language', () => {
+    const customKF = [{ text: '  ', textAr: 'ملاحظتها', checked: true }];
+    const result = readOk(withFile({ customKF }));
+    expect(result.content.findings.custom).toEqual({
+      c0: { label: { en: 'ملاحظتها', ar: 'ملاحظتها' }, note: null, chosen: true, position: 0 },
     });
     expect(result.notes).toEqual([]);
   });
