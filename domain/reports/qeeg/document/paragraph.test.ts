@@ -361,7 +361,7 @@ describe('underline', () => {
     expect(rtl[0]?.x).toBe(AT.x + 100 - 5 * CHAR - 10 * CHAR);
   });
 
-  it('sits below the descender, and lower still under Arabic', () => {
+  it('sits 0.275 em below the baseline, under a descent of 0.25 em, and 0.5 em under Arabic', () => {
     const latinOps = draw([{ text: 'underlined', underline: true }]);
     const latinBaseline = texts(latinOps)[0]?.y ?? 0;
     const latinRule = rules(latinOps)[0] as RuleOp;

@@ -248,7 +248,7 @@ describe('encoding pixels as a PNG the engine embeds', () => {
     expect(filters.some((f) => f !== 0)).toBe(true);
   });
 
-  it('gives the same file for the same pixels', async () => {
+  it('gives the same file for the same pixels, twice in one run', async () => {
     const a = await encodePng(gradient, 256, 200, deflate);
     const b = await encodePng(new Uint8Array(gradient), 256, 200, deflate);
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);

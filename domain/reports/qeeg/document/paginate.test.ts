@@ -187,9 +187,23 @@ describe('fitBlock', () => {
     expect(fit.overflow).toBeCloseTo(16.25, 6);
   });
 
-  it('gives the same answer every run', () => {
-    const runs = Array.from({ length: 5 }, () => fitBlock(at(137.3), 91.7, limits));
-    for (const run of runs) expect(run).toEqual(runs[0]);
+  it('takes the same fixed number of steps for any room it must search, so the answer never depends on when it stopped', () => {
+    const calls = (room: number): number => {
+      let count = 0;
+      fitBlock(
+        (width) => {
+          count += 1;
+          return at(137.3)(width);
+        },
+        room,
+        limits,
+      );
+      return count;
+    };
+    // The natural height, the floor, thirty halvings and the height at the answer.
+    expect(calls(91.7)).toBe(33);
+    expect(calls(120)).toBe(33);
+    expect(calls(100.05)).toBe(33);
   });
 
   it('holds a step-shaped height under the room', () => {
@@ -426,11 +440,8 @@ describe('breathe', () => {
   });
 
   it('leaves a full page alone', () => {
-    const pages = paginate(
-      [block('a', 45), block('b', 45, { sectionStart: true })],
-      limits,
-      heightAt,
-    );
+    // Slack 4, one mark with no margin of its own: a share of 2, under the floor.
+    const pages = paginate([block('a', 45), block('b', 51, { gapBefore: true })], limits, heightAt);
     expect(breathe(pages, limits, heightAt)).toEqual(pages);
   });
 

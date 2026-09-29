@@ -328,7 +328,8 @@ describe('baseDirection', () => {
   it('follows the first strong character', () => {
     expect(baseDirection('12 جلسة then more', 'ltr')).toBe('rtl');
     expect(baseDirection('— Alpha ثم', 'rtl')).toBe('ltr');
-    expect(baseDirection('Été', 'rtl')).toBe('ltr');
+    // Only letters from U+00C0 to 024F: no plain A to Z to lean on.
+    expect(baseDirection('Éé', 'rtl')).toBe('ltr');
   });
 
   it('falls back when there is no strong character', () => {
