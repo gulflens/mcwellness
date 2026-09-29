@@ -7,6 +7,12 @@ import type { ChartAccount, DraftLine, JournalDraft } from './types';
  * one balanced journal draft out, or null when the event posts nothing. The
  * chart is known only by roles (rule 6); amounts are the source row's own and
  * nothing is recomputed. Memos are fixed words: the books name nobody.
+ *
+ * **An event worth nothing posts nothing** (`worthNothing`, rule 18). A
+ * session given free is an invoice for nought and a credit worth nought; the
+ * journal holds no line of nought (rule 1), so there is no entry to write and
+ * none is attempted. An event with a figure in it that does not add up is a
+ * different thing, and is still refused.
  */
 
 export type MoneyEvent =
@@ -84,10 +90,35 @@ function draft(event: MoneyEvent, memo: string, lines: DraftLine[]): JournalDraf
   };
 }
 
+/**
+ * Whether every figure the event carries is nought.
+ *
+ * Every figure, and not the total alone: an invoice with a total and nothing
+ * sold behind it, or with something sold and no total, is a fault in the row
+ * and `assertBalanced` must still be given the chance to say so.
+ */
+function worthNothing(event: MoneyEvent): boolean {
+  switch (event.event) {
+    case 'invoice.issued':
+    case 'fee.waived':
+      return event.grossFils === 0 && event.netFils === 0 && event.vatFils === 0;
+    case 'payment.received':
+      return event.amountFils === 0;
+    case 'credit.consumed':
+    case 'credit.waived':
+    case 'credit.expired':
+    case 'credit.refunded':
+      return event.allocatedNetFils === 0;
+  }
+}
+
 export function postingsFor(
   event: MoneyEvent,
   chart: readonly ChartAccount[],
 ): JournalDraft | null {
+  if (worthNothing(event)) {
+    return null;
+  }
   switch (event.event) {
     case 'invoice.issued': {
       // A statement invoice is a re-presentation of charges already invoiced
