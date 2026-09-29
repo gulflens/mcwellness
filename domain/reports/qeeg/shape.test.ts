@@ -547,6 +547,56 @@ describe('validateQeegContent', () => {
     });
   });
 
+  describe('typed text is handed back clean', () => {
+    const dirty = '  Slow\u0000 mornings\u200b  ';
+
+    it('cleans every typed string alike, in a label, a note, evidence and a caption', () => {
+      let input = withValue(validInitial(), 'findings.custom.a.label', { en: dirty, ar: dirty });
+      input = withValue(input, 'findings.custom.a.note', { en: dirty, ar: '   ' });
+      input = withValue(input, 'dashboard.mental_energy.evidence', { en: dirty, ar: null });
+      input = withValue(input, 'maps.m1.caption', { en: dirty, ar: dirty });
+      const answer = validateQeegContent(input);
+      expect(answer.ok).toBe(true);
+      if (!answer.ok || answer.content.edition !== 'initial') return;
+      const { findings, dashboard, maps } = answer.content;
+      expect(findings.custom['a']?.label).toEqual({ en: 'Slow mornings', ar: 'Slow mornings' });
+      expect(findings.custom['a']?.note).toEqual({ en: 'Slow mornings', ar: null });
+      expect(dashboard.mental_energy.evidence).toEqual({ en: 'Slow mornings', ar: null });
+      expect(maps['m1']?.caption).toEqual({ en: 'Slow mornings', ar: 'Slow mornings' });
+    });
+
+    it('checks a length after cleaning', () => {
+      const padded = `x${' '.repeat(LIMITS.label)}`;
+      const answer = validateQeegContent(
+        withValue(validInitial(), 'findings.custom.a.label.en', padded),
+      );
+      expect(answer.ok && answer.content.findings.custom['a']?.label.en).toBe('x');
+    });
+
+    it('refuses a label that is empty once cleaned', () => {
+      expectRefusedAt(
+        withValue(validInitial(), 'findings.custom.a.label.en', '\u200b\u0000 '),
+        'findings.custom.a.label.en',
+      );
+    });
+
+    it('cleans the reference of the report compared with', () => {
+      const answer = validateQeegContent(
+        withValue(validFollowUp(), 'comparedWith.reference', ' RPT-000001\u200e '),
+      );
+      expect(
+        answer.ok && answer.content.edition === 'follow-up' && answer.content.comparedWith,
+      ).toMatchObject({ reference: 'RPT-000001' });
+    });
+
+    it('refuses rich text holding a character the editor removes, since marks count from it', () => {
+      expectRefusedAt(
+        withValue(validInitial(), 'summary.en', { text: 'a\u0000b', marks: [] }),
+        'summary.en.text',
+      );
+    });
+  });
+
   describe('marks', () => {
     const at = 'summary.en.marks';
     const withMarks = (marks: unknown) =>

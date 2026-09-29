@@ -17,6 +17,12 @@
  * held or moved further. The two lists share no name, and each edition's shape
  * knows only its own, so a choice made in one can never be read as the other.
  *
+ * **What is typed is handed back clean.** Every string a person typed comes
+ * back as `clean` (`text.ts`) makes it, and its length is checked after
+ * that, so what is validated is what is stored. Rich text is refused rather
+ * than cleaned when it holds anything `clean` removes: its marks count from
+ * its letters, and cleaning would move them.
+ *
  * **No figure is read off a picture.** A change figure says whether it was
  * typed or calculated, a calculated one carries what it was calculated from,
  * and only a measure the app records (`CALCULABLE_MEASURES`) can have one. A
@@ -53,7 +59,7 @@ import {
   type QeegFollowUp,
   type QeegInitial,
 } from './types';
-import { isRealDay } from './text';
+import { clean, isRealDay, withoutUnseen } from './text';
 
 // ---------------------------------------------------------------------------
 // Small pieces
@@ -84,15 +90,36 @@ function uniqueOf<const T extends readonly [string, ...string[]]>(ids: T) {
 
 const regions = uniqueOf(REGION_IDS);
 
+/** No cut: a length is checked after cleaning, never made to fit by it. */
+const UNCUT = Number.MAX_SAFE_INTEGER;
+
+/**
+ * A string a person typed, handed back as `clean` makes it, the rule the
+ * editor uses, and held to `least` and `most` AFTER cleaning, so what is
+ * checked is what is stored.
+ */
+function typed(most: number, least = 0, empty = 'This is never empty.') {
+  return z
+    .string()
+    .transform((value) => clean(value, UNCUT))
+    .pipe(z.string().min(least, empty).max(most));
+}
+
+/** An optional Arabic: one that is empty once cleaned is none. */
+function typedOrNone(most: number) {
+  return typed(most)
+    .nullable()
+    .transform((value) => (value === '' ? null : value));
+}
+
 /** Typed once in English, with an optional Arabic, each held to `most`. */
-const bilingual = (most: number) =>
-  z.object({ en: z.string().max(most), ar: z.string().max(most).nullable() }).strict();
+const bilingual = (most: number) => z.object({ en: typed(most), ar: typedOrNone(most) }).strict();
 
 /** A label she added: never empty in English. */
 const labelText = z
   .object({
-    en: z.string().trim().min(1, 'A label she adds is never empty.').max(LIMITS.label),
-    ar: z.string().max(LIMITS.label).nullable(),
+    en: typed(LIMITS.label, 1, 'A label she adds is never empty.'),
+    ar: typedOrNone(LIMITS.label),
   })
   .strict();
 
@@ -107,7 +134,16 @@ const mark = z
 
 const richText = (most: number) =>
   z
-    .object({ text: z.string().max(most), marks: z.array(mark).max(LIMITS.marks) })
+    .object({
+      text: z
+        .string()
+        .max(most)
+        .refine(
+          (text) => withoutUnseen(text.normalize('NFC')) === text,
+          'Rich text holds only what the editor keeps, composed, since its marks count from it.',
+        ),
+      marks: z.array(mark).max(LIMITS.marks),
+    })
     .strict()
     .superRefine((rich, ctx) => {
       let end = 0;
@@ -258,8 +294,8 @@ const provenance = z.discriminatedUnion('origin', [
         .max(500),
       asPrinted: z
         .object({
-          signerName: z.string().max(LIMITS.label).nullable(),
-          signerRole: z.string().max(LIMITS.label).nullable(),
+          signerName: typed(LIMITS.label).nullable(),
+          signerRole: typed(LIMITS.label).nullable(),
         })
         .strict(),
     })
@@ -268,7 +304,7 @@ const provenance = z.discriminatedUnion('origin', [
 
 const subject = z
   .object({
-    nameAr: z.string().max(LIMITS.label).nullable(),
+    nameAr: typed(LIMITS.label).nullable(),
     ageYears: whole(0, 130).nullable(),
     sex: z.enum(SEXES).nullable(),
   })
@@ -474,7 +510,7 @@ const comparedWith = z.discriminatedUnion('origin', [
     .object({
       ...comparedWithFields,
       origin: z.literal('issued'),
-      reference: z.string().trim().min(1).max(40),
+      reference: typed(40, 1),
     })
     .strict(),
   z.object({ ...comparedWithFields, origin: z.literal('imported'), reference: z.null() }).strict(),
