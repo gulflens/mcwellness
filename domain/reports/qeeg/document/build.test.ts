@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STANDING_SENTENCES, WORDS } from '../../document/strings';
+import { COMPARISON_SENTENCE, STANDING_SENTENCES, WORDS } from '../../document/strings';
 import { BAND_IDS, CONNECTIVITY_IDS } from '../catalogue/ids';
 import { sessionLabel } from '../sentences';
 import { classifyScoreChange } from '../scoreChange';
@@ -522,6 +522,7 @@ describe('a follow-up', () => {
       'change.row.theta',
       'change.row.alpha',
       'change.row.beta_2',
+      'change.comparison',
       'change.summary.heading',
       'change.summary.1',
       'change.summary.2',
@@ -733,6 +734,7 @@ describe('a follow-up', () => {
       'change.pairs.heading',
       'change.pair.eyes_closed',
       'change.pair.eyes_open',
+      'change.comparison',
       'change.summary.heading',
       'change.summary.1',
       'change.summary.2',
@@ -757,6 +759,36 @@ describe('a follow-up', () => {
     expect(ids).not.toContain('change.row.delta');
     expect(ids).not.toContain('change.headlines');
     expect(ids).toContain('change.row.theta');
+  });
+
+  it('prints the comparison’s own sentence beneath the figures, word for word, in both languages', () => {
+    // docs/SPEC/reports-qeeg.md section 10, point 8, and docs/SPEC/assessment.md
+    // section 3.3: on every comparison, and so on a page of pictures alone too.
+    const squeezed = (text: string) => text.replace(/\s+/g, '');
+    for (const make of [fullFollowUp, picturesOnlyFollowUp, longFollowUp]) {
+      for (const locale of LOCALES) {
+        const parts = build(make(), locale);
+        const words = wordsDrawn([partOf(parts, 'change.comparison')], drawingOf(locale));
+        expect(squeezed(words).length).toBe(squeezed(COMPARISON_SENTENCE[locale]).length);
+        const ids = idsOf(parts);
+        const at = ids.indexOf('change.comparison');
+        const figures = ids.filter((id) => /^change\.(row\.|pair\.|headlines)/.test(id));
+        for (const id of figures) expect(ids.indexOf(id), id).toBeLessThan(at);
+        if (ids.includes('change.summary.heading')) {
+          expect(at).toBeLessThan(ids.indexOf('change.summary.heading'));
+        }
+      }
+    }
+  });
+
+  it('prints no comparison sentence where nothing is compared', () => {
+    expect(idsOf(build(sparseFollowUp()))).not.toContain('change.comparison');
+    for (const make of Object.values(CASES)) {
+      const content = make();
+      if (content.edition === 'initial') {
+        expect(idsOf(build(content))).not.toContain('change.comparison');
+      }
+    }
   });
 
   it('prints its heading and a dash when nothing of the page is filled in yet', () => {

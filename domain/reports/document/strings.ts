@@ -170,6 +170,15 @@ export const COMPARISON_NOT_A_DIAGNOSIS: Phrase = {
 };
 
 /**
+ * The comparison's own sentence above, under a name that says what it is
+ * for. A brain-map follow-up prints it beneath the figures of its page of
+ * what has changed (docs/SPEC/reports-qeeg.md section 10, point 8), and its
+ * code is held to spelling none of the words it holds, which its own name
+ * does; it reads it here, as it reads `STANDING_SENTENCES`.
+ */
+export const COMPARISON_SENTENCE: Phrase = COMPARISON_NOT_A_DIAGNOSIS;
+
+/**
  * The third line, on every copy until the wording is approved (section 10,
  * decision 5). Worded exactly as `docs/CONSENT` words it on every text a
  * person signs today, so a household meets the same sentence in the same

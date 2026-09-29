@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { reportFonts } from '../../app/api/billing/fonts';
-import { STANDING_SENTENCES, WORDS } from '../../domain/reports/document/strings';
+import {
+  COMPARISON_SENTENCE,
+  STANDING_SENTENCES,
+  WORDS,
+} from '../../domain/reports/document/strings';
 import { extentOf } from '../../domain/reports/qeeg/document/block';
 import { BODY_WIDTH, bodyTop, PAD } from '../../domain/reports/qeeg/document/geometry';
 import {
@@ -22,7 +26,12 @@ import {
 } from '../../domain/reports/qeeg/testing/reports';
 import type { CaseName } from '../../domain/reports/qeeg/testing/reports';
 import { speaksOfAnotherPractice } from '../../domain/reports/qeeg/testing/vocabulary';
-import type { Locale, QeegContent, QeegInitial } from '../../domain/reports/qeeg/types';
+import type {
+  Locale,
+  QeegContent,
+  QeegFollowUp,
+  QeegInitial,
+} from '../../domain/reports/qeeg/types';
 import { phrase } from '../../domain/reports/qeeg/wording';
 import { PAGE_WIDTH } from '../../domain/shared/document';
 import type { DocumentImage } from '../../domain/shared/document';
@@ -185,7 +194,10 @@ describe('the words a report prints', () => {
         const found = laid(name, locale).sheets.flatMap((sheet, page) =>
           [
             { id: 'header', ops: sheet.header },
-            ...sheet.parts.filter((part) => !part.id.startsWith('final.standing')),
+            ...sheet.parts.filter(
+              (part) =>
+                !part.id.startsWith('final.standing') && !part.id.startsWith('change.comparison'),
+            ),
             { id: 'footer', ops: sheet.footer },
           ]
             .filter((part) => speaksOfAnotherPractice(textOf(part.ops)))
@@ -200,6 +212,33 @@ describe('the words a report prints', () => {
           .map((part) => textOf(part.ops))
           .join(' ');
         expect(speaksOfAnotherPractice(standing), `${name} ${locale}`).toBe(true);
+        // So is the comparison's own sentence, on a follow-up's page of what has changed.
+        const comparison = laid(name, locale)
+          .sheets.flatMap((sheet) => sheet.parts)
+          .filter((part) => part.id.startsWith('change.comparison'))
+          .map((part) => textOf(part.ops))
+          .join(' ');
+        if (comparison !== '') {
+          expect(speaksOfAnotherPractice(comparison), `${name} ${locale}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('print the comparison’s own sentence beneath a follow-up’s figures, and nothing else there', () => {
+    const squeezed = (text: string) => [...text.replace(/\s+/g, '')].sort().join('');
+    for (const name of CASE_NAMES) {
+      for (const locale of LOCALES) {
+        const comparison = laid(name, locale)
+          .sheets.flatMap((sheet) => sheet.parts)
+          .filter((part) => part.id.startsWith('change.comparison'));
+        const compares = !['sparse', 'full', 'long', 'qeegOnly', 'followUpSparse'].includes(name);
+        expect(comparison.length > 0, `${name} ${locale}`).toBe(compares);
+        if (!compares) continue;
+        expect(
+          squeezed(comparison.map((part) => textOf(part.ops)).join('')),
+          `${name} ${locale}`,
+        ).toBe(squeezed(COMPARISON_SENTENCE[locale]));
       }
     }
   });
@@ -250,14 +289,24 @@ describe('the words a report prints', () => {
 });
 
 describe('a follow-up on paper', () => {
-  it('prints its page of what has changed on one page, in either language', () => {
-    for (const name of ['followUpFull', 'followUpPictures'] as const) {
-      for (const locale of LOCALES) {
-        const pages = laid(name, locale).sheets.filter((sheet) =>
-          sheet.parts.some((part) => part.id.startsWith('change.')),
-        );
-        expect(pages, `${name} ${locale}`).toHaveLength(1);
-      }
+  it('prints its page of what has changed on one page when it can, in either language', () => {
+    // Every kind of part, her summary one sentence; and pictures and words alone.
+    const content = fullFollowUp();
+    const compact: QeegFollowUp = {
+      ...content,
+      change: {
+        ...content.change,
+        summary: {
+          en: { text: 'Evenings are calmer since June.', marks: [] },
+          ar: { text: 'أصبحت الأمسيات أهدأ منذ يونيو.', marks: [] },
+        },
+      },
+    };
+    const onChange = (result: Laid) =>
+      result.sheets.filter((sheet) => sheet.parts.some((part) => part.id.startsWith('change.')));
+    for (const locale of LOCALES) {
+      expect(onChange(layoutQeegReport(inputOf(compact, locale), fonts)), locale).toHaveLength(1);
+      expect(onChange(laid('followUpPictures', locale)), locale).toHaveLength(1);
     }
   });
 

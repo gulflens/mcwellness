@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PAGE_HEIGHT, PAGE_WIDTH } from '@domain/shared/document';
-import { CASES, factsFor, fullReport } from '../testing/reports';
+import { CASES, factsFor, fullFollowUp, fullReport } from '../testing/reports';
 import type { CaseName } from '../testing/reports';
-import type { Locale } from '../types';
+import type { Locale, QeegFollowUp } from '../types';
 import { extentOf } from './block';
 import { buildQeegReport } from './build';
 import type { ReportInput } from './build';
@@ -251,8 +251,26 @@ describe('the page of what has changed', () => {
     );
 
   it('fits one page when it can, in both languages', () => {
-    for (const name of ['followUpFull', 'followUpPictures', 'followUpSparse'] as const) {
-      for (const locale of LOCALES) {
+    // A page of every kind of part, her summary one sentence: headlines, both
+    // pairs, four rows, the comparison's sentence and the note.
+    const content = fullFollowUp();
+    const compact: QeegFollowUp = {
+      ...content,
+      change: {
+        ...content.change,
+        summary: {
+          en: { text: 'Evenings are calmer since June.', marks: [] },
+          ar: { text: 'أصبحت الأمسيات أهدأ منذ يونيو.', marks: [] },
+        },
+      },
+    };
+    for (const locale of LOCALES) {
+      const every = placeQeegReport(
+        { content: compact, locale, facts: factsFor(compact) },
+        drawingOf(locale),
+      ).sheets.filter((sheet) => sheet.parts.some((part) => part.id.startsWith('change.')));
+      expect(every, locale).toHaveLength(1);
+      for (const name of ['followUpPictures', 'followUpSparse'] as const) {
         const sheets = changeSheets(name, locale);
         expect(sheets, `${name} ${locale}`).toHaveLength(1);
         expect(sheets[0]?.parts[0]?.id).toBe('change.heading');

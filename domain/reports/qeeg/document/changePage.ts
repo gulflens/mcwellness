@@ -18,6 +18,9 @@
  * triangle in the ink (`figureLine`), and what that means is said in her
  * summary, never by a colour.
  *
+ * **The comparison's own sentence** is printed beneath the figures, on
+ * every page that compares anything, as on every comparison the app prints.
+ *
  * **The note follows from the figures** (`changeNoteKey`): the practitioner
  * never chooses it, and a page with no figure prints none.
  *
@@ -28,6 +31,7 @@
  * head stays with at least two of its rows.
  */
 
+import { COMPARISON_SENTENCE } from '../../document/strings';
 import { MEASURE_IDS, MEASURE_RANGES } from '../catalogue/ids';
 import type { MeasureId } from '../catalogue/ids';
 import { changeNoteKey } from '../changeNote';
@@ -239,6 +243,23 @@ export function changeParts(
           },
         );
       }),
+    );
+  }
+
+  // The comparison's own sentence, beneath the figures (section 10, point 8),
+  // word for word the one the Compare screen and every other printed
+  // comparison carry (docs/SPEC/assessment.md section 3.3). Printed wherever
+  // this page compares anything, a page of pictures alone included: the
+  // pairs are a comparison of two days as much as the figures are. Small
+  // and grey, as the session and progress reports print it.
+  if (tiles.length + pairs.length + rows.length > 0) {
+    after.push(
+      part(
+        'change.comparison',
+        'change',
+        (width) => typeset('note', COMPARISON_SENTENCE[locale], width, drawing),
+        { marginBottom: GAP.afterParagraph },
+      ),
     );
   }
 
