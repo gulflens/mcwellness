@@ -264,21 +264,26 @@ describe('what the review of the rectangle found the tests did not hold', () => 
     ]);
   });
 
-  /** Every paint of an op, and every colour triple inside one. */
-  function paintsOf(op: LayoutOp): object[] {
-    const found: object[] = [];
-    const take = (paint: { rgb?: readonly number[] } | undefined): void => {
-      if (!paint) return;
-      found.push(paint);
-      if (paint.rgb) found.push(paint.rgb);
-    };
-    if (op.kind === 'text') take(op.style);
-    if (op.kind === 'rule' && op.rgb) found.push(op.rgb);
-    if (op.kind === 'path' || op.kind === 'rect') {
-      take(op.fill);
-      take(op.stroke);
+  /** Every colour triple an op carries. */
+  function coloursOf(op: LayoutOp): (readonly number[])[] {
+    switch (op.kind) {
+      case 'text':
+        return op.style.rgb ? [op.style.rgb] : [];
+      case 'rule':
+        return op.rgb ? [op.rgb] : [];
+      case 'image':
+        return [];
+      case 'path':
+        return [op.fill?.rgb, op.stroke?.rgb].filter((rgb) => rgb !== undefined);
+      case 'rect':
+        return [op.fill && 'rgb' in op.fill ? op.fill.rgb : undefined, op.stroke?.rgb].filter(
+          (rgb) => rgb !== undefined,
+        );
+      default: {
+        const unknown: never = op;
+        throw new Error(`unknown op ${String(unknown)}`);
+      }
     }
-    return found;
   }
 
   const coloured: LayoutOp[] = [
@@ -302,20 +307,26 @@ describe('what the review of the rectangle found the tests did not hold', () => 
     rect,
   ];
 
+  it('copies every colour at a scale of one: the copy shares none with what it was made from', () => {
+    const made = scaleOps(coloured, 1, { x: 0, y: 0 });
+    expect(made).toEqual(coloured);
+    coloured.forEach((op, index) => {
+      const before = coloursOf(op);
+      const after = coloursOf(made[index] ?? op);
+      expect(before.length).toBeGreaterThan(0);
+      expect(after).toEqual(before);
+      after.forEach((colour, at) => expect(colour, `${op.kind} ${at}`).not.toBe(before[at]));
+    });
+  });
+
   it.each([
-    ['copied at a scale of one', (ops: LayoutOp[]) => scaleOps(ops, 1, { x: 0, y: 0 })],
     ['scaled', (ops: LayoutOp[]) => scaleOps(ops, 0.5, { x: 0, y: 0 })],
     ['moved', (ops: LayoutOp[]) => translateOps(ops, 3, 4)],
-  ])('shares no paint and no colour with what it was made from, when %s', (_name, change) => {
+  ])('keeps every colour when %s, and changes nothing it was given', (_name, change) => {
+    const before = coloured.map(coloursOf);
     const made = change(coloured);
-    coloured.forEach((op, index) => {
-      const result = made[index];
-      if (!result) throw new Error('an op is missing');
-      const before = paintsOf(op);
-      const after = paintsOf(result);
-      expect(after).toEqual(before);
-      expect(before.length).toBeGreaterThan(0);
-      after.forEach((paint, at) => expect(paint, `${op.kind} paint ${at}`).not.toBe(before[at]));
-    });
+    expect(made.map(coloursOf)).toEqual(before);
+    expect(coloured.map(coloursOf)).toEqual(before);
+    expect(coloured[3]).toEqual(rect);
   });
 });

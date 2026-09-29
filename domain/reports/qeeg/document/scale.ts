@@ -79,6 +79,13 @@ function mapPoints(
  * new, so a caller changing the copy changes nothing it was made from. By
  * hand rather than with the host's `structuredClone`, which Safari lacks
  * before 15.4.
+ *
+ * **Only a copy at a scale of one is made this way.** An op that is scaled
+ * or moved is a new op with new numbers, and carries the very paints of its
+ * source. That is deliberate. A block is moved once for every box it is set
+ * inside, so a page of cards moves each op a handful of times, and copying
+ * a colour each time would buy nothing: the palette's paints are frozen and
+ * cannot be changed by whoever holds them (`palette.test.ts`).
  */
 function copyOf(op: LayoutOp): LayoutOp {
   switch (op.kind) {
@@ -149,9 +156,7 @@ export function scaleOps(
   const sx = (x: number): number => origin.x + (x - origin.x) * k;
   const sy = (y: number): number => origin.y + (y - origin.y) * k;
 
-  return ops.map((given): LayoutOp => {
-    // Copied first, so that what is handed back shares no paint with its source.
-    const op = copyOf(given);
+  return ops.map((op): LayoutOp => {
     switch (op.kind) {
       case 'text':
         return { ...op, x: sx(op.x), y: sy(op.y), style: { ...op.style, size: op.style.size * k } };
@@ -209,9 +214,7 @@ export function translateOps(ops: readonly LayoutOp[], dx: number, dy: number): 
       `translateOps needs a finite ${name}, and was given ${String(name === 'dx' ? dx : dy)}.`,
     );
   }
-  return ops.map((given): LayoutOp => {
-    // Copied first, so that what is handed back shares no paint with its source.
-    const op = copyOf(given);
+  return ops.map((op): LayoutOp => {
     switch (op.kind) {
       case 'text':
       case 'rule':
