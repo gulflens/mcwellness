@@ -192,7 +192,6 @@ describe('dashboardCard', () => {
         CARD.bulletGap +
         two +
         CARD.gap +
-        CARD.rule +
         CARD.ruleGap +
         p.advice;
       expect(dashboardCard(input, WIDTH, drawing).height).toBeCloseTo(expected, 9);
@@ -280,13 +279,26 @@ describe('dashboardCard', () => {
     expect(line?.x).toBeCloseTo(CARD.padH + CARD.bulletIndent, 9);
   });
 
-  it('draws the advice under a hairline, the room between', () => {
+  it('draws the advice under a hairline, inside the upper edge of the room between', () => {
     const block = dashboardCard(EN_INPUT, WIDTH, ENGLISH);
     const [rule] = rules(block.ops);
     expect(rule).toMatchObject({ x: CARD.padH, width: INNER, thickness: CARD.rule, ...HAIRLINE });
     const advice = parts(EN_INPUT, ENGLISH).advice;
-    const ruleFoot = -(block.height - CARD.padV - advice - CARD.ruleGap);
-    expect((rule?.y ?? 0) - CARD.rule / 2).toBeCloseTo(ruleFoot, 9);
+    const gapTop = -(block.height - CARD.padV - advice - CARD.ruleGap);
+    expect((rule?.y ?? 0) + CARD.rule / 2).toBeCloseTo(gapTop, 9);
+  });
+
+  it('gives its hairline no room: a card of every part is as tall as the practice’s', () => {
+    // One line to each part and three to its list, a card of the body's
+    // width: the practice's report, worked by hand, gives 170.015.
+    const input: CardInput = {
+      ...EN_INPUT,
+      summary: 'Focus held.',
+      meaning: { label: 'What this may mean', items: ['One', 'Two', 'Three'] },
+      advice: [{ text: 'Advice: ', bold: true }, { text: 'short blocks.' }],
+    };
+    expect(WIDTH).toBeCloseTo(158.74, 2);
+    expect(dashboardCard(input, WIDTH, ENGLISH).height).toBeCloseTo(170.015, 2);
   });
 
   it('leaves out the advice and its hairline when there are no words of advice', () => {
@@ -294,7 +306,7 @@ describe('dashboardCard', () => {
     const none = dashboardCard({ ...EN_INPUT, advice: [] }, WIDTH, ENGLISH);
     expect(rules(none.ops)).toEqual([]);
     expect(full.height - none.height).toBeCloseTo(
-      CARD.gap + CARD.rule + CARD.ruleGap + parts(EN_INPUT, ENGLISH).advice,
+      CARD.gap + CARD.ruleGap + parts(EN_INPUT, ENGLISH).advice,
       9,
     );
   });
