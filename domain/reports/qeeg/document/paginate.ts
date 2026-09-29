@@ -283,10 +283,14 @@ export function paginate<B extends Flow>(
       continue;
     }
 
+    // A split counts only when it makes progress: a first part with some
+    // height, and a second part shorter than the block. Anything else would
+    // open page after page and never end.
     const parts = split ? split(block, limits.bodyHeight - y) : null;
-    if (parts) {
+    const firstHeight = parts ? heightAt(parts[0], limits.bodyWidth) : 0;
+    if (parts && firstHeight > 0 && heightAt(parts[1], limits.bodyWidth) < height) {
       const [first, second] = parts;
-      current().push({ block: first, height: heightAt(first, limits.bodyWidth), fit: null });
+      current().push({ block: first, height: firstHeight, fit: null });
       queue.unshift({ block: second, continued: true });
       continue;
     }

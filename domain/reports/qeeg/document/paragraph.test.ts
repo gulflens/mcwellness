@@ -389,6 +389,11 @@ describe('splitParagraph', () => {
     expect(splitParagraph(six, 1.9 * six.box.advance)).toBeNull();
   });
 
+  it('does not split for a room that is not a number', () => {
+    expect(splitParagraph(six, Number.NaN)).toBeNull();
+    expect(splitParagraph(six, Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
   it('does not split a three-line paragraph', () => {
     const three = layoutParagraph(input([{ text: EIGHT_WORDS }]), measure);
     expect(three.lines).toHaveLength(3);

@@ -340,6 +340,29 @@ describe('paginate', () => {
     expect(overflowing(pages, limits)).toEqual([]);
   });
 
+  it('ends, and reports the block, when a split makes no progress', () => {
+    let calls = 0;
+    const stuck = (b: Flow): readonly [Flow, Flow] => {
+      calls += 1;
+      if (calls > 100) throw new Error('split was asked a hundred times');
+      return [{ ...b, height: 0 }, b];
+    };
+    const pages = paginate([block('big', 150)], limits, (b) => b.height, stuck);
+    expect(ids(pages)).toEqual([['big']]);
+    expect(overflowing(pages, limits).map((p) => p.block.id)).toEqual(['big']);
+  });
+
+  it('counts a split only when its second part is shorter than the block', () => {
+    let calls = 0;
+    const same = (b: Flow): readonly [Flow, Flow] => {
+      calls += 1;
+      if (calls > 100) throw new Error('split was asked a hundred times');
+      return [{ ...b, height: 10 }, b];
+    };
+    const pages = paginate([block('big', 150)], limits, (b) => b.height, same);
+    expect(ids(pages)).toEqual([['big']]);
+  });
+
   it('fits a fit block into the room left when there is enough of it', () => {
     const pages = paginate([block('a', 20), block('map', 100, { fit: true })], limits, heightAt);
     expect(ids(pages)).toEqual([['a', 'map']]);

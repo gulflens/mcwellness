@@ -415,7 +415,7 @@ function underlinesOf(line: Line): Underline[] {
  */
 export function splitParagraph(laid: Laid, room: number): readonly [Laid, Laid] | null {
   const count = laid.lines.length;
-  if (count < 4) return null;
+  if (count < 4 || !Number.isFinite(room)) return null;
   const take = Math.min(Math.floor(room / laid.box.advance + EPSILON), count - 2);
   if (take < 2) return null;
   const part = (lines: readonly Line[]): Laid => ({
