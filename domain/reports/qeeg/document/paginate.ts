@@ -23,12 +23,22 @@
 
 import { finite, mm } from './metrics';
 
-/** One block to be placed: its natural height and how it behaves at a break. */
+/**
+ * One block to be placed: its natural height and how it behaves at a break.
+ *
+ * A block that is both `fit` and `keep` is fitted to the room its page has,
+ * NOT to that room less what follows it: fitting to less would mean looking
+ * ahead through a kept chain, which no rule here does. What follows may then
+ * run over the foot, and `overflowing` reports it. Whoever builds the pages
+ * refuses to produce a file while `overflowing` holds anything.
+ */
 export type Flow = {
   /**
-   * Unique in a report: `paginate` refuses a list in which one appears twice,
-   * since breathing keys its margins by id. The second part of a split takes
-   * its block's id with `/2` added, the part after that `/3`, and so on.
+   * Unique in a report, and never ending in a slash and a number (`p/2`):
+   * that form is kept for the parts of a split, the second part taking its
+   * block's id with `/2` added, the part after that `/3`, and so on.
+   * `paginate` refuses, at its door and by name, a list in which one id
+   * appears twice (breathing keys its margins by id) or an id of that form.
    */
   readonly id: string;
   readonly height: number;
@@ -269,6 +279,9 @@ function isOneKeptChain<B extends Flow>(page: readonly Sized<B>[]): boolean {
   return page.length > 0 && page.every((each) => each.block.keep);
 }
 
+/** The form of id kept for the parts of a split: a slash and a number at the end. */
+const SPLIT_PART = /\/[0-9]+$/;
+
 /**
  * Breaks the blocks into pages.
  *
@@ -295,6 +308,11 @@ export function paginate<B extends Flow>(
   };
   for (const block of blocks) {
     checkBlock('paginate', block);
+    if (SPLIT_PART.test(block.id)) {
+      throw new RangeError(
+        `paginate keeps an id ending in a slash and a number for the parts of a split, and was given "${block.id}".`,
+      );
+    }
     claim(block.id);
   }
   /** Which block a split part came from, and which part it is: 'p' is part 1, 'p/2' part 2. */

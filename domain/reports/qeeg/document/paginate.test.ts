@@ -365,6 +365,35 @@ describe('paginate', () => {
     );
   });
 
+  it('refuses at its door, by name, an id that ends in a slash and a number', () => {
+    const splitsInTwo = (b: Flow, room: number): readonly [Flow, Flow] => [
+      { ...b, height: room },
+      { ...b, height: b.height - room },
+    ];
+    const run = () =>
+      paginate([block('p', 150), block('p/2', 10)], limits, (b) => b.height, splitsInTwo);
+    expect(run).toThrow(RangeError);
+    expect(run).toThrow(/"p\/2"/);
+    expect(run).not.toThrow(/twice/);
+    expect(() => paginate([block('summary/12', 10)], limits, heightAt)).toThrow(/"summary\/12"/);
+    let asked = 0;
+    const counted = (b: Flow): number => {
+      asked += 1;
+      return b.height;
+    };
+    expect(() => paginate([block('a', 10), block('a/3', 10)], limits, counted)).toThrow(RangeError);
+    expect(asked).toBe(0);
+  });
+
+  it('accepts an id with a slash that is not followed by a number alone', () => {
+    const pages = paginate(
+      [block('a/b', 10), block('2/x', 10), block('p/2a', 10)],
+      limits,
+      heightAt,
+    );
+    expect(ids(pages)).toEqual([['a/b', '2/x', 'p/2a']]);
+  });
+
   it('ends, and reports the block, when a split makes no progress', () => {
     let calls = 0;
     const stuck = (b: Flow): readonly [Flow, Flow] => {
