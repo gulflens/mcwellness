@@ -39,6 +39,12 @@ export type Block = {
   readonly height: number;
   /** How far ink reaches below the box, 0 when none does. */
   readonly overhang: number;
+  /**
+   * How far below its top the first baseline of its type stands, or null
+   * when it holds no type or holds several side by side. What a row needs to
+   * set its cells on one baseline.
+   */
+  readonly baseline: number | null;
   readonly ops: readonly LayoutOp[];
   /**
    * The block cut in two, the first part no taller than `room`, or null when
@@ -81,7 +87,7 @@ function notNegative(fn: string, name: string, value: number): void {
 export function blank(width: number, height: number): Block {
   notNegative('blank', 'width', width);
   notNegative('blank', 'height', height);
-  return { width, height, overhang: 0, ops: [] };
+  return { width, height, overhang: 0, baseline: null, ops: [] };
 }
 
 /** A block's ops with its top-left corner at `at`, `top` measured up from the foot of the page. */
@@ -102,6 +108,8 @@ export function stack(width: number, parts: readonly (Block | number)[]): Block 
   let height = 0;
   let gap = 0;
   let hanging = 0;
+  let baseline: number | null = null;
+  let first = true;
   for (const part of parts) {
     if (typeof part === 'number') {
       notNegative('stack', 'gap', part);
@@ -112,12 +120,14 @@ export function stack(width: number, parts: readonly (Block | number)[]): Block 
       throw new RangeError(`stack holds a part ${part.width} wide in ${width}.`);
     }
     height += Math.max(gap, hanging);
+    if (first && part.baseline !== null) baseline = height + part.baseline;
+    first = false;
     ops.push(...translateOps(part.ops, 0, -height));
     height += part.height;
     gap = 0;
     hanging = part.overhang;
   }
-  return { width, height: height + gap, overhang: Math.max(0, hanging - gap), ops };
+  return { width, height: height + gap, overhang: Math.max(0, hanging - gap), baseline, ops };
 }
 
 /**
@@ -149,7 +159,7 @@ export function beside(width: number, cells: readonly Cell[]): Block {
       throw new RangeError(`beside holds two cells that overlap, from ${cell.left} to ${edge}.`);
     }
   });
-  return { width, height, overhang: reach - height, ops };
+  return { width, height, overhang: reach - height, baseline: null, ops };
 }
 
 /**
@@ -189,6 +199,7 @@ export function boxed(inside: Block, width: number, box: Box): Block {
     width,
     height,
     overhang: 0,
+    baseline: null,
     ops: [panel, ...translateOps(inside.ops, box.padH, -box.padV)],
   };
 }
@@ -198,6 +209,7 @@ function fromLaid(laid: Laid): Block {
     width: laid.input.width,
     height: laid.height,
     overhang: laid.overhang,
+    baseline: laid.lines.length > 0 ? laid.box.firstBaseline : null,
     ops: drawParagraph(laid, { x: 0, top: 0 }),
     split: (room) => {
       const cut = splitParagraph(laid, room);

@@ -32,8 +32,14 @@ function marked(width: number, height: number, overhang = 0): Block {
     width,
     height,
     overhang,
+    baseline: null,
     ops: [{ kind: 'rule', x: 0, y: -height, width }],
   };
+}
+
+/** A block that says where its first line of type stands. */
+function lined(width: number, height: number, baseline: number): Block {
+  return { ...marked(width, height), baseline };
 }
 
 const rules = (ops: readonly LayoutOp[]) =>
@@ -44,7 +50,13 @@ const paths = (ops: readonly LayoutOp[]) => ops.filter((op): op is PathOp => op.
 
 describe('blank', () => {
   it('holds room and draws nothing', () => {
-    expect(blank(100, 20)).toEqual({ width: 100, height: 20, overhang: 0, ops: [] });
+    expect(blank(100, 20)).toEqual({
+      width: 100,
+      height: 20,
+      overhang: 0,
+      baseline: null,
+      ops: [],
+    });
   });
 
   it('refuses a size that is not a number, or is below nothing, by name', () => {
@@ -98,7 +110,13 @@ describe('stack', () => {
   });
 
   it('is nothing when it holds nothing', () => {
-    expect(stack(100, [])).toEqual({ width: 100, height: 0, overhang: 0, ops: [] });
+    expect(stack(100, [])).toEqual({
+      width: 100,
+      height: 0,
+      overhang: 0,
+      baseline: null,
+      ops: [],
+    });
   });
 
   it('refuses a part wider than itself, and a gap below nothing, by name', () => {
@@ -345,5 +363,40 @@ describe('extentOf', () => {
 
   it('is nothing at all for no ops', () => {
     expect(extentOf([], measure)).toEqual({ left: 0, right: 0, top: 0, bottom: 0 });
+  });
+});
+
+describe('where the first line of type stands', () => {
+  it('is said by a paragraph: how far below its top its first baseline is', () => {
+    const block = paragraphBlock(input('aaaa bbbb cccc dddd', 50), measure);
+    expect(block.baseline).toBe(11.25);
+    expect(texts(block.ops)[0]?.y).toBe(-11.25);
+  });
+
+  it('is kept by each part of a paragraph that was cut', () => {
+    const six = paragraphBlock(
+      input('aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll', 50),
+      measure,
+    );
+    const [first, second] = six.split?.(50) ?? [];
+    expect(first?.baseline).toBe(11.25);
+    expect(second?.baseline).toBe(11.25);
+  });
+
+  it('is nothing for a block that holds no type', () => {
+    expect(blank(10, 10).baseline).toBeNull();
+  });
+
+  it('is a stack’s first part’s, lowered by any gap above it', () => {
+    expect(stack(100, [lined(100, 20, 8), 5, lined(100, 20, 3)]).baseline).toBe(8);
+    expect(stack(100, [4, lined(100, 20, 8)]).baseline).toBe(12);
+    expect(stack(100, [marked(100, 20), lined(100, 20, 8)]).baseline).toBeNull();
+  });
+
+  it('is not said by a row or a box, whose cells may each have their own', () => {
+    expect(beside(100, [{ block: lined(40, 20, 8), left: 0 }]).baseline).toBeNull();
+    expect(
+      boxed(lined(88, 20, 8), 100, { padH: 6, padV: 4, radius: 3, fill: { grey: 0.9 } }).baseline,
+    ).toBeNull();
   });
 });
