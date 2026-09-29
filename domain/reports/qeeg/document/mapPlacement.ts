@@ -33,13 +33,21 @@ export const GOOD_PRINT_DPI = 220;
 export const POOR_PRINT_DPI = 140;
 export const MAX_MAP_SCALE = 2.5;
 
-export type Placed = { width: number; height: number; scale: number; dpi: number };
+export type Placed = {
+  readonly width: number;
+  readonly height: number;
+  readonly scale: number;
+  readonly dpi: number;
+};
 export type PrintQuality = 'good' | 'fair' | 'poor';
 
 const POINTS_PER_INCH = 72;
 const CSS_PIXELS_PER_INCH = 96;
 
-const NOTHING: Placed = { width: 0, height: 0, scale: 0, dpi: 0 };
+/** A fresh zero placement for each caller, so no caller's change can reach another. */
+function nothing(): Placed {
+  return { width: 0, height: 0, scale: 0, dpi: 0 };
+}
 
 /**
  * The size a map of `pixels` is drawn at in `box`, the scale that took it
@@ -53,8 +61,8 @@ export function placeImage(
   maxScale: number = MAX_MAP_SCALE,
 ): Placed {
   const positive = (n: number): boolean => Number.isFinite(n) && n > 0;
-  if (!positive(pixels.width) || !positive(pixels.height)) return NOTHING;
-  if (!positive(box.maxWidth) || !positive(box.maxHeight) || !positive(maxScale)) return NOTHING;
+  if (!positive(pixels.width) || !positive(pixels.height)) return nothing();
+  if (!positive(box.maxWidth) || !positive(box.maxHeight) || !positive(maxScale)) return nothing();
 
   const naturalWidth = (pixels.width * POINTS_PER_INCH) / CSS_PIXELS_PER_INCH;
   const naturalHeight = (pixels.height * POINTS_PER_INCH) / CSS_PIXELS_PER_INCH;

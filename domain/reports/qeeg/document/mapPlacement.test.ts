@@ -55,6 +55,17 @@ describe('placing a map in its box', () => {
     expect(printQualityOf(0)).toBe('poor');
   });
 
+  it('hands every caller its own answer for nothing, so one caller’s change reaches no other', () => {
+    const first = placeImage({ width: 0, height: 0 }, fullWidth);
+    (first as { width: number }).width = 99;
+    expect(placeImage({ width: 0, height: 0 }, fullWidth)).toEqual({
+      width: 0,
+      height: 0,
+      scale: 0,
+      dpi: 0,
+    });
+  });
+
   it('prints the same map about twice as sharp in a box half as wide', () => {
     const map = { width: 736, height: 976 };
     const whole = placeImage(map, fullWidth);

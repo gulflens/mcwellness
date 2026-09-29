@@ -109,6 +109,20 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
 }
 
 /**
+ * Whether bytes open with a zlib header: compression method 8 (deflate) in
+ * the low four bits of the first byte, and the first two bytes, read as one
+ * number, a multiple of 31. `readPng` does not inflate, so without this a
+ * compressor that wrote raw deflate or gzip by mistake would give a file
+ * that passes every check here and that no viewer can draw.
+ */
+function isZlib(bytes: Uint8Array): boolean {
+  const first = bytes[0];
+  const second = bytes[1];
+  if (first === undefined || second === undefined) return false;
+  return (first & 0x0f) === 8 && (first * 256 + second) % 31 === 0;
+}
+
+/**
  * The PNG file for `rgb`, three bytes a pixel, row by row from the top.
  * `width * height * 3` must equal `rgb.length`, and both sides must be at
  * least one pixel; anything else is a `RangeError`.
@@ -134,6 +148,11 @@ export async function encodePng(
   header.set([8, 2, 0, 0, 0], 8);
 
   const compressed = await deflate(filtered(rgb, width, height));
+  if (!isZlib(compressed)) {
+    throw new RangeError(
+      'encodePng expected its compressor to return a zlib stream (deflate with the zlib header), and it did not.',
+    );
+  }
   const parts = [
     new Uint8Array(SIGNATURE),
     chunk('IHDR', header),

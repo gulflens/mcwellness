@@ -1,4 +1,4 @@
-import { deflateSync, inflateSync } from 'node:zlib';
+import { deflateRawSync, deflateSync, gzipSync, inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { readPng } from '@domain/shared/document';
 import { crc32, encodePng } from './encodePng';
@@ -150,6 +150,18 @@ describe('encoding pixels as a PNG the engine embeds', () => {
     const a = await encodePng(gradient, 256, 200, deflate);
     const b = await encodePng(new Uint8Array(gradient), 256, 200, deflate);
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
+  });
+
+  it('refuses a compressor that does not write a zlib stream', async () => {
+    const wrong: Deflate[] = [
+      (bytes) => Promise.resolve(bytes),
+      (bytes) => Promise.resolve(new Uint8Array(deflateRawSync(bytes))),
+      (bytes) => Promise.resolve(new Uint8Array(gzipSync(bytes))),
+    ];
+    for (const compressor of wrong) {
+      await expect(encodePng(flat, 64, 48, compressor)).rejects.toThrow(/zlib/);
+      await expect(encodePng(gradient, 256, 200, compressor)).rejects.toThrow(RangeError);
+    }
   });
 
   it('refuses a length that does not match the size', async () => {
