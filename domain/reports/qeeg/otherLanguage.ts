@@ -39,30 +39,33 @@
  * English that is empty once cleaned is refused by keeping the first's: an
  * English report is never left without words where the first had some.
  *
- * **Cleaned as the editor cleans.** Every half taken goes through `clean` or
- * `cleanRich` to the limits of `LIMITS`, so the result passes the shape.
+ * **Cleaned as the shape cleans, never cut.** Every half taken goes through
+ * `clean` or `cleanRich` with no cut (`UNCUT`), as the shape does: text that
+ * is too long is refused, never cut. So the result passes the shape WHEN
+ * what was sent would. What makes it fail is what would have failed in
+ * `sent`: a half longer than its limit in `LIMITS`, or a formatted half of
+ * more than `LIMITS.marks` marks. Each is refused by the shape by name.
  *
  * It never throws on what was sent, and it returns a new value, sharing
  * nothing with either input and changing neither.
  */
 
 import { DIMENSION_IDS, type DimensionId } from './catalogue/ids';
-import { clean, cleanRich, isEmpty, isRecord } from './text';
-import {
-  LIMITS,
-  type Bilingual,
-  type BilingualRich,
-  type CustomItem,
-  type Locale,
-  type MapEntry,
-  type Mark,
-  type Ordered,
-  type Picked,
-  type QeegCommon,
-  type QeegContent,
-  type RichText,
-  type Score,
-  type Tile,
+import { UNCUT, clean, cleanRich, isEmpty, isRecord } from './text';
+import type {
+  Bilingual,
+  BilingualRich,
+  CustomItem,
+  Locale,
+  MapEntry,
+  Mark,
+  Ordered,
+  Picked,
+  QeegCommon,
+  QeegContent,
+  RichText,
+  Score,
+  Tile,
 } from './types';
 
 /** A key's own value in what was sent, never one its prototype answers to. */
@@ -88,29 +91,24 @@ function sentRich(typed: unknown, locale: Locale): RichText | null {
   };
 }
 
-/** `first` with its `locale` half taken from `sent`, cleaned to `most`. */
-function bilingualFrom(first: Bilingual, sent: unknown, locale: Locale, most: number): Bilingual {
+/** `first` with its `locale` half taken from `sent`, cleaned and never cut. */
+function bilingualFrom(first: Bilingual, sent: unknown, locale: Locale): Bilingual {
   if (!isRecord(sent)) return { ...first };
   const taken = sentString(sent, locale);
-  const cleaned = taken === null ? '' : clean(taken, most);
+  const cleaned = taken === null ? '' : clean(taken, UNCUT);
   if (locale === 'ar') return { en: first.en, ar: cleaned === '' ? null : cleaned };
   return { en: cleaned === '' ? first.en : cleaned, ar: first.ar };
 }
 
-function optionalFrom(
-  first: Bilingual | null,
-  sent: unknown,
-  locale: Locale,
-  most: number,
-): Bilingual | null {
-  return first === null ? null : bilingualFrom(first, sent, locale, most);
+function optionalFrom(first: Bilingual | null, sent: unknown, locale: Locale): Bilingual | null {
+  return first === null ? null : bilingualFrom(first, sent, locale);
 }
 
 function richFrom(first: BilingualRich, sent: unknown, locale: Locale): BilingualRich {
   const copy = structuredClone(first);
   if (!isRecord(sent)) return copy;
   const taken = sentRich(sent, locale);
-  const cleaned = taken === null ? null : cleanRich(taken, LIMITS.summary);
+  const cleaned = taken === null ? null : cleanRich(taken, UNCUT);
   const empty = cleaned === null || isEmpty(cleaned);
   if (locale === 'ar') return { en: copy.en, ar: empty ? null : cleaned };
   return { en: empty ? copy.en : cleaned, ar: copy.ar };
@@ -135,8 +133,8 @@ function pickedFrom<Id extends string>(
   return {
     chosen: [...first.chosen],
     custom: byKey<CustomItem>(first.custom, own(sent, 'custom'), (item, other) => ({
-      label: bilingualFrom(item.label, own(other, 'label'), locale, LIMITS.label),
-      note: optionalFrom(item.note, own(other, 'note'), locale, LIMITS.note),
+      label: bilingualFrom(item.label, own(other, 'label'), locale),
+      note: optionalFrom(item.note, own(other, 'note'), locale),
       chosen: item.chosen,
       position: item.position,
     })),
@@ -146,7 +144,7 @@ function pickedFrom<Id extends string>(
 function mapsFrom(first: Ordered<MapEntry>, sent: unknown, locale: Locale): Ordered<MapEntry> {
   return byKey<MapEntry>(first, sent, (map, other) => ({
     ...structuredClone(map),
-    caption: optionalFrom(map.caption, own(other, 'caption'), locale, LIMITS.caption),
+    caption: optionalFrom(map.caption, own(other, 'caption'), locale),
   }));
 }
 
@@ -161,7 +159,7 @@ function dashboardFrom<S extends Score>(
     const other = own(own(sent, dimension), 'evidence');
     out[dimension] = {
       ...structuredClone(score),
-      evidence: optionalFrom(score.evidence, other, locale, LIMITS.evidence),
+      evidence: optionalFrom(score.evidence, other, locale),
     };
   }
   return out;
@@ -204,7 +202,7 @@ export function withOtherLanguageFrom(
       ...copy.change,
       tiles: byKey<Tile>(copy.change.tiles, own(sentChange, 'tiles'), (tile, other) => ({
         ...tile,
-        caption: bilingualFrom(tile.caption, own(other, 'caption'), locale, LIMITS.caption),
+        caption: bilingualFrom(tile.caption, own(other, 'caption'), locale),
       })),
       summary: richFrom(copy.change.summary, own(sentChange, 'summary'), locale),
     },

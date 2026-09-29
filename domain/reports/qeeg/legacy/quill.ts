@@ -29,7 +29,7 @@
  * reader falls back to the plain summary the old file also kept.
  */
 
-import { cleanRich, isRecord, withoutUnseen } from '../text';
+import { UNCUT, cleanRich, isRecord, withoutUnseen } from '../text';
 import type { Mark, RichText } from '../types';
 
 export type Dropped = 'colour' | 'slant' | 'direction' | 'embed' | 'other';
@@ -67,9 +67,6 @@ function droppedFor(key: string): Dropped {
       return 'other';
   }
 }
-
-/** No cut here: the reader cuts to its own limit, and notes that it did. */
-const UNCUT = Number.MAX_SAFE_INTEGER;
 
 export function fromQuillDelta(
   deltaJson: string,
@@ -131,6 +128,7 @@ export function fromQuillDelta(
     }));
     return {
       ok: true,
+      // No cut here: the reader cuts to its own limit, and notes that it did.
       rich: cleanRich({ text, marks }, UNCUT),
       dropped: DROPPED_ORDER.filter((kind) => dropped.has(kind)),
       removed: withoutUnseen(text).length < text.length,

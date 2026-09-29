@@ -59,7 +59,7 @@ import {
   type QeegFollowUp,
   type QeegInitial,
 } from './types';
-import { clean, isEmpty, isRealDay, withoutUnseen } from './text';
+import { UNCUT, clean, isEmpty, isRealDay, withoutUnseen } from './text';
 
 // ---------------------------------------------------------------------------
 // Small pieces
@@ -89,9 +89,6 @@ function uniqueOf<const T extends readonly [string, ...string[]]>(ids: T) {
 }
 
 const regions = uniqueOf(REGION_IDS);
-
-/** No cut: a length is checked after cleaning, never made to fit by it. */
-const UNCUT = Number.MAX_SAFE_INTEGER;
 
 /**
  * A string a person typed, handed back as `clean` makes it, the rule the

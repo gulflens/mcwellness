@@ -12,7 +12,9 @@ import type {
   QeegContent,
   QeegFollowUp,
   QeegInitial,
+  RichText,
 } from './types';
+import { LIMITS } from './types';
 
 /**
  * Brief G, item 5: the second report of one recording takes only the other
@@ -468,49 +470,88 @@ describe('withOtherLanguageFrom', () => {
   });
 
   describe('what is taken is cleaned', () => {
-    it('cleans each half taken to the limits of the shape', () => {
+    /** A follow-up sent with `ar` as the Arabic of every typed text but the change page's. */
+    function sentWithArabic(ar: string, summary: RichText): QeegFollowUp {
       const sent = filledFollowUp();
-      const long = `  ${'ب'.repeat(500)}  `;
-      const dirty: QeegFollowUp = {
+      return {
         ...sent,
         findings: {
           ...sent.findings,
           custom: {
             ...sent.findings.custom,
-            c0: { ...sent.findings.custom['c0']!, label: both('x', long), note: both('x', long) },
+            c0: { ...sent.findings.custom['c0']!, label: both('x', ar), note: both('x', ar) },
           },
         },
-        maps: { 'map-0': { ...sent.maps['map-0']!, caption: both('x', long) } },
+        maps: { 'map-0': { ...sent.maps['map-0']!, caption: both('x', ar) } },
         dashboard: {
           ...sent.dashboard,
-          stress_regulation: {
-            ...sent.dashboard.stress_regulation,
-            evidence: both('x', `a\u0000b${long}`),
-          },
+          stress_regulation: { ...sent.dashboard.stress_regulation, evidence: both('x', ar) },
         },
-        summary: {
-          en: sent.summary.en,
-          ar: {
-            text: `\ufeff  س\tص\r\nع${'ب'.repeat(5000)}`,
-            marks: [{ from: 3, to: 4, bold: true }],
-          },
-        },
+        summary: { en: sent.summary.en, ar: summary },
         change: {
           ...sent.change,
-          tiles: { t0: { ...sent.change.tiles['t0']!, caption: both('x', long) } },
+          tiles: { t0: { ...sent.change.tiles['t0']!, caption: both('x', ar) } },
         },
       };
-      const result = withOtherLanguageFrom(filledFollowUp(), dirty, 'ar');
+    }
+
+    it('cleans each half taken as the shape does', () => {
+      const ar = `  a\u0000b${'ب'.repeat(50)}\u200b  `;
+      const summary = {
+        text: `\ufeff  س\tص\r\nع${'ب'.repeat(50)}`,
+        marks: [{ from: 3, to: 4, bold: true as const }],
+      };
+      const result = withOtherLanguageFrom(filledFollowUp(), sentWithArabic(ar, summary), 'ar');
       if (result.edition !== 'follow-up') throw new Error('expected a follow-up');
-      expect(result.findings.custom['c0']?.label.ar).toHaveLength(160);
-      expect(result.findings.custom['c0']?.note?.ar).toHaveLength(400);
-      expect(result.maps['map-0']?.caption?.ar).toHaveLength(120);
-      expect(result.change.tiles['t0']?.caption.ar).toHaveLength(120);
-      expect(result.dashboard.stress_regulation.evidence?.ar?.startsWith('ab')).toBe(true);
-      expect(result.summary.ar?.text.startsWith('س ص\nع')).toBe(true);
-      expect(result.summary.ar?.text).toHaveLength(4000);
-      expect(result.summary.ar?.marks).toEqual([{ from: 0, to: 1, bold: true }]);
+      const cleaned = `ab${'ب'.repeat(50)}`;
+      expect(result.findings.custom['c0']?.label.ar).toBe(cleaned);
+      expect(result.findings.custom['c0']?.note?.ar).toBe(cleaned);
+      expect(result.maps['map-0']?.caption?.ar).toBe(cleaned);
+      expect(result.change.tiles['t0']?.caption.ar).toBe(cleaned);
+      expect(result.dashboard.stress_regulation.evidence?.ar).toBe(cleaned);
+      expect(result.summary.ar).toEqual({
+        text: `س ص\nع${'ب'.repeat(50)}`,
+        marks: [{ from: 0, to: 1, bold: true }],
+      });
       expectShapeAccepts(result);
+    });
+
+    it('never cuts a half that is too long: the shape refuses it by name', () => {
+      // The specification: text that is too long is refused, never cut.
+      const ar = 'ب'.repeat(LIMITS.note + 1);
+      const summary = { text: 'ب'.repeat(LIMITS.summary + 1), marks: [] };
+      const result = withOtherLanguageFrom(filledFollowUp(), sentWithArabic(ar, summary), 'ar');
+      expect(result.findings.custom['c0']?.label.ar).toHaveLength(LIMITS.note + 1);
+      const answer = validateQeegContent(result);
+      expect(answer.ok).toBe(false);
+      if (answer.ok) return;
+      expect(answer.refusals.map((refusal) => refusal.path).sort()).toEqual(
+        [
+          'findings.custom.c0.label.ar',
+          'findings.custom.c0.note.ar',
+          'maps.map-0.caption.ar',
+          'dashboard.stress_regulation.evidence.ar',
+          'summary.ar.text',
+          'change.tiles.t0.caption.ar',
+        ].sort(),
+      );
+    });
+
+    it('keeps more than two hundred marks for the shape to refuse, never dropping them', () => {
+      const summary = {
+        text: 'ب '.repeat(300).trim(),
+        marks: Array.from({ length: 300 }, (_, i) => ({
+          from: 2 * i,
+          to: 2 * i + 1,
+          bold: true as const,
+        })),
+      };
+      const result = withOtherLanguageFrom(filledFollowUp(), sentWithArabic('ب', summary), 'ar');
+      expect(result.summary.ar?.marks).toHaveLength(300);
+      expect(validateQeegContent(result)).toMatchObject({
+        ok: false,
+        refusals: [{ path: 'summary.ar.marks' }],
+      });
     });
   });
 

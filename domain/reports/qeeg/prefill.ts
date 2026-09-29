@@ -52,7 +52,7 @@ import {
   type RecommendationId,
   type RegionId,
 } from './catalogue/ids';
-import { clean, isRealDay, isRecord } from './text';
+import { UNCUT, clean, isRealDay, isRecord } from './text';
 import {
   CONDITIONS,
   HANDEDNESS,
@@ -198,9 +198,6 @@ function offeredFrom<Id extends string>(value: unknown, ids: readonly Id[]): Pic
 // ---------------------------------------------------------------------------
 // The door
 // ---------------------------------------------------------------------------
-
-/** No cut: the shape decides whether a reference is too long. */
-const UNCUT = Number.MAX_SAFE_INTEGER;
 
 function refusalFor(earlier: EarlierReport, request: PrefillRequest): PrefillRefusal | null {
   if (earlier.clientId !== request.clientId) return 'other_client';

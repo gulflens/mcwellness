@@ -311,6 +311,13 @@ function marksOf(styles: readonly number[]): Mark[] {
   return marks;
 }
 
+/**
+ * A length to cut at that cuts nothing. The shape, the delta reader and the
+ * rebuild of a second-language report clean with it: text that is too long
+ * is refused by name, never cut (the specification, section 4 rule 6).
+ */
+export const UNCUT = Number.MAX_SAFE_INTEGER;
+
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** The years a recording can have been made in. Anything else is a slip of the keyboard. */
