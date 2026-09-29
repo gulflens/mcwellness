@@ -202,6 +202,19 @@ The writer is `domain/shared/document`. The layout is this piece's own, under `d
 | A line of under 75 characters (sections 4.5 and 6.4) | About 95 to 100, at the geometry kept |
 | Tables, not cards | Cards, as in the report a household knows |
 
+**How the pieces are made.** Each drawn part of the report (a heading, a list, a card) is a function from words and numbers to a block: a width, a height and what is drawn, in a box of its own. A piece knows nothing of a finding or a score, and holds no length, colour or style of its own: every length is named in `geometry.ts`, every colour in `palette.ts`, every style in `styles.ts`. Joining a report's content and wording to the pieces is one module's work (`build.ts`), so the look of the report can be reviewed, and changed, apart from what it says.
+
+**Defaults taken in building, each open to the practice's eye on the sample pages.** None changes what a report says.
+
+| What | The default | Why |
+| --- | --- | --- |
+| The hue of high beta | The fifth hue of the app's own scale of bands | The app's scale ends in a band the report does not have, and the report's fifth is a band the app's scale does not have. The five icons of a report are then the five hues of a ribbon, slow to fast |
+| The number of a recommendation | The violet | The old report had a second colour for it. This one has one accent |
+| A card, and the panel at the head of a report | Filled with the violet's wash, edged with the violet's pale | The old report's were cream, edged in grey. These are the two tints the app already has |
+| A line of Arabic | Never set tighter than 1.5 times its size on the page, and 1.45 in a card | The Arabic face is taller than the Latin. Set as tightly as the English, one line would print over the next |
+| Over the signature's line | 12 mm left clear | There is no picture of a signature. A printed copy can still be signed by hand |
+| The smallest type | 6.6 points, in a card's category, as the old report has it | The layout is kept. If it reads too small once it is no longer in capitals, it is one number to change |
+
 **Rendered on the server**, as every document is. The preview opens in a new tab, in either language. The security policy refuses to show a document inside a frame, and that is not loosened for this.
 
 **The rules of the page, as the first review corrected them (2026-09-29).** Each is held by a test that failed before it was mended.
