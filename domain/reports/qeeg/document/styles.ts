@@ -15,8 +15,12 @@
  * - **Arabic is never set tighter than its face is tall.** The Arabic face
  *   stands 1.5 em from the top of its tallest letter to the foot of its
  *   deepest, where the Latin stands 1.3. A line height under that would
- *   print one line over the next, so an Arabic line is never under 1.5 on the
- *   page and 1.45 in a card, whatever the English of the same role has.
+ *   print one line over the next, so an Arabic line is never under 1.5,
+ *   on the page or in a card, whatever the English of the same role has.
+ *   (A card was first given 1.45, to keep it short. The review of the
+ *   pieces measured the face and found five roles each a twentieth of an
+ *   em over their neighbour. The dashboard is scaled to its page in any
+ *   case, so a card a little taller costs a little scale and no overlap.)
  *
  * A role's colour is a paint of `palette.ts`, held by identity, or `null`
  * where the colour is the caller's to give: a card's category is set in the
@@ -63,8 +67,8 @@ export type RoleStyle = {
   readonly underline: boolean;
 };
 
-/** The least line height of an Arabic line, on the page and in a card. */
-export const ARABIC_FLOOR = Object.freeze({ page: 1.5, card: 1.45 });
+/** The least line height of an Arabic line: how tall the Arabic face stands, in em. */
+export const ARABIC_FLOOR = 1.5;
 
 type Weight = TextStyle['weight'];
 type Designed = readonly [
@@ -104,8 +108,7 @@ const DESIGNED: Readonly<Record<Role, Designed>> = {
 
 function made(role: Role, direction: Direction): RoleStyle {
   const [size, designed, weight, paint, underline] = DESIGNED[role];
-  const floor = role.startsWith('card') ? ARABIC_FLOOR.card : ARABIC_FLOOR.page;
-  const lineHeight = direction === 'rtl' ? Math.max(designed, floor) : designed;
+  const lineHeight = direction === 'rtl' ? Math.max(designed, ARABIC_FLOOR) : designed;
   return Object.freeze({
     style: Object.freeze({ size, lineHeight, weight }),
     paint,
@@ -113,6 +116,12 @@ function made(role: Role, direction: Direction): RoleStyle {
   });
 }
 
+/**
+ * The one cast of this file. `Object.fromEntries` forgets its keys and
+ * gives back a record of any string; the keys are `ROLES`, every one of
+ * them and no other, so the record is of every role. `styles.test.ts` holds
+ * a table of all of them against it.
+ */
 const entries = (direction: Direction) =>
   Object.freeze(
     Object.fromEntries(ROLES.map((role) => [role, made(role, direction)])) as Record<

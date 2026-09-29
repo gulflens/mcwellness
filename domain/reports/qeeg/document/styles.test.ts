@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ACCENT, INK, MUTED } from './palette';
 import { ARABIC_FLOOR, ROLES, styleOf } from './styles';
 import type { Role } from './styles';
-
-const CARD_ROLES = ROLES.filter((role) => role.startsWith('card'));
-const PAGE_ROLES = ROLES.filter((role) => !role.startsWith('card'));
+import type { Paint } from './shapes';
 
 describe('the type of the brain-map report', () => {
   it('has a style for every role, in both directions', () => {
@@ -41,15 +39,16 @@ describe('the type of the brain-map report', () => {
     expect(height('footer')).toBe(1.45);
   });
 
-  it('never sets Arabic tighter than its face is tall: 1.5 on the page, 1.45 in a card', () => {
-    expect(ARABIC_FLOOR).toEqual({ page: 1.5, card: 1.45 });
-    for (const role of PAGE_ROLES) {
+  it('never sets Arabic tighter than its face is tall, on the page or in a card', () => {
+    // The installed Arabic face stands 1.5 em from the top of its tallest
+    // letter to the foot of its deepest (an ascent of 1085 and a descent of
+    // 415 in a thousand), as the review of the pieces measured it.
+    expect(ARABIC_FLOOR).toBe(1.5);
+    for (const role of ROLES) {
       expect(styleOf(role, 'rtl').style.lineHeight, role).toBeGreaterThanOrEqual(1.5);
     }
-    for (const role of CARD_ROLES) {
-      expect(styleOf(role, 'rtl').style.lineHeight, role).toBeGreaterThanOrEqual(1.45);
-    }
-    expect(styleOf('cardTitle', 'rtl').style.lineHeight).toBe(1.45);
+    expect(styleOf('cardTitle', 'rtl').style.lineHeight).toBe(1.5);
+    expect(styleOf('cardSummary', 'rtl').style.lineHeight).toBe(1.5);
     expect(styleOf('band', 'rtl').style.lineHeight).toBe(1.5);
   });
 
@@ -116,4 +115,64 @@ describe('the type of the brain-map report', () => {
     expect(Object.isFrozen(held.style)).toBe(true);
     expect(styleOf('body', 'ltr')).toBe(held);
   });
+});
+
+describe('the practice’s type, role by role', () => {
+  /**
+   * Written out, and not read back from the module, so that a number changed
+   * there by a slip is a number that no longer agrees with this table. The
+   * sizes and line heights are those of the report a household knows.
+   */
+  const TABLE: readonly (readonly [
+    Role,
+    number,
+    number,
+    'regular' | 'bold',
+    Paint | null,
+    boolean,
+  ])[] = [
+    ['body', 10.2, 1.5, 'regular', INK, false],
+    ['lede', 10.2, 1.5, 'regular', MUTED, false],
+    ['empty', 10.2, 1.5, 'regular', MUTED, false],
+    ['heading', 14, 1.5, 'bold', ACCENT, true],
+    ['subheading', 11.5, 1.5, 'bold', ACCENT, true],
+    ['band', 10.2, 1.42, 'regular', INK, false],
+    ['bandMuted', 10.2, 1.42, 'regular', MUTED, false],
+    ['note', 7.6, 1.4, 'regular', MUTED, false],
+    ['panel', 10.2, 1.5, 'regular', INK, false],
+    ['panelHead', 10.2, 1.5, 'bold', ACCENT, true],
+    ['cardCategory', 6.6, 1.5, 'bold', null, false],
+    ['cardTitle', 10, 1.16, 'bold', INK, false],
+    ['cardSummary', 8.6, 1.36, 'regular', MUTED, false],
+    ['cardLabel', 6.8, 1.5, 'bold', MUTED, false],
+    ['cardEvidence', 8.3, 1.35, 'regular', MUTED, false],
+    ['cardBullet', 8.4, 1.34, 'regular', INK, false],
+    ['cardAdvice', 8.4, 1.38, 'regular', INK, false],
+    ['rowNumber', 11, 1.5, 'bold', ACCENT, false],
+    ['rowName', 10.2, 1.5, 'bold', INK, false],
+    ['rowText', 10.2, 1.5, 'regular', MUTED, false],
+    ['pill', 11, 1.5, 'bold', ACCENT, false],
+    ['signature', 9, 1.4, 'regular', INK, false],
+    ['signatureLabel', 9, 1.4, 'regular', MUTED, false],
+    ['footer', 6.8, 1.45, 'regular', MUTED, false],
+  ];
+
+  it('holds every role there is, once', () => {
+    expect(TABLE.map(([role]) => role)).toEqual([...ROLES]);
+  });
+
+  it.each(TABLE)(
+    'sets %s at %d points on a line of %d, %s',
+    (role, size, line, weight, paint, underline) => {
+      const english = styleOf(role, 'ltr');
+      expect(english.style).toEqual({ size, lineHeight: line, weight });
+      expect(english.paint).toBe(paint);
+      expect(english.underline).toBe(underline);
+      expect(styleOf(role, 'rtl').style).toEqual({
+        size,
+        lineHeight: Math.max(line, 1.5),
+        weight,
+      });
+    },
+  );
 });

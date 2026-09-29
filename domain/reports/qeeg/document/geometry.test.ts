@@ -176,3 +176,134 @@ describe('every measurement', () => {
     expect(Object.isFrozen(BAND_WAVE.delta)).toBe(true);
   });
 });
+
+describe('the practice’s measurements, written out', () => {
+  /**
+   * Written out, and not read back from the module, so that a number changed
+   * there by a slip is a number that no longer agrees with this table. In
+   * millimetres where the practice's layout is, in points where it is, and
+   * on a figure's own grid where the figure was drawn on one. The review of
+   * the pieces changed fourteen of these by a little, one at a time, and ten
+   * of the changes passed every test there was.
+   */
+  it('holds the page', () => {
+    expect(PAD).toEqual({ top: mm(11), side: mm(17), bottom: mm(8) });
+    expect(HEADER).toEqual({ height: mm(31), logo: { width: mm(52), height: mm(26) } });
+    expect(FOOTER).toEqual({ rule: 0.5, padTop: mm(2.5), gutter: mm(8) });
+    expect(MAP).toEqual({ labelGap: mm(4), reserve: mm(3) });
+  });
+
+  it('holds the room between one block and the next', () => {
+    expect(GAP).toEqual({
+      afterPanel: mm(6),
+      afterHeading: mm(2.2),
+      afterSubheading: mm(2),
+      afterParagraph: mm(3),
+      afterList: mm(3),
+      afterBand: mm(2.6),
+      afterConnectivity: mm(3),
+      afterNote: mm(3.4),
+      beforeLateHeading: mm(6),
+      beforeSignature: mm(6),
+      noteRaisedBy: mm(1),
+      betweenParagraphs: mm(3),
+    });
+  });
+
+  it('holds a list', () => {
+    expect(BULLETS).toEqual({
+      indent: mm(6.5),
+      diamond: mm(2.4),
+      diamondInset: mm(1.2),
+      diamondTop: mm(1.7),
+      rowGap: mm(1.8),
+      gutter: mm(10),
+      columnsAbove: 6,
+    });
+  });
+
+  it('holds a band’s icon, on its grid of 48, and the wave of each band', () => {
+    expect(BAND_ICON).toEqual({
+      size: mm(15),
+      gutter: mm(4),
+      top: mm(0.6),
+      lineGap: mm(0.7),
+      findingGap: mm(1.6),
+      box: 48,
+      discRadius: 22,
+      ringLine: 1.5,
+      waveLine: 2.1,
+      waveFrom: 11,
+      waveTo: 37,
+    });
+    expect(BAND_WAVE).toEqual({
+      delta: { cycles: 1, amplitude: 9 },
+      theta: { cycles: 2, amplitude: 7.5 },
+      alpha: { cycles: 3, amplitude: 6 },
+      beta: { cycles: 4.5, amplitude: 4.5 },
+      high_beta: { cycles: 6, amplitude: 3.5 },
+    });
+  });
+
+  it('holds a block of connectivity', () => {
+    expect(CONNECTIVITY).toEqual({ bar: 2.2, inset: mm(4), gap: mm(1) });
+  });
+
+  it('holds a card, and the dashboard it stands in', () => {
+    expect(CARD).toEqual({
+      radius: mm(2),
+      edge: 0.6,
+      accent: 2.6,
+      padV: mm(2.8),
+      padH: mm(3.4),
+      gap: mm(1.8),
+      labelGap: mm(1),
+      ring: mm(11),
+      ringGutter: mm(2.6),
+      titleTop: mm(0.5),
+      bulletIndent: mm(3.4),
+      bulletGap: mm(0.7),
+      rule: 0.5,
+      ruleGap: mm(1.5),
+      dash: 4.2,
+      dashLine: 0.7,
+      dashRise: 2.3,
+    });
+    expect(GRID).toEqual({ columns: 3, rows: 2, columnGap: mm(4), rowGap: mm(3.2) });
+  });
+
+  it('holds a score’s ring, on its grid of 40', () => {
+    expect(RING).toEqual({
+      box: 40,
+      radius: 17,
+      line: 3,
+      scoreSize: 13,
+      scoreBaseline: 22,
+      outOfSize: 5,
+      outOfBaseline: 29,
+      unsetDash: 8,
+      unsetLine: 2,
+    });
+  });
+
+  it('draws the mark of a score not yet given inside the ring, across its middle', () => {
+    const inner = RING.radius - RING.line / 2;
+    expect(RING.unsetDash).toBeLessThan(inner);
+    expect(RING.unsetLine).toBeLessThanOrEqual(RING.line);
+  });
+
+  it('holds the panel, a row, the pill and the signature', () => {
+    expect(PANEL).toEqual({
+      padH: mm(4.5),
+      padV: mm(3.6),
+      gutter: mm(10),
+      radius: mm(2.5),
+      edge: 0.6,
+      headGap: mm(1.5),
+      lineGap: mm(0.9),
+    });
+    expect(ROW).toEqual({ number: mm(11), name: mm(46), gutter: mm(3), padV: mm(2.4), rule: 0.5 });
+    expect(PILL).toEqual({ padV: mm(1.4), padH: mm(5), edge: 1, above: mm(1), below: mm(3) });
+    expect(SIGNATURE).toEqual({ width: mm(70), rule: 0.75, gap: mm(1.8), room: mm(12) });
+  });
+});

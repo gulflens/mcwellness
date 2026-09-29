@@ -189,6 +189,12 @@ export function cardWidth(width: number): number {
 /**
  * A score's ring, on its own grid of 40, `y` measured down from its top. The
  * score is centred on one baseline and "/10" on another under it.
+ *
+ * A score not yet given has no figure to draw: a report's scores start
+ * empty, and a draft is previewed before they are set. Its ring holds a
+ * short mark across its middle, `unsetDash` long and `unsetLine` thick. It
+ * is a mark and not a word, so it needs no translating and cannot be too
+ * wide for the ring, as words for it were.
  */
 export const RING = frozen({
   box: 40,
@@ -198,6 +204,8 @@ export const RING = frozen({
   scoreBaseline: 22,
   outOfSize: 5,
   outOfBaseline: 29,
+  unsetDash: 8,
+  unsetLine: 2,
 });
 
 /** The panel at the head of a report: who it is about, and the recording. */
