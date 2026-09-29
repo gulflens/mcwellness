@@ -79,9 +79,12 @@ export function phrase(key: string, edition: Edition, locale: Locale): string {
  */
 export function fill(template: string, values: Readonly<Record<string, string | number>>): string {
   return template.replace(/\{([a-z_]+)\}/g, (_whole, name: string) => {
-    const value = values[name];
+    // Only what was given: `constructor` is a name every object answers to.
+    const value = Object.hasOwn(values, name) ? values[name] : undefined;
     if (value === undefined) {
-      throw new Error(`Nothing was given for ${name} in "${template}".`);
+      // The gap's name and nothing else. What fills a gap may have been typed
+      // by a person, and an error reaches a log.
+      throw new Error(`Nothing was given for the gap named ${name}.`);
     }
     return String(value);
   });

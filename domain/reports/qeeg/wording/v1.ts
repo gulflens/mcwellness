@@ -91,6 +91,8 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'label.date': both('Date', 'التاريخ'),
   'label.assessment': both('Assessment', 'التقييم'),
   'label.compared_with': later('Compared with', 'بالمقارنة مع'),
+  'label.maps': both('Brain maps', 'خرائط الدماغ'),
+  'label.sessions': both('Number of sessions', 'عدد الجلسات'),
 
   'value.sex.female': both('Female', 'أنثى'),
   'value.sex.male': both('Male', 'ذكر'),
@@ -100,9 +102,9 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'value.eyes.closed': both('Closed', 'مغلقتان'),
   'value.eyes.open': both('Open', 'مفتوحتان'),
   'value.eyes.closed_and_open': both('Closed and Open', 'مغلقتان ومفتوحتان'),
-  'value.stage.initial': both('Initial QEEG', 'تقييم QEEG أولي'),
-  'value.stage.follow_up': both('Follow-up QEEG', 'تقييم QEEG للمتابعة'),
-  'value.stage.final': both('Final QEEG', 'تقييم QEEG نهائي'),
+  'value.stage.initial': both('Initial QEEG', 'تقييم خريطة الدماغ الأولي'),
+  'value.stage.follow_up': both('Follow-up QEEG', 'تقييم خريطة الدماغ للمتابعة'),
+  'value.stage.final': both('Final QEEG', 'تقييم خريطة الدماغ النهائي'),
 
   // -------------------------------------------------------------------------
   // The paragraphs
@@ -152,21 +154,21 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'text.programme': each(
     p(
       'Based on your QEEG findings, background and presenting concerns, the following neurofeedback programme has been recommended to support your individual goals. As training progresses, your programme may be adjusted to ensure it remains tailored to your needs and response to training.',
-      'استنادا إلى نتائج خريطة الدماغ وخلفيتك وما يشغلك حاليا، أوصي ببرنامج الارتجاع العصبي التالي لدعم أهدافك الفردية. ومع تقدم التدريب، قد يعدل برنامجك لضمان بقائه ملائما لاحتياجاتك واستجابتك للتدريب.',
+      'استنادا إلى نتائج خريطة الدماغ وخلفيتك وما يشغلك حاليا، يوصى ببرنامج الارتجاع العصبي التالي لدعم أهدافك الفردية. ومع تقدم التدريب، قد يعدل برنامجك لضمان بقائه ملائما لاحتياجاتك واستجابتك للتدريب.',
     ),
     p(
       'Based on the follow-up QEEG findings and your reported progress, the following continued neurofeedback programme has been recommended to support your individual goals. As training progresses, your programme may be adjusted to ensure it remains tailored to your needs and response to training.',
-      'استنادا إلى نتائج تقييم المتابعة لخريطة الدماغ وما أفدت به من تقدم، أوصي بمواصلة برنامج الارتجاع العصبي على النحو التالي لدعم أهدافك الفردية. ومع تقدم التدريب، قد يعدل برنامجك لضمان بقائه ملائما لاحتياجاتك واستجابتك للتدريب.',
+      'استنادا إلى نتائج تقييم المتابعة لخريطة الدماغ وما أفدت به من تقدم، يوصى بمواصلة برنامج الارتجاع العصبي على النحو التالي لدعم أهدافك الفردية. ومع تقدم التدريب، قد يعدل برنامجك لضمان بقائه ملائما لاحتياجاتك واستجابتك للتدريب.',
     ),
   ),
   'text.programme_length': each(
     p(
       'The following programme length has been recommended to provide the best opportunity for meaningful and lasting improvements in brain function.',
-      'أوصي بمدة البرنامج التالية لإتاحة أفضل فرصة لتحقيق تحسنات ملموسة ودائمة في وظائف الدماغ.',
+      'يوصى بمدة البرنامج التالية لإتاحة أفضل فرصة لتحقيق تحسنات ملموسة ودائمة في وظائف الدماغ.',
     ),
     p(
       'The following continued programme has been recommended to build on the progress made so far.',
-      'أوصي بمواصلة البرنامج بالمدة التالية للبناء على ما تحقق من تقدم حتى الآن.',
+      'يوصى بمواصلة البرنامج بالمدة التالية للبناء على ما تحقق من تقدم حتى الآن.',
     ),
   ),
   'text.approach': each(
@@ -186,7 +188,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'text.gradual': both(
     'Neurofeedback is a gradual learning process, and progress varies between individuals. Your training plan will continue to be personalised throughout the programme to ensure the most effective outcome.',
-    'الارتجاع العصبي عملية تعلم تدريجية، ويختلف التقدم من شخص إلى آخر. وستستمر مواءمة خطة تدريبك على مدار البرنامج لضمان تحقيق أفضل النتائج.',
+    'الارتجاع العصبي عملية تعلم تدريجية، ويختلف التقدم من شخص إلى آخر. وستستمر مواءمة خطة تدريبك على مدار البرنامج سعيا إلى أفضل نتيجة ممكنة.',
   ),
   'text.final_note': both(
     '**Final Note:** Every brain is unique, and no two QEEG assessments are the same. Neurofeedback is a personalised process, and your training plan will be adjusted throughout training based on your progress, the changes you notice and your response to sessions. This report is confidential and intended solely for the named client.',
@@ -272,7 +274,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   // -------------------------------------------------------------------------
   'label.associated': both('Associated with:', 'يرتبط بما يلي:'),
   'label.influence': both('May influence:', 'قد يؤثر في:'),
-  'band.with_range': both('{name} ({from}–{to} Hz)', '{name} ({from}–{to} هرتز)'),
+  'band.with_range': both('{name} ({from}–{to} Hz)', '{name} (من {from} إلى {to} هرتز)'),
 
   'band.delta.name': both('Delta', 'دلتا'),
   'band.delta.associated': both(
@@ -418,9 +420,9 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'level.connectivity.mixed.label': first('Mixed', 'متباين'),
   'level.connectivity.mixed.word': first('mixed', 'متباينا'),
   'level.asymmetry.left.label': first('Left', 'الجانب الأيسر'),
-  'level.asymmetry.left.word': first('left', 'في الجانب الأيسر'),
+  'level.asymmetry.left.word': first('left', 'تميل إلى الجانب الأيسر'),
   'level.asymmetry.right.label': first('Right', 'الجانب الأيمن'),
-  'level.asymmetry.right.word': first('right', 'في الجانب الأيمن'),
+  'level.asymmetry.right.word': first('right', 'تميل إلى الجانب الأيمن'),
   'level.asymmetry.bilateral.label': first('Bilateral', 'كلا الجانبين'),
   'level.asymmetry.bilateral.word': first('bilateral', 'في كلا الجانبين'),
   'level.phase_lag.normal.label': first('Normal', 'طبيعي'),
@@ -472,8 +474,8 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
     'تحسن / انخفاض عدم التماثل',
   ),
   'change.asymmetry.improved.sentence': later(
-    'Amplitude asymmetry demonstrated **improved balance, with reduced asymmetry**',
-    'أظهر تحليل عدم تماثل السعة **توازنا متحسنا مع انخفاض عدم التماثل**',
+    'Amplitude asymmetry demonstrated **improved balance and reduced asymmetry**',
+    'أظهر تحليل عدم تماثل السعة **توازنا متحسنا وانخفاضا في عدم التماثل**',
   ),
   'change.asymmetry.unchanged.label': later('Unchanged / broadly stable', 'دون تغير / مستقر عموما'),
   'change.asymmetry.unchanged.sentence': later(
@@ -568,7 +570,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.mental_energy.low.advice': both(
     'Prioritise recovery-focused neurofeedback training alongside rest and energy management.',
-    'امنح الأولوية لتدريب الارتجاع العصبي الموجه للتعافي إلى جانب الراحة وإدارة الطاقة.',
+    'إعطاء الأولوية لتدريب الارتجاع العصبي الموجه للتعافي إلى جانب الراحة وإدارة الطاقة.',
   ),
   'dimension.mental_energy.middle.summary': both(
     'Mental energy is broadly available but may fluctuate across the day.',
@@ -588,7 +590,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.mental_energy.middle.advice': both(
     'Support consistency of energy through pacing, sleep routine and targeted training.',
-    'ادعم ثبات الطاقة من خلال تنظيم الإيقاع اليومي وروتين النوم والتدريب الموجه.',
+    'دعم ثبات الطاقة من خلال تنظيم الإيقاع اليومي وروتين النوم والتدريب الموجه.',
   ),
   'dimension.mental_energy.high.summary': both(
     'Mental energy appears well supported and consistently available.',
@@ -608,7 +610,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.mental_energy.high.advice': both(
     'Maintain current routines and reinforce what is already working well.',
-    'حافظ على الروتين الحالي وعزز ما يعمل جيدا بالفعل.',
+    'الحفاظ على الروتين الحالي وتعزيز ما يعمل جيدا بالفعل.',
   ),
 
   'dimension.attention_focus.title': both('Attention & Focus', 'الانتباه والتركيز'),
@@ -630,7 +632,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.attention_focus.low.advice': both(
     'Improve neural efficiency through targeted training and a lower-distraction environment.',
-    'حسن الكفاءة العصبية من خلال التدريب الموجه وبيئة أقل تشتيتا.',
+    'تحسين الكفاءة العصبية من خلال التدريب الموجه وبيئة أقل تشتيتا.',
   ),
   'dimension.attention_focus.middle.summary': both(
     'Focus is generally available but may take more effort to sustain during longer tasks.',
@@ -650,7 +652,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.attention_focus.middle.advice': both(
     'Build consistent focus habits and train sustained attention in short, regular blocks.',
-    'ابن عادات تركيز ثابتة ودرب الانتباه المستمر في فترات قصيرة منتظمة.',
+    'بناء عادات تركيز ثابتة وتدريب الانتباه المستمر في فترات قصيرة منتظمة.',
   ),
   'dimension.attention_focus.high.summary': both(
     'Attention and concentration appear well regulated across varied demands.',
@@ -670,7 +672,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.attention_focus.high.advice': both(
     'Maintain existing focus habits and protect them during periods of higher load.',
-    'حافظ على عادات التركيز الحالية واحمها في فترات الضغط المرتفع.',
+    'الحفاظ على عادات التركيز الحالية وحمايتها في فترات الضغط المرتفع.',
   ),
 
   'dimension.cognitive_flexibility.title': both(
@@ -695,7 +697,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.cognitive_flexibility.low.advice': both(
     'Target network efficiency and communication timing through neurofeedback.',
-    'استهدف كفاءة الشبكات العصبية وتوقيت التواصل من خلال الارتجاع العصبي.',
+    'استهداف كفاءة الشبكات العصبية وتوقيت التواصل من خلال الارتجاع العصبي.',
   ),
   'dimension.cognitive_flexibility.middle.summary': both(
     'Processing is broadly efficient, though adaptability may reduce under higher demand.',
@@ -715,7 +717,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.cognitive_flexibility.middle.advice': both(
     'Challenge the brain with varied cognitive activities to build flexibility.',
-    'تحد الدماغ بأنشطة معرفية متنوعة لبناء المرونة.',
+    'تحفيز الدماغ بأنشطة معرفية متنوعة لبناء المرونة.',
   ),
   'dimension.cognitive_flexibility.high.summary': both(
     'Information appears to be processed and adapted efficiently across contexts.',
@@ -735,7 +737,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.cognitive_flexibility.high.advice': both(
     'Maintain cognitive variety to preserve current flexibility.',
-    'حافظ على التنوع المعرفي للحفاظ على المرونة الحالية.',
+    'الحفاظ على التنوع المعرفي لصون المرونة الحالية.',
   ),
 
   'dimension.stress_regulation.title': both('Stress Regulation', 'تنظيم التوتر'),
@@ -749,7 +751,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.stress_regulation.low.point.2': both(
     'Reduced resilience to setbacks',
-    'انخفاض المرونة تجاه الانتكاسات',
+    'انخفاض المرونة تجاه العثرات',
   ),
   'dimension.stress_regulation.low.point.3': both(
     'Increased effort to maintain performance',
@@ -757,7 +759,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.stress_regulation.low.advice': both(
     'Incorporate daily stress-management techniques alongside regulation-focused training.',
-    'أدرج أساليب يومية لإدارة التوتر إلى جانب التدريب الموجه لتنظيم النشاط.',
+    'إدراج أساليب يومية لإدارة التوتر إلى جانب التدريب الموجه لتنظيم النشاط.',
   ),
   'dimension.stress_regulation.middle.summary': both(
     'Stress regulation is broadly intact but may be tested during sustained pressure.',
@@ -777,7 +779,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.stress_regulation.middle.advice': both(
     'Build daily downregulation habits and monitor cumulative load.',
-    'ابن عادات تهدئة يومية وراقب العبء التراكمي.',
+    'بناء عادات تهدئة يومية ومراقبة العبء التراكمي.',
   ),
   'dimension.stress_regulation.high.summary': both(
     'Stress regulation appears well supported and stable.',
@@ -797,7 +799,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.stress_regulation.high.advice': both(
     'Maintain current stress-management routines.',
-    'حافظ على أساليب إدارة التوتر الحالية.',
+    'الحفاظ على أساليب إدارة التوتر الحالية.',
   ),
 
   'dimension.recovery_capacity.title': both('Recovery Capacity', 'القدرة على التعافي'),
@@ -816,7 +818,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'dimension.recovery_capacity.low.point.3': both('Greater risk of burnout', 'خطر أكبر للإنهاك'),
   'dimension.recovery_capacity.low.advice': both(
     'Evaluate sleep and recovery habits alongside neurofeedback.',
-    'قيم عادات النوم والتعافي إلى جانب الارتجاع العصبي.',
+    'مراجعة عادات النوم والتعافي إلى جانب الارتجاع العصبي.',
   ),
   'dimension.recovery_capacity.middle.summary': both(
     'Recovery occurs but may be slower than expected after sustained demand.',
@@ -833,7 +835,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.recovery_capacity.middle.advice': both(
     'Support recovery through consistent sleep and structured rest.',
-    'ادعم التعافي من خلال نوم منتظم وراحة منظمة.',
+    'دعم التعافي من خلال نوم منتظم وراحة منظمة.',
   ),
   'dimension.recovery_capacity.high.summary': both(
     'Recovery between periods of mental and physical effort appears efficient.',
@@ -853,7 +855,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.recovery_capacity.high.advice': both(
     'Protect existing sleep and recovery routines.',
-    'حافظ على روتين النوم والتعافي الحالي.',
+    'الحفاظ على روتين النوم والتعافي الحالي.',
   ),
 
   'dimension.decision_making.title': both('Decision Making', 'اتخاذ القرارات'),
@@ -875,7 +877,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.decision_making.low.advice': both(
     'Use structured planning frameworks to reduce decision load.',
-    'استخدم أطر تخطيط منظمة لتقليل عبء اتخاذ القرارات.',
+    'استخدام أطر تخطيط منظمة لتقليل عبء اتخاذ القرارات.',
   ),
   'dimension.decision_making.middle.summary': both(
     'Decision-making is generally well supported, though it may vary with cognitive load and fatigue.',
@@ -895,7 +897,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.decision_making.middle.advice': both(
     'Use structured planning to support clear decision-making at higher load.',
-    'استخدم تخطيطا منظما لدعم وضوح القرارات عند ازدياد العبء.',
+    'استخدام تخطيط منظم لدعم وضوح القرارات عند ازدياد العبء.',
   ),
   'dimension.decision_making.high.summary': both(
     'Core planning and analytical capabilities appear intact.',
@@ -915,7 +917,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'dimension.decision_making.high.advice': both(
     'Maintain and reinforce consistent access to these strengths.',
-    'حافظ على هذه القدرات وعزز الوصول المستمر إليها.',
+    'الحفاظ على هذه القدرات وتعزيز الوصول المستمر إليها.',
   ),
 
   // -------------------------------------------------------------------------
@@ -924,32 +926,32 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'recommendation.mental_energy.name': both('Mental Energy', 'الطاقة الذهنية'),
   'recommendation.mental_energy.text': both(
     'Prioritise rest, recovery and energy management.',
-    'امنح الأولوية للراحة والتعافي وإدارة الطاقة.',
+    'إعطاء الأولوية للراحة والتعافي وإدارة الطاقة.',
   ),
   'recommendation.attention_focus.name': both('Attention & Focus', 'الانتباه والتركيز'),
   'recommendation.attention_focus.text': both(
     'Reduce distractions and build consistent focus habits.',
-    'قلل المشتتات وابن عادات تركيز ثابتة.',
+    'تقليل المشتتات وبناء عادات تركيز ثابتة.',
   ),
   'recommendation.cognitive_efficiency.name': both('Cognitive Efficiency', 'الكفاءة المعرفية'),
   'recommendation.cognitive_efficiency.text': both(
     'Challenge the brain with varied cognitive activities.',
-    'تحد الدماغ بأنشطة معرفية متنوعة.',
+    'تحفيز الدماغ بأنشطة معرفية متنوعة.',
   ),
   'recommendation.stress_regulation.name': both('Stress Regulation', 'تنظيم التوتر'),
   'recommendation.stress_regulation.text': both(
     'Incorporate daily stress-management techniques.',
-    'أدرج أساليب يومية لإدارة التوتر.',
+    'إدراج أساليب يومية لإدارة التوتر.',
   ),
   'recommendation.recovery_capacity.name': both('Recovery Capacity', 'القدرة على التعافي'),
   'recommendation.recovery_capacity.text': both(
     'Support recovery through good sleep and healthy routines.',
-    'ادعم التعافي من خلال نوم جيد وروتين صحي.',
+    'دعم التعافي من خلال نوم جيد وروتين يومي سليم.',
   ),
   'recommendation.decision_making.name': both('Decision Making', 'اتخاذ القرارات'),
   'recommendation.decision_making.text': both(
     'Use structured planning to support clear decision-making.',
-    'استخدم تخطيطا منظما لدعم وضوح اتخاذ القرارات.',
+    'استخدام تخطيط منظم لدعم وضوح اتخاذ القرارات.',
   ),
 
   'benefit.attention_focus': both('Improved attention & focus', 'تحسن الانتباه والتركيز'),
@@ -957,7 +959,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'benefit.stress_management': both('Better stress management', 'إدارة أفضل للتوتر'),
   'benefit.sleep': both('Improved sleep', 'تحسن النوم'),
   'benefit.mental_energy': both('Increased mental energy', 'زيادة الطاقة الذهنية'),
-  'benefit.resilience': both('Improved resilience', 'تحسن المرونة النفسية'),
+  'benefit.resilience': both('Improved resilience', 'تحسن القدرة على التحمل والتكيف'),
   'benefit.cognitive_endurance': both('Increased cognitive endurance', 'زيادة التحمل المعرفي'),
   'benefit.peak_performance': both('Peak cognitive performance', 'أداء معرفي في أعلى مستوياته'),
   'benefit.recovery': both('Improved recovery', 'تحسن التعافي'),
@@ -1050,7 +1052,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'table.measure': later('Measure', 'القياس'),
   'table.eyes_open': later('Eyes Open', 'العينان مفتوحتان'),
   'table.eyes_closed': later('Eyes Closed', 'العينان مغلقتان'),
-  'measure.with_range': later('{name}, {from}–{to} Hz', '{name}، {from}–{to} هرتز'),
+  'measure.with_range': later('{name}, {from}–{to} Hz', '{name}، من {from} إلى {to} هرتز'),
   'measure.delta': later('Delta', 'دلتا'),
   'measure.theta': later('Theta', 'ثيتا'),
   'measure.alpha': later('Alpha', 'ألفا'),

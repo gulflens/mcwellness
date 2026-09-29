@@ -188,8 +188,8 @@ describe('both languages, always', () => {
 
 describe('what no sentence may say', () => {
   /**
-   * CLAUDE.md rule 1. The practice is a wellness practice and not a clinic, and
-   * the page a household signed says so. The standing sentences that say what
+   * CLAUDE.md rule 1. The practice is a wellness practice, and the page a
+   * household signed says so. The standing sentences that say what
    * the practice is NOT are quoted from that page by the layout and are not in
    * this file, which is why the list below can be absolute.
    */
@@ -198,7 +198,7 @@ describe('what no sentence may say', () => {
 
   /** The same ideas in Arabic, by stem. */
   const ARABIC =
-    /(مريض|مرضى|علاج|سريري|عيادة|أعراض|تشخيص|اضطراب|شفاء|دواء|طبي|يعالج|نعالج|تعالج|عولج)/;
+    /(مريض|مرضى|علاج|سريري|عيادة|أعراض|تشخيص|اضطراب|شفاء|دواء|طبي|يعالج|نعالج|تعالج|عولج|نفسي|انتكاس)/;
 
   /**
    * The one who gives what a clinic gives, as a whole word. "معالجة" is the
@@ -215,14 +215,14 @@ describe('what no sentence may say', () => {
    */
   const withoutNatural = (text: string) => text.replaceAll('طبيع', '');
 
-  it('uses no word of the clinic in English', () => {
+  it('uses no word of another kind of practice, in English', () => {
     const found = everyText('en')
       .filter(({ text }) => ENGLISH.test(text))
       .map(({ at, text }) => `${at}: ${text}`);
     expect(found).toEqual([]);
   });
 
-  it('uses no word of the clinic in Arabic', () => {
+  it('uses no word of another kind of practice, in Arabic', () => {
     const found = everyText('ar')
       .filter(({ text }) => ARABIC.test(withoutNatural(text)) || ARABIC_WHOLE_WORD.test(text))
       .map(({ at, text }) => `${at}: ${text}`);
@@ -232,7 +232,15 @@ describe('what no sentence may say', () => {
   it('would catch the words it is there to catch', () => {
     // A guard that cannot fail guards nothing. These are the old tool's own
     // words for the things this file now says another way.
-    for (const word of ['العلاج', 'خطتك العلاجية', 'تاريخك السريري', 'الأعراض', 'تشخيصية']) {
+    for (const word of [
+      'العلاج',
+      'خطتك العلاجية',
+      'تاريخك السريري',
+      'الأعراض',
+      'تشخيصية',
+      'المرونة النفسية',
+      'الانتكاسات',
+    ]) {
       expect(ARABIC.test(withoutNatural(word)), word).toBe(true);
     }
     for (const word of ['المعالج', 'معالجك', 'مع المعالج.']) {
@@ -259,6 +267,30 @@ describe('what the page can print', () => {
     expect(marked).toEqual([]);
   });
 
+  it('writes no Arabic word that reads as another once its marks are gone', () => {
+    // Found by the first review, in seven sentences. A command such as "build"
+    // is, without its marks, the word for "son of"; "challenge" is "it limits",
+    // which is the opposite sense; "I recommend" and "it was recommended" are
+    // one spelling. Advice is written as a verbal noun, and a recommendation in
+    // the form that reads one way.
+    const AMBIGUOUS =
+      /(^|[^\u0600-\u06FF])(ابن|تحد|قيم|حسن|درب|أوصي|عزز|راقب|قلل)(?![\u0600-\u06FF])/;
+    const found = everyText('ar')
+      .filter(({ text }) => AMBIGUOUS.test(text))
+      .map(({ at, text }) => `${at}: ${text}`);
+    expect(found).toEqual([]);
+    expect(AMBIGUOUS.test('ابن عادات تركيز ثابتة')).toBe(true);
+    expect(AMBIGUOUS.test('بناء عادات تركيز ثابتة')).toBe(false);
+  });
+
+  it('writes a range in an Arabic line in words, never with a dash between two figures', () => {
+    // A dash between two figures in a right-to-left line can be read either way round.
+    const found = everyText('ar')
+      .filter(({ text }) => /(\d|\})\s*[–-]\s*(\d|\{)/.test(text))
+      .map(({ at, text }) => `${at}: ${text}`);
+    expect(found).toEqual([]);
+  });
+
   it('uses no sign the typeface cannot draw', () => {
     // The installed faces have no glyph for these, and a glyph that cannot be
     // drawn is dropped without a word. "about" is written as a word.
@@ -275,6 +307,16 @@ describe('what the page can print', () => {
       .filter(({ text }) => (text.match(/\b[A-Z]{4,}\b/g) ?? []).some((word) => word !== 'QEEG'))
       .map(({ at, text }) => `${at}: ${text}`);
     expect(shouted).toEqual([]);
+  });
+});
+
+describe('how many sessions, in Arabic', () => {
+  it('has one form for one, one for two, one for three to ten, and one for the rest', () => {
+    const ar = (key: string) => phrase(key, 'initial', 'ar');
+    expect(ar('sessions.one')).toBe('جلسة واحدة');
+    expect(ar('sessions.two')).toBe('جلستان');
+    expect(ar('sessions.few')).toBe('{count} جلسات');
+    expect(ar('sessions.many')).toBe('{count} جلسة');
   });
 });
 
@@ -333,6 +375,25 @@ describe('fill', () => {
 
   it('leaves a sentence with no gap as it is', () => {
     expect(fill('Summary:', {})).toBe('Summary:');
+  });
+
+  it('never fills a gap from a name it was not given', () => {
+    // `constructor` and `toString` are names every object answers to.
+    expect(() => fill('{constructor}', {})).toThrow(/constructor/);
+    expect(() => fill('{to_string}', {})).toThrow(/to_string/);
+  });
+
+  it('names the gap and nothing else when it refuses', () => {
+    // What fills a gap may be something a person typed. An error reaches a log.
+    let message = '';
+    try {
+      fill('A sentence about {who} and {what}', { who: 'somebody' });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('what');
+    expect(message).not.toContain('somebody');
+    expect(message).not.toContain('A sentence about');
   });
 
   it('refuses to print a gap nobody filled', () => {
