@@ -7,10 +7,11 @@
  * signed is said in words: the caller takes the signer's details from their
  * credential and hands them over as lines, each drawn on a line of its own.
  *
- * **Never signed by nobody.** A line that is empty once trimmed is left out
- * and takes no room, and a signature left with no line at all is refused by
- * name: it is a slip in the builder, and a report must not go out with a
- * rule and no one under it.
+ * **Drawn before it has a signer.** A draft is previewed before anyone signs
+ * it, so a signature with no line filled is drawn all the same: the room,
+ * the rule and the label (contract, ruling R6). A line or a label that is
+ * empty once trimmed is left out and takes no room; with no words at all,
+ * the block is the room and the rule.
  */
 
 import { stack } from '../block';
@@ -40,9 +41,6 @@ export function signatureBlock(input: SignatureBlockInput, width: number, drawin
     );
   }
   const lines = input.lines.filter((line) => line.text.trim() !== '');
-  if (lines.length === 0) {
-    throw new RangeError('signatureBlock needs at least one line that is not empty.');
-  }
 
   const frame: Frame = { direction: drawing.direction, left: 0, width };
   const left = boxLeft(frame, 0, SIGNATURE.width);
@@ -61,10 +59,11 @@ export function signatureBlock(input: SignatureBlockInput, width: number, drawin
     ...INK,
   };
   // A line takes no room: the rule is drawn inside the upper edge of the gap.
+  // With no words under it there is no gap, and the rule is the foot.
   const top = SIGNATURE.room + SIGNATURE.gap;
   return {
     width,
-    height: top + words.height,
+    height: words.height > 0 ? top + words.height : SIGNATURE.room + SIGNATURE.rule,
     overhang: words.overhang,
     baseline: words.baseline === null ? null : top + words.baseline,
     ops: [rule, ...translateOps(words.ops, left, -top)],

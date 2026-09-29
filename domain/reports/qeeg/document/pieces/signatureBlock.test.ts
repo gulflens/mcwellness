@@ -123,12 +123,38 @@ describe('signatureBlock', () => {
     }
   });
 
-  it('refuses a signature with no line that is not empty, by name', () => {
+  it('draws a signature with no line filled: the room, the rule and the label', () => {
     for (const lines of [[], [typed('  '), fixed('')]]) {
-      expect(() => signatureBlock({ label: LABEL, lines }, WIDTH, ENGLISH)).toThrow(
-        /signatureBlock needs at least one line that is not empty/,
-      );
+      for (const drawing of [ENGLISH, ARABIC]) {
+        const block = signatureBlock({ label: LABEL, lines }, WIDTH, drawing);
+        expect(texts(block.ops).map((op) => op.text)).toEqual([LABEL]);
+        expect(rules(block.ops)).toHaveLength(1);
+        const label = styleOf('signatureLabel', drawing.direction).style;
+        expect(block.height).toBeCloseTo(WORDS_AT + label.size * label.lineHeight, 9);
+        expect(outside(block, measure)).toEqual([]);
+      }
+      const en = signatureBlock({ label: LABEL, lines }, WIDTH, ENGLISH);
+      const ar = signatureBlock({ label: LABEL, lines }, WIDTH, ARABIC);
+      expect(unmirrored(en, ar, measure)).toEqual([]);
     }
+  });
+
+  it('draws only the room and the rule when neither the label nor a line has words', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = signatureBlock({ label: '  ', lines: [typed(' ')] }, WIDTH, drawing);
+      expect(texts(block.ops)).toEqual([]);
+      expect(rules(block.ops)).toHaveLength(1);
+      expect(block.height).toBeCloseTo(SIGNATURE.room + SIGNATURE.rule, 9);
+      expect(outside(block, measure)).toEqual([]);
+    }
+  });
+
+  it('leaves out a label that is empty once trimmed, and leaves no room for it', () => {
+    const lines = [typed('Hazel Dune')];
+    const labelled = signatureBlock({ label: LABEL, lines }, WIDTH, ENGLISH);
+    const bare = signatureBlock({ label: ' ', lines }, WIDTH, ENGLISH);
+    expect(labelled.height - bare.height).toBeCloseTo(LABEL_LINE, 9);
+    expect(texts(bare.ops).map((op) => op.text)).toEqual(['Hazel Dune']);
   });
 
   it('refuses a width that is not a number, or narrower than the signature, by name', () => {
