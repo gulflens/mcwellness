@@ -163,6 +163,16 @@ export const CARD = frozen({
   /** The hairline over the advice, and the room under it. */
   rule: 0.5,
   ruleGap: mm(1.5),
+  /**
+   * The dash before a line of the list, drawn as a mark and not a letter:
+   * the practice set an en dash in the list's 8.4-point type. Its length is
+   * an en, half that size; its thickness and how far its middle stands above
+   * the line's baseline are an en dash's in the report's face, about 0.08
+   * and 0.27 of the size, so it sits level with the middle of small letters.
+   */
+  dash: 4.2,
+  dashLine: 0.7,
+  dashRise: 2.3,
 });
 
 /** The dashboard: six cards, three to a row, each row as tall as its tallest card. */
