@@ -11,8 +11,10 @@
  * flat red-green-blue fill and stroke (since round 34, first for the session
  * ribbon of `docs/DESIGN-BRIEF.md` section 5), and — since round 65 — the
  * filled and stroked rectangle, square or rounded, the operator's invoice
- * design is drawn with. No colour spaces beyond that one operator, no forms,
- * no transparency, no compression.
+ * design is drawn with. And, for the brain-map report (trunk round 67,
+ * docs/CHANGE-REQUESTS/reports-02.md request 1): a path of lines and curves,
+ * an optional bold Arabic face, and smooth resampling on an image. No colour
+ * spaces beyond that one operator, no forms, no transparency, no compression.
  * `package.json` is the shared zone
  * (docs/SPEC/OWNERSHIP.md), so a dependency here is a change request and a
  * standing supply-chain surface on the one path that renders a client's
@@ -42,8 +44,27 @@ import { glyphFor, widthOf, type Font } from './truetype';
 export const PAGE_WIDTH = 595.28;
 export const PAGE_HEIGHT = 841.89;
 
-export type FontSlot = 'regular' | 'bold' | 'arabic';
-export type FontSet = Readonly<Record<FontSlot, Font>>;
+export type FontSlot = 'regular' | 'bold' | 'arabic' | 'arabicBold';
+
+/**
+ * The faces a document is set in: three always, and a bold Arabic one when the
+ * caller has it.
+ *
+ * **Optional on purpose.** Every invoice and report already filed was rendered
+ * from a set of three, and must render to the same bytes again (a lost file
+ * is recovered by re-rendering it and comparing the hash). So the fourth face
+ * is carried only by the set a caller builds for it — `reportFonts()` —
+ * and a set of three never selects it: bold Arabic is then drawn in the regular
+ * Arabic face, as it always has been.
+ */
+export type FontSet = Readonly<Record<'regular' | 'bold' | 'arabic', Font>> & {
+  readonly arabicBold?: Font;
+};
+
+/** The face a slot names, or the regular Arabic one for a bold slot the set lacks. */
+function faceOf(fonts: FontSet, slot: FontSlot): Font {
+  return slot === 'arabicBold' ? (fonts.arabicBold ?? fonts.arabic) : fonts[slot];
+}
 
 /**
  * A bitmap ready to embed: a PNG's own compressed scanlines, unchanged.
@@ -66,6 +87,13 @@ export type DocumentImage = {
   colours: 'rgb' | 'grey';
   /** The concatenated IDAT bytes: zlib-deflated, PNG-predicted scanlines. */
   data: Uint8Array;
+  /**
+   * Ask the reader to resample the bitmap smoothly when it is scaled, rather
+   * than repeat each pixel as a hard block: `/Interpolate true`. It changes no
+   * pixel. For a brain map, which is printed far larger than it was captured.
+   * Absent or false, the dictionary is the one written before it existed.
+   */
+  interpolate?: boolean;
 };
 
 /** Images a page may draw, by the name its ops use. */
@@ -99,6 +127,23 @@ export type Style = {
 
 /** Where `x` sits relative to the text: its start, its end, or its middle. */
 export type Align = 'start' | 'end' | 'centre';
+
+/** One step of a path: move, line, cubic curve (two controls, then the end), close. */
+export type PathSegment =
+  | readonly ['M', number, number]
+  | readonly ['L', number, number]
+  | readonly ['C', number, number, number, number, number, number]
+  | readonly ['Z'];
+
+/** A path's colour: a red-green-blue triple, else a grey, else ink. */
+export type Paint = { grey?: number; rgb?: readonly [number, number, number] };
+
+/** A path's outline. Absent width is PDF's own, one point; absent cap and join are PDF's own. */
+export type Stroke = Paint & {
+  width?: number;
+  cap?: 'butt' | 'round' | 'square';
+  join?: 'miter' | 'round' | 'bevel';
+};
 
 export type Op =
   | {
@@ -167,6 +212,23 @@ export type Op =
       stroke?: { rgb?: readonly [number, number, number]; grey?: number; thickness?: number };
       /** Corner radius in points, at most half the shorter side. Absent is square. */
       radius?: number;
+    }
+  | {
+      /**
+       * Lines and curves: the score rings, band icons, markers and diamonds of
+       * the brain-map report, which a rule and a rectangle cannot draw.
+       *
+       * The segments are in page points, bottom-left origin, as every other op.
+       * A path with no paint, one that does not begin with a move, or one with
+       * a number that is not finite draws nothing — as an image nobody
+       * supplied draws nothing — rather than a malformed line in the file.
+       */
+      kind: 'path';
+      segments: readonly PathSegment[];
+      fill?: Paint;
+      stroke?: Stroke;
+      /** Fill by the even-odd rule, so an inner ring is a hole. Absent is non-zero winding. */
+      evenOdd?: boolean;
     };
 
 export type Page = { ops: Op[] };
@@ -185,7 +247,10 @@ type Run = { slot: FontSlot; glyphs: Placed[] };
  * A space joins whichever run it follows, so "الفاتورة INV-000001" is two runs
  * and not four.
  */
-function runsOf(text: string, latin: FontSlot, rtl: boolean): Run[] {
+function runsOf(text: string, latin: FontSlot, rtl: boolean, fonts: FontSet): Run[] {
+  // Bold Arabic goes to the fourth face only when the set carries one; a set of
+  // three draws it in the regular Arabic face, byte for byte as before.
+  const arabic: FontSlot = latin === 'bold' && fonts.arabicBold ? 'arabicBold' : 'arabic';
   // Each glyph arrives with the characters it was made from, because the two
   // differ for Arabic and it is the characters, not the shapes, that the
   // `/ToUnicode` map below owes a reader. Left to right the two are the same
@@ -198,7 +263,7 @@ function runsOf(text: string, latin: FontSlot, rtl: boolean): Run[] {
       });
   const runs: Run[] = [];
   for (const glyph of glyphs) {
-    const slot: FontSlot = isArabic(glyph.code) ? 'arabic' : latin;
+    const slot: FontSlot = isArabic(glyph.code) ? arabic : latin;
     const last = runs[runs.length - 1];
     // A space belongs to the run it follows: starting a new one on every space
     // would split a phrase into a run per word for no gain.
@@ -213,7 +278,7 @@ function runsOf(text: string, latin: FontSlot, rtl: boolean): Run[] {
 
 /** How wide a run is at a given size, in points. */
 function widthOfRun(run: Run, fonts: FontSet, size: number): number {
-  const font = fonts[run.slot];
+  const font = faceOf(fonts, run.slot);
   let total = 0;
   for (const placed of run.glyphs) {
     const glyph = glyphFor(font, placed.code);
@@ -225,7 +290,7 @@ function widthOfRun(run: Run, fonts: FontSet, size: number): number {
 
 /** How wide a line of text is at its style's size, in points. */
 export function measure(text: string, style: Style, fonts: FontSet, rtl = false): number {
-  return runsOf(text, style.font === 'bold' ? 'bold' : 'regular', rtl).reduce(
+  return runsOf(text, style.font === 'bold' ? 'bold' : 'regular', rtl, fonts).reduce(
     (total, run) => total + widthOfRun(run, fonts, style.size),
     0,
   );
@@ -438,8 +503,14 @@ function contentOf(
       continue;
     }
 
+    if (op.kind === 'path') {
+      const line = pathLine(op);
+      if (line !== null) out.push(line);
+      continue;
+    }
+
     const latin: FontSlot = op.style.font === 'bold' ? 'bold' : 'regular';
-    const runs = runsOf(op.text, latin, op.rtl === true);
+    const runs = runsOf(op.text, latin, op.rtl === true, fonts);
     const total = runs.reduce((sum, run) => sum + widthOfRun(run, fonts, op.style.size), 0);
     const align = op.align ?? (op.rtl === true ? 'end' : 'start');
     let x = op.x;
@@ -449,7 +520,7 @@ function contentOf(
     setFill(fillOf(op.style.rgb, op.style.grey ?? 0));
     out.push('BT');
     for (const run of runs) {
-      const font = fonts[run.slot];
+      const font = faceOf(fonts, run.slot);
       const resource = resourceOf.get(run.slot);
       if (!resource) continue;
       let glyphs = '';
@@ -498,6 +569,67 @@ function contentOf(
     out.push('ET');
   }
   return out.join('\n');
+}
+
+const CAP = { butt: 0, round: 1, square: 2 } as const;
+const JOIN = { miter: 0, round: 1, bevel: 2 } as const;
+
+/** A paint as its operator: `rg` or `g` to fill, `RG` or `G` to stroke; ink when it names neither. */
+function paintOf(paint: Paint, stroke: boolean): string {
+  if (paint.rgb) {
+    const [r, g, b] = paint.rgb;
+    return `${num(clamp01(r))} ${num(clamp01(g))} ${num(clamp01(b))} ${stroke ? 'RG' : 'rg'}`;
+  }
+  return `${num(clamp01(paint.grey ?? 0))} ${stroke ? 'G' : 'g'}`;
+}
+
+/**
+ * A path as one line of the content stream, inside its own q/Q as a rule and a
+ * rectangle are, so the colour it paints with dies at the Q and the text
+ * after it is drawn in the fill the writer last told the reader. Null when
+ * there is nothing sound to draw.
+ */
+function pathLine(op: Extract<Op, { kind: 'path' }>): string | null {
+  if (!op.fill && !op.stroke) return null;
+  if (op.segments[0]?.[0] !== 'M') return null;
+  const numbers = op.segments.flatMap((segment) => segment.slice(1) as number[]);
+  if (op.stroke?.width !== undefined) numbers.push(op.stroke.width);
+  // Written as nought, a coordinate that was not a number would put a spike
+  // across the figure; a path with one is not drawn at all.
+  if (!numbers.every(Number.isFinite)) return null;
+
+  const parts: string[] = ['q'];
+  if (op.fill) parts.push(paintOf(op.fill, false));
+  if (op.stroke) {
+    parts.push(paintOf(op.stroke, true));
+    if (op.stroke.width !== undefined) parts.push(`${num(op.stroke.width)} w`);
+    if (op.stroke.cap) parts.push(`${CAP[op.stroke.cap]} J`);
+    if (op.stroke.join) parts.push(`${JOIN[op.stroke.join]} j`);
+  }
+  for (const segment of op.segments) {
+    switch (segment[0]) {
+      case 'M':
+        parts.push(`${num(segment[1])} ${num(segment[2])} m`);
+        break;
+      case 'L':
+        parts.push(`${num(segment[1])} ${num(segment[2])} l`);
+        break;
+      case 'C':
+        parts.push(
+          `${segment
+            .slice(1)
+            .map((n) => num(n as number))
+            .join(' ')} c`,
+        );
+        break;
+      case 'Z':
+        parts.push('h');
+        break;
+    }
+  }
+  const star = op.evenOdd === true ? '*' : '';
+  parts.push(op.fill && op.stroke ? `B${star}` : op.fill ? `f${star}` : 'S', 'Q');
+  return parts.join(' ');
 }
 
 // --------------------------------------------------------------------------
@@ -563,7 +695,9 @@ export function renderPdf(
   title: string,
   images: ImageSet = {},
 ): Uint8Array {
-  const slots: FontSlot[] = ['regular', 'bold', 'arabic'];
+  // The fourth is last, so it is /F4 and every document that never draws it
+  // numbers its faces and objects exactly as before it existed.
+  const slots: FontSlot[] = ['regular', 'bold', 'arabic', 'arabicBold'];
   const resourceOf = new Map<FontSlot, string>(slots.map((slot, index) => [slot, `F${index + 1}`]));
 
   // Only the images a page actually draws, named in the order they are first
@@ -639,7 +773,7 @@ export function renderPdf(
   });
 
   for (const slot of embedded) {
-    const font = fonts[slot];
+    const font = faceOf(fonts, slot);
     const glyphs = used.get(slot) ?? new Map<number, readonly number[]>();
     const base = fontObject.get(slot) ?? 0;
     const descendant = base + 1;
@@ -682,7 +816,8 @@ export function renderPdf(
         `/Width ${image.width} /Height ${image.height} /ColorSpace ${space} ` +
         '/BitsPerComponent 8 /Filter /FlateDecode ' +
         `/DecodeParms << /Predictor 15 /Colors ${colours} /BitsPerComponent 8 ` +
-        `/Columns ${image.width} >> /Length ${image.data.length} >>\nstream\n`,
+        `/Columns ${image.width} >>${image.interpolate === true ? ' /Interpolate true' : ''} ` +
+        `/Length ${image.data.length} >>\nstream\n`,
     );
     binary.set(marker, image.data);
   }

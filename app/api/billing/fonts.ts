@@ -146,6 +146,11 @@ function toSfnt(woff: Uint8Array): Uint8Array {
 }
 
 let cached: FontSet | null = null;
+let cachedReport: FontSet | null = null;
+
+const read = (path: string): Uint8Array => toSfnt(new Uint8Array(readFileSync(path)));
+const load = (path: string, name: string, isArabic = false): Font =>
+  readFont(read(path), { name, arabic: isArabic });
 
 /**
  * The document faces, loaded once per process.
@@ -159,10 +164,6 @@ export function documentFonts(): FontSet {
 
   const latin = filesDirOf('@fontsource/ibm-plex-sans');
   const arabic = filesDirOf('@fontsource/ibm-plex-sans-arabic');
-  const read = (path: string): Uint8Array => toSfnt(new Uint8Array(readFileSync(path)));
-
-  const load = (path: string, name: string, isArabic = false): Font =>
-    readFont(read(path), { name, arabic: isArabic });
 
   cached = {
     regular: load(join(latin, 'ibm-plex-sans-latin-400-normal.woff'), 'IBMPlexSans'),
@@ -176,4 +177,32 @@ export function documentFonts(): FontSet {
     ),
   };
   return cached;
+}
+
+/**
+ * The document faces and, fourth, IBM Plex Sans Arabic at the same semibold
+ * weight the Latin bold is set in: for the brain-map report, whose Arabic
+ * headings and inline labels are told from body text by weight alone
+ * (docs/CHANGE-REQUESTS/reports-02.md, request 2).
+ *
+ * **A second function, and not a wider first.** `documentFonts()` sets every
+ * invoice, receipt and report already filed, and a filed document is
+ * recovered by rendering it again and comparing the hash. The writer never
+ * draws the fourth face for a set of three, and a set of four draws it only
+ * for bold Arabic — but keeping the two sets apart means no caller of the first
+ * can ever meet the fourth by accident. Cached on its own, for the reason the
+ * first is.
+ */
+export function reportFonts(): FontSet {
+  if (cachedReport) return cachedReport;
+  const arabic = filesDirOf('@fontsource/ibm-plex-sans-arabic');
+  cachedReport = {
+    ...documentFonts(),
+    arabicBold: load(
+      join(arabic, 'ibm-plex-sans-arabic-arabic-600-normal.woff'),
+      'IBMPlexSansArabic-SemiBold',
+      true,
+    ),
+  };
+  return cachedReport;
 }
