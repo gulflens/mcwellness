@@ -40,6 +40,27 @@ export function mountReportList(api: Hono<ApiEnv>, now: () => Date = () => new D
         fields: {
           session: ['note', 'beforeNextVisit'],
           progress: ['summary', 'suggestion', 'goals.movement'],
+          // A brain map's parts a request may carry. The client, where the
+          // report came from and the facts of what a follow-up is compared
+          // with are the server's, so none is listed
+          // (docs/SPEC/reports-qeeg.md section 4, rule 11).
+          qeeg: [
+            'edition',
+            'stage',
+            'recording',
+            'findings',
+            'focus',
+            'maps',
+            'bands',
+            'connectivity',
+            'dashboard',
+            'recommendations',
+            'summary',
+            'benefits',
+            'plan',
+            'comparedWith.reportId',
+            'change',
+          ],
         },
       }),
     ),

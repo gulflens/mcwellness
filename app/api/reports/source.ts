@@ -41,7 +41,11 @@ export const REPORT_COLUMNS =
   'r.recipient_name, r.recipient_record_number, ' +
   'r.practice_legal_name, r.practice_legal_name_ar, r.practice_address, ' +
   'r.practice_licence_number, r.practice_licensing_authority, ' +
-  'to_char(r.created_at, \'YYYY-MM-DD"T"HH24:MI:SSOF\') as created_at';
+  'to_char(r.created_at, \'YYYY-MM-DD"T"HH24:MI:SSOF\') as created_at, ' +
+  // The stamp a save is made over (`savedAt`), to the microsecond the column
+  // holds, so it compares equal to itself and to nothing later.
+  'to_char(r.updated_at at time zone \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') as saved_at, ' +
+  'r.imported_from, r.withdrawn_at is not null as withdrawn';
 
 export type ReportRecord = {
   id: string;
@@ -73,6 +77,12 @@ export type ReportRecord = {
   practice_licence_number: string | null;
   practice_licensing_authority: string | null;
   created_at: string;
+  /** When the row was last written, as the brain-map draft route compares it. */
+  saved_at: string;
+  /** Set on a row read from the old tool's file (docs/SPEC/reports-qeeg.md section 11). */
+  imported_from: string | null;
+  /** A past record withdrawn because it was kept against the wrong client. */
+  withdrawn: boolean;
   deliveries?: string | number;
 };
 

@@ -49,6 +49,14 @@
  *
  * It never throws on what was sent, and it returns a new value, sharing
  * nothing with either input and changing neither.
+ *
+ * **What was sent goes to the shape first** (RC4 note N2). A half read here
+ * only as far as it is text: a mark that is nearly a mark (an `underline` of
+ * `false`, an edge of `4.5`) is left out of the result, which then passes the
+ * shape. The route that calls this puts what was SENT through
+ * `validateQeegContent` before it rebuilds, so such a mark is refused by name
+ * and never dropped in silence, as the brain-map draft route does
+ * (`app/api/reports/qeegDraft.ts`).
  */
 
 import { DIMENSION_IDS, type DimensionId } from './catalogue/ids';

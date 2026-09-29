@@ -140,6 +140,9 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
         })),
         url,
         expiresInSeconds: url === null ? null : DEFAULT_SIGNED_URL_TTL_SECONDS,
+        // What a brain-map draft's next save names, so a page opened here
+        // cannot save over one made since (app/api/reports/qeegDraft.ts).
+        savedAt: record.saved_at,
       }),
     );
   });

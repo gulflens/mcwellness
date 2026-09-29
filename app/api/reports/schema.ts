@@ -75,6 +75,13 @@ export const ReportResponse = z.object({
   /** Present only when the report has a filed PDF and the caller may open it. */
   url: z.string().nullable(),
   expiresInSeconds: z.number().int().positive().nullable(),
+  /**
+   * When the row was last written, which a brain-map draft's next save must
+   * name (`QeegDraftInput.savedAt`). The server always sends it; it is
+   * optional here only so a screen written before it reads a response as it
+   * did.
+   */
+  savedAt: z.string().optional(),
 });
 export type ReportResponse = z.infer<typeof ReportResponse>;
 
@@ -119,6 +126,65 @@ export const DraftResponse = z.object({
   content: z.unknown(),
 });
 export type DraftResponse = z.infer<typeof DraftResponse>;
+
+/**
+ * Only the kind, read first, so `POST /api/reports/draft` can hand the body to
+ * the door that knows it: the two gathered kinds to `DraftInput`, a brain map
+ * to `QeegDraftInput`.
+ */
+export const DraftKindOf = z.object({ kind: ReportKindInput });
+
+/**
+ * The stamp of the save a brain-map draft is made over, as the server sent it:
+ * the row's last write, in UTC, to the microsecond.
+ */
+export const SavedAt = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+
+/**
+ * Creating or updating a brain-map (qEEG) draft (docs/SPEC/reports-qeeg.md
+ * section 14). `id` present is an update, and must then say which save it is
+ * made over (`savedAt`), so a page left open in a second tab cannot save over
+ * a newer one.
+ *
+ * **Strict.** What the server owns has no field here and cannot be sent: where
+ * a report came from (`imported_from`, `source_sha256` are the import's, a
+ * later door), its twin in the other language, the comparison's column (the
+ * route writes it from the body's `comparedWith.reportId`), its status. An
+ * unknown field is refused, not ignored, so a caller who believes it set one
+ * is told it did not.
+ *
+ * `locale` is the draft's at creation, `en` unless said. A saved draft keeps
+ * its language: each language is its own report (section 8), and the second
+ * is made from the first by its own door.
+ *
+ * `content` is the body as the editor holds it, less the parts the server
+ * writes (the client, where it came from, what a follow-up is compared with
+ * beyond its id). Held to `validateQeegContent`, never to this schema.
+ */
+export const QeegDraftInput = z
+  .object({
+    id: z.uuid().optional(),
+    clientId: z.uuid(),
+    kind: z.literal('qeeg'),
+    locale: ReportLocaleInput.optional(),
+    serviceTypeId: z.uuid().nullable().default(null),
+    savedAt: SavedAt.optional(),
+    content: z.unknown(),
+  })
+  .strict()
+  .refine((input) => input.id === undefined || input.savedAt !== undefined, {
+    path: ['savedAt'],
+    message: 'An update names the save it is made over.',
+  });
+export type QeegDraftInput = z.infer<typeof QeegDraftInput>;
+
+/** A brain-map draft as saved, with the stamp its next save must name. */
+export const QeegDraftResponse = z.object({
+  report: ReportRow,
+  content: z.unknown(),
+  savedAt: SavedAt,
+});
+export type QeegDraftResponse = z.infer<typeof QeegDraftResponse>;
 
 /** What the draft screen shows before a practitioner writes a word. */
 export const GatherResponse = z.object({
