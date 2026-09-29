@@ -25,6 +25,11 @@ import { finite, mm } from './metrics';
 
 /** One block to be placed: its natural height and how it behaves at a break. */
 export type Flow = {
+  /**
+   * Unique in a report: `paginate` refuses a list in which one appears twice,
+   * since breathing keys its margins by id. The second part of a split takes
+   * its block's id with `/2` added, the part after that `/3`, and so on.
+   */
   readonly id: string;
   readonly height: number;
   readonly marginTop: number;
@@ -279,7 +284,21 @@ export function paginate<B extends Flow>(
   split?: (b: B, room: number) => readonly [B, B] | null,
 ): Placement<B>[][] {
   checkedLimits('paginate', limits);
-  for (const block of blocks) checkBlock('paginate', block);
+  const seen = new Set<string>();
+  const claim = (id: string): void => {
+    if (seen.has(id)) {
+      throw new RangeError(
+        `paginate needs each block id once in a report, and was given "${id}" twice.`,
+      );
+    }
+    seen.add(id);
+  };
+  for (const block of blocks) {
+    checkBlock('paginate', block);
+    claim(block.id);
+  }
+  /** Which block a split part came from, and which part it is: 'p' is part 1, 'p/2' part 2. */
+  const origins = new Map<string, { base: string; part: number }>();
   const heightOf = (b: B, width: number): number => measured('paginate', heightAt(b, width));
   const pages: Sized<B>[][] = [[]];
   const none = new Map<string, number>();
@@ -354,9 +373,14 @@ export function paginate<B extends Flow>(
     const parts = split ? split(block, limits.bodyHeight - y) : null;
     const firstHeight = parts ? heightOf(parts[0], limits.bodyWidth) : 0;
     if (parts && firstHeight > 0 && heightOf(parts[1], limits.bodyWidth) < height) {
-      const [first, second] = parts;
-      current().push({ block: first, height: firstHeight, fit: null });
-      queue.unshift({ block: second, continued: true });
+      // The first part keeps the id of what was split; the second takes the
+      // next part number, so no two placements share an id.
+      const { base, part } = origins.get(block.id) ?? { base: block.id, part: 1 };
+      const secondId = `${base}/${part + 1}`;
+      claim(secondId);
+      origins.set(secondId, { base, part: part + 1 });
+      current().push({ block: { ...parts[0], id: block.id }, height: firstHeight, fit: null });
+      queue.unshift({ block: { ...parts[1], id: secondId }, continued: true });
       continue;
     }
 

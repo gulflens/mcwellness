@@ -294,7 +294,7 @@ describe('paginate', () => {
       return [lines(`${b.id}.1`, fit), lines(`${b.id}.2`, b.lines - fit)];
     };
     const pages = paginate([lines('a', 5), lines('p', 12)], limits, (b) => b.height, split);
-    expect(ids(pages)).toEqual([['a', 'p.1'], ['p.2']]);
+    expect(ids(pages)).toEqual([['a', 'p'], ['p/2']]);
     expect(pages[0]?.[1]?.height).toBe(50);
     expect(pages[1]?.[0]?.height).toBe(70);
     expect(overflowing(pages, limits)).toEqual([]);
@@ -309,7 +309,7 @@ describe('paginate', () => {
       return [lines(`${b.id}a`, fit), lines(`${b.id}b`, b.lines - fit)];
     };
     const pages = paginate([lines('p', 25)], limits, (b) => b.height, split);
-    expect(ids(pages)).toEqual([['pa'], ['pba'], ['pbb']]);
+    expect(ids(pages)).toEqual([['p'], ['p/2'], ['p/3']]);
   });
 
   it('moves a fit block with too little room to a new page with its heading', () => {
@@ -353,10 +353,16 @@ describe('paginate', () => {
       (b) => b.height,
       split,
     );
-    expect(ids(pages)).toEqual([['a'], ['p.1'], ['p.2']]);
+    expect(ids(pages)).toEqual([['a'], ['p'], ['p/2']]);
     expect(pages[1]?.[0]?.height).toBe(100);
     expect(pages[2]?.[0]?.height).toBe(20);
     expect(overflowing(pages, limits)).toEqual([]);
+  });
+
+  it('refuses a list in which one id appears twice, naming it', () => {
+    expect(() => paginate([block('summary', 10), block('summary', 20)], limits, heightAt)).toThrow(
+      /summary/,
+    );
   });
 
   it('ends, and reports the block, when a split makes no progress', () => {
