@@ -8,9 +8,10 @@ import { HAIRLINE, MUTED } from '../palette';
 import type { LayoutOp } from '../scale';
 import { styleOf } from '../styles';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, FACE, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, FACE, measure, outside, unmirrored, wordsOf } from './checks';
 import { pageFooter } from './pageFooter';
 import { fixed, typed } from './words';
+import type { Words } from './words';
 
 const WIDTH = 480;
 
@@ -149,7 +150,7 @@ describe('pageFooter', () => {
     }
   });
 
-  it('draws a telephone number inside an Arabic footer left to right, in order', () => {
+  it('stands the figures of a telephone number in order on an Arabic page', () => {
     for (const line of [fixed(`هاتف ${PHONE}`), typed(`هاتف ${PHONE}`), typed(PHONE)]) {
       const block = pageFooter({ lines: [line], page: 'صفحة 2 من 9' }, WIDTH, ARABIC);
       const number = texts(block.ops).filter((op) => op.text.includes('971'));
@@ -157,6 +158,15 @@ describe('pageFooter', () => {
       expect(number[0]?.rtl ?? false).toBe(false);
       expect(number[0]?.align ?? 'start').toBe('start');
     }
+  });
+
+  it('reads a typed line the way its letters do in an Arabic report, and a fixed one the report’s way', () => {
+    // The page's words stand level with the last line, so the line asked
+    // about is the first of two.
+    const block = (line: Words) =>
+      pageFooter({ lines: [line, fixed('دبي')], page: 'صفحة 2 من 9' }, WIDTH, ARABIC);
+    expect(wordsOf(block(typed('Steady progress.')), measure)[0]).toBe('Steady progress.');
+    expect(wordsOf(block(fixed('Steady progress.')), measure)[0]).toBe('. Steady progress');
   });
 
   it('leaves out a line that is empty once trimmed, and leaves no room for it', () => {

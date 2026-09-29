@@ -8,8 +8,9 @@ import type { LayoutOp } from '../scale';
 import type { PathOp } from '../shapes';
 import { styleOf } from '../styles';
 import { bulletList } from './bulletList';
-import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, measure, outside, unmirrored, wordsOf } from './checks';
 import { fixed, typed } from './words';
+import type { Words } from './words';
 
 const WIDTH = 480;
 const EMPTY = 'None chosen.';
@@ -173,6 +174,13 @@ describe('bulletList', () => {
     );
     expect(texts(block.ops).some((op) => op.rtl === true)).toBe(false);
     expect(extentOf(texts(block.ops), measure).right).toBeCloseTo(WIDTH - BULLETS.indent, 9);
+  });
+
+  it('reads a typed item the way its letters do in an Arabic report, and a fixed one the report’s way', () => {
+    const block = (item: Words) =>
+      bulletList({ items: [item], columns: 'auto', empty: EMPTY }, WIDTH, ARABIC);
+    expect(wordsOf(block(typed('Steady progress.')), measure)).toEqual(['Steady progress.']);
+    expect(wordsOf(block(fixed('Steady progress.')), measure)).toEqual(['. Steady progress']);
   });
 
   it('wraps a long item inside its box, and grows', () => {

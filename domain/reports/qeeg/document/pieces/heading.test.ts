@@ -4,9 +4,10 @@ import { extentOf } from '../block';
 import { ACCENT } from '../palette';
 import type { LayoutOp } from '../scale';
 import { styleOf } from '../styles';
-import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, measure, outside, unmirrored, wordsOf } from './checks';
 import { heading } from './heading';
 import { fixed, typed } from './words';
+import type { Words } from './words';
 
 const WIDTH = 300;
 
@@ -82,6 +83,12 @@ describe('heading', () => {
     const block = heading({ words: typed('Eyes open'), level: 'subheading' }, WIDTH, ARABIC);
     expect(texts(block.ops).some((op) => op.rtl === true)).toBe(false);
     expect(extentOf(block.ops, measure).right).toBeCloseTo(WIDTH, 9);
+  });
+
+  it('reads typed words the way their letters do in an Arabic report, and fixed words the report’s way', () => {
+    const block = (words: Words) => heading({ words, level: 'subheading' }, WIDTH, ARABIC);
+    expect(wordsOf(block(typed('Steady progress.')), measure)).toEqual(['Steady progress.']);
+    expect(wordsOf(block(fixed('Steady progress.')), measure)).toEqual(['. Steady progress']);
   });
 
   it('wraps a long title inside its box, and grows', () => {

@@ -7,9 +7,10 @@ import { INK, MUTED } from '../palette';
 import type { LayoutOp } from '../scale';
 import { styleOf } from '../styles';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, FACE, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, FACE, measure, outside, unmirrored, wordsOf } from './checks';
 import { signatureBlock } from './signatureBlock';
 import { fixed, typed } from './words';
+import type { Words } from './words';
 
 const WIDTH = 480;
 const LABEL = 'Prepared by';
@@ -100,6 +101,12 @@ describe('signatureBlock', () => {
     const name = texts(block.ops).filter((op) => op.text === 'Hazel Dune');
     expect(name.some((op) => op.rtl === true)).toBe(false);
     expect(extentOf(name, measure).right).toBeCloseTo(WIDTH, 9);
+  });
+
+  it('reads a typed line the way its letters do in an Arabic report, and a fixed one the report’s way', () => {
+    const block = (line: Words) => signatureBlock({ label: ' ', lines: [line] }, WIDTH, ARABIC);
+    expect(wordsOf(block(typed('Steady progress.')), measure)).toEqual(['Steady progress.']);
+    expect(wordsOf(block(fixed('Steady progress.')), measure)).toEqual(['. Steady progress']);
   });
 
   it('leaves out a line that is empty once trimmed, and leaves no room for it', () => {

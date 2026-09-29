@@ -8,9 +8,10 @@ import { ACCENT, HAIRLINE, INK, MUTED } from '../palette';
 import type { LayoutOp } from '../scale';
 import { styleOf } from '../styles';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, FACE, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, FACE, across, measure, outside, unmirrored } from './checks';
 import { recommendationRow } from './recommendationRow';
 import { fixed, typed } from './words';
+import type { Words } from './words';
 
 const WIDTH = 480;
 
@@ -136,6 +137,23 @@ describe('recommendationRow', () => {
     expect(name[0]?.y).toBeCloseTo(number?.y ?? Number.NaN, 9);
     expect(words?.y).toBeCloseTo(number?.y ?? Number.NaN, 9);
     expect(outside(block, measure)).toEqual([]);
+  });
+
+  it('reads a typed name and a typed text the way their letters do in an Arabic report', () => {
+    // The number shares the line, so the words are read without it.
+    const words = (block: Block) =>
+      across(
+        texts(block.ops).filter((op) => op.text !== '03'),
+        measure,
+      );
+    const named = (name: Words) =>
+      recommendationRow({ number: 3, name, text: null }, WIDTH, ARABIC);
+    expect(words(named(typed('Steady progress.')))).toBe('Steady progress.');
+    expect(words(named(fixed('Steady progress.')))).toBe('. Steady progress');
+    const told = (text: Words) =>
+      recommendationRow({ number: 3, name: typed('نوم'), text }, WIDTH, ARABIC);
+    expect(words(told(typed('Steady progress.')))).toBe('Steady progress. نوم');
+    expect(words(told(fixed('Steady progress.')))).toBe('. Steady progress نوم');
   });
 
   it('keeps the padding above and below, the hairline inside the lower edge of it', () => {
