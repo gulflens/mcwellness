@@ -14,10 +14,12 @@
  * report paragraph is one base direction with the other script embedded as
  * words and phrases; there is no nesting. So the unit is the word, not the
  * character, and five rules cover it: the first strong character sets the
- * base; brackets and sentence punctuation at the edge of a Latin word or a
- * figure are peeled off in a right-to-left paragraph so they can take the
- * Arabic's side; a neutral word between two words of one direction takes it,
- * else the paragraph's; neighbouring figures are one left-to-right run; and
+ * base; brackets and sentence punctuation at the edge of a word of the other
+ * script are peeled off (off a Latin word or a figure in a right-to-left
+ * paragraph, off an Arabic word in a left-to-right one) so they can take the
+ * paragraph's side; a neutral word between two words of one direction takes
+ * it, else the paragraph's; every unbroken run of neutrals holding a figure
+ * is one left-to-right run, the punctuation at its ends left outside; and
  * only a plain number may join an Arabic run.
  *
  * **Figures typed on an Arabic keyboard are figures.** U+0660 to 0669 and the
@@ -120,17 +122,27 @@ function peelable(character: string): boolean {
   return PEELABLE.has(character);
 }
 
-/** One word, cut into its leading punctuation, its core and its trailing punctuation. */
-function peel(word: string, glued: boolean): Token[] {
+/**
+ * One word, cut into its leading punctuation, its core and its trailing
+ * punctuation. In a right-to-left paragraph the punctuation of a Latin word
+ * or a figure is peeled, and an Arabic word is left whole, since the engine
+ * mirrors and places punctuation inside an Arabic run itself. In a
+ * left-to-right paragraph it is the other way round: the full stop after an
+ * Arabic phrase ends the English sentence, so it is peeled off the Arabic.
+ */
+function peel(word: string, glued: boolean, paragraph: Direction): Token[] {
   const characters = [...word];
   let start = 0;
   while (start < characters.length && peelable(characters[start] ?? '')) start += 1;
   let end = characters.length;
   while (end > start && peelable(characters[end - 1] ?? '')) end -= 1;
   const core = characters.slice(start, end).join('');
-  // Nothing but punctuation, or an Arabic word: left whole, since the engine
-  // mirrors and places punctuation inside an Arabic run itself.
-  if (core.length === 0 || classify(core) === 'R' || (start === 0 && end === characters.length)) {
+  const arabic = classify(core) === 'R';
+  if (
+    core.length === 0 ||
+    (start === 0 && end === characters.length) ||
+    arabic !== (paragraph === 'ltr')
+  ) {
     return [{ text: word, class: classify(word), glued }];
   }
   const out: Token[] = [];
@@ -177,12 +189,7 @@ function cutAtFigures(word: string): string[] {
 export function tokenise(text: string, paragraph: Direction): Token[] {
   const words = text.split(' ').filter((word) => word.length > 0);
   return words.flatMap((word) =>
-    cutAtFigures(word).flatMap((piece, index) => {
-      const glued = index > 0;
-      return paragraph === 'rtl'
-        ? peel(piece, glued)
-        : [{ text: piece, class: classify(piece), glued }];
-    }),
+    cutAtFigures(word).flatMap((piece, index) => peel(piece, index > 0, paragraph)),
   );
 }
 
@@ -232,13 +239,28 @@ export function runsOf(text: string, paragraph: Direction): Run[] {
   const tokens = tokenise(text, paragraph);
   const directions = resolve(tokens, paragraph);
 
-  // A figure is a neutral holding a digit. Two or more side by side — a
-  // telephone number, a time range — are one left-to-right run, however
-  // they resolved.
+  // A figure is a neutral holding a digit. Every unbroken run of neutrals
+  // that holds one — a telephone number, a range typed with spaces round its
+  // dash, a range of times — is one left-to-right run, however its words
+  // resolved, with the punctuation at its two ends left outside it as marks.
+  // A lone figure is not a group: a plain number may still join the Arabic.
   const figure = tokens.map((token) => token.class === 'N' && holdsDigit(token));
-  const grouped = figure.map(
-    (is, at) => is && (figure[at - 1] === true || figure[at + 1] === true),
-  );
+  const grouped: boolean[] = tokens.map(() => false);
+  let at = 0;
+  while (at < tokens.length) {
+    if (tokens[at]?.class !== 'N') {
+      at += 1;
+      continue;
+    }
+    let end = at;
+    while (end + 1 < tokens.length && tokens[end + 1]?.class === 'N') end += 1;
+    let first = at;
+    while (first <= end && !figure[first]) first += 1;
+    let last = end;
+    while (last >= first && !figure[last]) last -= 1;
+    if (last > first) for (let inner = first; inner <= last; inner += 1) grouped[inner] = true;
+    at = end + 1;
+  }
 
   const kinds: Kind[] = tokens.map((token, at) => {
     if (token.class === 'R') return 'arabic';

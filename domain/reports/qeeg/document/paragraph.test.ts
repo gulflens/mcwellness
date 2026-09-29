@@ -256,6 +256,23 @@ describe('layoutParagraph', () => {
     expect(onPage(ops)).toBe(`٪٢٥ ${engine('انخفاض بنسبة')}`);
   });
 
+  it('ends an English sentence with its full stop after an Arabic phrase', () => {
+    const ops = draw([{ text: 'The greeting was صباح الخير.' }], { width: 400 });
+    expect(onPage(ops)).toBe(`The greeting was ${engine('صباح الخير')}.`);
+  });
+
+  it('keeps a Latin word before its Arabic comma in an English sentence', () => {
+    const ops = draw([{ text: 'Alpha، ثم' }]);
+    expect(onPage(ops)).toBe(`Alpha، ${engine('ثم')}`);
+  });
+
+  it('draws a range inside an Arabic line in the order typed, however it is spaced', () => {
+    for (const range of ['8–12', '8 – 12', '8 - 12']) {
+      const ops = draw([{ text: `ألفا ${range} هرتز` }], { paragraph: 'rtl', width: 200 });
+      expect(onPage(ops)).toBe(`${engine('هرتز')} ${range} ${engine('ألفا')}`);
+    }
+  });
+
   it('keeps a plain number inside the Arabic op of an Arabic line', () => {
     const ops = texts(draw([{ text: 'بعد 15 جلسة' }], { paragraph: 'rtl' }));
     expect(ops.map((op) => [op.text, op.rtl])).toEqual([['بعد 15 جلسة', true]]);

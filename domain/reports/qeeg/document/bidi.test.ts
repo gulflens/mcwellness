@@ -183,6 +183,93 @@ const CASES: Case[] = [
     ],
   },
   {
+    name: 'a full stop after an Arabic phrase in an English sentence',
+    text: 'The greeting was صباح الخير.',
+    paragraph: 'ltr',
+    base: 'ltr',
+    runs: [
+      { direction: 'ltr', text: 'The greeting was' },
+      { direction: 'rtl', text: 'صباح الخير' },
+      { direction: 'ltr', text: '.' },
+    ],
+  },
+  {
+    name: 'a comma after an Arabic phrase in an English sentence',
+    text: 'She said صباح الخير, then sat down.',
+    paragraph: 'ltr',
+    base: 'ltr',
+    runs: [
+      { direction: 'ltr', text: 'She said' },
+      { direction: 'rtl', text: 'صباح الخير' },
+      { direction: 'ltr', text: ', then sat down.' },
+    ],
+  },
+  {
+    name: 'a Latin word followed by an Arabic comma in an English sentence',
+    text: 'Alpha، ثم',
+    paragraph: 'ltr',
+    base: 'ltr',
+    runs: [
+      { direction: 'ltr', text: 'Alpha،' },
+      { direction: 'rtl', text: 'ثم' },
+    ],
+  },
+  {
+    name: 'brackets round an Arabic phrase in an English sentence',
+    text: 'Read (صباح الخير) aloud',
+    paragraph: 'ltr',
+    base: 'ltr',
+    runs: [
+      { direction: 'ltr', text: 'Read (' },
+      { direction: 'rtl', text: 'صباح الخير' },
+      { direction: 'ltr', text: ') aloud' },
+    ],
+  },
+  {
+    name: 'a range typed with a dash and no spaces',
+    text: 'ألفا 8–12 هرتز',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'ألفا' },
+      { direction: 'ltr', text: '8–12' },
+      { direction: 'rtl', text: 'هرتز' },
+    ],
+  },
+  {
+    name: 'a range typed with a dash between spaces',
+    text: 'ألفا 8 – 12 هرتز',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'ألفا' },
+      { direction: 'ltr', text: '8 – 12' },
+      { direction: 'rtl', text: 'هرتز' },
+    ],
+  },
+  {
+    name: 'a range typed with a hyphen between spaces',
+    text: 'ألفا 8 - 12 هرتز',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'ألفا' },
+      { direction: 'ltr', text: '8 - 12' },
+      { direction: 'rtl', text: 'هرتز' },
+    ],
+  },
+  {
+    name: 'a range of times',
+    text: 'من 12:30 — 14:00 مساء',
+    paragraph: 'rtl',
+    base: 'rtl',
+    runs: [
+      { direction: 'rtl', text: 'من' },
+      { direction: 'ltr', text: '12:30 — 14:00' },
+      { direction: 'rtl', text: 'مساء' },
+    ],
+  },
+  {
     name: 'an empty string, right to left',
     text: '',
     paragraph: { detect: 'rtl' },
@@ -299,7 +386,7 @@ describe('tokenise', () => {
     expect(tokenise('هرتز).', 'rtl')).toEqual([{ text: 'هرتز).', class: 'R', glued: false }]);
   });
 
-  it('peels nothing in a left-to-right paragraph', () => {
+  it('peels nothing off a Latin word in a left-to-right paragraph', () => {
     expect(tokenise('(see this).', 'ltr')).toEqual([
       { text: '(see', class: 'L', glued: false },
       { text: 'this).', class: 'L', glued: false },
