@@ -1,7 +1,6 @@
 ## Round 66 — a session given free stays out of the books (2026-09-30)
 
-On 29 September 2026 the Books page stopped opening on production. The
-runtime log held the same two lines each time the owner tried it:
+The Books page stopped opening on production. The runtime log held the same two lines each time it was tried:
 `/api/accounting/post` and `/api/accounting/overview`, each answering 500 with
 `UnbalancedEntryError`. The thirty-eighth pass saw them in passing and reported
 them; the operator agreed to start there. This round finds the cause, proves
@@ -10,34 +9,26 @@ scheduler's hourly line written twice.
 
 ### The cause
 
-One invoice. A single session had been sold at a whole-price discount — a
-session given free — so its invoice was for nought and the credit it granted
-was worth nought. `postingsFor` (`domain/accounting/posting.ts`) built the
+An event worth nothing. A session sold at a whole-price discount — a session given free — makes an invoice for nought and a credit worth nought. `postingsFor` (`domain/accounting/posting.ts`) built the
 entry it builds for every invoice, a debit to receivable and a credit to
 contract liability, each of nought; and `assertBalanced` refused it, rightly,
 because the journal holds no line of nought (`docs/SPEC/accounting.md` section
 4.2). The refusal's own message was "Each line carries exactly one side,
 greater than zero."
 
-That would have been one invoice the books could not place. What made it the
+That would have been one event the books could not place. What made it the
 whole page is that both routes walk **every** event not yet in the books: the
 overview to count what is waiting (`classifyPending`), the poster to write it.
 The error left each of them at the first event it met, so the overview
 answered nothing at all, and the poster's transaction was rolled back with
-everything in it — two ordinary events dated the same day were left unposted
-behind the free one, and the nightly run would have failed on it every night.
-Nothing was lost and nothing wrong was written: the journal on production
-held two entries, numbered 1 and 2 with no gap, and no source posted twice.
+everything in it — every ordinary event behind the free one was left unposted, and the nightly run would have failed on it every night. Nothing was lost and nothing wrong was written: production's journal was read and had no gap in its numbers and no source posted twice.
 
 The credit was a second fault waiting for its day. Used at a visit, it becomes
 `credit.consumed` with an allocated net of nought, and the same refusal.
 
 ### How it was proved before it was mended
 
-Production was read, not written: the events not yet in the books, as flags
-and never as figures. Three were waiting; one invoice had a total, a net and a
-VAT of nought and a discount equal to its whole price, and its one credit was
-worth nought.
+Production was read, not written, and only as flags, never as figures: which events were waiting, and whether each one's figures were nought. The event the refusal fitted was there.
 
 Then the fault was made to happen here. Seven new cases in
 `domain/accounting/posting.test.ts` failed with production's own message. And
@@ -125,6 +116,14 @@ production.
   everything else run at versions no test ran
   (`docs/PRODUCTION.md`, the thirty-eighth pass).
 
+- **Two of this round's own tests lean on things they do not own.**
+  `year_close_nought.test.ts` delivers the visit on the database's clock, not
+  the test's, so from 1 January 2027 the free credit's use falls outside the
+  year the test closes and only the invoice half is exercised; it will not
+  fail for a wrong reason. And the new block in `posting.test.ts` expects
+  exactly one posting, which holds only while the earlier blocks leave
+  nothing waiting and the seed gives that household no older open credit.
+
 ### The tests
 
 - `domain/accounting/posting.test.ts` — 24 (15 before): an invoice of nought
@@ -158,13 +157,6 @@ documents. No migration, no policy file.
 **Merged is not live.** No migration and no policy file: a build only, by the
 recipe, on the operator's word.
 
-**Proof is not the client bundle**, because the rule runs on the server. The
-proof is production's own journal and log, read and not written. Before the
-pass the journal holds two entries and three events wait. After it, the first
-time the Books page is opened, or at 03:00 that night, the two ordinary events
-are posted and the journal holds four; the free session and its credit are
-written nowhere; and the runtime log carries no `UnbalancedEntryError`.
+**Proof is not the client bundle**, because the rule runs on the server. The proof is production's own journal and log, read and not written, with the counts kept in the operator's own record and not here: the first time the Books page is opened after the pass, or at 03:00 that night, the events that were waiting are posted, the free session and its credit are written nowhere, and the runtime log carries no `UnbalancedEntryError`.
 
-**For the owner.** The Books page opens again. The session given free shows
-on its invoice as it did, with a total of nought, and appears nowhere in the
-books, because it moved no money.
+**For the owner.** The Books page opens again. A session given free shows on its invoice as it did, and appears nowhere in the books, because it moved no money.
