@@ -250,6 +250,23 @@ describe('bulletList', () => {
     );
   });
 
+  it('refuses a width it cannot stand in under its own name, before it calls anything', () => {
+    const never = [Number.NaN, Number.POSITIVE_INFINITY, -1, 0];
+    const twoColumns = BULLETS.gutter + 2 * BULLETS.indent;
+    for (const [count, widths] of [
+      [0, never],
+      [1, [...never, BULLETS.indent]],
+      [9, [...never, BULLETS.indent, BULLETS.gutter / 2, BULLETS.gutter, twoColumns]],
+    ] as const) {
+      for (const width of widths) {
+        for (const drawing of [ENGLISH, ARABIC]) {
+          const input = { items: items(count), columns: 'auto' as const, empty: EMPTY };
+          expect(() => bulletList(input, width, drawing)).toThrow(/^bulletList (needs|is left)/);
+        }
+      }
+    }
+  });
+
   it('changes nothing it was given', () => {
     const input = deepFreeze({
       items: [fixed('One'), typed('Two'), ...items(7)],

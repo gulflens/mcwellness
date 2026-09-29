@@ -40,13 +40,12 @@ export function sessionsPill(input: SessionsPillInput, width: number, drawing: D
   if (width < 0) {
     throw new RangeError(`sessionsPill needs a width of zero or more, and was given ${width}.`);
   }
-  if (input.label.trim() === '') return blank(width, 0);
-
   const around = PILL.padH;
   const most = width - 2 * around;
   if (most <= 0) {
     throw new RangeError(`sessionsPill is left no room for its label by a width of ${width}.`);
   }
+  if (input.label.trim() === '') return blank(width, 0);
 
   // Set once in all the room there is, to learn how wide the words are. On
   // one line the pill hugs them; wrapped, it takes the whole of the room.

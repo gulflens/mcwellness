@@ -77,8 +77,9 @@ function column(items: readonly Words[], width: number, drawing: Drawing): Block
   return stack(width, parts);
 }
 
-function roomFor(width: number, columnWidth: number): void {
-  if (columnWidth <= BULLETS.indent) {
+/** Words need room; a row needs its words' room past the indent. */
+function roomFor(width: number, least: number): void {
+  if (width <= least) {
     throw new RangeError(`bulletList is left no room for its words by a width of ${width}.`);
   }
 }
@@ -89,6 +90,13 @@ export function bulletList(input: BulletListInput, width: number, drawing: Drawi
     throw new RangeError(`bulletList needs a width of zero or more, and was given ${width}.`);
   }
   const items = input.items.filter((item) => item.text.trim() !== '');
+  const two = input.columns === 'two' || items.length > BULLETS.columnsAbove;
+  // Every width this list cannot stand in is refused here, under its own
+  // name, before anything it calls can refuse it under another.
+  if (items.length === 0) roomFor(width, 0);
+  else if (two) roomFor(width, BULLETS.gutter + 2 * BULLETS.indent);
+  else roomFor(width, BULLETS.indent);
+
   if (items.length === 0) {
     // The words alone, without the paragraph's way of being cut.
     const {
@@ -101,16 +109,11 @@ export function bulletList(input: BulletListInput, width: number, drawing: Drawi
     return { width: w, height, overhang, baseline, ops };
   }
 
-  const two = input.columns === 'two' || items.length > BULLETS.columnsAbove;
-  if (!two) {
-    roomFor(width, width);
-    return column(items, width, drawing);
-  }
+  if (!two) return column(items, width, drawing);
 
   const frame: Frame = { direction: drawing.direction, left: 0, width };
   const [first, second] = columns(frame, 2, BULLETS.gutter);
   if (!first || !second) throw new RangeError('bulletList was given fewer than two columns.');
-  roomFor(width, first.width);
   const split = Math.ceil(items.length / 2);
   return beside(width, [
     { block: column(items.slice(0, split), first.width, drawing), left: first.left },

@@ -117,6 +117,16 @@ describe('heading', () => {
     );
   });
 
+  it('refuses a width it cannot stand in under its own name, before it calls anything', () => {
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0]) {
+      for (const drawing of [ENGLISH, ARABIC]) {
+        expect(() =>
+          heading({ words: fixed('Key findings'), level: 'heading' }, width, drawing),
+        ).toThrow(/^heading (needs|is left)/);
+      }
+    }
+  });
+
   it('changes nothing it was given', () => {
     const input = deepFreeze({ words: typed('Eyes closed'), level: 'heading' as const });
     expect(() => heading(input, WIDTH, ENGLISH)).not.toThrow();

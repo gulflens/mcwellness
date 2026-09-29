@@ -248,6 +248,16 @@ describe('pageFooter', () => {
     );
   });
 
+  it('refuses a width it cannot stand in under its own name, before it calls anything', () => {
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0, FOOTER.gutter]) {
+      for (const drawing of [ENGLISH, ARABIC]) {
+        expect(() => pageFooter({ lines: LINES, page: 'Page 2 of 9' }, width, drawing)).toThrow(
+          /^pageFooter (needs|is left)/,
+        );
+      }
+    }
+  });
+
   it('changes nothing it was given', () => {
     const input = deepFreeze({ lines: [...ARABIC_LINES], page: 'صفحة 2 من 9' });
     expect(() => pageFooter(input, WIDTH, ARABIC)).not.toThrow();

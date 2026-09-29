@@ -236,6 +236,16 @@ describe('recommendationRow', () => {
     );
   });
 
+  it('refuses a width it cannot stand in under its own name, before it calls anything', () => {
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0, ROW.number]) {
+      for (const drawing of [ENGLISH, ARABIC]) {
+        expect(() =>
+          recommendationRow({ number: 1, name: fixed('Sleep'), text: null }, width, drawing),
+        ).toThrow(/^recommendationRow (needs|is left)/);
+      }
+    }
+  });
+
   it('changes nothing it was given', () => {
     const input = deepFreeze({ number: 9, name: typed('Sleep'), text: typed('Eight hours.') });
     expect(() => recommendationRow(input, WIDTH, ARABIC)).not.toThrow();

@@ -65,6 +65,10 @@ export function pageFooter(input: PageFooterInput, width: number, drawing: Drawi
   if (width < 0) {
     throw new RangeError(`pageFooter needs a width of zero or more, and was given ${width}.`);
   }
+  // Refused here, under its own name, rather than by the paragraph it sets.
+  if (width === 0) {
+    throw new RangeError('pageFooter is left no room for its lines by a width of 0.');
+  }
   const frame: Frame = { direction: drawing.direction, left: 0, width };
 
   const kept = typeset('footer', widestOf(input.page, drawing), width, drawing);

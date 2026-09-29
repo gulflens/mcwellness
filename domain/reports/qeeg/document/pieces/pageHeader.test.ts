@@ -70,6 +70,16 @@ describe('pageHeader', () => {
     );
   });
 
+  it('refuses a width it cannot stand in under its own name, before it calls anything', () => {
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0, HEADER.logo.width - 1]) {
+      for (const drawing of [ENGLISH, ARABIC]) {
+        expect(() => pageHeader({ image: LOGO }, width, drawing)).toThrow(
+          /^pageHeader (needs|is left)/,
+        );
+      }
+    }
+  });
+
   it('changes nothing it was given', () => {
     const input = deepFreeze({ image: LOGO });
     expect(() => pageHeader(input, WIDTH, ARABIC)).not.toThrow();

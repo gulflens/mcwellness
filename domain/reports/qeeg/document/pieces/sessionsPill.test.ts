@@ -159,6 +159,18 @@ describe('sessionsPill', () => {
     );
   });
 
+  it('refuses a width it cannot stand in under its own name, before it calls anything', () => {
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0, 2 * PILL.padH]) {
+      for (const drawing of [ENGLISH, ARABIC]) {
+        for (const label of [LABEL, '  ']) {
+          expect(() => sessionsPill({ label }, width, drawing)).toThrow(
+            /^sessionsPill (needs|is left)/,
+          );
+        }
+      }
+    }
+  });
+
   it('changes nothing it was given', () => {
     const input = deepFreeze({ label: LABEL });
     expect(() => sessionsPill(input, WIDTH, ARABIC)).not.toThrow();

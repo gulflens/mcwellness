@@ -26,5 +26,7 @@ export function heading(input: HeadingInput, width: number, drawing: Drawing): B
   if (width < 0) {
     throw new RangeError(`heading needs a width of zero or more, and was given ${width}.`);
   }
+  // Refused here, under its own name, rather than by the paragraph it sets.
+  if (width === 0) throw new RangeError('heading is left no room for its words by a width of 0.');
   return typeset(input.level, input.words.text, width, drawing, { typed: input.words.typed });
 }

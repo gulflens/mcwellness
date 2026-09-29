@@ -192,6 +192,16 @@ describe('signatureBlock', () => {
     );
   });
 
+  it('refuses a width it cannot stand in under its own name, before it calls anything', () => {
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0, SIGNATURE.width - 1]) {
+      for (const drawing of [ENGLISH, ARABIC]) {
+        expect(() => signatureBlock({ label: LABEL, lines: [] }, width, drawing)).toThrow(
+          /^signatureBlock (needs|is left)/,
+        );
+      }
+    }
+  });
+
   it('changes nothing it was given', () => {
     const input = deepFreeze({ label: LABEL, lines: [typed('Hazel Dune'), fixed('Practitioner')] });
     expect(() => signatureBlock(input, WIDTH, ARABIC)).not.toThrow();
