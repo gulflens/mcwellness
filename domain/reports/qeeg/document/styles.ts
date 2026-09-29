@@ -57,6 +57,10 @@ export const ROLES = Object.freeze([
   'signature',
   'signatureLabel',
   'footer',
+  'headline',
+  'headlineCaption',
+  'tableHead',
+  'pairLabel',
 ] as const);
 export type Role = (typeof ROLES)[number];
 
@@ -104,6 +108,15 @@ const DESIGNED: Readonly<Record<Role, Designed>> = {
   signature: [9, 1.4, 'regular', INK],
   signatureLabel: [9, 1.4, 'regular', MUTED],
   footer: [6.8, 1.45, 'regular', MUTED],
+  // A follow-up's page of what has changed. There is no layout of the
+  // practice's for it (docs/SPEC/reports-qeeg.md section 10); these follow
+  // the roles beside them. A headline figure is as large as a heading and
+  // set in the ink: whether it went up or down is a shape beside it, never
+  // a colour (section 10, point 7).
+  headline: [14, 1.3, 'bold', INK],
+  headlineCaption: [8.6, 1.36, 'regular', INK],
+  tableHead: [8.4, 1.4, 'bold', MUTED],
+  pairLabel: [8.6, 1.4, 'bold', INK],
 };
 
 function made(role: Role, direction: Direction): RoleStyle {

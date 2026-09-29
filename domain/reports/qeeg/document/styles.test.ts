@@ -6,7 +6,7 @@ import type { Paint } from './shapes';
 
 describe('the type of the brain-map report', () => {
   it('has a style for every role, in both directions', () => {
-    expect(ROLES.length).toBe(24);
+    expect(ROLES.length).toBe(28);
     for (const role of ROLES) {
       for (const direction of ['ltr', 'rtl'] as const) {
         const { style } = styleOf(role, direction);
@@ -106,7 +106,18 @@ describe('the type of the brain-map report', () => {
       'rowNumber',
       'rowName',
       'pill',
+      'headline',
+      'tableHead',
+      'pairLabel',
     ]);
+  });
+
+  it('sets a headline figure in the ink, as large as a heading and no larger', () => {
+    // Direction is a shape and never a colour (docs/SPEC/reports-qeeg.md
+    // section 10, point 7): a figure that moved is not set in a hue of its own.
+    const headline = styleOf('headline', 'ltr');
+    expect(headline.paint).toBe(INK);
+    expect(headline.style.size).toBe(styleOf('heading', 'ltr').style.size);
   });
 
   it('cannot be changed by whoever holds it', () => {
@@ -155,6 +166,10 @@ describe('the practice’s type, role by role', () => {
     ['signature', 9, 1.4, 'regular', INK, false],
     ['signatureLabel', 9, 1.4, 'regular', MUTED, false],
     ['footer', 6.8, 1.45, 'regular', MUTED, false],
+    ['headline', 14, 1.3, 'bold', INK, false],
+    ['headlineCaption', 8.6, 1.36, 'regular', INK, false],
+    ['tableHead', 8.4, 1.4, 'bold', MUTED, false],
+    ['pairLabel', 8.6, 1.4, 'bold', INK, false],
   ];
 
   it('holds every role there is, once', () => {
