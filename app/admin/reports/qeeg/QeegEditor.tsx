@@ -242,11 +242,13 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props
         <p className="small muted" role="status">
           {draft.saving
             ? 'Saving.'
-            : draft.dirty
-              ? 'Changes not saved yet.'
-              : draft.reportId === null
-                ? 'Not saved yet.'
-                : 'Saved.'}
+            : draft.error
+              ? 'Not saved. The reason is beneath the form.'
+              : draft.dirty
+                ? 'Changes not saved yet.'
+                : draft.reportId === null
+                  ? 'Not saved yet.'
+                  : 'Saved.'}
         </p>
         <div className="report-editor__actions">
           <Button
@@ -276,28 +278,6 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props
           onConfirm={confirmSwitch}
           onCancel={() => setSwitching(null)}
         />
-      ) : null}
-
-      {draft.stale ? (
-        <div className="report-editor__sign">
-          <Note tone="critical">{draft.error}</Note>
-          <p>
-            Loading the newer version replaces what is on this screen. Anything you changed here
-            since your last save is not kept.
-          </p>
-          <div className="report-editor__actions">
-            <Button
-              variant="primary"
-              onClick={() => {
-                void draft.reload().then(() => setGeneration((was) => was + 1));
-              }}
-            >
-              Load the newer version
-            </Button>
-          </div>
-        </div>
-      ) : draft.error ? (
-        <Note tone="critical">{draft.error}</Note>
       ) : null}
 
       <div className="qeeg-sections">
@@ -338,6 +318,29 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props
           );
         })}
       </div>
+
+      {/* Beside the Save button, where she looks when a save is refused. */}
+      {draft.stale ? (
+        <div className="report-editor__sign">
+          <Note tone="critical">{draft.error}</Note>
+          <p>
+            Loading the newer version replaces what is on this screen. Anything you changed here
+            since your last save is not kept.
+          </p>
+          <div className="report-editor__actions">
+            <Button
+              variant="primary"
+              onClick={() => {
+                void draft.reload().then(() => setGeneration((was) => was + 1));
+              }}
+            >
+              Load the newer version
+            </Button>
+          </div>
+        </div>
+      ) : draft.error ? (
+        <Note tone="critical">{draft.error}</Note>
+      ) : null}
 
       <div className="report-editor__actions">
         <Button
