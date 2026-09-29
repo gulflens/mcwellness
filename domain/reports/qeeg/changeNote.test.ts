@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { blankFollowUp } from './blank';
 import { changeNoteKey, figuresOf } from './changeNote';
-import type { ChangeFigure, ChangeSection, ComparedWith } from './types';
+import type { CalculatedFigure, ChangeSection, ComparedWith, TypedFigure } from './types';
 
 /** Part 7 of brief C1: the note beneath a follow-up's figures follows from where they came from. */
 
@@ -13,7 +13,7 @@ const EARLIER: ComparedWith = {
   relation: 'initial',
 };
 
-const typed = (low: number): ChangeFigure => ({
+const typed = (low: number): TypedFigure => ({
   kind: 'percent',
   direction: 'decrease',
   low,
@@ -22,7 +22,7 @@ const typed = (low: number): ChangeFigure => ({
   basis: null,
 });
 
-const calculated = (low: number): ChangeFigure => ({
+const calculated = (low: number): CalculatedFigure => ({
   kind: 'percent',
   direction: 'increase',
   low,

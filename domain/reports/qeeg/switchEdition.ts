@@ -18,6 +18,13 @@
  * **Going back to a first report drops what only a follow-up has**: what it is
  * compared with, the page of what has changed, and each earlier score.
  *
+ * **A past record is never switched.** A report read from the old tool is a
+ * record of what was printed, and it is frozen. `toFollowUp` refuses one, and
+ * says so, rather than make a follow-up that still claims to be the old
+ * tool's while holding choices made here. Starting a new report from a past
+ * record is a copy a route makes, and is not this function. `toInitial` has
+ * nothing to refuse: every follow-up was written in this app.
+ *
  * Returns new values and never changes what it was given.
  */
 
@@ -28,13 +35,15 @@ import type { ComparedWith, QeegCommon, QeegFollowUp, QeegInitial } from './type
 /** A choice that was cleared, where it was, and what it had been. */
 export type SetAside = { at: string; was: string };
 
-/** The parts both editions share, copied so the result shares nothing with its source. */
-function keptParts(content: QeegCommon): Omit<QeegCommon, 'stage'> {
+/**
+ * The parts both editions share, copied so the result shares nothing with its
+ * source. Where it came from is not among them: each caller says that itself.
+ */
+function keptParts(content: QeegCommon): Omit<QeegCommon, 'stage' | 'provenance'> {
   return structuredClone({
     kind: content.kind,
     schema: content.schema,
     wording: content.wording,
-    provenance: content.provenance,
     subject: content.subject,
     recording: content.recording,
     findings: content.findings,
@@ -50,11 +59,16 @@ function eachOf<K extends string, V>(keys: readonly K[], make: (key: K) => V): R
   return Object.fromEntries(keys.map((key) => [key, make(key)])) as Record<K, V>;
 }
 
+export type ToFollowUp =
+  { ok: true; content: QeegFollowUp; setAside: SetAside[] } | { ok: false; reason: 'past_record' };
+
 export function toFollowUp(
   content: QeegInitial,
   comparedWith: ComparedWith,
   stage: 'follow_up' | 'final',
-): { content: QeegFollowUp; setAside: SetAside[] } {
+): ToFollowUp {
+  if (content.provenance.origin !== 'app') return { ok: false, reason: 'past_record' };
+
   const setAside: SetAside[] = [];
   const setAsideIf = (at: string, was: string | null) => {
     if (was !== null) setAside.push({ at, was });
@@ -72,9 +86,11 @@ export function toFollowUp(
 
   const blank = blankFollowUp(comparedWith, stage);
   return {
+    ok: true,
     content: {
       ...blank,
       ...keptParts(content),
+      provenance: { origin: 'app' },
       bands,
       connectivity,
       dashboard: eachOf(DIMENSION_IDS, (dimension) => ({
@@ -106,6 +122,7 @@ export function toInitial(content: QeegFollowUp): { content: QeegInitial; setAsi
   return {
     content: {
       ...keptParts(content),
+      provenance: { origin: 'app' },
       edition: 'initial',
       stage: 'initial',
       bands,

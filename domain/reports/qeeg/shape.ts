@@ -319,53 +319,55 @@ const basis = z
   })
   .strict();
 
-const source = z.enum(['typed', 'calculated']);
+/** The top of a range is above its bottom. */
+function rangeRises(figure: { low: number; high: number | null }, ctx: z.core.$RefinementCtx) {
+  if (figure.high !== null && figure.high <= figure.low) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['high'],
+      message: 'The top of a range is above its bottom.',
+    });
+  }
+}
 
-const changeFigure = z
-  .discriminatedUnion('kind', [
-    z
-      .object({
-        kind: z.literal('percent'),
-        direction: z.enum(['increase', 'decrease']),
-        low: whole(1, 100),
-        high: z.number().int().max(100).nullable(),
-        source,
-        basis: basis.nullable(),
-      })
-      .strict()
-      .superRefine((figure, ctx) => {
-        if (figure.high !== null && figure.high <= figure.low) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['high'],
-            message: 'The top of a range is above its bottom.',
-          });
-        }
-      }),
-    z
-      .object({ kind: z.literal('no_appreciable_change'), source, basis: basis.nullable() })
-      .strict(),
-  ])
-  .superRefine((figure, ctx) => {
-    if ((figure.source === 'calculated') !== (figure.basis !== null)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['basis'],
-        message: 'A figure carries what it was calculated from exactly when it was calculated.',
-      });
-    }
-  });
+const percentFields = {
+  kind: z.literal('percent'),
+  direction: z.enum(['increase', 'decrease']),
+  low: whole(1, 100),
+  high: z.number().int().max(100).nullable(),
+};
+
+const typedFields = { source: z.literal('typed'), basis: z.null() };
+const calculatedFields = { source: z.literal('calculated'), basis };
+
+/** Her own estimate: it has nothing it was calculated from. */
+const typedFigure = z.discriminatedUnion('kind', [
+  z
+    .object({ ...percentFields, ...typedFields })
+    .strict()
+    .superRefine(rangeRises),
+  z.object({ kind: z.literal('no_appreciable_change'), ...typedFields }).strict(),
+]);
+
+/** Arithmetic on two recorded assessments, which it names. */
+const calculatedFigure = z.discriminatedUnion('kind', [
+  z
+    .object({ ...percentFields, ...calculatedFields })
+    .strict()
+    .superRefine(rangeRises),
+  z.object({ kind: z.literal('no_appreciable_change'), ...calculatedFields }).strict(),
+]);
+
+/**
+ * Where a figure came from and what it was calculated from are one fact, so
+ * a calculated figure with no basis, or a typed one with a basis, is refused
+ * at `basis`.
+ */
+const changeFigure = z.discriminatedUnion('source', [typedFigure, calculatedFigure]);
 
 const tileFields = {
-  figure: changeFigure.superRefine((figure, ctx) => {
-    if (figure.source !== 'typed') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['source'],
-        message: 'A headline figure is always her own.',
-      });
-    }
-  }),
+  // A headline is always hers: a calculated figure is refused at `source`.
+  figure: typedFigure,
   caption: bilingual(LIMITS.caption),
 };
 
@@ -417,24 +419,26 @@ const changeSection = z
   })
   .strict();
 
-const comparedWith = z
-  .object({
-    reportId: z.uuid(),
-    reference: z.string().trim().min(1).max(40).nullable(),
-    recordedOn: day,
-    origin: z.enum(['issued', 'imported']),
-    relation: z.enum(['initial', 'previous']),
-  })
-  .strict()
-  .superRefine((earlier, ctx) => {
-    if ((earlier.reference === null) !== (earlier.origin === 'imported')) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['reference'],
-        message: 'A report from the old tool has no printed reference, and every other one has.',
-      });
-    }
-  });
+/**
+ * A report this app signed has a printed reference; a past record from the
+ * old tool has none. Which it is decides whether `reference` may be null.
+ */
+const comparedWithFields = {
+  reportId: z.uuid(),
+  recordedOn: day,
+  relation: z.enum(['initial', 'previous']),
+};
+
+const comparedWith = z.discriminatedUnion('origin', [
+  z
+    .object({
+      ...comparedWithFields,
+      origin: z.literal('issued'),
+      reference: z.string().trim().min(1).max(40),
+    })
+    .strict(),
+  z.object({ ...comparedWithFields, origin: z.literal('imported'), reference: z.null() }).strict(),
+]);
 
 const followUpChange = <const T extends readonly [string, ...string[]]>(changes: T) =>
   z.object({ change: z.enum(changes).nullable(), regions }).strict();
@@ -444,6 +448,9 @@ const followUpShape = z
     ...common,
     edition: z.literal('follow-up'),
     stage: z.enum(['follow_up', 'final']),
+    // Always written in this app: the old tool had only a first report's
+    // lists, and a past record is frozen, so none is ever made a follow-up.
+    provenance: z.object({ origin: z.literal('app') }).strict(),
     comparedWith,
     bands: everyOf(BAND_IDS, followUpChange(BAND_CHANGES)),
     connectivity: everyOf(

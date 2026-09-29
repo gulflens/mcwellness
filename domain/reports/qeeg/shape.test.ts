@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { blankFollowUp, blankInitial } from './blank';
 import { validateQeegContent } from './shape';
-import { LIMITS, type ChangeFigure, type QeegFollowUp, type QeegInitial } from './types';
+import {
+  LIMITS,
+  type CalculatedFigure,
+  type QeegFollowUp,
+  type QeegInitial,
+  type TypedFigure,
+} from './types';
 
 /**
  * Part 3 of brief C1: the shape a stored brain-map report is held to. Each
@@ -20,7 +26,7 @@ const EARLIER = {
   relation: 'initial',
 } as const;
 
-const typedFigure: ChangeFigure = {
+const typedFigure: TypedFigure = {
   kind: 'percent',
   direction: 'decrease',
   low: 25,
@@ -29,7 +35,7 @@ const typedFigure: ChangeFigure = {
   basis: null,
 };
 
-const calculatedFigure: ChangeFigure = {
+const calculatedFigure: CalculatedFigure = {
   kind: 'percent',
   direction: 'increase',
   low: 12,
@@ -344,7 +350,9 @@ describe('validateQeegContent', () => {
       expectAccepted(withValue(legacy, 'stage', 'follow_up'));
     });
 
-    it('holds a follow-up brought in from the old tool to the rule all the same', () => {
+    it('refuses, by name, a follow-up that says it came from the old tool', () => {
+      // The old tool offered only a first report's lists, so nothing it wrote
+      // is a follow-up; and a past record is frozen, so none becomes one.
       const legacy = withValue(validFollowUp(), 'provenance', {
         origin: 'legacy_tool',
         format: 'qeeg.json/1',
@@ -352,7 +360,8 @@ describe('validateQeegContent', () => {
         notes: [],
         asPrinted: { signerName: null, signerRole: null },
       });
-      expectRefusedAt(withValue(legacy, 'stage', 'initial'), 'stage');
+      expectRefusedAt(legacy, 'provenance.origin');
+      expectRefusedAt(withValue(legacy, 'stage', 'final'), 'provenance.origin');
     });
   });
 

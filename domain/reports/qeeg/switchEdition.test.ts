@@ -5,6 +5,8 @@ import { validateQeegContent } from './shape';
 import { toFollowUp, toInitial } from './switchEdition';
 import type { ComparedWith, QeegFollowUp, QeegInitial } from './types';
 
+const SHA = 'c'.repeat(64);
+
 /** Part 6 of brief C1: turning a draft from one edition into the other. */
 
 const EARLIER: ComparedWith = {
@@ -66,8 +68,18 @@ function firstReport(): QeegInitial {
   };
 }
 
+/** The follow-up `toFollowUp` gives, failing the test if it refused. */
+function switched(
+  from: QeegInitial,
+  stage: 'follow_up' | 'final' = 'follow_up',
+): Extract<ReturnType<typeof toFollowUp>, { ok: true }> {
+  const result = toFollowUp(from, EARLIER, stage);
+  if (!result.ok) throw new Error(`toFollowUp refused: ${result.reason}`);
+  return result;
+}
+
 function followUp(): QeegFollowUp {
-  const { content } = toFollowUp(firstReport(), EARLIER, 'follow_up');
+  const { content } = switched(firstReport());
   return {
     ...content,
     bands: { ...content.bands, delta: { change: 'improved', regions: ['frontal'] } },
@@ -114,7 +126,7 @@ const KEPT = [
 describe('toFollowUp', () => {
   it('keeps what both editions share', () => {
     const before = firstReport();
-    const { content } = toFollowUp(before, EARLIER, 'final');
+    const { content } = switched(before, 'final');
     for (const key of KEPT) expect(content[key], key).toEqual(before[key]);
     expect(content.plan.sessions).toBe(30);
     for (const dimension of DIMENSION_IDS) {
@@ -126,7 +138,7 @@ describe('toFollowUp', () => {
   });
 
   it('becomes a follow-up at the stage given, compared with the report given', () => {
-    const { content } = toFollowUp(firstReport(), EARLIER, 'final');
+    const { content } = switched(firstReport(), 'final');
     expect(content.edition).toBe('follow-up');
     expect(content.stage).toBe('final');
     expect(content.comparedWith).toEqual(EARLIER);
@@ -135,7 +147,7 @@ describe('toFollowUp', () => {
 
   it('keeps every band’s and measure’s regions', () => {
     const before = firstReport();
-    const { content } = toFollowUp(before, EARLIER, 'follow_up');
+    const { content } = switched(before);
     for (const band of BAND_IDS)
       expect(content.bands[band].regions).toEqual(before.bands[band].regions);
     for (const measure of CONNECTIVITY_IDS) {
@@ -144,7 +156,7 @@ describe('toFollowUp', () => {
   });
 
   it('clears every level and the approach, and lists each one set aside', () => {
-    const { content, setAside } = toFollowUp(firstReport(), EARLIER, 'follow_up');
+    const { content, setAside } = switched(firstReport());
     for (const band of BAND_IDS) expect(content.bands[band].change).toBeNull();
     for (const measure of CONNECTIVITY_IDS) expect(content.connectivity[measure].change).toBeNull();
     expect(content.plan.next).toBeNull();
@@ -160,13 +172,13 @@ describe('toFollowUp', () => {
   });
 
   it('maps nothing from one list to the other', () => {
-    const { content } = toFollowUp(firstReport(), EARLIER, 'follow_up');
+    const { content } = switched(firstReport());
     expect(Object.values(content.bands).every((band) => band.change === null)).toBe(true);
     expect(JSON.stringify(content)).not.toMatch(/moved_further|improved|"level"|"approach"/);
   });
 
   it('gives a follow-up that passes the shape', () => {
-    const { content } = toFollowUp(firstReport(), EARLIER, 'follow_up');
+    const { content } = switched(firstReport());
     expect(validateQeegContent(content)).toMatchObject({ ok: true });
   });
 
@@ -174,6 +186,26 @@ describe('toFollowUp', () => {
     const before = deepFreeze(firstReport());
     expect(() => toFollowUp(before, EARLIER, 'follow_up')).not.toThrow();
     expect(before).toEqual(firstReport());
+  });
+
+  it('writes the follow-up as this app’s own', () => {
+    expect(switched(firstReport()).content.provenance).toEqual({ origin: 'app' });
+  });
+
+  it('refuses a past record from the old tool, which is frozen', () => {
+    const past: QeegInitial = {
+      ...firstReport(),
+      stage: 'final',
+      provenance: {
+        origin: 'legacy_tool',
+        format: 'qeeg.json/1',
+        sourceSha256: SHA,
+        notes: [],
+        asPrinted: { signerName: null, signerRole: null },
+      },
+    };
+    expect(toFollowUp(past, EARLIER, 'follow_up')).toEqual({ ok: false, reason: 'past_record' });
+    expect(toFollowUp(past, EARLIER, 'final')).toEqual({ ok: false, reason: 'past_record' });
   });
 });
 
@@ -233,7 +265,7 @@ describe('toInitial', () => {
 describe('there and back', () => {
   it('leaves the kept parts as they were', () => {
     const before = firstReport();
-    const there = toFollowUp(before, EARLIER, 'follow_up').content;
+    const there = switched(before).content;
     const back = toInitial(there).content;
     for (const key of KEPT) expect(back[key], key).toEqual(before[key]);
     expect(back.dashboard).toEqual(before.dashboard);
