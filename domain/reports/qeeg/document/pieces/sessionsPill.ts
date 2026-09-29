@@ -2,14 +2,14 @@
  * The number of sessions a programme holds, in an outline with round ends,
  * at the start edge.
  *
- * **As wide as its words.** The pill hugs its label, its padding and its
- * line, as the practice's layout has it. A label too wide for the page wraps
+ * **As wide as its words.** The pill is its label and its padding and no
+ * more, as the practice's layout has it. A label too wide for the page wraps
  * inside a pill as wide as the page, rather than running off it.
  *
- * **The line stays inside the box.** A stroke is drawn half to each side of
- * its path, so the path is set in by half the line, and the padding is
- * measured from the line's inner side: the words stand clear of it by the
- * whole of `PILL.padV` and `PILL.padH`.
+ * **A line takes no room** (contract, ruling R1). The outline is drawn
+ * wholly inside the pill: a stroke falls half to each side of its path, so
+ * the path is set in by half the line. The padding is measured from the
+ * pill's edge, and the line lies within it.
  *
  * The room over and under the pill is part of the block, so the builder of
  * pages sets it with no gap of its own. A label of no words draws nothing
@@ -40,13 +40,12 @@ export function sessionsPill(input: SessionsPillInput, width: number, drawing: D
   if (width < 0) {
     throw new RangeError(`sessionsPill needs a width of zero or more, and was given ${width}.`);
   }
-  if (input.label.trim() === '') return blank(width, 0);
-
-  const around = PILL.edge + PILL.padH;
+  const around = PILL.padH;
   const most = width - 2 * around;
   if (most <= 0) {
     throw new RangeError(`sessionsPill is left no room for its label by a width of ${width}.`);
   }
+  if (input.label.trim() === '') return blank(width, 0);
 
   // Set once in all the room there is, to learn how wide the words are. On
   // one line the pill hugs them; wrapped, it takes the whole of the room.
@@ -58,7 +57,7 @@ export function sessionsPill(input: SessionsPillInput, width: number, drawing: D
   const words = typeset('pill', input.label, inner, drawing, { align: 'centre' });
 
   const pillWidth = inner + 2 * around;
-  const pillHeight = words.height + words.overhang + 2 * (PILL.edge + PILL.padV);
+  const pillHeight = words.height + words.overhang + 2 * PILL.padV;
   const frame: Frame = { direction: drawing.direction, left: 0, width };
   const left = boxLeft(frame, 0, pillWidth);
   const half = PILL.edge / 2;
@@ -72,7 +71,7 @@ export function sessionsPill(input: SessionsPillInput, width: number, drawing: D
     ),
     stroke: { ...ACCENT, width: PILL.edge },
   };
-  const top = PILL.above + PILL.edge + PILL.padV;
+  const top = PILL.above + PILL.padV;
   return {
     width,
     height: PILL.above + pillHeight + PILL.below,

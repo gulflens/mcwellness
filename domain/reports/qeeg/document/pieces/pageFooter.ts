@@ -65,6 +65,10 @@ export function pageFooter(input: PageFooterInput, width: number, drawing: Drawi
   if (width < 0) {
     throw new RangeError(`pageFooter needs a width of zero or more, and was given ${width}.`);
   }
+  // Refused here, under its own name, rather than by the paragraph it sets.
+  if (width === 0) {
+    throw new RangeError('pageFooter is left no room for its lines by a width of 0.');
+  }
   const frame: Frame = { direction: drawing.direction, left: 0, width };
 
   const kept = typeset('footer', widestOf(input.page, drawing), width, drawing);
@@ -90,7 +94,9 @@ export function pageFooter(input: PageFooterInput, width: number, drawing: Drawi
   ];
   const content = beside(width, cells);
 
-  const top = FOOTER.rule + FOOTER.padTop;
+  // A line takes no room: the hairline is drawn inside the upper edge of
+  // the padding under it.
+  const top = FOOTER.padTop;
   const first = practice.baseline ?? page.baseline;
   const firstDown = practice.baseline === null ? level - pageLast : level - practiceLast;
   const hairline: LayoutOp = {
