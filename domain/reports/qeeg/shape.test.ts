@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { blankFollowUp, blankInitial } from './blank';
 import { validateQeegContent } from './shape';
+import { DRAWS_NOTHING } from './testing/drawsNothing';
 import {
   LIMITS,
   type CalculatedFigure,
@@ -655,6 +656,29 @@ describe('validateQeegContent', () => {
       expect(once.ok && once.content.findings.custom['a']?.label.ar).toBe('\u00e9');
       const twice = once.ok ? validateQeegContent(once.content) : once;
       expect(twice).toEqual(once);
+    });
+
+    it('holds each character that draws nothing, alone, as nothing', () => {
+      for (const character of DRAWS_NOTHING) {
+        const code = character.codePointAt(0)?.toString(16);
+        expectRefusedAt(
+          withValue(validInitial(), 'findings.custom.a.label.en', character),
+          'findings.custom.a.label.en',
+        );
+        expectRefusedAt(
+          withValue(validFollowUp(), 'change.tiles.t1.caption.en', character),
+          'change.tiles.t1.caption.en',
+        );
+        let input = withValue(validInitial(), 'findings.custom.a.label.ar', character);
+        input = withValue(input, 'dashboard.mental_energy.evidence.ar', character);
+        input = withValue(input, 'summary.ar', { text: character, marks: [] });
+        const answer = validateQeegContent(input);
+        expect(answer.ok, code).toBe(true);
+        if (!answer.ok || answer.content.edition !== 'initial') return;
+        expect(answer.content.findings.custom['a']?.label.ar, code).toBeNull();
+        expect(answer.content.dashboard.mental_energy.evidence?.ar, code).toBeNull();
+        expect(answer.content.summary.ar, code).toBeNull();
+      }
     });
 
     it('checks a length after cleaning', () => {

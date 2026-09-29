@@ -52,7 +52,7 @@ import {
   type RecommendationId,
   type RegionId,
 } from './catalogue/ids';
-import { UNCUT, clean, isRealDay, isRecord } from './text';
+import { UNCUT, clean, isBlank, isRealDay, isRecord } from './text';
 import {
   CONDITIONS,
   HANDEDNESS,
@@ -207,7 +207,7 @@ function refusalFor(earlier: EarlierReport, request: PrefillRequest): PrefillRef
   if (earlier.status !== 'issued' && earlier.status !== 'imported') return 'draft';
   if (earlier.withdrawn) return 'withdrawn';
   const reference = typeof earlier.reference === 'string' ? clean(earlier.reference, UNCUT) : '';
-  if (earlier.status === 'issued' ? reference === '' : earlier.reference !== null) {
+  if (earlier.status === 'issued' ? isBlank(reference) : earlier.reference !== null) {
     return 'no_reference';
   }
   const day = own(own(earlier.content, 'recording'), 'recordedOn');

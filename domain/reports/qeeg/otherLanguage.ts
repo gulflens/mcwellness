@@ -35,8 +35,9 @@
  * half of. When `sent` is of the other edition, only the typed texts both
  * editions share are taken.
  *
- * **A half of nothing.** An Arabic that is empty once cleaned is none. An
- * English that is empty once cleaned is refused by keeping the first's: an
+ * **A half of nothing.** An Arabic that draws nothing once cleaned
+ * (`isBlank`) is none. An English that draws nothing is refused by keeping
+ * the first's: an
  * English report is never left without words where the first had some.
  *
  * **Cleaned as the shape cleans, never cut.** Every half taken goes through
@@ -51,7 +52,7 @@
  */
 
 import { DIMENSION_IDS, type DimensionId } from './catalogue/ids';
-import { UNCUT, clean, cleanRich, isEmpty, isRecord } from './text';
+import { UNCUT, clean, cleanRich, isBlank, isEmpty, isRecord } from './text';
 import type {
   Bilingual,
   BilingualRich,
@@ -96,8 +97,8 @@ function bilingualFrom(first: Bilingual, sent: unknown, locale: Locale): Bilingu
   if (!isRecord(sent)) return { ...first };
   const taken = sentString(sent, locale);
   const cleaned = taken === null ? '' : clean(taken, UNCUT);
-  if (locale === 'ar') return { en: first.en, ar: cleaned === '' ? null : cleaned };
-  return { en: cleaned === '' ? first.en : cleaned, ar: first.ar };
+  if (locale === 'ar') return { en: first.en, ar: isBlank(cleaned) ? null : cleaned };
+  return { en: isBlank(cleaned) ? first.en : cleaned, ar: first.ar };
 }
 
 function optionalFrom(first: Bilingual | null, sent: unknown, locale: Locale): Bilingual | null {

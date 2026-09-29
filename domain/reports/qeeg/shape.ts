@@ -59,7 +59,7 @@ import {
   type QeegFollowUp,
   type QeegInitial,
 } from './types';
-import { UNCUT, clean, isEmpty, isRealDay, withoutUnseen } from './text';
+import { UNCUT, clean, isBlank, isRealDay, withoutUnseen } from './text';
 
 // ---------------------------------------------------------------------------
 // Small pieces
@@ -99,14 +99,20 @@ function typed(most: number, least = 0, empty = 'This is never empty.') {
   return z
     .string()
     .transform((value) => clean(value, UNCUT))
-    .pipe(z.string().min(least, empty).max(most));
+    .pipe(
+      z
+        .string()
+        .max(most)
+        // Required text must draw something: a label of U+200C alone is empty.
+        .refine((value) => least === 0 || !isBlank(value), empty),
+    );
 }
 
-/** An optional Arabic: one that is empty once cleaned is none. */
+/** An optional Arabic: one that draws nothing once cleaned is none. */
 function typedOrNone(most: number) {
   return typed(most)
     .nullable()
-    .transform((value) => (value === '' ? null : value));
+    .transform((value) => (value === null || isBlank(value) ? null : value));
 }
 
 /** Typed once in English, with an optional Arabic, each held to `most`. */
@@ -173,7 +179,7 @@ function splitsPair(text: string, at: number): boolean {
 }
 
 /**
- * A formatted summary. An Arabic of nothing but white space is handed back as
+ * A formatted summary. An Arabic that draws nothing is handed back as
  * none, as a plain Arabic is (`typedOrNone`), and as the page reads it anyway
  * (`richFor`). The English is never none, so an English of nothing stays as
  * it was given.
@@ -184,7 +190,7 @@ const bilingualRich = (most: number) =>
       en: richText(most),
       ar: richText(most)
         .nullable()
-        .transform((value) => (value !== null && isEmpty(value) ? null : value)),
+        .transform((value) => (value !== null && isBlank(value.text) ? null : value)),
     })
     .strict();
 

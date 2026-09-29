@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { blankInitial } from './blank';
 import { validateQeegContent } from './shape';
+import { DRAWS_NOTHING } from './testing/drawsNothing';
 import {
   UNCUT,
   clean,
   cleanRich,
+  isBlank,
   isEmpty,
   isRealDay,
   isRecord,
@@ -561,5 +563,46 @@ describe('cleanRich', () => {
     const started = performance.now();
     expect(cleanRich(long, 200_000).text.startsWith('가 word')).toBe(true);
     expect(performance.now() - started).toBeLessThan(2000);
+  });
+});
+
+describe('isBlank', () => {
+  it('holds each character that draws nothing, alone, to be nothing', () => {
+    for (const character of DRAWS_NOTHING) {
+      expect(isBlank(character), character.codePointAt(0)?.toString(16)).toBe(true);
+    }
+    expect(isBlank('')).toBe(true);
+    expect(isBlank(DRAWS_NOTHING.join(''))).toBe(true);
+  });
+
+  it('holds a letter, with or without its marks, to be something', () => {
+    for (const text of [
+      'a',
+      '\u0628',
+      '\u0628\u200c\u0628',
+      'e\u0301',
+      '\u0301a',
+      '\u{1F600}',
+      '1',
+    ]) {
+      expect(isBlank(text), text).toBe(false);
+    }
+  });
+
+  it('changes nothing: what is stored keeps its U+200C', () => {
+    expect(clean('\u200c', 10)).toBe('\u200c');
+  });
+
+  it('is what textFor and richFor ask before they fall back to the English', () => {
+    for (const ar of DRAWS_NOTHING) {
+      expect(textFor('ar', { en: 'Calm', ar }), ar.codePointAt(0)?.toString(16)).toBe('Calm');
+      const english = rich('Calm');
+      expect(richFor('ar', { en: english, ar: rich(ar) })).toBe(english);
+      expect(isEmpty(rich(ar))).toBe(true);
+    }
+  });
+
+  it('drops a paragraph that draws nothing', () => {
+    expect(toParagraphs(rich('abc\n\u200c\u00ad\ndef'))).toEqual([rich('abc'), rich('def')]);
   });
 });

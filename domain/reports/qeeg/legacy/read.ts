@@ -67,7 +67,7 @@ import type {
   Score,
   Stage,
 } from '../types';
-import { clean, cleanRich, isRealDay, isRecord } from '../text';
+import { clean, cleanRich, isBlank, isRealDay, isRecord } from '../text';
 import { LIMITS } from '../types';
 import { LEGACY_FORMAT, LEGACY_SUBJECT_KEY, LEGACY_VERSION } from './keys';
 import { fromQuillDelta } from './quill';
@@ -170,10 +170,14 @@ class Notes {
     return kept;
   }
 
-  /** Her English and her Arabic, or null when she typed neither. */
+  /**
+   * Her English and her Arabic, or null when she typed neither. A half that
+   * draws nothing (`isBlank`) is none, as the shape holds it.
+   */
   bilingual(en: string, ar: string, limit: number, at: string): Bilingual | null {
-    const english = this.limited(en, limit, `${at}.en`);
-    const arabic = this.limited(ar, limit, `${at}.ar`);
+    const drawn = (value: string) => (isBlank(value) ? '' : value);
+    const english = drawn(this.limited(en, limit, `${at}.en`));
+    const arabic = drawn(this.limited(ar, limit, `${at}.ar`));
     if (english === '' && arabic === '') return null;
     return { en: english, ar: arabic === '' ? null : arabic };
   }
@@ -207,7 +211,7 @@ function customItems(
   const items = (value as readonly unknown[])
     .filter(isRecord)
     .filter((item) =>
-      ['text', 'textAr'].some((key) => clean(text(field(item, key)), LIMITS.label) !== ''),
+      ['text', 'textAr'].some((key) => !isBlank(clean(text(field(item, key)), LIMITS.label))),
     );
   if (items.length > LIMITS.customPerList) notes.add('extra_positions_ignored', `${at}.custom`);
   const out: Record<string, CustomItem & { position: number }> = {};
@@ -420,7 +424,7 @@ function summaryIn(plainValue: unknown, richValue: unknown, at: string, notes: N
   if (read.dropped.includes('embed') || read.dropped.includes('other')) {
     notes.add('summary_content_dropped', at);
   }
-  if (read.rich.text.trim() === '') return plain();
+  if (isBlank(read.rich.text)) return plain();
   if (read.dropped.includes('colour')) notes.add('summary_colour_dropped', at);
   if (read.dropped.includes('slant')) notes.add('summary_slant_dropped', at);
   return limitedRich(read.rich, at, notes, read.removed);
@@ -493,7 +497,9 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
     const slot = list[place];
     if (!isRecord(slot)) continue;
     const key = `map-${place}`;
-    const label = text(field(slot, 'label')).trim();
+    const written = text(field(slot, 'label')).trim();
+    // A label that draws nothing is no label, and never becomes a caption.
+    const label = isBlank(written) ? '' : written;
     const img = field(slot, 'img');
     const url = imageUrl(img);
     if (url === null || !isRecord(img)) {
@@ -535,7 +541,7 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
 /** Who the old report named beneath its signature, or null where it named nobody. */
 function printed(value: unknown, at: string, notes: Notes): string | null {
   const written = notes.limited(text(value), LIMITS.label, at);
-  return written === '' ? null : written;
+  return isBlank(written) ? null : written;
 }
 
 // ---------------------------------------------------------------------------
@@ -629,7 +635,7 @@ function read(file: unknown, sourceSha256: string): LegacyRead {
     connectivity,
     dashboard,
     recommendations,
-    summary: { en: english, ar: arabic.text.trim() === '' ? null : arabic },
+    summary: { en: english, ar: isBlank(arabic.text) ? null : arabic },
     benefits,
     plan,
   };

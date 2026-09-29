@@ -6,8 +6,8 @@
  * **Her English stands in for a missing Arabic.** A practitioner types once
  * in English and may add Arabic. An Arabic report prints her Arabic where she
  * gave some and her English where she did not, so nothing she wrote is lost
- * from either report. Arabic of nothing but white space counts as none: a
- * blank line on an Arabic page is worse than an English sentence.
+ * from either report. Arabic that draws nothing (`isBlank`) counts as none:
+ * a blank line on an Arabic page is worse than an English sentence.
  *
  * **Marks are cut, never stretched.** A bold stretch that crosses a newline is
  * cut into one stretch per paragraph, because the document writer lays out a
@@ -22,7 +22,41 @@
 
 import type { Bilingual, BilingualRich, Locale, Mark, RichText } from './types';
 
-const hasSomething = (text: string) => text.trim().length > 0;
+/**
+ * What draws nothing: white space of every kind, the characters that part
+ * and join letters (U+200C, U+200D), the soft hyphen, the Hangul fillers,
+ * the variation selectors, and combining marks. A combining mark after a
+ * letter draws, but then the letter is there and the text is not blank.
+ */
+const DRAWS_NOTHING: ReadonlySet<number> = new Set([
+  0x200c, 0x200d, 0x00ad, 0x3164, 0x115f, 0x1160, 0xffa0,
+]);
+const WHITE_SPACE = /^\s$/u;
+const MARK = /^\p{M}$/u;
+
+/**
+ * Whether nothing in `text` would be drawn. The one test of "empty" for
+ * typed text: an English that must have words, an Arabic that is none when
+ * it has none, and the fallback to her English. It changes nothing: what is
+ * stored keeps its U+200C, as the re-check ruled.
+ */
+export function isBlank(text: string): boolean {
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    const selector = code >= 0xfe00 && code <= 0xfe0f;
+    if (
+      !DRAWS_NOTHING.has(code) &&
+      !selector &&
+      !WHITE_SPACE.test(character) &&
+      !MARK.test(character)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const hasSomething = (text: string) => !isBlank(text);
 
 /** A plain set of fields: an object that is not an array. The one test of it here. */
 export function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -39,7 +73,7 @@ export function richFor(locale: Locale, text: BilingualRich): RichText {
   return text.en;
 }
 
-/** Nothing but white space. */
+/** Nothing that would be drawn (`isBlank`). */
 export function isEmpty(rich: RichText): boolean {
   return !hasSomething(rich.text);
 }

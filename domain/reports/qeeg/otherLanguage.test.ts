@@ -3,6 +3,7 @@ import { blankFollowUp, blankInitial } from './blank';
 import { DIMENSION_IDS } from './catalogue/ids';
 import { withOtherLanguageFrom } from './otherLanguage';
 import { validateQeegContent } from './shape';
+import { DRAWS_NOTHING } from './testing/drawsNothing';
 import type {
   Bilingual,
   ComparedWith,
@@ -455,6 +456,20 @@ describe('withOtherLanguageFrom', () => {
         const result = withOtherLanguageFrom(filledInitial(), sentWith(ar), 'ar');
         expect(result.findings.custom['c0']?.label.ar, String(ar)).toBeNull();
         expect(result.summary.ar, String(ar)).toBeNull();
+      }
+    });
+
+    it('holds each character that draws nothing, alone, as nothing, in either language', () => {
+      const first = filledInitial();
+      for (const character of DRAWS_NOTHING) {
+        const code = character.codePointAt(0)?.toString(16);
+        const arabic = withOtherLanguageFrom(first, sentWith(character), 'ar');
+        expect(arabic.findings.custom['c0']?.label.ar, code).toBeNull();
+        expect(arabic.summary.ar, code).toBeNull();
+        const english = withOtherLanguageFrom(first, sentWith('عربي', character), 'en');
+        expect(english.findings.custom['c0']?.label.en, code).toBe('Finding 0');
+        expect(english.summary.en, code).toEqual(first.summary.en);
+        expectShapeAccepts(english);
       }
     });
 

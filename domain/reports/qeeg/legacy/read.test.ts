@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateQeegContent } from '../shape';
 import { LIMITS, type ImportNote, type QeegInitial } from '../types';
+import { DRAWS_NOTHING } from '../testing/drawsNothing';
 import { LEGACY_SUBJECT_KEY } from './keys';
 import { readLegacyReport } from './read';
 
@@ -916,6 +917,36 @@ describe('typed text is made fit to store', () => {
       marks: [{ from: 5, to: 6, bold: true }],
     });
     expect(result.notes).toEqual([]);
+  });
+
+  it('reads typed text that draws nothing as nothing, and its output meets the shape', () => {
+    for (const character of DRAWS_NOTHING) {
+      const code = character.codePointAt(0)?.toString(16);
+      const result = readOk(
+        withFile({
+          customKF: [
+            { text: character, checked: true },
+            { text: 'Kept', textAr: character, checked: true },
+          ],
+          dims: [{ score: '5', evid: 'Seen', evidAr: character }],
+          summaryAr: character,
+          summaryRichAr: JSON.stringify({ ops: [{ insert: `${character}\n` }] }),
+          signer: character,
+        }),
+      );
+      expect(Object.keys(result.content.findings.custom), code).toEqual(['c0']);
+      expect(result.content.findings.custom['c0']?.label, code).toEqual({ en: 'Kept', ar: null });
+      expect(result.content.dashboard.mental_energy.evidence, code).toEqual({
+        en: 'Seen',
+        ar: null,
+      });
+      expect(result.content.summary.ar, code).toBeNull();
+      expect(result.content.provenance, code).toMatchObject({ asPrinted: { signerName: null } });
+      expect(validateQeegContent(result.content), code).toEqual({
+        ok: true,
+        content: result.content,
+      });
+    }
   });
 
   it('trims what was padded, without a note', () => {
