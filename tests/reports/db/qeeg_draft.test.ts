@@ -834,3 +834,23 @@ describe('fix round 1: races between two people', () => {
     expect(((await res.json()) as { code: string }).code).toBe('already_issued');
   });
 });
+
+describe('fix round 1: what the review found untested', () => {
+  it('refuses a reason that cleans to nothing, or is no reason worth reading', async () => {
+    const before = await reportCount();
+    // A header carries bytes, not every character: a no-break space and a
+    // control character, each of which the fence's cleaning removes whole.
+    const cleansToNothing = [
+      String.fromCharCode(0xa0).repeat(12),
+      String.fromCharCode(1).repeat(12),
+    ];
+    for (const reason of [...cleansToNothing, 'aaaaaaaa', 'ok']) {
+      const res = await save({ clientId, kind: 'qeeg', content: sentInitial() }, undefined, {
+        'x-reason': reason,
+      });
+      expect(res.status, JSON.stringify(reason)).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toBe('reason_required');
+    }
+    expect(await reportCount()).toBe(before);
+  });
+});

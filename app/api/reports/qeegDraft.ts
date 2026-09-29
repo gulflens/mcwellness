@@ -13,6 +13,7 @@ import { isUuid } from '../billing/ids';
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
+import { requiredReason } from './reason';
 import { practiceTimeZone } from './gather';
 import { QeegDraftInput, QeegDraftResponse } from './schema';
 import { asRow, readReport } from './source';
@@ -88,12 +89,6 @@ type ClientRow = {
   sex_at_birth: 'female' | 'male' | 'unknown' | null;
   status: string;
 };
-
-/** The request's reason, when it gives one worth recording. */
-function reasonOf(c: Context<ApiEnv>): string | null {
-  const reason = (c.req.header('x-reason') ?? '').trim();
-  return reason.length > 0 ? reason : null;
-}
 
 /** The database refusing a link to a report that can no longer be compared with. */
 function isComparisonRefused(error: unknown): boolean {
@@ -171,7 +166,7 @@ export async function saveQeegDraft(
   if (!mayDraftReport(c.get('actor'), input.clientId, now())) {
     return c.json({ error: 'forbidden', requestId }, 403);
   }
-  if (reasonOf(c) === null) {
+  if ((await requiredReason(c.get('db'))) === null) {
     return c.json({ error: 'reason_required', requestId }, 400);
   }
 
