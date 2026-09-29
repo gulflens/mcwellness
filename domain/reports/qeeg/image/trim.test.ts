@@ -120,6 +120,23 @@ describe('trimming a white border', () => {
   });
 });
 
+describe('the sizes trimming takes', () => {
+  it('refuses a size that is not a whole number above 0, or data of the wrong length', () => {
+    const data = new Uint8ClampedArray(16);
+    expect(() => trimWhiteBorder({ width: Number.NaN, height: 2, data })).toThrow(RangeError);
+    expect(() => trimWhiteBorder({ width: 0.5, height: 8, data })).toThrow(RangeError);
+    expect(() => trimWhiteBorder({ width: 0, height: 0, data: new Uint8ClampedArray(0) })).toThrow(
+      RangeError,
+    );
+    expect(() => trimWhiteBorder({ width: 2, height: 2, data: new Uint8ClampedArray(15) })).toThrow(
+      RangeError,
+    );
+    expect(() =>
+      crop({ width: 2, height: 2, data: new Uint8ClampedArray(15) }, whole(filled(1, 1, INK))),
+    ).toThrow(RangeError);
+  });
+});
+
 describe('cropping', () => {
   it('copies exactly the pixels inside the crop, row by row', () => {
     const image = withBlock(filled(10, 8, WHITE), 2, 3, 4, 5, INK);

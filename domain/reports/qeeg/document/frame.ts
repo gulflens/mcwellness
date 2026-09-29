@@ -22,6 +22,9 @@ export type Frame = {
   readonly width: number;
 };
 
+/** The most columns a frame is cut into: a report's widest grid has four. */
+const MAX_COLUMNS = 12;
+
 function finite(fn: string, name: string, value: number): void {
   if (!Number.isFinite(value)) {
     throw new RangeError(`${fn} needs a finite ${name}, and was given ${String(value)}.`);
@@ -93,6 +96,9 @@ export function columns(frame: Frame, count: number, gutter: number): Frame[] {
     throw new RangeError(
       `columns needs a count that is a whole number of 1 or more, and was given ${count}.`,
     );
+  }
+  if (count > MAX_COLUMNS) {
+    throw new RangeError(`columns needs at most ${MAX_COLUMNS} columns, and was given ${count}.`);
   }
   finite('columns', 'gutter', gutter);
   const width = (frame.width - gutter * (count - 1)) / count;

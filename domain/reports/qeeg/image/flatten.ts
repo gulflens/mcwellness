@@ -10,14 +10,11 @@
  * `channel = round(alpha/255 * value + (1 - alpha/255) * 255)`.
  */
 
+import { checkPixels } from './trim';
 import type { Pixels } from './trim';
 export function flattenOverWhite(image: Pixels): Uint8Array {
+  checkPixels('flattenOverWhite', image);
   const count = image.width * image.height;
-  if (!Number.isInteger(count) || count < 0 || image.data.length !== count * 4) {
-    throw new RangeError(
-      `An image of ${image.width} by ${image.height} needs ${count * 4} bytes of RGBA, and was given ${image.data.length}.`,
-    );
-  }
   const out = new Uint8Array(count * 3);
   for (let i = 0; i < count; i += 1) {
     const a = (image.data[i * 4 + 3] ?? 0) / 255;

@@ -38,6 +38,15 @@ describe('flattening a map onto white paper', () => {
     expect(out.length).toBe(3 * 2 * 3);
   });
 
+  it('refuses a size that is not a whole number above 0', () => {
+    expect(() =>
+      flattenOverWhite({ width: 0.5, height: 8, data: new Uint8ClampedArray(16) }),
+    ).toThrow(RangeError);
+    expect(() => flattenOverWhite({ width: 0, height: 0, data: new Uint8ClampedArray(0) })).toThrow(
+      RangeError,
+    );
+  });
+
   it('refuses pixels whose data is not four bytes for each one', () => {
     expect(() =>
       flattenOverWhite({ width: 2, height: 2, data: new Uint8ClampedArray(15) }),

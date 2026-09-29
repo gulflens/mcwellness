@@ -44,6 +44,13 @@ export type PathOp = {
 };
 
 const QUARTER = Math.PI / 2;
+const FULL_TURN = 2 * Math.PI;
+
+/**
+ * The most cycles a wave may hold. A band icon's wave has two or three; the
+ * cap keeps a slip of a number from building millions of segments.
+ */
+const MAX_CYCLES = 64;
 
 /**
  * The control distance, as a fraction of the radius, of a cubic standing for
@@ -92,6 +99,11 @@ export function arc(
   notNegative('arc', 'radius r', r);
   finite('arc', 'start', start);
   finite('arc', 'sweep', sweep);
+  if (Math.abs(sweep) > FULL_TURN) {
+    throw new RangeError(
+      `arc needs a sweep of at most one full turn either way, and was given ${sweep}.`,
+    );
+  }
 
   const segments: PathSegment[] = [['M', cx + r * Math.cos(start), cy + r * Math.sin(start)]];
   if (sweep === 0) return segments;
@@ -249,6 +261,11 @@ export function sineWave(
   finite('sineWave', 'yMid', yMid);
   finite('sineWave', 'amplitude', amplitude);
   finite('sineWave', 'cycles', cycles);
+  if (Math.abs(cycles) > MAX_CYCLES) {
+    throw new RangeError(
+      `sineWave needs at most ${MAX_CYCLES} cycles either way, and was given ${cycles}.`,
+    );
+  }
 
   const segments: PathSegment[] = [['M', x0, yMid]];
   if (cycles === 0 || amplitude === 0 || x0 === x1) {
@@ -341,5 +358,8 @@ export function tintOver(rgb: Rgb, alpha: number): Rgb {
   finite('tintOver', 'green', g);
   finite('tintOver', 'blue', b);
   finite('tintOver', 'alpha', alpha);
+  if (alpha < 0 || alpha > 1) {
+    throw new RangeError(`tintOver needs an alpha from 0 to 1, and was given ${alpha}.`);
+  }
   return [1 - alpha * (1 - r), 1 - alpha * (1 - g), 1 - alpha * (1 - b)];
 }

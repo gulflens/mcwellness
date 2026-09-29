@@ -40,11 +40,26 @@ const WHITE_FROM = 247;
 const CLEAR_BELOW = 16;
 const SMALLEST_KEPT = 20;
 
+/**
+ * Refuses an image whose sides are not whole numbers above 0, or whose data
+ * is not four bytes for each pixel: a programming error, since the browser
+ * gives both from one decode.
+ */
+export function checkPixels(fn: string, image: Pixels): void {
+  const { width, height, data } = image;
+  const counts = Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0;
+  if (!counts || data.length !== width * height * 4) {
+    throw new RangeError(
+      `${fn} needs an image whose sides are whole numbers above 0 with four bytes a pixel, and was given ${width} by ${height} with ${data.length} bytes.`,
+    );
+  }
+}
+
 /** The rectangle to keep: the content plus a little padding, or the whole image. */
 export function trimWhiteBorder(image: Pixels): Crop {
+  checkPixels('trimWhiteBorder', image);
   const { width, height, data } = image;
   const whole: Crop = { left: 0, top: 0, width, height };
-  if (width <= 0 || height <= 0) return whole;
 
   const blank = (x: number, y: number): boolean => {
     const at = (y * width + x) * 4;
@@ -86,6 +101,7 @@ export function trimWhiteBorder(image: Pixels): Crop {
 
 /** A new image holding only the pixels inside `to`. The one given is untouched. */
 export function crop(image: Pixels, to: Crop): Pixels {
+  checkPixels('crop', image);
   const { left, top, width, height } = to;
   const counts = [left, top, width, height].every((n) => Number.isInteger(n) && n >= 0);
   if (!counts || left + width > image.width || top + height > image.height) {

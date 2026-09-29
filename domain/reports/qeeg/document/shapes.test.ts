@@ -333,3 +333,27 @@ describe('a number a shape cannot be built from', () => {
     expect(() => roundedRect(0, 0, 10, 10, -2)).toThrow(/radius/);
   });
 });
+
+describe('a count a shape must not run away with', () => {
+  it('refuses an arc that sweeps more than one full turn either way', () => {
+    expect(() => arc(0, 0, 1, 0, 1e7)).toThrow(/sweep/);
+    expect(() => arc(0, 0, 1, 0, -2 * Math.PI - 0.001)).toThrow(RangeError);
+    expect(arc(0, 0, 1, 0, 2 * Math.PI)).toHaveLength(5);
+    expect(arc(0, 0, 1, 0, -2 * Math.PI)).toHaveLength(5);
+  });
+
+  it('refuses a wave of more than 64 cycles', () => {
+    expect(() => sineWave(0, 10, 0, 1, 65)).toThrow(/cycles/);
+    expect(() => sineWave(0, 10, 0, 1, -65)).toThrow(RangeError);
+    expect(sineWave(0, 10, 0, 1, 64)).toHaveLength(1 + 64 * 4);
+  });
+
+  it('refuses a tint whose alpha is outside 0 to 1', () => {
+    expect(() => tintOver([0.2, 0.1, 0.4], 1.5)).toThrow(/alpha/);
+    expect(() => tintOver([0.2, 0.1, 0.4], -0.1)).toThrow(/alpha/);
+    expect(tintOver([0.2, 0.1, 0.4], 0)).toEqual([1, 1, 1]);
+    tintOver([0.2, 0.1, 0.4], 1).forEach((channel, i) =>
+      expect(channel).toBeCloseTo([0.2, 0.1, 0.4][i] ?? Number.NaN, 12),
+    );
+  });
+});

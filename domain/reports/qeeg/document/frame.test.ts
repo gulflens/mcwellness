@@ -142,3 +142,10 @@ describe('mirroring', () => {
     });
   });
 });
+
+describe('a count of columns', () => {
+  it('refuses more than 12 columns', () => {
+    expect(() => columns(ltr, 13, 1)).toThrow(/12/);
+    expect(columns(ltr, 12, 1)).toHaveLength(12);
+  });
+});
