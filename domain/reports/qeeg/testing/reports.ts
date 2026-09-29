@@ -338,6 +338,8 @@ export function factsFor(
       website: 'example.com',
     },
     logo: pictureOf({ width: 520, height: 260 }),
+    // No fixture holds a calculated figure; a test that makes one hands its days in.
+    calculatedFrom: null,
     pictures,
   };
 }

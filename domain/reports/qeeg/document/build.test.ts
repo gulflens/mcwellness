@@ -853,8 +853,11 @@ describe('a follow-up', () => {
     expect(wordsDrawn([partOf(parts, 'change.none')], ENGLISH)).toBe('—');
   });
 
-  it('prints the note that follows from where the figures came from, in both languages', () => {
-    const content = fullFollowUp();
+  describe('where its figures came from', () => {
+    // docs/SPEC/reports-qeeg.md section 10, points 2 and 4: a page of typed
+    // figures says they are her estimates; a page of calculated figures says
+    // what they were calculated from; the practitioner never chooses.
+    const DAYS = { earlierOn: '2026-06-09', laterOn: '2026-09-13' };
     const calculated = (figure: ReturnType<typeof typedPercent>): CalculatedFigure => ({
       ...figure,
       source: 'calculated',
@@ -865,6 +868,7 @@ describe('a follow-up', () => {
         sitesPaired: 19,
       },
     });
+    const content = fullFollowUp();
     const onlyCalculated: QeegFollowUp = {
       ...content,
       change: {
@@ -889,15 +893,63 @@ describe('a follow-up', () => {
         },
       },
     };
-    for (const locale of LOCALES) {
-      const noteOf = (made: QeegFollowUp) =>
-        wordsDrawn([partOf(build(made, locale), 'change.note')], drawingOf(locale));
-      const opening = (key: string) => later(key, locale).split(' ').slice(0, 3).join(' ');
-      expect(noteOf(content)).toContain(opening('note.figures.typed'));
-      expect(noteOf(onlyCalculated)).toContain(opening('note.figures.calculated'));
-      expect(noteOf(mixed)).toContain(opening('note.figures.both'));
-      expect(idsOf(build(picturesOnlyFollowUp(), locale))).not.toContain('change.note');
-    }
+    const buildWith = (made: QeegFollowUp, locale: Locale) =>
+      buildQeegReport(
+        { content: made, locale, facts: { ...factsFor(made), calculatedFrom: DAYS } },
+        drawingOf(locale),
+        BODY_HEIGHT,
+      );
+    const wordsOfPart = (made: QeegFollowUp, locale: Locale, id: string) =>
+      wordsDrawn([partOf(buildWith(made, locale), id)], drawingOf(locale));
+    const opening = (key: string, locale: Locale) =>
+      later(key, locale).split(' ').slice(0, 3).join(' ');
+
+    it('prints the note that follows from the figures, in both languages', () => {
+      for (const locale of LOCALES) {
+        expect(wordsOfPart(content, locale, 'change.note')).toContain(
+          opening('note.figures.typed', locale),
+        );
+        expect(wordsOfPart(onlyCalculated, locale, 'change.note')).toContain(
+          opening('note.figures.calculated', locale),
+        );
+        expect(wordsOfPart(mixed, locale, 'change.note')).toContain(
+          opening('note.figures.both', locale),
+        );
+        expect(idsOf(build(picturesOnlyFollowUp(), locale))).not.toContain('change.note');
+      }
+    });
+
+    it('names by their days the two assessments calculated figures came from', () => {
+      for (const locale of LOCALES) {
+        for (const made of [onlyCalculated, mixed]) {
+          const note = wordsOfPart(made, locale, 'change.note');
+          expect(note).toContain('09/06/2026');
+          expect(note).toContain('13/09/2026');
+        }
+        expect(wordsOfPart(content, locale, 'change.note')).not.toContain('09/06/2026');
+      }
+    });
+
+    it('heads a table of estimates as estimated, and one with a calculated figure as not', () => {
+      for (const locale of LOCALES) {
+        const head = (made: QeegFollowUp) => wordsOfPart(made, locale, 'change.table.heading');
+        expect(head(content)).toBe(later('heading.change_table', locale));
+        expect(head(onlyCalculated)).toBe(later('heading.change_table.calculated', locale));
+        expect(head(mixed)).toBe(later('heading.change_table.calculated', locale));
+      }
+    });
+
+    it('refuses calculated figures handed over without the days they were calculated from', () => {
+      expect(() =>
+        buildQeegReport(
+          { content: onlyCalculated, locale: 'en', facts: factsFor(onlyCalculated) },
+          ENGLISH,
+          BODY_HEIGHT,
+        ),
+      ).toThrow(
+        /buildQeegReport was given calculated figures and not the days of the two assessments they were calculated from/,
+      );
+    });
   });
 
   it('keeps its programme: a follow-up has no brain-map-only choice', () => {

@@ -127,6 +127,12 @@ export type ReportFacts = {
   readonly practice: PracticeLines;
   /** The practice's logo, or none: the header then keeps its room and draws nothing. */
   readonly logo: DocumentImage | null;
+  /**
+   * The days of the two assessments a follow-up's calculated figures came
+   * from, as `YYYY-MM-DD`, read by the route from the assessments the
+   * figures name; `null` when no figure on the page was calculated.
+   */
+  readonly calculatedFrom: { readonly earlierOn: string; readonly laterOn: string } | null;
   /** Each brain map's picture, by the figure id the content records. */
   readonly pictures: Readonly<Record<string, DocumentImage>>;
   // A follow-up's pairs name the earlier report's maps as well as its own:

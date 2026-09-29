@@ -105,6 +105,26 @@ function pictured(
   };
 }
 
+/**
+ * The note beneath the figures. A note of calculated figures names the days
+ * of the two assessments they came from, which the route reads and hands in;
+ * a page of calculated figures without them cannot say what it must.
+ */
+function noteWords(
+  key: NonNullable<ReturnType<typeof changeNoteKey>>,
+  facts: ReportFacts,
+  say: (key: string) => string,
+): string {
+  if (key === 'note.figures.typed') return say(key);
+  const days = facts.calculatedFrom;
+  if (days === null) {
+    throw new RangeError(
+      'buildQeegReport was given calculated figures and not the days of the two assessments they were calculated from.',
+    );
+  }
+  return fill(say(key), { earlier: dayOf(days.earlierOn), later: dayOf(days.laterOn) });
+}
+
 /** The parts of a follow-up's page of what has changed, in order. */
 export function changeParts(
   content: QeegFollowUp,
@@ -201,11 +221,23 @@ export function changeParts(
       { marginBottom: CHANGE.afterPair },
     );
 
-  // The change by frequency band: the head, kept with at least two rows.
+  // The change by frequency band: the head, kept with at least two rows. A
+  // table with a calculated figure is not headed as an estimate.
   const rows = rowsOf(content);
+  const calculatedRow = rows.some(({ row }) =>
+    [row.eyesOpen, row.eyesClosed].some((figure) => figure?.source === 'calculated'),
+  );
   if (rows.length > 0) {
     after.push(
-      part('change.table.heading', 'change', title('heading.change_table', 'subheading'), opening),
+      part(
+        'change.table.heading',
+        'change',
+        title(
+          calculatedRow ? 'heading.change_table.calculated' : 'heading.change_table',
+          'subheading',
+        ),
+        opening,
+      ),
       part(
         'change.table.head',
         'change',
@@ -292,7 +324,7 @@ export function changeParts(
   // Where the figures came from, and where the earlier report was written.
   const note = changeNoteKey(change);
   const notes = [
-    ...(note === null ? [] : [{ id: 'change.note', words: say(note) }]),
+    ...(note === null ? [] : [{ id: 'change.note', words: noteWords(note, facts, say) }]),
     ...(content.comparedWith.origin === 'imported'
       ? [{ id: 'change.earlier', words: say('note.earlier_imported') }]
       : []),

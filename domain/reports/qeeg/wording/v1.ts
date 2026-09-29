@@ -83,6 +83,8 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
     'Estimated Change by Frequency Band',
     'التغير التقديري بحسب نطاق التردد',
   ),
+  // Above a table with a calculated figure in it: not an estimate. Draft wording.
+  'heading.change_table.calculated': later('Change by Frequency Band', 'التغير بحسب نطاق التردد'),
 
   // -------------------------------------------------------------------------
   // The details at the head of the report
@@ -1085,18 +1087,22 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'figure.lower': later('lower', 'أقل'),
   'figure.higher': later('higher', 'أعلى'),
 
-  /** Which of these is printed follows from where the figures came from. */
+  /**
+   * Which of these is printed follows from where the figures came from. A
+   * calculated figure names the days of the two assessments it came from.
+   * Draft wording.
+   */
   'note.figures.typed': later(
     'The figures in this section are the practitioner’s approximate visual estimates, read from the brain maps shown. They are not calculated from the recording itself and are not a measure of change in brain function.',
     'الأرقام الواردة في هذا القسم تقديرات بصرية تقريبية من الممارس، مأخوذة من خرائط الدماغ المعروضة. وهي غير محسوبة من التسجيل نفسه، وليست مقياسا للتغير في وظائف الدماغ.',
   ),
   'note.figures.calculated': later(
-    'The figures in this section are calculated from the two recordings named above, as the mapping software measured them.',
-    'الأرقام الواردة في هذا القسم محسوبة من التسجيلين المذكورين أعلاه، كما قاسهما برنامج رسم الخرائط.',
+    'The figures in this section are calculated from the two recordings of {earlier} and {later}, as the mapping software measured them.',
+    'الأرقام الواردة في هذا القسم محسوبة من تسجيلي {earlier} و{later}، كما قاسهما برنامج رسم الخرائط.',
   ),
   'note.figures.both': later(
-    'Some figures in this section are the practitioner’s approximate visual estimates, read from the brain maps shown, and the others are calculated from the two recordings. An estimate is not a measure of change in brain function.',
-    'بعض الأرقام الواردة في هذا القسم تقديرات بصرية تقريبية من الممارس، مأخوذة من خرائط الدماغ المعروضة، والأخرى محسوبة من التسجيلين. والتقدير ليس مقياسا للتغير في وظائف الدماغ.',
+    'Some figures in this section are the practitioner’s approximate visual estimates, read from the brain maps shown, and the others are calculated from the two recordings of {earlier} and {later}. An estimate is not a measure of change in brain function.',
+    'بعض الأرقام الواردة في هذا القسم تقديرات بصرية تقريبية من الممارس، مأخوذة من خرائط الدماغ المعروضة، والأخرى محسوبة من تسجيلي {earlier} و{later}. والتقدير ليس مقياسا للتغير في وظائف الدماغ.',
   ),
   'note.earlier_imported': later(
     'The earlier report was written in the practice’s previous report tool.',
