@@ -340,7 +340,7 @@ describe('cleanRich', () => {
     },
     {
       what: 'control characters, a byte-order mark and direction controls around a mark',
-      given: rich('﻿\u0000ab‮ bo​ld\u0001', [{ from: 6, to: 11, ...B }]),
+      given: rich('\ufeff\u0000ab\u202e bo\u200bld\u0001', [{ from: 6, to: 11, ...B }]),
       most: 100,
       kept: rich('ab bold', [{ from: 3, to: 7, ...B }]),
     },
@@ -436,13 +436,13 @@ describe('cleanRich', () => {
     },
     {
       what: 'Arabic with the two characters that part and join letters',
-      given: rich('ب‌ب مهم', [{ from: 4, to: 7, ...B }]),
+      given: rich('ب\u200cب مهم', [{ from: 4, to: 7, ...B }]),
       most: 100,
-      kept: rich('ب‌ب مهم', [{ from: 4, to: 7, ...B }]),
+      kept: rich('ب\u200cب مهم', [{ from: 4, to: 7, ...B }]),
     },
     {
       what: 'nothing but what is removed',
-      given: rich('​ \u0000\t', [{ from: 0, to: 4, ...B }]),
+      given: rich('\u200b \u0000\t', [{ from: 0, to: 4, ...B }]),
       most: 100,
       kept: rich(''),
     },
