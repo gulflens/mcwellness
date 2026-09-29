@@ -273,13 +273,16 @@ describe('what the page can print', () => {
     // which is the opposite sense; "I recommend" and "it was recommended" are
     // one spelling. Advice is written as a verbal noun, and a recommendation in
     // the form that reads one way.
+    // A joined "and" or "so" in front does not hide one: "وابن" is refused as "ابن" is.
     const AMBIGUOUS =
-      /(^|[^\u0600-\u06FF])(ابن|تحد|قيم|حسن|درب|أوصي|عزز|راقب|قلل)(?![\u0600-\u06FF])/;
+      /(^|[^\u0600-\u06FF])[وف]?(ابن|تحد|قيم|حسن|درب|أوصي|عزز|راقب|قلل|حافظ|مثبت|مهدئ|أرسي|حددت|أفدت|كتب)(?![\u0600-\u06FF])/;
     const found = everyText('ar')
       .filter(({ text }) => AMBIGUOUS.test(text))
       .map(({ at, text }) => `${at}: ${text}`);
     expect(found).toEqual([]);
     expect(AMBIGUOUS.test('ابن عادات تركيز ثابتة')).toBe(true);
+    expect(AMBIGUOUS.test('قلل المشتتات وابن عادات')).toBe(true);
+    expect(AMBIGUOUS.test('بنهج مثبت لتحسين')).toBe(true);
     expect(AMBIGUOUS.test('بناء عادات تركيز ثابتة')).toBe(false);
   });
 

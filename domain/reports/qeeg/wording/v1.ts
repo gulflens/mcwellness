@@ -103,7 +103,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'value.eyes.open': both('Open', 'مفتوحتان'),
   'value.eyes.closed_and_open': both('Closed and Open', 'مغلقتان ومفتوحتان'),
   'value.stage.initial': both('Initial QEEG', 'تقييم خريطة الدماغ الأولي'),
-  'value.stage.follow_up': both('Follow-up QEEG', 'تقييم خريطة الدماغ للمتابعة'),
+  'value.stage.follow_up': both('Follow-up QEEG', 'تقييم المتابعة لخريطة الدماغ'),
   'value.stage.final': both('Final QEEG', 'تقييم خريطة الدماغ النهائي'),
 
   // -------------------------------------------------------------------------
@@ -122,7 +122,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'text.findings': each(
     p(
       'The following findings summarise the main patterns of brain activity identified during your QEEG assessment. These observations provide an overview of the primary areas that may be contributing to your current concerns and goals.',
-      'تلخص النتائج التالية الأنماط الرئيسية لنشاط الدماغ التي حددت خلال تقييم خريطة الدماغ الخاص بك. وتقدم هذه الملاحظات نظرة عامة على الجوانب الأساسية التي قد تسهم في ما يشغلك حاليا وفي أهدافك.',
+      'تلخص النتائج التالية الأنماط الرئيسية لنشاط الدماغ التي تم تحديدها خلال تقييم خريطة الدماغ الخاص بك. وتقدم هذه الملاحظات نظرة عامة على الجوانب الأساسية التي قد تسهم في ما يشغلك حاليا وفي أهدافك.',
     ),
     p(
       'The following findings summarise the main changes observed between the {earlier} and the follow-up QEEG. These findings highlight areas of improvement, areas that have remained relatively stable and areas that may continue to benefit from further training.',
@@ -132,11 +132,11 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'text.focus': each(
     p(
       'The following areas have been identified as the primary focus of your personalised neurofeedback programme. These priorities have been selected to support your individual goals and guide your training throughout the programme.',
-      'حددت المجالات التالية بوصفها محور التركيز الأساسي لبرنامج الارتجاع العصبي المخصص لك. وقد اختيرت هذه الأولويات لدعم أهدافك الفردية وتوجيه تدريبك على مدار البرنامج.',
+      'تم تحديد المجالات التالية بوصفها محور التركيز الأساسي لبرنامج الارتجاع العصبي المخصص لك. وقد اختيرت هذه الأولويات لدعم أهدافك الفردية وتوجيه تدريبك على مدار البرنامج.',
     ),
     p(
       'Based on the follow-up QEEG findings and the client’s reported progress, the following areas have been identified as priorities for the next stage of the neurofeedback programme.',
-      'استنادا إلى نتائج تقييم المتابعة لخريطة الدماغ وما أفاد به العميل من تقدم، حددت المجالات التالية بوصفها أولويات المرحلة التالية من برنامج الارتجاع العصبي.',
+      'استنادا إلى نتائج تقييم المتابعة لخريطة الدماغ وما أفاد به العميل من تقدم، تم تحديد المجالات التالية بوصفها أولويات المرحلة التالية من برنامج الارتجاع العصبي.',
     ),
   ),
   'text.dashboard': both(
@@ -158,7 +158,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
     ),
     p(
       'Based on the follow-up QEEG findings and your reported progress, the following continued neurofeedback programme has been recommended to support your individual goals. As training progresses, your programme may be adjusted to ensure it remains tailored to your needs and response to training.',
-      'استنادا إلى نتائج تقييم المتابعة لخريطة الدماغ وما أفدت به من تقدم، يوصى بمواصلة برنامج الارتجاع العصبي على النحو التالي لدعم أهدافك الفردية. ومع تقدم التدريب، قد يعدل برنامجك لضمان بقائه ملائما لاحتياجاتك واستجابتك للتدريب.',
+      'استنادا إلى نتائج تقييم المتابعة لخريطة الدماغ وما أبلغتنا به من تقدم، يوصى بمواصلة برنامج الارتجاع العصبي على النحو التالي لدعم أهدافك الفردية. ومع تقدم التدريب، قد يعدل برنامجك لضمان بقائه ملائما لاحتياجاتك واستجابتك للتدريب.',
     ),
   ),
   'text.programme_length': each(
@@ -188,7 +188,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'text.gradual': both(
     'Neurofeedback is a gradual learning process, and progress varies between individuals. Your training plan will continue to be personalised throughout the programme to ensure the most effective outcome.',
-    'الارتجاع العصبي عملية تعلم تدريجية، ويختلف التقدم من شخص إلى آخر. وستستمر مواءمة خطة تدريبك على مدار البرنامج سعيا إلى أفضل نتيجة ممكنة.',
+    'الارتجاع العصبي عملية تعلم تدريجية، ويختلف التقدم من شخص إلى آخر. وستستمر مواءمة خطة تدريبك على مدار البرنامج لضمان أفضل نتيجة ممكنة.',
   ),
   'text.final_note': both(
     '**Final Note:** Every brain is unique, and no two QEEG assessments are the same. Neurofeedback is a personalised process, and your training plan will be adjusted throughout training based on your progress, the changes you notice and your response to sessions. This report is confidential and intended solely for the named client.',
@@ -411,7 +411,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
     ', with findings involving the **{regions}**',
     '، مع نتائج تشمل **{regions}**',
   ),
-  'clause.asymmetry.involving': both(' involving the **{regions}**', ' تشمل **{regions}**'),
+  'clause.asymmetry.involving': both(' involving the **{regions}**', ' وتشمل **{regions}**'),
 
   'level.connectivity.increased.label': first('Increased', 'متزايد'),
   'level.connectivity.increased.word': first('increased', 'متزايدا'),
@@ -972,20 +972,20 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'sessions.few': both('{count} Sessions', '{count} جلسات'),
   'sessions.many': both('{count} Sessions', '{count} جلسة'),
 
-  'approach.calming.label': first('Calming', 'النهج المهدئ'),
+  'approach.calming.label': first('Calming', 'نهج التهدئة'),
   'approach.calming.text': first(
     'Training will begin with a calming approach to support nervous system regulation, promote relaxation and establish a stable foundation before progressing to more targeted training.',
-    'سيبدأ التدريب بنهج مهدئ لدعم تنظيم الجهاز العصبي وتعزيز الاسترخاء وإرساء أساس مستقر قبل الانتقال إلى تدريب أكثر استهدافا.',
+    'سيبدأ التدريب بنهج التهدئة لدعم تنظيم الجهاز العصبي وتعزيز الاسترخاء وإرساء أساس مستقر قبل الانتقال إلى تدريب أكثر استهدافا.',
   ),
-  'approach.stabilising.label': first('Stabilising', 'النهج المثبت'),
+  'approach.stabilising.label': first('Stabilising', 'نهج التثبيت'),
   'approach.stabilising.text': first(
     'Training will begin with a stabilising approach to improve brain regulation and strengthen communication between brain regions before progressing to more targeted training.',
-    'سيبدأ التدريب بنهج مثبت لتحسين تنظيم نشاط الدماغ وتقوية التواصل بين مناطق الدماغ قبل الانتقال إلى تدريب أكثر استهدافا.',
+    'سيبدأ التدريب بنهج التثبيت لتحسين تنظيم نشاط الدماغ وتقوية التواصل بين مناطق الدماغ قبل الانتقال إلى تدريب أكثر استهدافا.',
   ),
-  'approach.calming_and_stabilising.label': first('Calming & Stabilising', 'النهج المهدئ والمثبت'),
+  'approach.calming_and_stabilising.label': first('Calming & Stabilising', 'نهج التهدئة والتثبيت'),
   'approach.calming_and_stabilising.text': first(
     'Training will begin by combining calming and stabilising approaches to support nervous system regulation while improving communication between brain regions before progressing to more targeted training.',
-    'سيبدأ التدريب بالجمع بين النهجين المهدئ والمثبت لدعم تنظيم الجهاز العصبي وتحسين التواصل بين مناطق الدماغ قبل الانتقال إلى تدريب أكثر استهدافا.',
+    'سيبدأ التدريب بالجمع بين نهجي التهدئة والتثبيت لدعم تنظيم الجهاز العصبي وتحسين التواصل بين مناطق الدماغ قبل الانتقال إلى تدريب أكثر استهدافا.',
   ),
 
   'next.continue_current.label': later('Continue current approach', 'مواصلة النهج الحالي'),
@@ -993,23 +993,23 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
     'Training will continue with the current approach, building on the progress made so far.',
     'سيستمر التدريب بالنهج الحالي، بناء على ما تحقق من تقدم حتى الآن.',
   ),
-  'next.continue_calming.label': later('Continue calming', 'مواصلة النهج المهدئ'),
+  'next.continue_calming.label': later('Continue calming', 'مواصلة نهج التهدئة'),
   'next.continue_calming.text': later(
     'Training will continue with a calming approach to support nervous system regulation and promote relaxation.',
-    'سيستمر التدريب بنهج مهدئ لدعم تنظيم الجهاز العصبي وتعزيز الاسترخاء.',
+    'سيستمر التدريب بنهج التهدئة لدعم تنظيم الجهاز العصبي وتعزيز الاسترخاء.',
   ),
-  'next.continue_stabilising.label': later('Continue stabilising', 'مواصلة النهج المثبت'),
+  'next.continue_stabilising.label': later('Continue stabilising', 'مواصلة نهج التثبيت'),
   'next.continue_stabilising.text': later(
     'Training will continue with a stabilising approach to improve brain regulation and strengthen communication between brain regions.',
-    'سيستمر التدريب بنهج مثبت لتحسين تنظيم نشاط الدماغ وتقوية التواصل بين مناطق الدماغ.',
+    'سيستمر التدريب بنهج التثبيت لتحسين تنظيم نشاط الدماغ وتقوية التواصل بين مناطق الدماغ.',
   ),
   'next.continue_calming_and_stabilising.label': later(
     'Continue calming & stabilising',
-    'مواصلة النهج المهدئ والمثبت',
+    'مواصلة نهج التهدئة والتثبيت',
   ),
   'next.continue_calming_and_stabilising.text': later(
     'Training will continue by combining calming and stabilising approaches to support nervous system regulation while improving communication between brain regions.',
-    'سيستمر التدريب بالجمع بين النهجين المهدئ والمثبت لدعم تنظيم الجهاز العصبي وتحسين التواصل بين مناطق الدماغ.',
+    'سيستمر التدريب بالجمع بين نهجي التهدئة والتثبيت لدعم تنظيم الجهاز العصبي وتحسين التواصل بين مناطق الدماغ.',
   ),
   'next.progress_to_optimisation.label': later(
     'Progress to optimisation',
@@ -1017,7 +1017,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'next.progress_to_optimisation.text': later(
     'Training will progress to optimisation, building on the foundation established so far.',
-    'سينتقل التدريب إلى مرحلة تحسين الأداء، بناء على الأساس الذي أرسي حتى الآن.',
+    'سينتقل التدريب إلى مرحلة تحسين الأداء، بناء على الأساس الذي تحقق حتى الآن.',
   ),
   'next.adjust_focus.label': later(
     'Adjust training focus based on follow-up findings',
@@ -1085,7 +1085,7 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'note.earlier_imported': later(
     'The earlier report was written in the practice’s previous report tool.',
-    'كتب التقرير السابق باستخدام أداة التقارير السابقة لدى المركز.',
+    'تمت كتابة التقرير السابق باستخدام أداة التقارير السابقة لدى المركز.',
   ),
 
   // -------------------------------------------------------------------------
