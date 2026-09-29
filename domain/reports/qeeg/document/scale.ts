@@ -149,7 +149,9 @@ export function scaleOps(
   const sx = (x: number): number => origin.x + (x - origin.x) * k;
   const sy = (y: number): number => origin.y + (y - origin.y) * k;
 
-  return ops.map((op): LayoutOp => {
+  return ops.map((given): LayoutOp => {
+    // Copied first, so that what is handed back shares no paint with its source.
+    const op = copyOf(given);
     switch (op.kind) {
       case 'text':
         return { ...op, x: sx(op.x), y: sy(op.y), style: { ...op.style, size: op.style.size * k } };
@@ -207,7 +209,9 @@ export function translateOps(ops: readonly LayoutOp[], dx: number, dy: number): 
       `translateOps needs a finite ${name}, and was given ${String(name === 'dx' ? dx : dy)}.`,
     );
   }
-  return ops.map((op): LayoutOp => {
+  return ops.map((given): LayoutOp => {
+    // Copied first, so that what is handed back shares no paint with its source.
+    const op = copyOf(given);
     switch (op.kind) {
       case 'text':
       case 'rule':

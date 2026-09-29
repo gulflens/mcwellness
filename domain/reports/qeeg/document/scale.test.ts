@@ -237,3 +237,85 @@ describe('a rectangle, which the engine draws for the practice’s invoice', () 
     expect(copy.stroke).not.toBe(rect.stroke);
   });
 });
+
+describe('what the review of the rectangle found the tests did not hold', () => {
+  const rect: LayoutOp = {
+    kind: 'rect',
+    x: 120,
+    y: 140,
+    width: 60,
+    height: 20,
+    fill: { rgb: [0.9, 0.8, 1] },
+    stroke: { rgb: [0.2, 0.4, 0.6] },
+  };
+
+  it('scales up and down about the origin’s own height, and keeps a line’s colour', () => {
+    // An origin whose two numbers differ, so that one taken for the other shows.
+    expect(scaleOps([rect], 0.5, { x: 100, y: 40 })).toEqual([
+      {
+        kind: 'rect',
+        x: 110,
+        y: 90,
+        width: 30,
+        height: 10,
+        fill: { rgb: [0.9, 0.8, 1] },
+        stroke: { rgb: [0.2, 0.4, 0.6], thickness: 0.25 },
+      },
+    ]);
+  });
+
+  /** Every paint of an op, and every colour triple inside one. */
+  function paintsOf(op: LayoutOp): object[] {
+    const found: object[] = [];
+    const take = (paint: { rgb?: readonly number[] } | undefined): void => {
+      if (!paint) return;
+      found.push(paint);
+      if (paint.rgb) found.push(paint.rgb);
+    };
+    if (op.kind === 'text') take(op.style);
+    if (op.kind === 'rule' && op.rgb) found.push(op.rgb);
+    if (op.kind === 'path' || op.kind === 'rect') {
+      take(op.fill);
+      take(op.stroke);
+    }
+    return found;
+  }
+
+  const coloured: LayoutOp[] = [
+    {
+      kind: 'text',
+      x: 0,
+      y: 0,
+      text: 'a',
+      style: { font: 'regular', size: 10, rgb: [0.1, 0.2, 0.3] },
+    },
+    { kind: 'rule', x: 0, y: 0, width: 10, rgb: [0.1, 0.2, 0.3] },
+    {
+      kind: 'path',
+      segments: [
+        ['M', 0, 0],
+        ['L', 10, 10],
+      ],
+      fill: { rgb: [0.1, 0.2, 0.3] },
+      stroke: { rgb: [0.3, 0.2, 0.1], width: 1 },
+    },
+    rect,
+  ];
+
+  it.each([
+    ['copied at a scale of one', (ops: LayoutOp[]) => scaleOps(ops, 1, { x: 0, y: 0 })],
+    ['scaled', (ops: LayoutOp[]) => scaleOps(ops, 0.5, { x: 0, y: 0 })],
+    ['moved', (ops: LayoutOp[]) => translateOps(ops, 3, 4)],
+  ])('shares no paint and no colour with what it was made from, when %s', (_name, change) => {
+    const made = change(coloured);
+    coloured.forEach((op, index) => {
+      const result = made[index];
+      if (!result) throw new Error('an op is missing');
+      const before = paintsOf(op);
+      const after = paintsOf(result);
+      expect(after).toEqual(before);
+      expect(before.length).toBeGreaterThan(0);
+      after.forEach((paint, at) => expect(paint, `${op.kind} paint ${at}`).not.toBe(before[at]));
+    });
+  });
+});
