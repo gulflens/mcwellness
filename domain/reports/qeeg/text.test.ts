@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { blankInitial } from './blank';
+import { validateQeegContent } from './shape';
 import {
   clean,
+  cleanRich,
   isEmpty,
   isRealDay,
   isRecord,
@@ -10,7 +13,7 @@ import {
   textFor,
   toParagraphs,
 } from './text';
-import type { RichText } from './types';
+import type { Mark, RichText } from './types';
 
 /** Part 2 of brief C1: typed text, in either language, and the wording's bold marks. */
 
@@ -265,5 +268,236 @@ describe('isRecord', () => {
     expect(isRecord({})).toBe(true);
     expect(isRecord({ a: 1 })).toBe(true);
     for (const value of [null, undefined, [], 'text', 3, true]) expect(isRecord(value)).toBe(false);
+  });
+});
+
+describe('cleanRich', () => {
+  const B = { bold: true } as const;
+  const U = { underline: true } as const;
+
+  /** Each case: what a person's editor handed over, the length to cut at, and what is kept. */
+  const CASES: ReadonlyArray<{
+    readonly what: string;
+    readonly given: RichText;
+    readonly most: number;
+    readonly kept: RichText;
+  }> = [
+    {
+      what: 'two Korean letters that compose, with the edge of a mark between them',
+      // The re-check's input: bold over the first jamo only, the second no
+      // combining mark. The next mark must still cover "word".
+      given: rich('가 word', [
+        { from: 0, to: 1, ...B },
+        { from: 3, to: 7, ...U },
+      ]),
+      most: 100,
+      kept: rich('가 word', [
+        { from: 0, to: 1, ...B },
+        { from: 2, to: 6, ...U },
+      ]),
+    },
+    {
+      what: 'a mark that begins on the second of two letters that compose',
+      given: rich('x 가', [{ from: 3, to: 4, ...B }]),
+      most: 100,
+      kept: rich('x 가', [{ from: 2, to: 3, ...B }]),
+    },
+    {
+      what: 'a combining mark outside the mark over the letter it joins',
+      given: rich('café au lait', [
+        { from: 0, to: 4, ...B },
+        { from: 9, to: 13, ...U },
+      ]),
+      most: 100,
+      kept: rich('café au lait', [
+        { from: 0, to: 4, ...B },
+        { from: 8, to: 12, ...U },
+      ]),
+    },
+    {
+      what: 'a mark that begins on a combining mark',
+      given: rich('née', [{ from: 2, to: 4, ...B }]),
+      most: 100,
+      kept: rich('née', [{ from: 1, to: 3, ...B }]),
+    },
+    {
+      what: 'a mark that begins inside a letter written as a pair',
+      given: rich('a\u{1F600}b', [{ from: 2, to: 4, ...B }]),
+      most: 100,
+      kept: rich('a\u{1F600}b', [{ from: 1, to: 4, ...B }]),
+    },
+    {
+      what: 'two marks meeting inside a letter written as a pair',
+      given: rich('a\u{1F600}b', [
+        { from: 0, to: 2, ...B },
+        { from: 2, to: 4, ...U },
+      ]),
+      most: 100,
+      kept: rich('a\u{1F600}b', [
+        { from: 0, to: 3, ...B },
+        { from: 3, to: 4, ...U },
+      ]),
+    },
+    {
+      what: 'control characters, a byte-order mark and direction controls around a mark',
+      given: rich('﻿\u0000ab‮ bo​ld\u0001', [{ from: 6, to: 11, ...B }]),
+      most: 100,
+      kept: rich('ab bold', [{ from: 3, to: 7, ...B }]),
+    },
+    {
+      what: 'a tab and Windows line ends',
+      given: rich('one\ttwo\r\nthree', [{ from: 4, to: 7, ...U }]),
+      most: 100,
+      kept: rich('one two\nthree', [{ from: 4, to: 7, ...U }]),
+    },
+    {
+      what: 'text that was not composed',
+      given: rich('Café', [{ from: 0, to: 5, ...B }]),
+      most: 100,
+      kept: rich('Café', [{ from: 0, to: 4, ...B }]),
+    },
+    {
+      what: 'white space at both ends, marked and not',
+      given: rich('  lead x \n\n', [
+        { from: 0, to: 2, ...B },
+        { from: 7, to: 10, ...U },
+      ]),
+      most: 100,
+      kept: rich('lead x', [{ from: 5, to: 6, ...U }]),
+    },
+    {
+      what: 'a mark that straddles the cut, and one past it',
+      given: rich(`${'x'.repeat(10)}yyyy zz`, [
+        { from: 8, to: 14, ...B },
+        { from: 15, to: 17, ...U },
+      ]),
+      most: 12,
+      kept: rich(`${'x'.repeat(10)}yy`, [{ from: 8, to: 12, ...B }]),
+    },
+    {
+      what: 'a cut that would split a letter written as a pair',
+      given: rich('ab\u{1F600}cd', [{ from: 2, to: 4, ...B }]),
+      most: 3,
+      kept: rich('ab'),
+    },
+    {
+      what: 'marks out of order, overlapping, and running past the text',
+      given: rich('abcdefgh', [
+        { from: 6, to: 40, ...B },
+        { from: 0, to: 3, ...U },
+        { from: 2, to: 4, ...B },
+      ]),
+      most: 100,
+      kept: rich('abcdefgh', [
+        { from: 0, to: 2, ...U },
+        { from: 2, to: 3, bold: true, underline: true },
+        { from: 3, to: 4, ...B },
+        { from: 6, to: 8, ...B },
+      ]),
+    },
+    {
+      what: 'neighbours that are alike and touch',
+      given: rich('abcdef', [
+        { from: 0, to: 2, ...B },
+        { from: 2, to: 4, ...B },
+        { from: 4, to: 6, bold: true, underline: true },
+      ]),
+      most: 100,
+      kept: rich('abcdef', [
+        { from: 0, to: 4, ...B },
+        { from: 4, to: 6, bold: true, underline: true },
+      ]),
+    },
+    {
+      what: 'marks that end up empty, or are neither bold nor underlined',
+      given: rich('ab\u0000cd', [
+        { from: 1, to: 1, ...B },
+        { from: 2, to: 3, ...U },
+        { from: 0, to: 5 },
+        { from: 3, to: 4, bold: false, underline: false } as unknown as Mark,
+        { from: 4, to: 2, ...B },
+      ]),
+      most: 100,
+      kept: rich('abcd'),
+    },
+    {
+      what: 'edges that are not whole numbers, or not numbers at all',
+      given: rich('abcdef', [
+        { from: 0.5, to: 2.5, ...B },
+        { from: Number.NaN, to: 5, ...U },
+        { from: -3, to: Number.POSITIVE_INFINITY, ...U },
+      ]),
+      most: 100,
+      kept: rich('abcdef', [
+        { from: 0, to: 1, ...U },
+        { from: 1, to: 3, bold: true, underline: true },
+        { from: 3, to: 6, ...U },
+      ]),
+    },
+    {
+      what: 'Arabic with the two characters that part and join letters',
+      given: rich('ب‌ب مهم', [{ from: 4, to: 7, ...B }]),
+      most: 100,
+      kept: rich('ب‌ب مهم', [{ from: 4, to: 7, ...B }]),
+    },
+    {
+      what: 'nothing but what is removed',
+      given: rich('​ \u0000\t', [{ from: 0, to: 4, ...B }]),
+      most: 100,
+      kept: rich(''),
+    },
+  ];
+
+  for (const { what, given, most, kept } of CASES) {
+    it(`keeps every mark on the letters it was typed over: ${what}`, () => {
+      expect(cleanRich(given, most)).toEqual(kept);
+    });
+  }
+
+  it('gives back what the shape accepts as a summary, in every case', () => {
+    for (const { what, given, most } of CASES) {
+      const summary = cleanRich(given, most);
+      const answer = validateQeegContent({ ...blankInitial(), summary: { en: summary, ar: null } });
+      expect(answer, what).toMatchObject({ ok: true });
+    }
+  });
+
+  it('gives back the same text and marks when given what it gave back', () => {
+    for (const { what, given, most } of CASES) {
+      const once = cleanRich(given, most);
+      expect(cleanRich(once, most), what).toEqual(once);
+    }
+  });
+
+  it('gives the same text as clean where nothing removed sits beside a letter that composes', () => {
+    for (const { what, given, most } of CASES.slice(0, 11)) {
+      expect(cleanRich(given, most).text, what).toBe(clean(given.text, most));
+    }
+  });
+
+  it('never changes what it was given', () => {
+    for (const { given, most } of CASES) {
+      const frozen = Object.freeze({
+        text: given.text,
+        marks: Object.freeze(given.marks.map((m) => Object.freeze({ ...m }))),
+      });
+      const before = JSON.stringify(frozen);
+      expect(() => cleanRich(frozen, most)).not.toThrow();
+      expect(JSON.stringify(frozen)).toBe(before);
+    }
+  });
+
+  it('refuses a length that is not a whole number above 0, as clean does', () => {
+    for (const most of [0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => cleanRich(rich('abc'), most), String(most)).toThrow(RangeError);
+      expect(() => cleanRich(rich('abc'), most), String(most)).toThrow(/whole number above 0/);
+    }
+  });
+
+  it('cleans a long text in good time', () => {
+    const long = rich('가 word '.repeat(20_000), [{ from: 0, to: 1, ...B }]);
+    const started = performance.now();
+    expect(cleanRich(long, 200_000).text.startsWith('가 word')).toBe(true);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 });

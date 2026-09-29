@@ -55,7 +55,6 @@ import type {
   ImportNoteCode,
   InitialBand,
   InitialConnectivity,
-  Mark,
   Ordered,
   Picked,
   QeegInitial,
@@ -63,7 +62,7 @@ import type {
   Score,
   Stage,
 } from '../types';
-import { clean, isRealDay, isRecord } from '../text';
+import { clean, cleanRich, isRealDay, isRecord } from '../text';
 import { LIMITS } from '../types';
 import { LEGACY_FORMAT, LEGACY_SUBJECT_KEY, LEGACY_VERSION } from './keys';
 import { fromQuillDelta } from './quill';
@@ -378,23 +377,16 @@ function dashboardOf(file: Loose, notes: Notes): Readonly<Record<DimensionId, Sc
 }
 
 /**
- * Rich text made fit to store: trimmed and cut as `clean` would, with its
- * marks moved by what was trimmed from the start and kept inside what is
- * left. `removed` says the delta reader already took characters out.
+ * Rich text made fit to store by the editor's rule (`cleanRich`), cut to the
+ * summary's limit with its marks kept on their letters. What the delta
+ * reader hands over is already clean, so anything shorter now was cut.
+ * `removed` says the delta reader took characters out.
  */
 function limitedRich(rich: RichText, at: string, notes: Notes, removed: boolean): RichText {
-  const lead = rich.text.length - rich.text.trimStart().length;
-  const kept = clean(rich.text.slice(lead), LIMITS.summary);
-  if (removed || kept.length < rich.text.trim().length) notes.add('text_shortened', at);
-  const marks: Mark[] = rich.marks
-    .map((m) => ({
-      ...m,
-      from: Math.max(0, m.from - lead),
-      to: Math.min(kept.length, m.to - lead),
-    }))
-    .filter((m) => m.from < m.to);
-  if (marks.length > LIMITS.marks) notes.add('extra_positions_ignored', `${at}.marks`);
-  return { text: kept, marks: marks.slice(0, LIMITS.marks) };
+  const kept = cleanRich(rich, LIMITS.summary);
+  if (removed || kept.text.length < rich.text.length) notes.add('text_shortened', at);
+  if (kept.marks.length > LIMITS.marks) notes.add('extra_positions_ignored', `${at}.marks`);
+  return { text: kept.text, marks: kept.marks.slice(0, LIMITS.marks) };
 }
 
 /**

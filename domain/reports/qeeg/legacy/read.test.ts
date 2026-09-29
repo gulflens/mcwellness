@@ -841,6 +841,29 @@ describe('typed text is made fit to store', () => {
     expect(result.notes).toEqual([{ code: 'text_shortened', at: 'summary.en' }]);
   });
 
+  it('composes two letters across the edge of a mark without moving the next mark', () => {
+    // The re-check's input: two Korean jamo that compose into one letter, bold
+    // over the first only, the second no combining mark.
+    const summaryRich = JSON.stringify({
+      ops: [
+        { insert: '\u1100', attributes: { bold: true } },
+        { insert: '\u1161 ' },
+        { insert: 'word', attributes: { underline: true } },
+        { insert: '\n' },
+      ],
+    });
+    const result = readOk(withFile({ summaryRich }));
+    expect(result.content.summary.en).toEqual({
+      text: '\uac00 word',
+      marks: [
+        { from: 0, to: 1, bold: true },
+        { from: 2, to: 6, underline: true },
+      ],
+    });
+    expect(result.notes).toEqual([]);
+    expect(validateQeegContent(result.content)).toMatchObject({ ok: true });
+  });
+
   it('trims a formatted summary at its start and keeps its marks on their letters', () => {
     const summaryRich = JSON.stringify({
       ops: [{ insert: '  lead ' }, { insert: 'x', attributes: { bold: true } }, { insert: '\n' }],

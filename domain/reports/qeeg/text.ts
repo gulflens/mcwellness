@@ -152,16 +152,163 @@ export function withoutUnseen(typed: string): string {
  * character in two.
  */
 export function clean(typed: string, most: number): string {
+  checkMost(most);
+  let text = withoutUnseen(typed.normalize('NFC')).trim();
+  if (text.length > most) text = text.slice(0, cutAt(text, most)).trimEnd();
+  return text;
+}
+
+function checkMost(most: number): void {
   if (!Number.isInteger(most) || most < 1) {
     throw new RangeError('A length to cut at is a whole number above 0.');
   }
-  let text = withoutUnseen(typed.normalize('NFC')).trim();
-  if (text.length > most) {
-    let cut = most;
-    if (cut > 0 && isHighSurrogate(text.charCodeAt(cut - 1))) cut -= 1;
-    text = text.slice(0, cut).trimEnd();
+}
+
+/** Where to cut `text` at `most` units without splitting a letter written as a pair. */
+function cutAt(text: string, most: number): number {
+  return isHighSurrogate(text.charCodeAt(most - 1)) ? most - 1 : most;
+}
+
+const BOLD_BIT = 1;
+const UNDERLINE_BIT = 2;
+const COMBINING = /\p{M}/u;
+
+/**
+ * The style of every UTF-16 unit of a text of `length`: bold, underlined,
+ * both, or neither. Marks out of order, overlapping, or running past the
+ * text are what a person's editor may hand over, so they are read, never
+ * refused: a unit is bold when any bold mark covers it, and so for
+ * underline. An edge that is no number covers nothing.
+ */
+function unitStyles(marks: readonly Mark[], length: number): Uint8Array {
+  const bold = new Int32Array(length + 1);
+  const underline = new Int32Array(length + 1);
+  for (const mark of marks) {
+    const isBold = mark.bold === true;
+    const isUnderlined = mark.underline === true;
+    if (!isBold && !isUnderlined) continue;
+    // A unit at `i` is covered when from <= i < to.
+    const from = Math.min(Math.max(Math.ceil(mark.from), 0), length);
+    const to = Math.min(Math.max(Math.ceil(mark.to), 0), length);
+    if (!(from < to)) continue;
+    if (isBold) {
+      bold[from] = (bold[from] ?? 0) + 1;
+      bold[to] = (bold[to] ?? 0) - 1;
+    }
+    if (isUnderlined) {
+      underline[from] = (underline[from] ?? 0) + 1;
+      underline[to] = (underline[to] ?? 0) - 1;
+    }
   }
-  return text;
+  const styles = new Uint8Array(length);
+  let inBold = 0;
+  let inUnderline = 0;
+  for (let i = 0; i < length; i += 1) {
+    inBold += bold[i] ?? 0;
+    inUnderline += underline[i] ?? 0;
+    styles[i] = (inBold > 0 ? BOLD_BIT : 0) | (inUnderline > 0 ? UNDERLINE_BIT : 0);
+  }
+  return styles;
+}
+
+/** Whether `next` becomes part of the letter `letter` when the text is composed. */
+function joins(letter: string, next: string): boolean {
+  if (letter === '') return false;
+  if (COMBINING.test(next)) return true;
+  return (letter + next).normalize('NFC') !== letter.normalize('NFC') + next.normalize('NFC');
+}
+
+type Styled = { readonly text: string; readonly style: number };
+
+/**
+ * What a person typed with its bold and underline, made fit to store by the
+ * rule `clean` follows: composed, rid of what `withoutUnseen` removes,
+ * trimmed at both ends, and cut at `most` UTF-16 units without splitting a
+ * letter written as a pair. Every mark still covers the letters it was typed
+ * over.
+ *
+ * **Why it works a letter at a time.** Composing joins two characters into
+ * one letter: a letter and its accent, or two Korean jamo, where the second
+ * is no combining mark at all. A mark whose edge fell between them would
+ * slip by one if the text were composed as a whole and the mark left where
+ * it was. So what is removed goes first, the rest is gathered into the runs
+ * that compose into one letter, and each letter takes the style of the first
+ * of its characters that has one: an edge that falls inside a letter is
+ * moved OUTWARD to take the whole of it, and where two marks meet inside
+ * one letter, the earlier keeps it.
+ *
+ * **What comes back is tidy.** Marks are in order, never overlap, and never
+ * run past the text; alike neighbours that touch are one mark; a mark that
+ * ends up empty, or is neither bold nor underlined, is gone. Cleaning twice
+ * is cleaning once.
+ *
+ * How many marks there may be is not this function's to decide: the shape
+ * refuses too many by name (`LIMITS.marks`), and the old-file reader keeps
+ * the first ones with a note.
+ */
+export function cleanRich(rich: RichText, most: number): RichText {
+  checkMost(most);
+  const source = rich.text;
+  const units = unitStyles(rich.marks, source.length);
+
+  // What `withoutUnseen` removes, removed, each character keeping its style.
+  const kept: Styled[] = [];
+  for (let i = 0; i < source.length;) {
+    const code = source.codePointAt(i) ?? 0;
+    const size = code > 0xffff ? 2 : 1;
+    const style = (units[i] ?? 0) || (size === 2 ? (units[i + 1] ?? 0) : 0);
+    if (code === TAB) kept.push({ text: SPACE, style });
+    else if (!isRemoved(code)) kept.push({ text: source.slice(i, i + size), style });
+    i += size;
+  }
+
+  // Gathered into letters, each composed, each styled by its first styled part.
+  let text = '';
+  const styles: number[] = [];
+  let letter = '';
+  let letterStyle = 0;
+  const flush = () => {
+    const composed = letter.normalize('NFC');
+    text += composed;
+    for (let i = 0; i < composed.length; i += 1) styles.push(letterStyle);
+    letter = '';
+    letterStyle = 0;
+  };
+  for (const character of kept) {
+    if (!joins(letter, character.text)) flush();
+    letter += character.text;
+    if (letterStyle === 0) letterStyle = character.style;
+  }
+  flush();
+
+  // Trimmed, then cut, as `clean` does.
+  const lead = text.length - text.trimStart().length;
+  let end = text.trimEnd().length;
+  if (end - lead > most) {
+    const cut = cutAt(text.slice(lead, end), most);
+    end = lead + text.slice(lead, lead + cut).trimEnd().length;
+  }
+  return { text: text.slice(Math.min(lead, end), end), marks: marksOf(styles.slice(lead, end)) };
+}
+
+/** One mark for each run of units alike in style, leaving out the unstyled. */
+function marksOf(styles: readonly number[]): Mark[] {
+  const marks: Mark[] = [];
+  let from = 0;
+  for (let i = 1; i <= styles.length; i += 1) {
+    const style = styles[from] ?? 0;
+    if (i < styles.length && styles[i] === style) continue;
+    if (style !== 0) {
+      marks.push({
+        from,
+        to: i,
+        ...((style & BOLD_BIT) !== 0 ? { bold: true as const } : {}),
+        ...((style & UNDERLINE_BIT) !== 0 ? { underline: true as const } : {}),
+      });
+    }
+    from = i;
+  }
+  return marks;
 }
 
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
