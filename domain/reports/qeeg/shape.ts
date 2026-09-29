@@ -366,7 +366,13 @@ const recording = z
   })
   .strict();
 
-const sessions = whole(1, LIMITS.sessionsMost).nullable();
+/**
+ * A number of sessions, typed or counted: the one bound, used by the plan of
+ * either edition, the sessions completed and the form (`SessionCountShape`).
+ */
+const sessionCount = whole(1, LIMITS.sessionsMost);
+
+const sessions = sessionCount.nullable();
 
 /** One entry for every key of a list, each of the same shape. */
 function everyOf<K extends string, S extends z.ZodType>(keys: readonly K[], shape: S) {
@@ -415,7 +421,7 @@ const initialShape = z
     dashboard: everyOf(DIMENSION_IDS, score),
     plan: z
       .object({
-        sessions: z.union([whole(1, LIMITS.sessionsMost), z.literal(QEEG_ONLY)]).nullable(),
+        sessions: z.union([sessionCount, z.literal(QEEG_ONLY)]).nullable(),
         approach: z.enum(APPROACH_IDS).nullable(),
       })
       .strict(),
@@ -558,7 +564,7 @@ const changeSection = z
   .object({
     tiles: ordered(tileFields, LIMITS.tiles),
     sessionsCompleted: z
-      .object({ count: whole(1, LIMITS.sessionsMost), source: z.enum(['gathered', 'typed']) })
+      .object({ count: sessionCount, source: z.enum(['gathered', 'typed']) })
       .strict()
       .nullable(),
     pairs: z.object({ eyes_open: pair, eyes_closed: pair }).strict(),
@@ -646,7 +652,7 @@ const followUpShape = z
  * no copy of its limits.
  */
 export const TypedFigureShape = typedFigure;
-export const SessionCountShape = whole(1, LIMITS.sessionsMost);
+export const SessionCountShape = sessionCount;
 
 export const QeegInitialShape: z.ZodType<QeegInitial> = initialShape;
 export const QeegFollowUpShape: z.ZodType<QeegFollowUp> = followUpShape;
