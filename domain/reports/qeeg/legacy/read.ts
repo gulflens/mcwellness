@@ -399,6 +399,9 @@ function summaryIn(plainValue: unknown, richValue: unknown, at: string, notes: N
   if (read.rich.text.trim() === '') return limitedRich(plain, at, notes);
   if (read.dropped.includes('colour')) notes.add('summary_colour_dropped', at);
   if (read.dropped.includes('slant')) notes.add('summary_slant_dropped', at);
+  if (read.dropped.includes('embed') || read.dropped.includes('other')) {
+    notes.add('summary_content_dropped', at);
+  }
   return limitedRich(read.rich, at, notes);
 }
 

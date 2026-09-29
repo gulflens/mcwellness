@@ -581,6 +581,38 @@ describe('what the reader tolerates, following the old tool', () => {
     ]);
   });
 
+  it('says so when a picture was dropped from the summary', () => {
+    const summaryRich = JSON.stringify({
+      ops: [
+        { insert: 'Before ' },
+        { insert: { image: 'data:image/png;base64,AAAA' } },
+        { insert: ' after', attributes: { strike: true } },
+        { insert: '\n' },
+      ],
+    });
+    const result = readOk(withFile({ summaryRich }));
+    expect(result.content.summary.en).toEqual({ text: 'Before  after', marks: [] });
+    expect(result.notes).toEqual([{ code: 'summary_content_dropped', at: 'summary.en' }]);
+  });
+
+  it('says so when a bulleted list was dropped from the summary', () => {
+    const summaryRichAr = JSON.stringify({
+      ops: [{ insert: 'بند' }, { insert: '\n', attributes: { list: 'bullet' } }],
+    });
+    const result = readOk(withFile({ summaryAr: 'بند', summaryRichAr }));
+    expect(result.content.summary.ar).toEqual({ text: 'بند', marks: [] });
+    expect(result.notes).toEqual([{ code: 'summary_content_dropped', at: 'summary.ar' }]);
+  });
+
+  it('says so when a link was dropped from the summary', () => {
+    const summaryRich = JSON.stringify({
+      ops: [{ insert: 'Read more', attributes: { link: 'https://example.com' } }, { insert: '\n' }],
+    });
+    const result = readOk(withFile({ summaryRich }));
+    expect(result.content.summary.en).toEqual({ text: 'Read more', marks: [] });
+    expect(result.notes).toEqual([{ code: 'summary_content_dropped', at: 'summary.en' }]);
+  });
+
   it('falls back to the plain summary when the formatted one cannot be read', () => {
     const result = readOk(withFile({ summary: 'Plain words', summaryRich: '{"ops": [' }));
     expect(result.content.summary.en).toEqual({ text: 'Plain words', marks: [] });
