@@ -32,20 +32,6 @@ function endpoints(segments: readonly PathSegment[]): Point[] {
   return points;
 }
 
-/** Every number a path names, controls included. */
-function everyPoint(segments: readonly PathSegment[]): Point[] {
-  const points: Point[] = [];
-  for (const segment of segments) {
-    if (segment[0] === 'M' || segment[0] === 'L') points.push({ x: segment[1], y: segment[2] });
-    if (segment[0] === 'C') {
-      points.push({ x: segment[1], y: segment[2] });
-      points.push({ x: segment[3], y: segment[4] });
-      points.push({ x: segment[5], y: segment[6] });
-    }
-  }
-  return points;
-}
-
 /** A point on the cubic from `from` along segment `c` at parameter `t`. */
 function onCubic(from: Point, c: PathSegment, t: number): Point {
   if (c[0] !== 'C') throw new Error('not a curve');
@@ -287,7 +273,9 @@ describe('the bounds of a path', () => {
         expect(p.y).toBeGreaterThanOrEqual(box.bottom - 1e-9);
         expect(p.y).toBeLessThanOrEqual(box.top + 1e-9);
       }
-      for (const p of everyPoint(path)) {
+      // The ends of every segment are ink. The points that steer a curve are
+      // not, and may stand outside the box: see 'the box round a curve'.
+      for (const p of endpoints(path)) {
         expect(p.x).toBeGreaterThanOrEqual(box.left);
         expect(p.y).toBeLessThanOrEqual(box.top);
       }
@@ -354,6 +342,98 @@ describe('a count a shape must not run away with', () => {
     expect(tintOver([0.2, 0.1, 0.4], 0)).toEqual([1, 1, 1]);
     tintOver([0.2, 0.1, 0.4], 1).forEach((channel, i) =>
       expect(channel).toBeCloseTo([0.2, 0.1, 0.4][i] ?? Number.NaN, 12),
+    );
+  });
+});
+
+describe('the box round a curve', () => {
+  /** The point a cubic has reached at `t`, from 0 at its start to 1 at its end. */
+  function at(from: readonly [number, number], curve: PathSegment, t: number): [number, number] {
+    if (curve[0] !== 'C') throw new Error('not a curve');
+    const u = 1 - t;
+    const point = (p0: number, p1: number, p2: number, p3: number): number =>
+      u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+    return [
+      point(from[0], curve[1], curve[3], curve[5]),
+      point(from[1], curve[2], curve[4], curve[6]),
+    ];
+  }
+
+  it('is the box round its ink, and not round the points that steer it', () => {
+    // An eighth each side of the top of a circle of 10: its highest point is
+    // in the middle of the curve, and the two that steer it stand higher.
+    const path = arc(0, 0, 10, Math.PI / 4, Math.PI / 2);
+    const [, curve] = path;
+    expect(Math.max(Number(curve?.[2]), Number(curve?.[4]))).toBeGreaterThan(10.9);
+    const box = boundsOf(path);
+    expect(box.top).toBeGreaterThan(9.99);
+    expect(box.top).toBeLessThan(10.01);
+    expect(box.left).toBeCloseTo(-10 * Math.SQRT1_2, 9);
+    expect(box.right).toBeCloseTo(10 * Math.SQRT1_2, 9);
+    expect(box.bottom).toBeCloseTo(10 * Math.SQRT1_2, 9);
+  });
+
+  it('holds a whole turn, drawn in quarters, in the square of its circle', () => {
+    const box = boundsOf(circle(50, 40, 17));
+    expect(box.left).toBeCloseTo(33, 9);
+    expect(box.right).toBeCloseTo(67, 9);
+    expect(box.bottom).toBeCloseTo(23, 9);
+    expect(box.top).toBeCloseTo(57, 9);
+  });
+
+  it('holds seven tenths of a turn from the top, clockwise, inside its circle', () => {
+    // The arc of a score of 7 on the ring's own grid: a radius of 17 about (20, 20).
+    const box = boundsOf(arc(20, 20, 17, Math.PI / 2, -0.7 * 2 * Math.PI));
+    for (const edge of [box.left, box.bottom]) expect(edge).toBeGreaterThan(2.99);
+    for (const edge of [box.right, box.top]) expect(edge).toBeLessThan(37.01);
+  });
+
+  it('is never smaller than the ink: every point of every curve is inside it', () => {
+    const paths = [
+      arc(0, 0, 10, 0.3, 1.1),
+      arc(5, -5, 7, 2, -4.5),
+      sineWave(11, 37, 24, 9, 1),
+      sineWave(11, 37, 24, 3.5, 6),
+      roundedRect(3, 4, 40, 20, 6),
+      [
+        ['M', 0, 0],
+        ['C', 30, 40, -20, 40, 10, 0],
+        ['C', 10, -30, 50, 10, 0, 0],
+      ] as PathSegment[],
+    ];
+    for (const path of paths) {
+      const box = boundsOf(path);
+      let here: readonly [number, number] = [0, 0];
+      for (const segment of path) {
+        if (segment[0] === 'M' || segment[0] === 'L') here = [segment[1], segment[2]];
+        if (segment[0] !== 'C') continue;
+        for (let step = 0; step <= 200; step += 1) {
+          const [x, y] = at(here, segment, step / 200);
+          expect(x).toBeGreaterThanOrEqual(box.left - 1e-9);
+          expect(x).toBeLessThanOrEqual(box.right + 1e-9);
+          expect(y).toBeGreaterThanOrEqual(box.bottom - 1e-9);
+          expect(y).toBeLessThanOrEqual(box.top + 1e-9);
+        }
+        here = [segment[5], segment[6]];
+      }
+    }
+  });
+
+  it('is no larger than the ink needs: a curve that doubles back is held to where it turns', () => {
+    // From (0, 0) out towards (30, 40) and back to (10, 0): it never reaches 30 across or 40 up.
+    const box = boundsOf([
+      ['M', 0, 0],
+      ['C', 30, 40, -20, 40, 10, 0],
+    ]);
+    expect(box.top).toBeCloseTo(30, 9);
+    expect(box.right).toBeLessThan(12);
+    expect(box.left).toBeGreaterThan(-2);
+    expect(box.bottom).toBe(0);
+  });
+
+  it('refuses a curve with nothing before it to start from, by name', () => {
+    expect(() => boundsOf([['C', 1, 1, 2, 2, 3, 3]])).toThrow(
+      /boundsOf needs a point before a curve/,
     );
   });
 });
