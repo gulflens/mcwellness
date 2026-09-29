@@ -9,11 +9,11 @@ import { describe, expect, it } from 'vitest';
  * report is about under a key this app does not use. Reading the file means
  * naming that key, so it is written once, as the value of
  * `LEGACY_SUBJECT_KEY` in `keys.ts`, and every other line says the constant.
- * The other exception is the guards themselves: the wording's guard in
- * `wording/wording.test.ts` and this file must spell the words to catch them.
- * In the wording's guard only the lines that hold its lists are let off. Its
- * comments are held as any other line is: they say "another kind of
- * practice" and never the word.
+ * The other exception is the guards themselves: the lists the guards share
+ * (`testing/vocabulary.ts`), the wording's guard in `wording/wording.test.ts`
+ * and this file must spell the words to catch them. In the first two only
+ * the lines that hold a list are let off. Their comments are held as any
+ * other line is: they say "another kind of practice" and never the word.
  *
  * **Why every file under `domain/reports/qeeg/` and not only `legacy/`.** The
  * importer is where the old tool's words come closest to this app's code,
@@ -67,6 +67,7 @@ function offences(path: string, source: string): string[] {
       }
     }
     if (path === 'legacy/keys.ts' && KEY_LINE.test(line)) return;
+    if (path === 'testing/vocabulary.ts' && LIST_LINE.test(line)) return;
     if (STEMS.test(line)) found.push(`${path}:${index + 1}`);
   });
   return found;

@@ -28,6 +28,12 @@ import {
   type Locale,
   type Phrase,
 } from './index';
+import {
+  ARABIC_STEMS,
+  ARABIC_WHOLE_WORD,
+  ENGLISH_STEMS,
+  withoutNatural,
+} from '../testing/vocabulary';
 
 /**
  * docs/SPEC/reports-qeeg.md, "The wording": every fixed sentence of the
@@ -191,40 +197,19 @@ describe('what no sentence may say', () => {
    * CLAUDE.md rule 1. The practice is a wellness practice, and the page a
    * household signed says so. The standing sentences that say what
    * the practice is NOT are quoted from that page by the layout and are not in
-   * this file, which is why the list below can be absolute.
+   * this file, which is why the lists can be absolute. The lists are
+   * `testing/vocabulary.ts`, shared with the guard over the rendered pages.
    */
-  const ENGLISH =
-    /\b(patient|treat|therap|cure|symptom|clinic|diagnos|protocol|prescri|disorder|disease|medical|medicine|illness)/i;
-
-  /** The same ideas in Arabic, by stem. */
-  const ARABIC =
-    /(مريض|مرضى|علاج|سريري|عيادة|أعراض|تشخيص|اضطراب|شفاء|دواء|طبي|يعالج|نعالج|تعالج|عولج|نفسي|انتكاس)/;
-
-  /**
-   * The one who works in another kind of practice, as a whole word. "معالجة" is the
-   * ordinary Arabic for processing, as in "معالجة المعلومات", and is a
-   * different word that happens to begin the same way; it ends in a letter
-   * this pattern does not allow.
-   */
-  const ARABIC_WHOLE_WORD = /(^|[^؀-ۿ])(ال|و|وال|لل|بال)?معالج(ك|ه|ها|ين|ون)?(?![؀-ۿ])/;
-
-  /**
-   * "طبيعي", "الطبيعية" and "بطبيعته" (natural, normal, by its nature) begin
-   * with the letters of a word on the list above, and are not it: the
-   * limits a band is measured against are "normal limits".
-   */
-  const withoutNatural = (text: string) => text.replaceAll('طبيع', '');
-
   it('uses no word of another kind of practice, in English', () => {
     const found = everyText('en')
-      .filter(({ text }) => ENGLISH.test(text))
+      .filter(({ text }) => ENGLISH_STEMS.test(text))
       .map(({ at, text }) => `${at}: ${text}`);
     expect(found).toEqual([]);
   });
 
   it('uses no word of another kind of practice, in Arabic', () => {
     const found = everyText('ar')
-      .filter(({ text }) => ARABIC.test(withoutNatural(text)) || ARABIC_WHOLE_WORD.test(text))
+      .filter(({ text }) => ARABIC_STEMS.test(withoutNatural(text)) || ARABIC_WHOLE_WORD.test(text))
       .map(({ at, text }) => `${at}: ${text}`);
     expect(found).toEqual([]);
   });
@@ -241,18 +226,20 @@ describe('what no sentence may say', () => {
       'المرونة النفسية',
       'الانتكاسات',
     ]) {
-      expect(ARABIC.test(withoutNatural(word)), word).toBe(true);
+      expect(ARABIC_STEMS.test(withoutNatural(word)), word).toBe(true);
     }
     for (const word of ['المعالج', 'معالجك', 'مع المعالج.']) {
       expect(ARABIC_WHOLE_WORD.test(word), word).toBe(true);
     }
     for (const word of ['معالجة المعلومات', 'المعالجة الذهنية', 'الحدود الطبيعية', 'بطبيعته']) {
-      expect(ARABIC.test(withoutNatural(word)) || ARABIC_WHOLE_WORD.test(word), word).toBe(false);
+      expect(ARABIC_STEMS.test(withoutNatural(word)) || ARABIC_WHOLE_WORD.test(word), word).toBe(
+        false,
+      );
     }
     for (const word of ['history of treatment', 'Clinical note', 'a diagnostic tool']) {
-      expect(ENGLISH.test(word), word).toBe(true);
+      expect(ENGLISH_STEMS.test(word), word).toBe(true);
     }
-    expect(ENGLISH.test('a secure, accurate recording')).toBe(false);
+    expect(ENGLISH_STEMS.test('a secure, accurate recording')).toBe(false);
   });
 });
 
