@@ -19,6 +19,12 @@
  * start edge. It is built in terms of the start edge and turned into x by
  * the frame, so the Arabic card's bar is on its right with no second copy.
  *
+ * **A follow-up's card** shows the earlier score under its title, "was 4",
+ * after a triangle in the ink when the score moved (`figureLine`). Whether
+ * it moved is the builder's to ask of `classifyScoreChange`; the card only
+ * draws what it is told. A first report's card has none, and is drawn as it
+ * always was.
+ *
  * **The dash is a mark, not a letter.** The practice set an en dash before
  * each line of the list; here it is a short filled bar in the muted grey,
  * level with the middle of the small letters of its line, so it is the same
@@ -40,6 +46,8 @@ import { arc, bar } from '../shapes';
 import type { Paint, PathSegment } from '../shapes';
 import { typeset } from '../typeset';
 import type { Drawing } from '../typeset';
+import { figureLine } from './followup/figureLine';
+import type { FigureLineInput } from './followup/figureLine';
 import { scoreRing } from './scoreRing';
 import type { Words } from './words';
 
@@ -53,6 +61,11 @@ export type CardInput = {
   readonly evidence: { readonly label: string; readonly words: Words } | null;
   readonly meaning: { readonly label: string; readonly items: readonly string[] };
   readonly advice: readonly Span[];
+  /**
+   * A follow-up's earlier score, "was 4", with the way the score moved; a
+   * first report has none. Set under the title, beside the ring.
+   */
+  readonly earlier?: FigureLineInput | null;
 };
 
 export type CardOptions = {
@@ -84,7 +97,10 @@ function headOf(input: CardInput, inner: number, drawing: Drawing): Block {
     ? typeset('cardCategory', input.category, column, drawing, { tier: input.tier })
     : typeset('cardLabel', input.category, column, drawing);
   const title = typeset('cardTitle', input.title, column, drawing);
-  const words = stack(column, joined([category, title], CARD.titleTop));
+  const earlier = input.earlier
+    ? [figureLine(input.earlier, column, drawing, { size: 'card' })]
+    : [];
+  const words = stack(column, joined([category, title, ...earlier], CARD.titleTop));
   const height = Math.max(ring.height, words.height);
   return beside(inner, [
     { block: ring, left: boxLeft(frame, 0, CARD.ring), down: (height - ring.height) / 2 },

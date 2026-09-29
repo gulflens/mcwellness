@@ -3,7 +3,7 @@ import type { Op } from '@domain/shared/document';
 import { extentOf } from '../block';
 import type { Block } from '../block';
 import { BODY_WIDTH, CARD, cardWidth } from '../geometry';
-import { HAIRLINE, MUTED, PANEL_EDGE, PANEL_FILL, TIER_PAINT } from '../palette';
+import { HAIRLINE, INK, MUTED, PANEL_EDGE, PANEL_FILL, TIER_PAINT } from '../palette';
 import type { LayoutOp } from '../scale';
 import { boundsOf } from '../shapes';
 import type { PathOp } from '../shapes';
@@ -497,5 +497,69 @@ describe('dashboardCard', () => {
   it('rounds the panel’s corners', () => {
     const [panel] = paths(dashboardCard(EN_INPUT, WIDTH, ENGLISH).ops);
     expect(panel?.segments.filter((segment) => segment[0] === 'C')).toHaveLength(4);
+  });
+});
+
+describe('dashboardCard, in a follow-up', () => {
+  // docs/SPEC/reports-qeeg.md section 3: the dashboard of a follow-up shows
+  // six scores, each with the earlier score beside it ("was 4"); a score that
+  // moved is marked by a shape in the ink, never a colour.
+  const EARLIER = { words: fixed('was 4'), points: 'up' as const };
+  const markers = (block: Block) => paths(block.ops).filter((op) => op.fill === INK);
+
+  it('draws a card with no earlier score exactly as a first report’s', () => {
+    for (const earlier of [undefined, null]) {
+      expect(dashboardCard({ ...EN_INPUT, earlier }, WIDTH, ENGLISH)).toEqual(
+        dashboardCard(EN_INPUT, WIDTH, ENGLISH),
+      );
+    }
+  });
+
+  it('sets the earlier score under the title, beside the ring', () => {
+    for (const [drawing, input] of [
+      [ENGLISH, EN_INPUT],
+      [ARABIC, AR_INPUT],
+    ] as const) {
+      const block = dashboardCard({ ...input, earlier: EARLIER }, WIDTH, drawing);
+      const [title, was] = placesOf(block, [input.title, 'was 4']);
+      expect(was).toBeGreaterThan(title ?? -1);
+      const line = texts(block.ops).find((op) => op.text.includes('was'));
+      const reach = line ? extentOf([line], measure) : null;
+      const ringEdge = CARD.padH + CARD.ring + CARD.ringGutter;
+      if (drawing === ENGLISH) expect(reach?.left ?? 0).toBeGreaterThan(ringEdge);
+      else expect(reach?.right ?? WIDTH).toBeLessThan(WIDTH - ringEdge);
+      expect(outside(block, measure)).toEqual([]);
+    }
+  });
+
+  it('marks a score that moved with one triangle in the ink, and one that held with none', () => {
+    expect(markers(dashboardCard({ ...EN_INPUT, earlier: EARLIER }, WIDTH, ENGLISH))).toHaveLength(
+      1,
+    );
+    expect(
+      markers(
+        dashboardCard({ ...EN_INPUT, earlier: { ...EARLIER, points: null } }, WIDTH, ENGLISH),
+      ),
+    ).toEqual([]);
+  });
+
+  it('draws the Arabic card with its earlier score as the mirror of the English one', () => {
+    // A score of 10 fills the ring, so its arc is the same either way round.
+    const whole = { ...EN_INPUT, score: 10, tier: 'high' as const, earlier: EARLIER };
+    const en = dashboardCard(whole, WIDTH, ENGLISH);
+    const ar = dashboardCard(whole, WIDTH, ARABIC);
+    expect(unmirrored(en, ar, measure)).toEqual([]);
+  });
+
+  it('grows the head by the gap and the line of the earlier score when the words outgrow the ring', () => {
+    const block = dashboardCard({ ...EN_INPUT, earlier: EARLIER }, WIDTH, ENGLISH);
+    const plain = dashboardCard(EN_INPUT, WIDTH, ENGLISH);
+    const was = typeset('cardSummary', 'was 4', COLUMN, ENGLISH).height;
+    const category = typeset('cardCategory', EN_INPUT.category, COLUMN, ENGLISH, { tier: 'low' });
+    const title = typeset('cardTitle', EN_INPUT.title, COLUMN, ENGLISH);
+    const words = category.height + CARD.titleTop + title.height;
+    const grown = Math.max(CARD.ring, words + CARD.titleTop + was);
+    expect(grown).toBeGreaterThan(Math.max(CARD.ring, words));
+    expect(block.height - plain.height).toBeCloseTo(grown - Math.max(CARD.ring, words), 9);
   });
 });
