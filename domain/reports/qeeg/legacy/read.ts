@@ -20,9 +20,8 @@
  * **Why the person is not in `content`.** A report's name, age and sex are
  * gathered from the client's record by the server, never typed. The old file
  * typed them, with a name in Arabic, so they are handed back beside the
- * content, in `asTyped`, for
- * the screen to show next to the client the practitioner chooses. They are
- * never put in `content`.
+ * content, in `asTyped`, for the screen to show next to the client the
+ * practitioner chooses. They are never put in `content`.
  *
  * **Why the maps come back apart.** A map is stored and referred to only after
  * it is uploaded, which is not this module's work. The images are handed back
@@ -33,6 +32,14 @@
  * long one, and printed 5 for a score nobody set. This reader does the same,
  * and wherever it changed or left out something the file held, it adds an
  * `ImportNote` naming the FIELD. A note never holds what was typed.
+ *
+ * **Where a note points.** `at` is a path into the reader's RESULT, not into
+ * `content` alone: a path of the content as it stands (`findings.custom.c0`),
+ * or of what is handed back beside it: `asTyped.name`, `images.map-0` for a
+ * picture by the key it is handed back under (`images` for one left out),
+ * and `asPrinted.signature` for the signature, which is not carried. A route
+ * that stores a note for good keeps the image's key with the upload, or
+ * the note names a place that is gone.
  *
  * It is pure and it never throws: whatever it is given, it returns a result.
  * The caller hashes the file's bytes; nothing here does I/O.
@@ -477,19 +484,19 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
     if (url === null || !isRecord(img)) {
       const held = isRecord(img) && typeof field(img, 'url') === 'string';
       const herLabel = label !== '' && lookUp(CONDITION_BY_OLD_LABEL, label) === undefined;
-      if (held || herLabel) notes.add('map_without_image_dropped', 'maps');
+      if (held || herLabel) notes.add('map_without_image_dropped', 'images');
       continue;
     }
     if (images.length === LIMITS.maps) {
-      notes.add('extra_positions_ignored', 'maps');
+      notes.add('extra_positions_ignored', 'images');
       break;
     }
     const key = `map-${images.length}`;
     const condition = label === '' ? null : (lookUp(CONDITION_BY_OLD_LABEL, label) ?? null);
     let caption: Bilingual | null = null;
     if (label !== '' && condition === null) {
-      notes.add('map_label_kept_as_caption', `maps.${key}`);
-      caption = { en: notes.limited(label, LIMITS.caption, `maps.${key}.caption.en`), ar: null };
+      notes.add('map_label_kept_as_caption', `images.${key}`);
+      caption = { en: notes.limited(label, LIMITS.caption, `images.${key}.caption.en`), ar: null };
     }
     images.push({
       key,
@@ -575,7 +582,7 @@ function read(file: unknown, sourceSha256: string): LegacyRead {
   };
   const signature = field(file, 'signature');
   if (isRecord(signature) && typeof field(signature, 'url') === 'string') {
-    notes.add('signature_image_dropped', 'signature');
+    notes.add('signature_image_dropped', 'asPrinted.signature');
   }
 
   const content: QeegInitial = {

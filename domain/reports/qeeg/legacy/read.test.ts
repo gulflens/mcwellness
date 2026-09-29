@@ -685,7 +685,7 @@ describe('what the reader tolerates, following the old tool', () => {
     const result = readOk(withFile({ maps }));
     expect(result.images.map((i) => i.key)).toEqual(['map-0']);
     expect(result.images[0]?.condition).toBe('eyes_closed');
-    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'maps' }]);
+    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
   });
 
   it('keeps any other label of a map as its caption, and says so', () => {
@@ -701,7 +701,7 @@ describe('what the reader tolerates, following the old tool', () => {
         caption: { en: 'Eyes open, second run', ar: null },
       },
     ]);
-    expect(result.notes).toEqual([{ code: 'map_label_kept_as_caption', at: 'maps.map-0' }]);
+    expect(result.notes).toEqual([{ code: 'map_label_kept_as_caption', at: 'images.map-0' }]);
   });
 
   it('reads a map with no label as having no condition and no caption, without a note', () => {
@@ -722,7 +722,7 @@ describe('what the reader tolerates, following the old tool', () => {
     ];
     const result = readOk(withFile({ maps }));
     expect(result.images).toEqual([]);
-    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'maps' }]);
+    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
   });
 
   it('carries a PNG, JPEG, WebP or BMP picture and nothing else, and says what it dropped', () => {
@@ -739,7 +739,7 @@ describe('what the reader tolerates, following the old tool', () => {
       const maps = [{ label: 'EO: Eyes Open', name: '', img: { url, w: 1, h: 1 } }];
       const result = readOk(withFile({ maps }));
       expect(result.images, type).toEqual([]);
-      expect(result.notes, type).toEqual([{ code: 'map_without_image_dropped', at: 'maps' }]);
+      expect(result.notes, type).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
     }
   });
 
@@ -751,14 +751,14 @@ describe('what the reader tolerates, following the old tool', () => {
     }));
     const result = readOk(withFile({ maps }));
     expect(result.images).toHaveLength(8);
-    expect(result.notes).toEqual([{ code: 'extra_positions_ignored', at: 'maps' }]);
+    expect(result.notes).toEqual([{ code: 'extra_positions_ignored', at: 'images' }]);
   });
 
   it('does not carry a signature image, and says so', () => {
     const signed = 'data:image/png;base64,U0lHTkVE';
     const result = readOk(withFile({ signature: { url: signed, name: 'sig.png' } }));
     expect(JSON.stringify(result)).not.toContain('U0lHTkVE');
-    expect(result.notes).toEqual([{ code: 'signature_image_dropped', at: 'signature' }]);
+    expect(result.notes).toEqual([{ code: 'signature_image_dropped', at: 'asPrinted.signature' }]);
   });
 
   it('reads a date that is not a real day as unset, and says so', () => {
@@ -874,6 +874,24 @@ describe('typed text is made fit to store', () => {
     const result = readOk(withSubject({ name: `  ${HOSTILE} `, age: ' 34 ', gender: 'Female' }));
     expect(result.asTyped).toMatchObject({ name: 'abc', age: '34', sex: 'Female' });
     expect(result.notes).toEqual([{ code: 'text_shortened', at: 'asTyped.name' }]);
+  });
+});
+
+describe('where a note points', () => {
+  it('points at a place that exists in what the reader hands back', () => {
+    const caption = 'x'.repeat(200);
+    const result = readOk(
+      withFile({
+        maps: [{ label: caption, name: '', img: { url: PNG, w: 1, h: 1 } }],
+        signature: { url: PNG, name: 'sig.png' },
+      }),
+    );
+    expect(result.notes).toEqual([
+      { code: 'map_label_kept_as_caption', at: 'images.map-0' },
+      { code: 'text_shortened', at: 'images.map-0.caption.en' },
+      { code: 'signature_image_dropped', at: 'asPrinted.signature' },
+    ]);
+    expect(result.images[0]?.key).toBe('map-0');
   });
 });
 
