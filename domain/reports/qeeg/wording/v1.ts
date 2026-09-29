@@ -76,6 +76,9 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   ),
   'heading.change': later('What Has Changed', 'ما الذي تغير'),
   'heading.before_after': later('Before and After', 'قبل وبعد'),
+  // Her summary on the page of what has changed, apart from the report's own
+  // "Summary:". Draft words, for the practice to word.
+  'heading.change_summary': later('What These Changes Mean', 'ما تعنيه هذه التغيرات'),
   'heading.change_table': later(
     'Estimated Change by Frequency Band',
     'التغير التقديري بحسب نطاق التردد',

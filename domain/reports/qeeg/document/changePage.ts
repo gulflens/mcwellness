@@ -267,7 +267,12 @@ export function changeParts(
   const paragraphs = toParagraphs(richFor(locale, change.summary));
   if (paragraphs.length > 0) {
     after.push(
-      part('change.summary.heading', 'change', title('heading.summary', 'subheading'), opening),
+      part(
+        'change.summary.heading',
+        'change',
+        title('heading.change_summary', 'subheading'),
+        opening,
+      ),
       ...paragraphs.map((each, index) =>
         part(
           `change.summary.${index + 1}`,

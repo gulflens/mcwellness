@@ -811,6 +811,16 @@ describe('a follow-up', () => {
     }
   });
 
+  it('heads her summary of what has changed apart from the report’s own summary', () => {
+    for (const locale of LOCALES) {
+      const parts = build(fullFollowUp(), locale);
+      const own = wordsDrawn([partOf(parts, 'change.summary.heading')], drawingOf(locale));
+      expect(own).toBe(later('heading.change_summary', locale));
+      expect(own).not.toBe(wordsDrawn([partOf(parts, 'summary.heading')], drawingOf(locale)));
+    }
+    expect(() => phrase('heading.change_summary', 'initial', 'en')).toThrow();
+  });
+
   it('prints its heading and a dash when nothing of the page is filled in yet', () => {
     const parts = build(sparseFollowUp());
     expect(changeIds(parts)).toEqual(['change.heading', 'change.none']);
