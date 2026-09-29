@@ -8,6 +8,7 @@ import type {
 } from '../../../app/api/reports/schema';
 import type * as Source from '../../../app/api/reports/source';
 import { ageOn } from '../../../domain/shared/dates';
+import { MEASURE_IDS } from '../../../domain/reports/qeeg/catalogue/ids';
 import { blankFollowUp, blankInitial } from '../../../domain/reports/qeeg/blank';
 import type { ComparedWith, QeegInitial } from '../../../domain/reports/qeeg/types';
 import { progressBody, sessionBody, SEEDED, startHarness, type Harness } from './support';
@@ -876,5 +877,125 @@ describe('fix round 1: what the review found untested', () => {
     expect(Object.keys((await theirs.json()) as object)).not.toContain('savedAt');
     const staff = await h.call('GET', `/api/reports/${issuedId}`, SEEDED.owner);
     expect(((await staff.json()) as ReportResponse).savedAt).toMatch(/Z$/);
+  });
+});
+
+/** Arabic letters, `length` UTF-16 units of them, with a space now and then. */
+function arabic(length: number): string {
+  return 'بحر سهل '.repeat(Math.ceil(length / 8)).slice(0, length);
+}
+
+/** English of `length` characters. */
+function english(length: number): string {
+  return 'Calm and steady. '.repeat(Math.ceil(length / 17)).slice(0, length);
+}
+
+/** Formatted text at its limit, with the most marks the shape keeps. */
+function richAtLimit(text: string) {
+  return {
+    text,
+    marks: Array.from({ length: 200 }, (_, i) => ({
+      from: i * 20,
+      to: i * 20 + 10,
+      bold: true as const,
+      underline: true as const,
+    })),
+  };
+}
+
+function customAtLimit() {
+  return Object.fromEntries(
+    Array.from({ length: 12 }, (_, i) => [
+      `c${i}`,
+      {
+        label: { en: english(160), ar: arabic(160) },
+        note: { en: english(400), ar: arabic(400) },
+        chosen: true,
+        position: i,
+      },
+    ]),
+  );
+}
+
+/** The largest brain-map body the shape accepts, near enough: every typed thing at its limit. */
+function maximalFollowUp(): Record<string, unknown> {
+  const base = sentFollowUp(issuedId);
+  const change = base['change'] as Record<string, unknown>;
+  const dashboard = base['dashboard'] as Record<string, Record<string, unknown>>;
+  const figure = {
+    kind: 'percent',
+    direction: 'increase',
+    low: 25,
+    high: 30,
+    source: 'typed',
+    basis: null,
+  };
+  const rich = { en: richAtLimit(english(4000)), ar: richAtLimit(arabic(4000)) };
+  const picked = { chosen: [], custom: customAtLimit() };
+  return {
+    ...base,
+    findings: picked,
+    focus: picked,
+    recommendations: picked,
+    benefits: picked,
+    summary: rich,
+    maps: Object.fromEntries(
+      Array.from({ length: 8 }, (_, i) => [
+        `map-${i}`,
+        {
+          figureId: `0000000d-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+          sha256: SHA,
+          widthPx: 1600,
+          heightPx: 1200,
+          condition: 'eyes_open',
+          caption: { en: english(120), ar: arabic(120) },
+          position: i,
+        },
+      ]),
+    ),
+    dashboard: Object.fromEntries(
+      Object.entries(dashboard).map(([key, score]) => [
+        key,
+        { ...score, score: 5, evidence: { en: english(400), ar: arabic(400) } },
+      ]),
+    ),
+    change: {
+      ...change,
+      tiles: Object.fromEntries(
+        Array.from({ length: 2 }, (_, i) => [
+          `t${i}`,
+          { figure, caption: { en: english(120), ar: arabic(120) }, position: i },
+        ]),
+      ),
+      sessionsCompleted: { count: 200, source: 'typed' },
+      table: Object.fromEntries(
+        MEASURE_IDS.map((measure, i) => [
+          measure,
+          { position: i, eyesOpen: figure, eyesClosed: figure },
+        ]),
+      ),
+      summary: rich,
+    },
+  };
+}
+
+describe('fix round 1: the size of a brain-map body', () => {
+  it('saves the largest body the shape accepts, well over the ordinary 64 KiB', async () => {
+    const content = maximalFollowUp();
+    const request = { clientId, kind: 'qeeg', content };
+    const bytes = Buffer.byteLength(JSON.stringify(request));
+    expect(bytes).toBeGreaterThan(64 * 1024);
+    expect(bytes).toBeLessThan(512 * 1024);
+    const res = await save(request);
+    expect(res.status, await res.clone().text()).toBe(201);
+  });
+
+  it('refuses a body over its own limit with 413', async () => {
+    const res = await save({
+      clientId,
+      kind: 'qeeg',
+      content: sentInitial({ padding: 'x'.repeat(512 * 1024) }),
+    });
+    expect(res.status).toBe(413);
   });
 });

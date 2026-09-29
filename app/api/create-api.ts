@@ -46,6 +46,7 @@ import { mountPractice } from './practice/routes';
 import { mountPractitioners } from './practitioners/routes';
 import { mountTeam } from './team/routes';
 import { mountReports } from './reports/routes';
+import { REPORT_DRAFT_BODY_LIMIT_BYTES, REPORT_DRAFT_PATH } from './reports/schema';
 import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
 import { mountKit } from './kit/routes';
 import { mountRouting } from './routing/day';
@@ -298,12 +299,21 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // path, one method's worth of bytes, and not a raised floor for everything.
   const defaultBodyLimit = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge });
   const logoBodyLimit = bodyLimit({ maxSize: LOGO_BODY_LIMIT_BYTES, onError: payloadTooLarge });
+  // And a brain-map draft, whose typed text in two languages outgrows the
+  // ordinary envelope (app/api/reports/schema.ts REPORT_DRAFT_BODY_LIMIT_BYTES).
+  const reportDraftBodyLimit = bodyLimit({
+    maxSize: REPORT_DRAFT_BODY_LIMIT_BYTES,
+    onError: payloadTooLarge,
+  });
   const assessmentFileLimit = bodyLimit({
     maxSize: ASSESSMENT_FILE_LIMIT_BYTES,
     onError: payloadTooLarge,
   });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
+    if (c.req.method === 'POST' && c.req.path === REPORT_DRAFT_PATH) {
+      return reportDraftBodyLimit(c, next);
+    }
     if (isEquipmentExportUpload(c.req.method, c.req.path)) return assessmentFileLimit(c, next);
     return defaultBodyLimit(c, next);
   });

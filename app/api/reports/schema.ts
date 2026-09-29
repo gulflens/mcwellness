@@ -178,6 +178,27 @@ export const QeegDraftInput = z
   });
 export type QeegDraftInput = z.infer<typeof QeegDraftInput>;
 
+/**
+ * The body a draft save may carry: 512 KiB, where every other route keeps
+ * 64 KiB (`app/api/create-api.ts`).
+ *
+ * **Why so much.** A brain map is the largest thing a person types here. The
+ * shape accepts, in both languages: two formatted summaries of 4,000 each with
+ * 200 marks apiece, twelve items she added to each of four lists with a label
+ * of 160 and a note of 400, eight map captions of 120, six pieces of evidence
+ * of 400 and two headline captions of 120. That is about 77,000 typed UTF-16
+ * units. Arabic is two bytes a unit in the JSON and another script up to
+ * three, so the typed text alone may reach about 230 KB, and the marks, keys
+ * and figures around it add some 60 KB more: about 290 KB at worst. Measured:
+ * the largest body the test builds, every half in Arabic, is 157,950 bytes
+ * (`tests/reports/db/qeeg_draft.test.ts`). 512 KiB is the worst case with
+ * room to spare, and the logo's own figure, so the API has two envelope sizes
+ * and not three. The older kinds share the path and so the envelope; their
+ * bodies are a few kilobytes and their shapes refuse more.
+ */
+export const REPORT_DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
+export const REPORT_DRAFT_PATH = '/api/reports/draft';
+
 /** A brain-map draft as saved, with the stamp its next save must name. */
 export const QeegDraftResponse = z.object({
   report: ReportRow,
