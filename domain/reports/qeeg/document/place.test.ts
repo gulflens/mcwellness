@@ -6,7 +6,7 @@ import type { Locale } from '../types';
 import { extentOf } from './block';
 import { buildQeegReport } from './build';
 import type { ReportInput } from './build';
-import { bodyTop, PAD } from './geometry';
+import { bodyTop, GAP, PAD } from './geometry';
 import { ARABIC, ENGLISH, across } from './pieces/checks';
 import { placeQeegReport } from './place';
 import type { Laid, PlacedPart } from './place';
@@ -88,6 +88,24 @@ describe('the pages of a first report', () => {
         expect(signature?.y ?? 0).toBeGreaterThan(
           (standing?.y ?? 0) + (standing?.height ?? 0) + SLACK,
         );
+      }
+    }
+  });
+
+  it('leave, on the last page of a brain map only, the gap of a paragraph before the closing and the final note', () => {
+    for (const locale of LOCALES) {
+      const { sheets } = laid('qeegOnly', locale);
+      const last = sheets[sheets.length - 1]?.parts ?? [];
+      for (const id of ['closing.monitoring', 'final.note']) {
+        const at = last.findIndex((part) => part.id === id);
+        const before = last[at - 1];
+        const part = last[at];
+        expect(at, `${locale} ${id}`).toBeGreaterThan(0);
+        const gap = (part?.y ?? 0) - ((before?.y ?? 0) + (before?.height ?? 0));
+        expect(
+          Math.abs(gap - GAP.afterParagraph),
+          `${locale} ${id} gap ${gap}`,
+        ).toBeLessThanOrEqual(SLACK);
       }
     }
   });

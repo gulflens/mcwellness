@@ -174,6 +174,14 @@ export type ReportInput = {
  * paragraphs (`closing.monitoring` and `closing.gradual`, the wording's
  * `text.monitoring` and `text.gradual`) to go too. Each is then one more id
  * in this list, and nothing else changes.
+ *
+ * **It takes two section marks away too.** Spare room on a page is shared
+ * among the parts that open a section (`breathe`). With the programme's
+ * parts gone, only the closing paragraphs and the final note would be left
+ * to share it, and each would take the whole cap: two wide gaps on a short
+ * page. So on a brain-map-only report `closing.monitoring` and `final.note`
+ * open no section and keep the gap of a paragraph, and the spare room goes
+ * above the pinned signature.
  */
 export const LEFT_OUT_WITHOUT_PROGRAMME: readonly string[] = Object.freeze([
   'programme.length',
@@ -411,6 +419,8 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
   const say = (key: string) => phrase(key, 'initial', locale);
   const colon = (key: string) => `${say(key)}:`;
   const parts: Part[] = [];
+  // Asked first: a brain map with no programme opens fewer sections.
+  const agreed = programmeAgreed(content);
 
   const words =
     (role: Role, content_: string | readonly Span[], setting = {}) =>
@@ -749,7 +759,7 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
       words('body', paragraph('text.monitoring', content, locale)),
       {
         marginBottom: GAP.afterParagraph,
-        sectionStart: true,
+        sectionStart: agreed,
       },
     ),
     part('closing.gradual', 'closing', words('body', paragraph('text.gradual', content, locale)), {
@@ -761,7 +771,7 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
       words('body', spansFrom(paragraph('text.final_note', content, locale))),
       {
         marginBottom: GAP.afterParagraph,
-        sectionStart: true,
+        sectionStart: agreed,
       },
     ),
     part(
@@ -792,6 +802,5 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
     ),
   );
 
-  const agreed = programmeAgreed(content);
   return agreed ? parts : parts.filter((each) => !LEFT_OUT_WITHOUT_PROGRAMME.includes(each.id));
 }
