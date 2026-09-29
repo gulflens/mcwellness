@@ -129,6 +129,11 @@ describe('spansOf', () => {
   it('refuses an odd number of marks as a fault in the wording', () => {
     expect(() => spansOf('**unclosed')).toThrow(/wording/);
   });
+
+  it('names the fault and never repeats what it was given', () => {
+    expect(() => spansOf('**Willow Harbour typed this')).toThrow(/unclosed bold mark/);
+    expect(() => spansOf('**Willow Harbour typed this')).not.toThrow(/Willow/);
+  });
 });
 
 describe('clean', () => {

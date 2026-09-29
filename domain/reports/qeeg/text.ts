@@ -76,7 +76,9 @@ const BOLD = '**';
 export function spansOf(marked: string): BoldSpan[] {
   const parts = marked.split(BOLD);
   if (parts.length % 2 === 0) {
-    throw new Error(`The wording has an unclosed bold mark in "${marked}".`);
+    // The fault and nothing else: what is given here could one day hold
+    // something a person typed, and an error reaches a log.
+    throw new Error('The wording has an unclosed bold mark.');
   }
   return parts
     .map((text, index) => ({ text, bold: index % 2 === 1 }))
