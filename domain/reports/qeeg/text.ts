@@ -147,13 +147,15 @@ export function withoutUnseen(typed: string): string {
 }
 
 /**
- * What a person typed, made fit to store: composed, trimmed, with control
- * characters removed, and cut at `most` UTF-16 units without splitting a
+ * What a person typed, made fit to store: with control characters removed,
+ * then composed, trimmed, and cut at `most` UTF-16 units without splitting a
  * character in two.
  */
 export function clean(typed: string, most: number): string {
   checkMost(most);
-  let text = withoutUnseen(typed.normalize('NFC')).trim();
+  // Removed first, then composed: a letter and its accent with a removed
+  // character between them compose, and cleaning twice is cleaning once.
+  let text = withoutUnseen(typed).normalize('NFC').trim();
   if (text.length > most) text = text.slice(0, cutAt(text, most)).trimEnd();
   return text;
 }

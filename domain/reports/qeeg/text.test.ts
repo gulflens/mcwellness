@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { blankInitial } from './blank';
 import { validateQeegContent } from './shape';
 import {
+  UNCUT,
   clean,
   cleanRich,
   isEmpty,
@@ -149,7 +150,68 @@ describe('spansOf', () => {
   });
 });
 
+/**
+ * Texts made of characters that are awkward to clean: letters that compose,
+ * combining marks, what `clean` removes, white space, pairs and their lone
+ * halves. A fixed sequence, so every run tries the same texts.
+ */
+const AWKWARD = [
+  'a',
+  'e',
+  ' ',
+  '\t',
+  '\n',
+  '\r',
+  '\u0000',
+  '\u200b',
+  '\u200c',
+  '\u200d',
+  '\ufeff',
+  '\u202e',
+  '\u0301',
+  '\u0327',
+  '\u0651',
+  '\u064e',
+  '\u0628',
+  '\u1100',
+  '\u1161',
+  '\u11a8',
+  '\uac00',
+  '\u00a0',
+  '\u00ad',
+  '\ud83d',
+  '\ude00',
+  '\u{1F600}',
+  '\u212b',
+];
+
+function generated(count: number, longest: number): string[] {
+  let seed = 7;
+  const next = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed;
+  };
+  return Array.from({ length: count }, () =>
+    Array.from({ length: next() % longest }, () => AWKWARD[next() % AWKWARD.length]).join(''),
+  );
+}
+
 describe('clean', () => {
+  it('removes before it composes, so a letter and its accent either side of a removed character compose', () => {
+    expect(clean('e\u200b\u0301', 100)).toBe('\u00e9');
+    expect(clean('\u1100\u0000\u1161', 100)).toBe('\uac00');
+  });
+
+  it('is the same cleaned twice as once, and the same as cleanRich of text with no marks', () => {
+    for (const text of generated(20_000, 12)) {
+      for (const most of [UNCUT, 5]) {
+        const once = clean(text, most);
+        expect(clean(once, most), JSON.stringify(text)).toBe(once);
+        expect(cleanRich({ text, marks: [] }, most).text, JSON.stringify(text)).toBe(once);
+      }
+    }
+  });
+
   it('normalises to the composed form', () => {
     expect(clean('Café', 100)).toBe('Café');
   });
@@ -469,8 +531,8 @@ describe('cleanRich', () => {
     }
   });
 
-  it('gives the same text as clean where nothing removed sits beside a letter that composes', () => {
-    for (const { what, given, most } of CASES.slice(0, 11)) {
+  it('gives the same text as clean', () => {
+    for (const { what, given, most } of CASES) {
       expect(cleanRich(given, most).text, what).toBe(clean(given.text, most));
     }
   });

@@ -136,7 +136,7 @@ const richText = (most: number) =>
         .string()
         .max(most)
         .refine(
-          (text) => withoutUnseen(text.normalize('NFC')) === text,
+          (text) => withoutUnseen(text).normalize('NFC') === text,
           'Rich text holds only what the editor keeps, composed, since its marks count from it.',
         ),
       marks: z.array(mark).max(LIMITS.marks),

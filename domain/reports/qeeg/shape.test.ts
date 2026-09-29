@@ -648,6 +648,15 @@ describe('validateQeegContent', () => {
       expect(maps['m1']?.caption).toEqual({ en: 'Slow mornings', ar: 'Slow mornings' });
     });
 
+    it('hands back the same text when what it handed back is saved again', () => {
+      const once = validateQeegContent(
+        withValue(validInitial(), 'findings.custom.a.label.ar', 'e\u200b\u0301'),
+      );
+      expect(once.ok && once.content.findings.custom['a']?.label.ar).toBe('\u00e9');
+      const twice = once.ok ? validateQeegContent(once.content) : once;
+      expect(twice).toEqual(once);
+    });
+
     it('checks a length after cleaning', () => {
       const padded = `x${' '.repeat(LIMITS.label)}`;
       const answer = validateQeegContent(
