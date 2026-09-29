@@ -268,3 +268,47 @@ export const MAP = frozen({
   /** Kept clear above the footer. */
   reserve: mm(3),
 });
+
+/**
+ * A follow-up's page of what has changed (`docs/SPEC/reports-qeeg.md`
+ * section 10). The practice's report has no such page, so these follow the
+ * pieces beside them: a headline tile is padded and rounded as the panel at
+ * the head of a report is, tiles stand apart as cards do, and a row of the
+ * change table is padded as a recommendation's row is.
+ *
+ * `mapLeast` and `mapPreferred` are plan note N7's, in points: the height a
+ * map of a before-and-after pair is drawn at is shared out between them, so
+ * the page fits on one sheet when it can (`planFollowUp`).
+ */
+export const CHANGE = frozen({
+  /** Two figures of her own and the sessions completed. */
+  tilesMost: 3,
+  tilePadH: mm(4),
+  tilePadV: mm(3.2),
+  tileRadius: mm(2.5),
+  tileEdge: 0.6,
+  /** Between two tiles, as between two cards of the dashboard. */
+  tileGutter: mm(4),
+  /** Between a tile's figure, its caption and where its figure came from. */
+  tileGap: mm(1.2),
+  afterHeadlines: mm(6),
+  /** Between the earlier map and the later one, and under the labels over them. */
+  pairGutter: mm(8),
+  pairLabelGap: mm(1.5),
+  afterPair: mm(4),
+  mapLeast: 96,
+  mapPreferred: 190,
+  /** The change table: the measure's column, the room between columns, a row's padding. */
+  measure: mm(58),
+  cellGutter: mm(4),
+  cellPadV: mm(1.8),
+  rule: 0.5,
+});
+
+/**
+ * The shape that says a figure moved: a triangle in the ink, its base on the
+ * baseline of the words it stands before, as tall as it is wide. Pointing up
+ * for a figure that rose, down for one that fell, and none for one that held
+ * (section 10, point 7). Sized to the words beside it, below their capitals.
+ */
+export const MARKER = frozen({ cell: 5.5, card: 4.5, headline: 8, gutter: mm(1.2) });

@@ -6,12 +6,14 @@ import {
   BODY_WIDTH,
   BULLETS,
   CARD,
+  CHANGE,
   CONNECTIVITY,
   FOOTER,
   GAP,
   GRID,
   HEADER,
   MAP,
+  MARKER,
   PAD,
   PANEL,
   PILL,
@@ -45,6 +47,8 @@ const GROUPS = {
   SIGNATURE,
   FOOTER,
   MAP,
+  CHANGE,
+  MARKER,
 };
 
 function numbersIn(value: unknown, at: string): [string, number][] {
@@ -153,6 +157,24 @@ describe('the figures', () => {
     expect(CARD.dashRise + CARD.dashLine / 2).toBeLessThan(size / 2);
   });
 
+  it('keeps a map of a pair between the least and the preferred height of N7', () => {
+    expect(CHANGE.mapLeast).toBe(96);
+    expect(CHANGE.mapPreferred).toBe(190);
+    expect(CHANGE.mapLeast).toBeLessThan(CHANGE.mapPreferred);
+  });
+
+  it('draws each marker no taller than the capitals of the words it stands before', () => {
+    // A capital of the report's face stands about seven tenths of its size.
+    expect(MARKER.cell).toBeLessThan(0.7 * styleOf('body', 'ltr').style.size);
+    expect(MARKER.card).toBeLessThan(0.7 * styleOf('cardSummary', 'ltr').style.size);
+    expect(MARKER.headline).toBeLessThan(0.7 * styleOf('headline', 'ltr').style.size);
+  });
+
+  it('leaves the two figures of the change table room beside the measure', () => {
+    const figure = (BODY_WIDTH - CHANGE.measure - 2 * CHANGE.cellGutter) / 2;
+    expect(figure).toBeGreaterThan(CHANGE.measure / 2);
+  });
+
   it('starts a list in two columns above six', () => {
     expect(BULLETS.columnsAbove).toBe(6);
   });
@@ -191,6 +213,29 @@ describe('the practice’s measurements, written out', () => {
     expect(HEADER).toEqual({ height: mm(31), logo: { width: mm(52), height: mm(26) } });
     expect(FOOTER).toEqual({ rule: 0.5, padTop: mm(2.5), gutter: mm(8) });
     expect(MAP).toEqual({ labelGap: mm(4), reserve: mm(3) });
+  });
+
+  it('holds the page of what has changed, and the marker of a figure that moved', () => {
+    expect(CHANGE).toEqual({
+      tilesMost: 3,
+      tilePadH: mm(4),
+      tilePadV: mm(3.2),
+      tileRadius: mm(2.5),
+      tileEdge: 0.6,
+      tileGutter: mm(4),
+      tileGap: mm(1.2),
+      afterHeadlines: mm(6),
+      pairGutter: mm(8),
+      pairLabelGap: mm(1.5),
+      afterPair: mm(4),
+      mapLeast: 96,
+      mapPreferred: 190,
+      measure: mm(58),
+      cellGutter: mm(4),
+      cellPadV: mm(1.8),
+      rule: 0.5,
+    });
+    expect(MARKER).toEqual({ cell: 5.5, card: 4.5, headline: 8, gutter: mm(1.2) });
   });
 
   it('holds the room between one block and the next', () => {
