@@ -9,6 +9,8 @@ import type {
 } from '../../../../domain/reports/qeeg/types';
 import { LIMITS } from '../../../../domain/reports/qeeg/types';
 import { phrase } from '../../../../domain/reports/qeeg/wording';
+import { typedFigure } from '../../../../domain/reports/qeeg/choices';
+import { isBlank } from '../../../../domain/reports/qeeg/text';
 import { Button, Field, Select } from '../../../shell/components/Controls';
 import { Checkbox } from '../../clients/FormAtoms';
 import { retype, stylesAt, toggleMark, type Style } from './richEdit';
@@ -50,6 +52,37 @@ function inOrder(custom: Readonly<Record<string, OwnItem>>): [string, OwnItem][]
 /** The items renumbered from 0 in the order given, as the shape requires. */
 function renumbered(entries: readonly [string, OwnItem][]): Record<string, OwnItem> {
   return Object.fromEntries(entries.map(([key, item], position) => [key, { ...item, position }]));
+}
+
+/**
+ * The label of an item of hers. Emptied, it stays on screen with a hint and
+ * is not taken into the report, which keeps the label it had: the report
+ * holds no empty item, and a half-typed value is held back as a figure is.
+ */
+function OwnLabel({
+  id,
+  label,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  onChange: (next: string) => void;
+}) {
+  const [typed, setTyped] = useState(label);
+  return (
+    <Field
+      id={id}
+      label="Your own item"
+      value={typed}
+      maxLength={LIMITS.label}
+      error={isBlank(typed) ? 'An item is never empty. Remove it instead.' : undefined}
+      onChange={(event) => {
+        const next = event.currentTarget.value;
+        setTyped(next);
+        if (!isBlank(next)) onChange(next);
+      }}
+    />
+  );
 }
 
 export function PickedList<Id extends string>({
@@ -126,17 +159,10 @@ export function PickedList<Id extends string>({
             checked={item.chosen}
             onChange={(on) => setOwn(key, { ...item, chosen: on })}
           />
-          <Field
+          <OwnLabel
             id={`${id}-own-${key}-label`}
-            label="Your own item"
-            value={item.label.en}
-            maxLength={LIMITS.label}
-            error={
-              item.label.en.trim() === '' ? 'An item is never empty. Remove it instead.' : undefined
-            }
-            onChange={(event) =>
-              setOwn(key, { ...item, label: { ...item.label, en: event.currentTarget.value } })
-            }
+            label={item.label.en}
+            onChange={(en) => setOwn(key, { ...item, label: { ...item.label, en } })}
           />
           {withNote ? (
             <Field
@@ -264,46 +290,38 @@ export function Choice<V extends string>({
 
 type Direction = '' | 'increase' | 'decrease' | 'none';
 
-const WHOLE = /^\d{1,3}$/;
+/**
+ * The whole number she typed, or NaN when what she typed is not one. Reading
+ * the box is the form's; whether the number is one the report takes is the
+ * domain's (`typedFigure`, `isSessionCount`).
+ */
+export function wholeNumberIn(typed: string): number {
+  const text = typed.trim();
+  return /^\d+$/.test(text) ? Number(text) : NaN;
+}
 
 function directionOf(figure: ChangeFigure | null): Direction {
   if (figure === null) return '';
   return figure.kind === 'percent' ? figure.direction : 'none';
 }
 
+const FIGURE_PROBLEM = `Give a whole number of percent up to ${LIMITS.percentMost}. The top of a range is above its bottom.`;
+
 /**
- * What she typed, as a figure, or null with the reason it is not one yet. A
- * figure is her own estimate (`typed`); a calculated one is not offered on
- * this form, and none is ever read off a picture (section 10).
+ * What she typed, as a figure, or null with a hint while it is not one yet.
+ * A figure is her own estimate (`typed`); a calculated one is not offered on
+ * this form, and none is ever read off a picture (section 10). Whether it is
+ * a figure at all is `typedFigure`'s answer, which asks the shape.
  */
-export function figureFrom(
+function figureFrom(
   direction: Direction,
   low: string,
   high: string,
 ): { figure: TypedFigure | null; problem: string | null } {
   if (direction === '') return { figure: null, problem: null };
-  if (direction === 'none') {
-    return {
-      figure: { kind: 'no_appreciable_change', source: 'typed', basis: null },
-      problem: null,
-    };
-  }
-  const bottom = WHOLE.test(low.trim()) ? Number(low.trim()) : NaN;
-  if (!(bottom >= 1 && bottom <= 100)) {
-    return { figure: null, problem: 'Give a whole number of percent from 1 to 100.' };
-  }
-  const topText = high.trim();
-  const top = topText === '' ? null : WHOLE.test(topText) ? Number(topText) : NaN;
-  if (top !== null && !(top > bottom && top <= 100)) {
-    return {
-      figure: null,
-      problem: 'The top of a range is a whole number above the bottom, and at most 100.',
-    };
-  }
-  return {
-    figure: { kind: 'percent', direction, low: bottom, high: top, source: 'typed', basis: null },
-    problem: null,
-  };
+  const top = high.trim() === '' ? null : wholeNumberIn(high);
+  const figure = typedFigure(direction, low.trim() === '' ? null : wholeNumberIn(low), top);
+  return { figure, problem: figure === null ? FIGURE_PROBLEM : null };
 }
 
 export function FigureField({

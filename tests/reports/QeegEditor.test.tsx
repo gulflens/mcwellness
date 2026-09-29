@@ -147,7 +147,7 @@ function mountEditor(
   }: { reportId?: string | null; reports?: unknown[] } = {},
 ) {
   const onDone = vi.fn();
-  render(
+  const { unmount } = render(
     <AuthProviderBoundary provider={signedInProvider} fetchImpl={api.fetchImpl}>
       <QeegEditor
         clientId={CLIENT}
@@ -158,7 +158,7 @@ function mountEditor(
       />
     </AuthProviderBoundary>,
   );
-  return { ...api, onDone };
+  return { ...api, onDone, unmount };
 }
 
 /** The row that opens a section, found by its title. */
@@ -583,6 +583,103 @@ describe('every refusal has its own sentence', () => {
     expect(onDone).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Leave without saving' }));
     expect(onDone).toHaveBeenCalled();
+  });
+
+  it('sends nothing more once she leaves without saving and the form closes', async () => {
+    const user = userEvent.setup();
+    const { onDone, saves, unmount } = mountEditor(
+      blankInitial(),
+      mountApi({ saveAnswer: () => json({ error: 'unprocessable', code: 'already_issued' }, 422) }),
+    );
+    await openSection(user, 'Key findings');
+    await user.click(screen.getByLabelText('Mental Fatigue'));
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await screen.findByText(DRAFT_REFUSALS['already_issued'] as string);
+    expect(saves()).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Leave without saving' }));
+    expect(onDone).toHaveBeenCalled();
+    unmount();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(saves()).toHaveLength(1);
+  });
+});
+
+describe('small things the review asked for', () => {
+  it('holds back an emptied label of her own, and sends the one she had', async () => {
+    const user = userEvent.setup();
+    const { saves } = mountEditor(blankInitial());
+    await openSection(user, 'Key findings');
+    await user.type(screen.getByLabelText('Add your own item'), 'Sleep diary');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.clear(screen.getByLabelText('Your own item'));
+    expect(screen.getByText('An item is never empty. Remove it instead.')).toBeTruthy();
+    await user.click(screen.getByLabelText('Mental Fatigue'));
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }));
+    await waitFor(() => expect(saves()).toHaveLength(1));
+    const findings = sentContent(saves()[0])['findings'] as {
+      custom: Record<string, { label: { en: string } }>;
+    };
+    expect(findings.custom['c0']?.label.en).toBe('Sleep diary');
+  });
+
+  it('words a headline from the report’s wording', async () => {
+    const user = userEvent.setup();
+    const blank = blankFollowUp(COMPARED, 'follow_up');
+    mountEditor({
+      ...blank,
+      change: {
+        ...blank.change,
+        tiles: {
+          t0: {
+            position: 0,
+            caption: { en: 'Calmer evenings', ar: null },
+            figure: {
+              kind: 'percent',
+              direction: 'increase',
+              low: 25,
+              high: 30,
+              source: 'typed',
+              basis: null,
+            },
+          },
+        },
+      },
+    });
+    await openSection(user, 'What has changed');
+    expect(screen.getByText('Calmer evenings: about 25–30% higher')).toBeTruthy();
+  });
+
+  it('asks before the browser tab closes over unsaved changes', async () => {
+    const addListener = vi.spyOn(window, 'addEventListener');
+    const user = userEvent.setup();
+    mountEditor(blankInitial());
+    await openSection(user, 'Key findings');
+    await user.click(screen.getByLabelText('Mental Fatigue'));
+    // A plain object stands in for the event: jsdom's own reads `returnValue`
+    // as the old flag, not the string older Safari reads.
+    const event = {
+      returnValue: undefined as unknown,
+      defaultPrevented: false,
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+    };
+    const listeners = addListener.mock.calls.filter(([type]) => String(type) === 'beforeunload');
+    const warn = listeners.at(-1)?.[1] as (event: unknown) => void;
+    warn(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(event.returnValue).toBe('');
+  });
+
+  it('names the body a section controls only while it is open', async () => {
+    const user = userEvent.setup();
+    mountEditor(blankInitial());
+    const findings = await section('Key findings');
+    expect(findings.hasAttribute('aria-controls')).toBe(false);
+    await user.click(findings);
+    const body = document.getElementById(findings.getAttribute('aria-controls') ?? '');
+    expect(body).toBeTruthy();
   });
 });
 

@@ -21,7 +21,17 @@ import {
   type ConnectivityId,
   type MeasureId,
 } from '../../../../domain/reports/qeeg/catalogue/ids';
-import { bandHeading, paragraph, sessionLabel } from '../../../../domain/reports/qeeg/sentences';
+import {
+  chooseSessions,
+  figureText,
+  isSessionCount,
+} from '../../../../domain/reports/qeeg/choices';
+import {
+  bandHeading,
+  paragraph,
+  programmeAgreed,
+  sessionLabel,
+} from '../../../../domain/reports/qeeg/sentences';
 import { toFollowUp, toInitial } from '../../../../domain/reports/qeeg/switchEdition';
 import { spansOf } from '../../../../domain/reports/qeeg/text';
 import {
@@ -41,7 +51,14 @@ import { Button, Field, Note, Select } from '../../../shell/components/Controls'
 import { DateField } from '../../../shell/components/DateField';
 import { Textarea } from '../../clients/FormAtoms';
 import { comparableReports, comparedFromRow, earlierLabel } from './earlier';
-import { Choice, FigureField, PickedList, RegionPicker, RichField } from './QeegFields';
+import {
+  Choice,
+  FigureField,
+  PickedList,
+  RegionPicker,
+  RichField,
+  wholeNumberIn,
+} from './QeegFields';
 import {
   SECTION_TITLES,
   leftBySection,
@@ -297,7 +314,7 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props
                   id={`qeeg-${section}-title`}
                   className="qeeg-section__toggle"
                   aria-expanded={expanded}
-                  aria-controls={`qeeg-${section}-body`}
+                  aria-controls={expanded ? `qeeg-${section}-body` : undefined}
                   onClick={() => toggle(section)}
                 >
                   <span>{SECTION_TITLES[section]}</span>
@@ -354,7 +371,13 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props
           Back
         </Button>
         {leaving && draft.error ? (
-          <Button variant="quiet" onClick={onDone}>
+          <Button
+            variant="quiet"
+            onClick={() => {
+              draft.discard();
+              onDone();
+            }}
+          >
             Leave without saving
           </Button>
         ) : null}
@@ -831,19 +854,12 @@ function ProgrammeSection({ content, edit }: { content: QeegContent; edit: Edit 
   const [other, setOther] = useState(() =>
     typeof sessions === 'number' && sessionsPick(sessions) === 'other' ? String(sessions) : '',
   );
-  const otherNumber = /^\d{1,3}$/.test(other.trim()) ? Number(other.trim()) : NaN;
-  const otherValid = otherNumber >= 1 && otherNumber <= LIMITS.sessionsMost;
+  const otherNumber = wholeNumberIn(other);
+  const otherValid = isSessionCount(otherNumber);
 
+  // What the choice clears is the domain's (`chooseSessions`).
   const setSessions = (next: number | typeof QEEG_ONLY | null) =>
-    edit((was) => {
-      if (was.edition === 'initial') {
-        // The shape refuses an approach beside the brain-map-only choice,
-        // and the page prints neither: choosing it clears the approach.
-        const approach = next === QEEG_ONLY ? null : was.plan.approach;
-        return { ...was, plan: { sessions: next, approach } };
-      }
-      return { ...was, plan: { ...was.plan, sessions: next === QEEG_ONLY ? null : next } };
-    });
+    edit((was) => chooseSessions(was, next));
 
   const choose = (next: SessionsPick) => {
     setPick(next);
@@ -894,14 +910,14 @@ function ProgrammeSection({ content, edit }: { content: QeegContent; edit: Edit 
             onChange={(event) => {
               const typed = event.currentTarget.value;
               setOther(typed);
-              const n = /^\d{1,3}$/.test(typed.trim()) ? Number(typed.trim()) : NaN;
-              setSessions(n >= 1 && n <= LIMITS.sessionsMost ? n : null);
+              const n = wholeNumberIn(typed);
+              setSessions(isSessionCount(n) ? n : null);
             }}
           />
         ) : null}
       </fieldset>
       {content.edition === 'initial' ? (
-        content.plan.sessions === QEEG_ONLY ? (
+        !programmeAgreed(content) ? (
           <p className="small muted">
             No programme has been agreed, so the report prints neither the programme length nor the
             training approach.
@@ -973,8 +989,7 @@ function ChangeSection({ content, edit }: { content: QeegFollowUp; edit: Edit })
   const [sessionsText, setSessionsText] = useState(() =>
     change.sessionsCompleted ? String(change.sessionsCompleted.count) : '',
   );
-  const sessionsNumber = /^\d{1,3}$/.test(sessionsText.trim()) ? Number(sessionsText.trim()) : NaN;
-  const sessionsValid = sessionsNumber >= 1 && sessionsNumber <= LIMITS.sessionsMost;
+  const sessionsValid = isSessionCount(wholeNumberIn(sessionsText));
 
   return (
     <>
@@ -988,10 +1003,7 @@ function ChangeSection({ content, edit }: { content: QeegFollowUp; edit: Edit })
         {tiles.map(([key, tile]) => (
           <div key={key} className="qeeg-own">
             <p>
-              {tile.caption.en}:{' '}
-              {tile.figure.kind === 'percent'
-                ? `${tile.figure.direction === 'increase' ? 'an increase' : 'a decrease'} of about ${tile.figure.low}${tile.figure.high === null ? '' : ` to ${tile.figure.high}`} percent`
-                : en('figure.none', 'follow-up')}
+              {tile.caption.en}: {figureText(tile.figure, 'en')}
             </p>
             <Button
               variant="quiet"
@@ -1041,11 +1053,10 @@ function ChangeSection({ content, edit }: { content: QeegFollowUp; edit: Edit })
           onChange={(event) => {
             const typed = event.currentTarget.value;
             setSessionsText(typed);
-            const n = /^\d{1,3}$/.test(typed.trim()) ? Number(typed.trim()) : NaN;
+            const n = wholeNumberIn(typed);
             setChange((was) => ({
               ...was,
-              sessionsCompleted:
-                n >= 1 && n <= LIMITS.sessionsMost ? { count: n, source: 'typed' } : null,
+              sessionsCompleted: isSessionCount(n) ? { count: n, source: 'typed' } : null,
             }));
           }}
         />
