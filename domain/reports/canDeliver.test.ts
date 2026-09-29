@@ -64,6 +64,20 @@ describe('canDeliver', () => {
     ).toEqual({ ok: false, code: 'not_issued' });
   });
 
+  it('refuses a past record brought in from the old tool: it is kept, never sent', () => {
+    // docs/SPEC/reports-qeeg.md section 11, point 4. It has no PDF to send,
+    // and what the household was given was the old tool's print.
+    expect(
+      canDeliver({
+        report: { status: 'imported' },
+        consent: consent(),
+        contact: contact(),
+        channel: 'email',
+        today: TODAY,
+      }),
+    ).toEqual({ ok: false, code: 'not_issued' });
+  });
+
   it('refuses when the client has no participation consent at all', () => {
     expect(
       canDeliver({

@@ -78,6 +78,18 @@ describe('validateContent', () => {
     expect(validateContent('progress', progress()).ok).toBe(true);
   });
 
+  it('refuses a brain-map body, whose shape is declared and checked in its own folder', () => {
+    // docs/SPEC/reports-qeeg.md section 16: validateQeegContent is that
+    // kind's rule. Answering it here would be a second answer to what a
+    // brain-map report is; refusing keeps every route built for the two
+    // kinds from saving, previewing or re-rendering one by mistake.
+    expect(validateContent('qeeg', { kind: 'qeeg' })).toEqual({
+      ok: false,
+      field: 'kind',
+      message: 'A brain-map report is checked by its own rule, not this one.',
+    });
+  });
+
   it('refuses a body that is not a set of fields', () => {
     for (const value of [null, 'a report', 42, ['a']]) {
       const answer = validateContent('session', value);

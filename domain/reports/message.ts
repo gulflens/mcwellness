@@ -43,6 +43,9 @@ export type SendableReport = {
 const WHAT: Record<ReportKind, Record<ReportLocale, string>> = {
   session: { en: 'session report', ar: 'تقرير الجلسة' },
   progress: { en: 'progress report', ar: 'تقرير التقدّم' },
+  // The practice's own words for it on the wording sheet: خريطة الدماغ is
+  // what the brain-map report's pages call the assessment.
+  qeeg: { en: 'brain map report', ar: 'تقرير خريطة الدماغ' },
 };
 
 export function draftReportMessage(report: SendableReport): DraftedReportMessage {

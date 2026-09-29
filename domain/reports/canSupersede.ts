@@ -10,7 +10,9 @@ import type { ReportStatus } from './types';
  *
  * Three refusals, and each is a different mistake:
  *
- * - a **draft** has nothing to supersede; it is edited, which is ordinary work;
+ * - a **draft** has nothing to supersede; it is edited, which is ordinary work
+ *   — and a **past record** brought in from the old tool was never issued here
+ *   at all, so it is refused the same way;
  * - an **already superseded** version is not the standing one, and letting a
  *   chain fork would give two answers to "which version is current" (section
  *   10, decision 5);
@@ -33,11 +35,21 @@ export const MIN_SUPERSEDE_REASON = 5;
 export const MAX_SUPERSEDE_REASON = 500;
 
 export function canSupersede(report: SupersedableReport, reason: string): SupersedeAnswer {
-  if (report.status === 'draft') {
-    return { ok: false, code: 'not_issued' };
-  }
-  if (report.status === 'superseded') {
-    return { ok: false, code: 'already_superseded' };
+  switch (report.status) {
+    case 'issued':
+      break;
+    // A draft is edited; a past record brought in from the old tool was never
+    // issued and is frozen, withdrawn when it is wrong and never corrected
+    // (docs/SPEC/reports-qeeg.md section 11, points 4 and 7).
+    case 'draft':
+    case 'imported':
+      return { ok: false, code: 'not_issued' };
+    case 'superseded':
+      return { ok: false, code: 'already_superseded' };
+    default: {
+      const unknown: never = report.status;
+      return unknown;
+    }
   }
   const trimmed = reason.trim();
   if (trimmed.length < MIN_SUPERSEDE_REASON) {
