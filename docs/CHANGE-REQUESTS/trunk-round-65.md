@@ -253,13 +253,21 @@ the number rather than trust it).
 
 **Proof is not the client bundle.** What an invoice prints lives in
 `domain/billing/document`, which renders on the server
-(`app/api/billing/document-source.ts`); the served client bundle never
-carries "TOTAL DUE" or "Payment details" to check for, and the API bundle is
-not served to a browser at all. The proof is two other things: the runtime
-log after the restart showing the new build's start, and an invoice rendered
-from the live site after the pass actually carrying the violet header band,
-the "Payment details" card and "TOTAL DUE" — read off the file, the way the
-goldens are read in the tests, not off a claim about the code. An invoice already filed keeps the page it was filed with; nothing re-renders a filed document. An invoice not yet filed files the first time it is opened, with whatever page the server renders that day — opened before the pass it keeps round 61's page for good, opened after it carries this one. Read on 29 September 2026, production held four invoices: `INV-000001` and `INV-000003` filed, `INV-000002` and `INV-000004` not. Read the list again at the pass rather than trust this one. Every document rendered after the pass is the new page.
+(`app/api/billing/document-source.ts`); the served client bundle never carries
+"TOTAL DUE" or "Payment details" to check for, and the API bundle is not
+served to a browser at all. The proof is two other things: the runtime log
+after the restart showing the new build's start, and an invoice rendered from
+the live site after the pass actually carrying the violet header band, the
+"Payment details" card and "TOTAL DUE" — read off the file, the way the
+goldens are read in the tests, not off a claim about the code. An invoice
+already filed keeps the page it was filed with; nothing re-renders a filed
+document. An invoice not yet filed files the first time it is opened, with
+whatever page the server renders that day — opened before the pass it keeps
+round 61's page for good, opened after it carries this one. Read on 29
+September 2026, production held four invoices: `INV-000001` and `INV-000003`
+filed, `INV-000002` and `INV-000004` not. Read the list again at the pass
+rather than trust this one. Every document rendered after the pass is the new
+page.
 
 **For the operator.** A continuation sheet — an invoice with more lines than
 one page holds — carries a small running header, the practice's name and the
