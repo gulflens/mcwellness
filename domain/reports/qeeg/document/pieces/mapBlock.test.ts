@@ -6,10 +6,11 @@ import { MAX_MAP_SCALE, placeImage } from '../mapPlacement';
 import type { LayoutOp } from '../scale';
 import { typeset } from '../typeset';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, measure, outside, unmirrored, wordsOf } from './checks';
 import { mapBlock, mapPlaced } from './mapBlock';
 import type { MapInput } from './mapBlock';
 import { fixed, typed } from './words';
+import type { Words } from './words';
 
 const WIDTH = BODY_WIDTH;
 const ROOM = 700;
@@ -70,6 +71,13 @@ describe('mapBlock', () => {
     const words = ar.ops.filter((op) => op.kind === 'text');
     expect(extentOf(words, measure).right).toBeCloseTo(WIDTH, 9);
     expect(words.every((op) => op.kind === 'text' && op.rtl !== true)).toBe(true);
+  });
+
+  it('reads a typed label the way its letters do, and a fixed one the report’s way', () => {
+    const set = (label: Words) =>
+      wordsOf(mapBlock({ ...WIDE, label }, WIDTH, ARABIC, { room: ROOM }), measure);
+    expect(set(typed('Steady progress.'))).toEqual(['Steady progress.']);
+    expect(set(fixed('Steady progress.'))).toEqual(['. Steady progress']);
   });
 
   it('sets the picture under the label and its gap, centred across the width', () => {

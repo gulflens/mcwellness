@@ -10,7 +10,6 @@ import type { Drawing } from '../typeset';
 import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
 import { infoPanel } from './infoPanel';
 import type { InfoColumn } from './infoPanel';
-import { fixed, typed } from './words';
 
 const WIDTH = BODY_WIDTH;
 const COLUMN = panelColumnWidth(WIDTH);
@@ -22,31 +21,31 @@ const paths = (ops: readonly LayoutOp[]) => ops.filter((op): op is PathOp => op.
 const PERSON: InfoColumn = {
   title: 'About you:',
   lines: [
-    { label: 'Name:', value: typed('Amber Dune') },
-    { label: 'Age:', value: typed('34') },
-    { label: 'Hand used:', value: fixed('Right') },
+    { label: 'Name:', value: 'Amber Dune' },
+    { label: 'Age:', value: '34' },
+    { label: 'Hand used:', value: 'Right' },
   ],
 };
 const RECORDING: InfoColumn = {
   title: 'Recording:',
   lines: [
-    { label: 'Date:', value: fixed('12/09/2026') },
-    { label: 'Kind:', value: fixed('Initial') },
+    { label: 'Date:', value: '12/09/2026' },
+    { label: 'Kind:', value: 'Initial' },
   ],
 };
 const ARABIC_PERSON: InfoColumn = {
   title: 'عنك أنت:',
   lines: [
-    { label: 'الاسم:', value: typed('عنبر كثيب') },
-    { label: 'العمر:', value: typed('34') },
-    { label: 'اليد:', value: fixed('اليمنى') },
+    { label: 'الاسم:', value: 'عنبر كثيب' },
+    { label: 'العمر:', value: '34' },
+    { label: 'اليد:', value: 'اليمنى' },
   ],
 };
 const ARABIC_RECORDING: InfoColumn = {
   title: 'التسجيل:',
   lines: [
-    { label: 'التاريخ:', value: fixed('12/09/2026') },
-    { label: 'النوع:', value: fixed('أولي') },
+    { label: 'التاريخ:', value: '12/09/2026' },
+    { label: 'النوع:', value: 'أولي' },
   ],
 };
 
@@ -58,7 +57,7 @@ function columnHeight(column: InfoColumn, drawing: Drawing): number {
     column.lines.reduce(
       (total, line) =>
         total +
-        typeset('panel', `${line.label} ${line.value.text}`, COLUMN, drawing).height +
+        typeset('panel', `${line.label} ${line.value}`, COLUMN, drawing).height +
         PANEL.lineGap,
       0,
     )
@@ -126,7 +125,7 @@ describe('infoPanel', () => {
   it('reads an Arabic value in an English panel the English way, the Arabic inside it right to left', () => {
     const first: InfoColumn = {
       title: 'About you:',
-      lines: [{ label: 'Name:', value: typed('عنبر كثيب') }],
+      lines: [{ label: 'Name:', value: 'عنبر كثيب' }],
     };
     const ops = texts(infoPanel({ first, second: RECORDING }, WIDTH, ENGLISH).ops);
     const label = ops.find((op) => op.text.startsWith('Name:'));
@@ -150,8 +149,18 @@ describe('infoPanel', () => {
     );
   });
 
+  it('leaves no room for a line with neither label nor value', () => {
+    const blankLine = { label: '', value: ' ' };
+    const first: InfoColumn = { ...PERSON, lines: [...PERSON.lines, blankLine, blankLine] };
+    for (const drawing of [ENGLISH, ARABIC]) {
+      expect(infoPanel({ first, second: RECORDING }, WIDTH, drawing).height).toBe(
+        infoPanel({ first: PERSON, second: RECORDING }, WIDTH, drawing).height,
+      );
+    }
+  });
+
   it('draws a line whose value is empty, with its label', () => {
-    const first: InfoColumn = { ...PERSON, lines: [{ label: 'Name:', value: typed('  ') }] };
+    const first: InfoColumn = { ...PERSON, lines: [{ label: 'Name:', value: '  ' }] };
     const ops = texts(infoPanel({ first, second: RECORDING }, WIDTH, ENGLISH).ops);
     expect(ops.some((op) => op.text === 'Name:')).toBe(true);
   });
@@ -183,8 +192,8 @@ describe('infoPanel', () => {
     const first: InfoColumn = {
       ...PERSON,
       lines: [
-        { label: 'Name:', value: typed('a'.repeat(120)) },
-        { label: 'Note:', value: typed('b '.repeat(200)) },
+        { label: 'Name:', value: 'a'.repeat(120) },
+        { label: 'Note:', value: 'b '.repeat(200) },
       ],
     };
     for (const drawing of [ENGLISH, ARABIC]) {
@@ -208,9 +217,7 @@ describe('infoPanel', () => {
       Object.freeze({
         title: each.title,
         lines: Object.freeze(
-          each.lines.map((line) =>
-            Object.freeze({ label: line.label, value: Object.freeze({ ...line.value }) }),
-          ),
+          each.lines.map((line) => Object.freeze({ label: line.label, value: line.value })),
         ),
       });
     const input = Object.freeze({ first: column(PERSON), second: column(RECORDING) });

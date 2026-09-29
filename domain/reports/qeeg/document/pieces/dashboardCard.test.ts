@@ -9,11 +9,12 @@ import { boundsOf } from '../shapes';
 import type { PathOp } from '../shapes';
 import { typeset } from '../typeset';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, measure, outside, unmirrored, wordsOf } from './checks';
 import { dashboardCard } from './dashboardCard';
 import type { CardInput } from './dashboardCard';
 import { scoreRing } from './scoreRing';
-import { typed } from './words';
+import { fixed, typed } from './words';
+import type { Words } from './words';
 
 const WIDTH = cardWidth(BODY_WIDTH);
 const INNER = WIDTH - 2 * CARD.padH;
@@ -205,6 +206,14 @@ describe('dashboardCard', () => {
       ENGLISH,
     );
     expect(texts(block.ops).some((op) => op.text.includes('كتب') && op.rtl === true)).toBe(true);
+  });
+
+  it('reads typed evidence the way its letters do, and fixed evidence the report’s way', () => {
+    const evidence = (words: Words) => ({ label: 'Recording evidence', words });
+    const set = (words: Words) =>
+      wordsOf(dashboardCard({ ...EN_INPUT, evidence: evidence(words) }, WIDTH, ARABIC), measure);
+    expect(set(typed('Steady progress.'))).toContain('Steady progress.');
+    expect(set(fixed('Steady progress.'))).toContain('. Steady progress');
   });
 
   it('leaves out evidence that is absent or has no words, and its gap', () => {
