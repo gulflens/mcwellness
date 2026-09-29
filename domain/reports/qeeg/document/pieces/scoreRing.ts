@@ -13,10 +13,11 @@
  * report does.
  *
  * **A score of nothing.** A report's scores start empty, and a draft is
- * previewed before they are set: the track is drawn with the caller's words
- * for no score where the score would stand, in the muted grey, and no arc
- * and no "out of ten". A score and its tier come together or not at all; one
- * without the other is a slip, and is refused.
+ * previewed before they are set: the track is drawn with a short grey mark
+ * across its middle, round-ended, and no arc, no figure and no "out of ten".
+ * A mark and not words: it needs no translating and is never too wide for
+ * the ring. A score and its tier come together or not at all; one without
+ * the other is a slip, and is refused.
  */
 
 import type { Block } from '../block';
@@ -25,8 +26,7 @@ import { finite } from '../metrics';
 import { INK, MUTED, RING_TRACK, TIER_PAINT } from '../palette';
 import type { Tier } from '../palette';
 import type { LayoutOp } from '../scale';
-import { arc, circle } from '../shapes';
-import type { PathSegment } from '../shapes';
+import { arc, bar, circle } from '../shapes';
 import type { Drawing } from '../typeset';
 
 export type ScoreRingInput = {
@@ -34,30 +34,10 @@ export type ScoreRingInput = {
   readonly tier: Tier | null;
   /** The words under the score, "/10". */
   readonly outOf: string;
-  /** The words drawn where a score of nothing would stand. */
-  readonly unset: string;
 };
 
 /** The most a score may be, and so a whole turn of the ring. */
 const TOP_SCORE = 10;
-
-/** The longest piece of the arc: an eighth of a turn. */
-const PIECE = Math.PI / 4;
-
-/**
- * An arc drawn as `arc`s of at most an eighth of a turn each, joined. A
- * cubic's controls stand outside its circle, the further the longer the
- * cubic, and a check of the box counts them: at a quarter turn they would
- * reach past the edge of the ring's square, at an eighth they stay inside.
- */
-function finerArc(cx: number, cy: number, r: number, start: number, sweep: number): PathSegment[] {
-  const count = Math.max(1, Math.ceil(Math.abs(sweep) / PIECE - 1e-9));
-  const step = sweep / count;
-  return Array.from({ length: count }, (_, index) => {
-    const piece = arc(cx, cy, r, start + step * index, step);
-    return index === 0 ? piece : piece.slice(1);
-  }).flat();
-}
 
 function checked(input: ScoreRingInput): void {
   const { score, tier } = input;
@@ -90,7 +70,6 @@ export function scoreRing(input: ScoreRingInput, size: number, drawing: Drawing)
   const centreY = -(RING.box / 2) * unit;
   const radius = RING.radius * unit;
   const line = RING.line * unit;
-  const scoreAt = { x: centreX, y: -RING.scoreBaseline * unit };
 
   const ops: LayoutOp[] = [
     {
@@ -102,11 +81,9 @@ export function scoreRing(input: ScoreRingInput, size: number, drawing: Drawing)
 
   if (input.score === null || input.tier === null) {
     ops.push({
-      kind: 'text',
-      ...scoreAt,
-      text: input.unset,
-      style: { font: 'bold', size: RING.scoreSize * unit, ...MUTED },
-      align: 'centre',
+      kind: 'path',
+      segments: bar(centreX, centreY, RING.unsetDash * unit, RING.unsetLine * unit),
+      fill: MUTED,
     });
     return { width: size, height: size, overhang: 0, baseline: null, ops };
   }
@@ -114,7 +91,7 @@ export function scoreRing(input: ScoreRingInput, size: number, drawing: Drawing)
   if (input.score > 0) {
     ops.push({
       kind: 'path',
-      segments: finerArc(
+      segments: arc(
         centreX,
         centreY,
         radius,
@@ -127,7 +104,8 @@ export function scoreRing(input: ScoreRingInput, size: number, drawing: Drawing)
   ops.push(
     {
       kind: 'text',
-      ...scoreAt,
+      x: centreX,
+      y: -RING.scoreBaseline * unit,
       text: String(input.score),
       style: { font: 'bold', size: RING.scoreSize * unit, ...INK },
       align: 'centre',

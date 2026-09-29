@@ -47,7 +47,6 @@ export type CardInput = {
   readonly score: number | null;
   readonly tier: Tier | null;
   readonly outOf: string;
-  readonly unset: string;
   readonly category: string;
   readonly title: string;
   readonly summary: string;
@@ -214,10 +213,12 @@ export function dashboardCard(
   );
 
   const advice = typeset('cardAdvice', input.advice, inner, drawing);
+  // A line takes no room: the hairline is drawn inside the upper edge of the
+  // gap under it, a block of no height with the line hanging below its top.
   const rule: Block = {
     width: inner,
-    height: CARD.rule,
-    overhang: 0,
+    height: 0,
+    overhang: CARD.rule,
     baseline: null,
     ops: [
       { kind: 'rule', x: 0, y: -CARD.rule / 2, width: inner, thickness: CARD.rule, ...HAIRLINE },

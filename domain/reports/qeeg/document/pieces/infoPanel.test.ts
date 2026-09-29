@@ -1,23 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { INK } from '../palette';
+import type { Block } from '../block';
 import type { Op } from '@domain/shared/document';
 import { extentOf } from '../block';
-import type { Block } from '../block';
 import { BODY_WIDTH, PANEL, panelColumnWidth } from '../geometry';
 import { PANEL_EDGE, PANEL_FILL } from '../palette';
-import type { Measure } from '../paragraph';
 import type { LayoutOp } from '../scale';
 import type { PathOp } from '../shapes';
 import { typeset } from '../typeset';
 import type { Drawing } from '../typeset';
+import { ARABIC, ENGLISH, downThePage, measure, outside, unmirrored } from './checks';
 import { infoPanel } from './infoPanel';
 import type { InfoColumn } from './infoPanel';
-import { fixed, typed } from './words';
-
-/** Every character is half its size wide, so every width in a test is exact. */
-const measure: Measure = (text, _weight, size) => [...text].length * size * 0.5;
-const FACE = { ascent: 1, descent: -0.25 };
-const english: Drawing = { direction: 'ltr', measure, faces: { latin: FACE, arabic: FACE } };
-const arabic: Drawing = { ...english, direction: 'rtl' };
 
 const WIDTH = BODY_WIDTH;
 const COLUMN = panelColumnWidth(WIDTH);
@@ -25,46 +19,37 @@ const COLUMN = panelColumnWidth(WIDTH);
 const texts = (ops: readonly LayoutOp[]) =>
   ops.filter((op): op is Extract<Op, { kind: 'text' }> => op.kind === 'text');
 const paths = (ops: readonly LayoutOp[]) => ops.filter((op): op is PathOp => op.kind === 'path');
-const shapes = (ops: readonly LayoutOp[]) => ops.filter((op) => op.kind !== 'text');
 
 const PERSON: InfoColumn = {
   title: 'About you:',
   lines: [
-    { label: 'Name:', value: typed('Amber Dune') },
-    { label: 'Age:', value: typed('34') },
-    { label: 'Hand used:', value: fixed('Right') },
+    { label: 'Name:', value: 'Amber Dune' },
+    { label: 'Age:', value: '34' },
+    { label: 'Hand used:', value: 'Right' },
   ],
 };
 const RECORDING: InfoColumn = {
   title: 'Recording:',
   lines: [
-    { label: 'Date:', value: fixed('12/09/2026') },
-    { label: 'Kind:', value: fixed('Initial') },
+    { label: 'Date:', value: '12/09/2026' },
+    { label: 'Kind:', value: 'Initial' },
   ],
 };
 const ARABIC_PERSON: InfoColumn = {
   title: 'عنك أنت:',
   lines: [
-    { label: 'الاسم:', value: typed('عنبر كثيب') },
-    { label: 'العمر:', value: typed('34') },
-    { label: 'اليد:', value: fixed('اليمنى') },
+    { label: 'الاسم:', value: 'عنبر كثيب' },
+    { label: 'العمر:', value: '34' },
+    { label: 'اليد:', value: 'اليمنى' },
   ],
 };
 const ARABIC_RECORDING: InfoColumn = {
   title: 'التسجيل:',
   lines: [
-    { label: 'التاريخ:', value: fixed('12/09/2026') },
-    { label: 'النوع:', value: fixed('أولي') },
+    { label: 'التاريخ:', value: '12/09/2026' },
+    { label: 'النوع:', value: 'أولي' },
   ],
 };
-
-function inside(block: Block, width: number): void {
-  const extent = extentOf(block.ops, measure);
-  expect(extent.left).toBeGreaterThanOrEqual(-1e-9);
-  expect(extent.right).toBeLessThanOrEqual(width + 1e-9);
-  expect(extent.top).toBeLessThanOrEqual(1e-9);
-  expect(extent.bottom).toBeGreaterThanOrEqual(-(block.height + block.overhang) - 1e-9);
-}
 
 function columnHeight(column: InfoColumn, drawing: Drawing): number {
   const head = typeset('panelHead', column.title, COLUMN, drawing);
@@ -74,51 +59,53 @@ function columnHeight(column: InfoColumn, drawing: Drawing): number {
     column.lines.reduce(
       (total, line) =>
         total +
-        typeset('panel', `${line.label} ${line.value.text}`, COLUMN, drawing).height +
+        typeset('panel', `${line.label} ${line.value}`, COLUMN, drawing).height +
         PANEL.lineGap,
       0,
     )
   );
 }
 
+/** Where each mark first stands down the page, among what the block draws. */
+function placesOf(block: Block, marks: readonly string[]): number[] {
+  const down = downThePage(block, measure).map((each) => each.what);
+  return marks.map((mark) => down.findIndex((what) => what.includes(mark)));
+}
+
+/** Every mark is found, and each stands below the one before. */
+function inOrder(places: readonly number[]): void {
+  expect(places.every((place) => place >= 0)).toBe(true);
+  expect([...places].sort((one, other) => one - other)).toEqual(places);
+}
+
 describe('infoPanel', () => {
   it('keeps every part inside its box, in either language', () => {
-    inside(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, english), WIDTH);
-    inside(infoPanel({ first: ARABIC_PERSON, second: ARABIC_RECORDING }, WIDTH, arabic), WIDTH);
+    expect(
+      outside(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH), measure),
+    ).toEqual([]);
+    expect(
+      outside(
+        infoPanel({ first: ARABIC_PERSON, second: ARABIC_RECORDING }, WIDTH, ARABIC),
+        measure,
+      ),
+    ).toEqual([]);
   });
 
-  it('draws the Arabic panel as the mirror of the English one, across the page', () => {
-    // The two titles of each column are the same number of letters, so their
-    // underlines are as long. Up and down the Arabic lines stand on a taller
-    // floor, so the shapes are compared across.
-    const en = shapes(
-      infoPanel(
-        { first: { ...PERSON, title: 'Abcdefgh' }, second: { ...RECORDING, title: 'Abcdefgh' } },
-        WIDTH,
-        english,
-      ).ops,
-    );
-    const ar = shapes(
-      infoPanel(
-        {
-          first: { ...ARABIC_PERSON, title: 'التسجيل:' },
-          second: { ...ARABIC_RECORDING, title: 'التسجيل:' },
-        },
-        WIDTH,
-        arabic,
-      ).ops,
-    );
-    expect(ar).toHaveLength(en.length);
-    en.forEach((op, index) => {
-      const a = extentOf([op], measure);
-      const b = extentOf(ar[index] ? [ar[index]] : [], measure);
-      expect(b.left).toBeCloseTo(WIDTH - a.right, 9);
-      expect(b.right).toBeCloseTo(WIDTH - a.left, 9);
-    });
+  it('draws the Arabic panel as the mirror of the English one, its words too', () => {
+    // Up and down the Arabic lines stand on a taller floor, so the panel's
+    // foot is lower: the mirror is asked across the page.
+    for (const [first, second] of [
+      [PERSON, RECORDING],
+      [ARABIC_PERSON, ARABIC_RECORDING],
+    ] as const) {
+      const en = infoPanel({ first, second }, WIDTH, ENGLISH);
+      const ar = infoPanel({ first, second }, WIDTH, ARABIC);
+      expect(unmirrored(en, ar, measure)).toEqual([]);
+    }
   });
 
   it('draws the panel first, in the violet’s wash with its pale edge', () => {
-    const block = infoPanel({ first: PERSON, second: RECORDING }, WIDTH, english);
+    const block = infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH);
     const [panel] = paths(block.ops);
     expect(block.ops[0]).toBe(panel);
     expect(panel?.fill).toEqual(PANEL_FILL);
@@ -126,13 +113,13 @@ describe('infoPanel', () => {
   });
 
   it('sets the first column at the start and the second the gutter after it', () => {
-    const en = texts(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, english).ops);
+    const en = texts(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH).ops);
     expect(en.find((op) => op.text === 'About you:')?.x).toBeCloseTo(PANEL.padH, 9);
     expect(en.find((op) => op.text === 'Recording:')?.x).toBeCloseTo(
       PANEL.padH + COLUMN + PANEL.gutter,
       9,
     );
-    const ar = infoPanel({ first: ARABIC_PERSON, second: ARABIC_RECORDING }, WIDTH, arabic);
+    const ar = infoPanel({ first: ARABIC_PERSON, second: ARABIC_RECORDING }, WIDTH, ARABIC);
     const first = texts(ar.ops).filter((op) => op.text.includes('عنك'));
     expect(extentOf(first, measure).right).toBeCloseTo(WIDTH - PANEL.padH, 9);
     const second = texts(ar.ops).filter((op) => op.text.includes('التسجيل'));
@@ -143,7 +130,7 @@ describe('infoPanel', () => {
   });
 
   it('sets each line as one paragraph: the label, one space, the value', () => {
-    const ops = texts(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, english).ops);
+    const ops = texts(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH).ops);
     expect(ops.some((op) => op.text === 'Name: Amber Dune')).toBe(true);
     expect(ops.find((op) => op.text === 'Name: Amber Dune')?.style.size).toBe(10.2);
     expect(ops.find((op) => op.text === 'About you:')?.style.font).toBe('bold');
@@ -152,9 +139,9 @@ describe('infoPanel', () => {
   it('reads an Arabic value in an English panel the English way, the Arabic inside it right to left', () => {
     const first: InfoColumn = {
       title: 'About you:',
-      lines: [{ label: 'Name:', value: typed('عنبر كثيب') }],
+      lines: [{ label: 'Name:', value: 'عنبر كثيب' }],
     };
-    const ops = texts(infoPanel({ first, second: RECORDING }, WIDTH, english).ops);
+    const ops = texts(infoPanel({ first, second: RECORDING }, WIDTH, ENGLISH).ops);
     const label = ops.find((op) => op.text.startsWith('Name:'));
     const value = ops.find((op) => op.text.includes('عنبر'));
     expect(label?.x).toBeCloseTo(PANEL.padH, 9);
@@ -164,7 +151,7 @@ describe('infoPanel', () => {
 
   it('reads an age in an Arabic panel the Arabic way, its figures left to right', () => {
     const ops = texts(
-      infoPanel({ first: ARABIC_PERSON, second: ARABIC_RECORDING }, WIDTH, arabic).ops,
+      infoPanel({ first: ARABIC_PERSON, second: ARABIC_RECORDING }, WIDTH, ARABIC).ops,
     );
     const age = ops.find((op) => op.text === '34');
     const label = ops.find((op) => op.text.includes('العمر'));
@@ -176,16 +163,26 @@ describe('infoPanel', () => {
     );
   });
 
+  it('leaves no room for a line with neither label nor value', () => {
+    const blankLine = { label: '', value: ' ' };
+    const first: InfoColumn = { ...PERSON, lines: [...PERSON.lines, blankLine, blankLine] };
+    for (const drawing of [ENGLISH, ARABIC]) {
+      expect(infoPanel({ first, second: RECORDING }, WIDTH, drawing).height).toBe(
+        infoPanel({ first: PERSON, second: RECORDING }, WIDTH, drawing).height,
+      );
+    }
+  });
+
   it('draws a line whose value is empty, with its label', () => {
-    const first: InfoColumn = { ...PERSON, lines: [{ label: 'Name:', value: typed('  ') }] };
-    const ops = texts(infoPanel({ first, second: RECORDING }, WIDTH, english).ops);
+    const first: InfoColumn = { ...PERSON, lines: [{ label: 'Name:', value: '  ' }] };
+    const ops = texts(infoPanel({ first, second: RECORDING }, WIDTH, ENGLISH).ops);
     expect(ops.some((op) => op.text === 'Name:')).toBe(true);
   });
 
   it('stands as tall as its taller column and its padding', () => {
     for (const [first, second, drawing] of [
-      [PERSON, RECORDING, english],
-      [ARABIC_PERSON, ARABIC_RECORDING, arabic],
+      [PERSON, RECORDING, ENGLISH],
+      [ARABIC_PERSON, ARABIC_RECORDING, ARABIC],
     ] as const) {
       const block = infoPanel({ first, second }, WIDTH, drawing);
       expect(block.height).toBeCloseTo(
@@ -199,9 +196,9 @@ describe('infoPanel', () => {
     const block = infoPanel(
       { first: { title: 'About you:', lines: [] }, second: { title: 'Recording:', lines: [] } },
       WIDTH,
-      english,
+      ENGLISH,
     );
-    const head = typeset('panelHead', 'About you:', COLUMN, english);
+    const head = typeset('panelHead', 'About you:', COLUMN, ENGLISH);
     expect(block.height).toBeCloseTo(2 * PANEL.padV + head.height + head.overhang, 9);
   });
 
@@ -209,13 +206,13 @@ describe('infoPanel', () => {
     const first: InfoColumn = {
       ...PERSON,
       lines: [
-        { label: 'Name:', value: typed('a'.repeat(120)) },
-        { label: 'Note:', value: typed('b '.repeat(200)) },
+        { label: 'Name:', value: 'a'.repeat(120) },
+        { label: 'Note:', value: 'b '.repeat(200) },
       ],
     };
-    for (const drawing of [english, arabic]) {
+    for (const drawing of [ENGLISH, ARABIC]) {
       const block = infoPanel({ first, second: RECORDING }, WIDTH, drawing);
-      inside(block, WIDTH);
+      expect(outside(block, measure)).toEqual([]);
       expect(block.height).toBeGreaterThan(
         infoPanel({ first: PERSON, second: RECORDING }, WIDTH, drawing).height,
       );
@@ -224,9 +221,13 @@ describe('infoPanel', () => {
 
   it('refuses a width that is no width, or leaves no column, by name', () => {
     const input = { first: PERSON, second: RECORDING };
-    expect(() => infoPanel(input, Number.NaN, english)).toThrow(/infoPanel needs a finite width/);
-    expect(() => infoPanel(input, -1, english)).toThrow(/infoPanel needs a width of zero or more/);
-    expect(() => infoPanel(input, 10, english)).toThrow(/panelColumnWidth is left no column/);
+    expect(() => infoPanel(input, Number.NaN, ENGLISH)).toThrow(/infoPanel needs a finite width/);
+    expect(() => infoPanel(input, -1, ENGLISH)).toThrow(/infoPanel needs a width of zero or more/);
+    const least = 2 * PANEL.padH + PANEL.gutter;
+    expect(() => infoPanel(input, least, ENGLISH)).toThrow(
+      /infoPanel is left no room for its columns by a width of/,
+    );
+    expect(() => infoPanel(input, least + 10, ENGLISH)).not.toThrow();
   });
 
   it('changes nothing it was given', () => {
@@ -234,14 +235,36 @@ describe('infoPanel', () => {
       Object.freeze({
         title: each.title,
         lines: Object.freeze(
-          each.lines.map((line) =>
-            Object.freeze({ label: line.label, value: Object.freeze({ ...line.value }) }),
-          ),
+          each.lines.map((line) => Object.freeze({ label: line.label, value: line.value })),
         ),
       });
     const input = Object.freeze({ first: column(PERSON), second: column(RECORDING) });
     const before = JSON.stringify(input);
-    expect(() => infoPanel(input, WIDTH, english)).not.toThrow();
+    expect(() => infoPanel(input, WIDTH, ENGLISH)).not.toThrow();
     expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it('sets a column’s title and its lines one under another, in either language', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = infoPanel({ first: PERSON, second: RECORDING }, WIDTH, drawing);
+      inOrder(placesOf(block, ['About you', 'Amber Dune', '34', 'Right']));
+      inOrder(placesOf(block, ['Recording', '12/09/2026', 'Initial']));
+    }
+  });
+
+  it('sets its lines in ink', () => {
+    const ops = texts(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH).ops);
+    expect(ops.find((op) => op.text === 'Name: Amber Dune')?.style.grey).toBe(INK.grey);
+  });
+
+  it('rounds the panel’s corners', () => {
+    const [panel] = paths(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH).ops);
+    expect(panel?.segments.filter((segment) => segment[0] === 'C')).toHaveLength(4);
+  });
+
+  it('draws the first column before the second', () => {
+    const ops = infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH).ops;
+    const at = (words: string) => ops.findIndex((op) => op.kind === 'text' && op.text === words);
+    expect(at('About you:')).toBeLessThan(at('Recording:'));
   });
 });

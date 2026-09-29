@@ -10,6 +10,10 @@
  *
  * **A draft is previewed before it is filled.** A line whose value is empty
  * is still drawn, with its label, so the panel shows what is still to fill.
+ * A line with neither label nor value draws nothing and takes no room.
+ *
+ * **A value is plain words.** The line reads the way its report does,
+ * whoever wrote the value, so whether a person typed it is not asked.
  *
  * **The gaps are the practice's.** `PANEL.headGap` under a column's title
  * when a line follows it, and `PANEL.lineGap` under every line, the last
@@ -25,9 +29,8 @@ import { finite } from '../metrics';
 import { PANEL_EDGE, PANEL_FILL } from '../palette';
 import { typeset } from '../typeset';
 import type { Drawing } from '../typeset';
-import type { Words } from './words';
 
-export type InfoLine = { readonly label: string; readonly value: Words };
+export type InfoLine = { readonly label: string; readonly value: string };
 export type InfoColumn = { readonly title: string; readonly lines: readonly InfoLine[] };
 export type InfoPanelInput = { readonly first: InfoColumn; readonly second: InfoColumn };
 
@@ -41,10 +44,10 @@ const BOX: Box = {
 
 function columnOf(column: InfoColumn, width: number, drawing: Drawing): Block {
   const head = typeset('panelHead', column.title, width, drawing);
-  const lines = column.lines.flatMap((line) => [
-    typeset('panel', `${line.label} ${line.value.text}`, width, drawing),
-    PANEL.lineGap,
-  ]);
+  const lines = column.lines
+    .map((line) => typeset('panel', `${line.label} ${line.value}`, width, drawing))
+    .filter((line) => line.height > 0)
+    .flatMap((line) => [line, PANEL.lineGap]);
   const titled = head.height > 0 ? (lines.length > 0 ? [head, PANEL.headGap] : [head]) : [];
   return stack(width, [...titled, ...lines]);
 }
@@ -53,6 +56,9 @@ export function infoPanel(input: InfoPanelInput, width: number, drawing: Drawing
   finite('infoPanel', 'width', width);
   if (width < 0) {
     throw new RangeError(`infoPanel needs a width of zero or more, and was given ${width}.`);
+  }
+  if (width <= 2 * PANEL.padH + PANEL.gutter) {
+    throw new RangeError(`infoPanel is left no room for its columns by a width of ${width}.`);
   }
   const each = panelColumnWidth(width);
   const inner = width - 2 * PANEL.padH;
