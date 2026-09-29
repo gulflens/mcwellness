@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Op } from '@domain/shared/document';
 import { BODY_WIDTH, CARD, GRID, cardWidth } from '../geometry';
-import { PANEL_FILL } from '../palette';
 import type { LayoutOp } from '../scale';
 import { boundsOf } from '../shapes';
 import type { PathOp } from '../shapes';
@@ -16,9 +15,9 @@ const CARD_WIDTH = cardWidth(WIDTH);
 
 const texts = (ops: readonly LayoutOp[]) =>
   ops.filter((op): op is Extract<Op, { kind: 'text' }> => op.kind === 'text');
-/** The panels of the cards, in the order they are drawn. */
+/** The panels of the cards, in the order they are drawn: the one shape both filled and edged. */
 const panels = (ops: readonly LayoutOp[]) =>
-  ops.filter((op): op is PathOp => op.kind === 'path' && op.fill === PANEL_FILL);
+  ops.filter((op): op is PathOp => op.kind === 'path' && !!op.fill && !!op.stroke);
 
 function card(index: number, summary = 'Focus held steady for short stretches.'): CardInput {
   return {

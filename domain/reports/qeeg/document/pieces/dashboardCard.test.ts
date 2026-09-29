@@ -474,11 +474,17 @@ describe('dashboardCard', () => {
   });
 
   it('draws each dash of the list before the words it stands by', () => {
+    // A dash is known by its shape: as long as a dash and as thick.
+    const isDash = (op: PathOp) => {
+      const bounds = boundsOf(op.segments);
+      return (
+        Math.abs(bounds.right - bounds.left - CARD.dash) < 1e-9 &&
+        Math.abs(bounds.top - bounds.bottom - CARD.dashLine) < 1e-9
+      );
+    };
     for (const drawing of [ENGLISH, ARABIC]) {
       const ops = dashboardCard(EN_INPUT, WIDTH, drawing).ops;
-      const dashes = ops.flatMap((op, index) =>
-        op.kind === 'path' && op.fill === MUTED ? [index] : [],
-      );
+      const dashes = ops.flatMap((op, index) => (op.kind === 'path' && isDash(op) ? [index] : []));
       const words = EN_INPUT.meaning.items.map((item) =>
         ops.findIndex((op) => op.kind === 'text' && item.includes(op.text)),
       );
