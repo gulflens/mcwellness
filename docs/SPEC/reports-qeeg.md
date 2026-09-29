@@ -62,7 +62,7 @@ The layout is the practice's own and is kept: the score rings, the band icons, t
 | The recording | its date, eyes open or closed, handedness | Typed |
 | Key findings, areas of focus, recommendations, benefits | what was ticked, by name, and what she added herself | Typed |
 | Brain maps | each a stored document, by id and digest | Uploaded |
-| The five bands; the three measures | a level or a change, and regions | Typed |
+| The five bands; the three kinds of connectivity | a level or a change, and regions | Typed |
 | The dashboard | six scores from 0 to 10, each with optional evidence | Typed |
 | The summary | formatted text: bold and underline | Typed |
 | The programme | the number of sessions; the approach or the next stage | Typed |
@@ -75,10 +75,16 @@ Rules of the shape:
 3. **Unset is unset.** A score nobody set is empty, never 5. No score is signed unexamined.
 4. **Strict.** An unknown key is refused by name.
 5. **Typed once.** Each typed thing is her English and, if she gave one, her Arabic (section 8).
+6. **What is typed is cleaned, then measured.** Plain typed text is composed, trimmed, and rid of what has no glyph and would move the page about: control characters, the zero-width space, the direction marks. Its length is checked after cleaning, so what is checked is what is stored. Text that is too long is refused, never cut. An Arabic that is empty once cleaned is none.
+7. **Two characters with no glyph are kept**: the one that parts two letters which would otherwise join, and the one that joins (U+200C, U+200D). The writer honours the first when it shapes a word, so removing it would change the word on the page. What is stored is the record, and a character taken from it cannot be put back.
+8. **Formatted text is refused, never cleaned**, when it holds anything cleaning would remove. Its marks count from its letters, and cleaning would move them. The editor cleans the summary before it saves.
+9. **The key of a typed thing is one the app makes**: a small letter, then up to thirty-one small letters, figures or hyphens, and never a name every object answers to. The keys are read as they were sent, before anything else looks at the list.
+10. **The day of the recording is a real day**, from 2000 to 2100.
+11. **What the server works out is never taken from a request**: the client, where a report came from, a calculated figure. A request that carries one is refused by the route.
 
 ## 5. The lists
 
-`domain/reports/qeeg/catalogue/ids.ts`. Ten findings, eleven areas of focus, nine regions, five bands, three measures, six dimensions, six recommendations, nine benefits; three levels and three approaches for a first report; five changes and six next stages for a follow-up; ten measures for the change table.
+`domain/reports/qeeg/catalogue/ids.ts`. Ten findings, eleven areas of focus, nine regions, five bands, three kinds of connectivity, six dimensions, six recommendations, nine benefits; three levels and three approaches for a first report; five changes and six next stages for a follow-up; ten measures for the change table.
 
 **The bands are the report's own.** Delta 1–4 Hz, theta 4–8, alpha 8–12, beta 12–25, high beta 25–30, as the practice reports them. `domain/shared/bands.ts` is a vocabulary for measurements, ends in gamma, carries no ranges, and is shared by sessions, ribbons and assessments. It is not touched.
 
@@ -93,7 +99,7 @@ Every fixed sentence, in English and Arabic, is in `domain/reports/qeeg/wording/
 3. **The practice's own words, changed only where a word belonged to another kind of practice.** The practice is a wellness practice and the agreement a household signs says so. The handful of words changed, each sentence before and after, and the practice's approval of them, are in the wording sheet handed to the practice on 29 September 2026. They are not repeated here.
 4. **The sentences that say what the practice is not** are the agreement's own, quoted by `domain/reports/document/strings.ts`, and are printed in place of the old report's own closing paragraph. A report and an agreement cannot then say two different things.
 5. **The Arabic follows the terms of the pages a household has signed** (`docs/CONSENT/*.ar.md`), not the old tool's, where the two differ.
-6. **What a test holds every sentence to:** both languages present; the same gaps to fill in both; no word of another kind of practice, in either language; Arabic without vowel marks; no sign the installed typeface cannot draw; no label in capitals; every bold mark opened and closed.
+6. **What a test holds every sentence to:** both languages present; the same gaps to fill in both; no word of another kind of practice, in either language; Arabic without vowel marks, and no Arabic word on the test's list of those that read as another once the marks are gone, bare or behind a joined "and"; a range in an Arabic line written in words; no sign the installed typeface cannot draw; no label in capitals; every bold mark opened and closed.
 
 **No machine translation.** The old tool's call to an outside translation service is not carried across. The practice's standing rule is that such a service is never used on text written about a client (`docs/COMPLIANCE/approved-vendors.md`).
 
@@ -172,6 +178,7 @@ Reports written in the old tool are brought in so that a follow-up can be compar
 6. **The same file twice** for one client is refused.
 7. **Kept against the wrong client**, it is withdrawn by an owner or a lead practitioner, with a reason: content cleared, maps removed, the stamp kept.
 8. **What the old tool called a follow-up** is kept as a first-report edition that says it was a follow-up. The old tool offered only the first report's lists.
+9. **A past record is never turned into a follow-up**, and a follow-up never says it came from a file. A follow-up is written in the app, against a past record or a signed report, and compared with it.
 
 ## 12. How it becomes a PDF
 
@@ -260,8 +267,8 @@ Twelve sections, in the order of the report, one open at a time unless she opens
 
 1. `validateQeegContent` — the shape of section 4, refused with the field named.
 2. `missingForIssue` — what a report needs before it can be signed. A blank report of either edition needs twenty-six things.
-3. `bandSentence`, `measureSentence`, `regionPhrase`, `sessionLabel` — every generated sentence, built from the wording and from nothing else.
-4. `switchEdition` — what is kept, what is cleared, and that nothing is mapped.
+3. `bandSentence`, `connectivitySentence`, `regionPhrase`, `sessionLabel` — every generated sentence, built from the wording and from nothing else.
+4. `toFollowUp`, `toInitial` — what is kept, what is cleared, that nothing is mapped, and that a past record is refused.
 5. `changeNoteKey` — the note that follows from where the figures came from.
 6. `readLegacyReport`, `fromQuillDelta` — a past record, and what could not be carried.
 7. `prefillFollowUp` — what is brought forward, and every refusal: another client's report, the same report, a later one, a draft, a record that has been erased.
