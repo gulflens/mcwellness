@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DraftInput, ReportRow } from '../../app/api/reports/schema';
+import { DraftInput, QeegDraftInput, ReportRow } from '../../app/api/reports/schema';
 
 /**
  * What the reports routes take and answer, now that a report may be a brain
@@ -28,6 +28,61 @@ describe('the draft door', () => {
     expect(DraftInput.safeParse({ clientId: CLIENT, kind: 'qeeg', content: {} }).success).toBe(
       false,
     );
+  });
+});
+
+describe('the brain map’s own door', () => {
+  const SAVED = '2026-09-30T08:00:00.123456Z';
+
+  it('takes a new draft, and an update that names the save it is made over', () => {
+    expect(QeegDraftInput.safeParse({ clientId: CLIENT, kind: 'qeeg', content: {} }).success).toBe(
+      true,
+    );
+    expect(
+      QeegDraftInput.safeParse({
+        id: REPORT,
+        clientId: CLIENT,
+        kind: 'qeeg',
+        savedAt: SAVED,
+        content: {},
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses an update that does not say which save it is made over', () => {
+    const answer = QeegDraftInput.safeParse({
+      id: REPORT,
+      clientId: CLIENT,
+      kind: 'qeeg',
+      content: {},
+    });
+    expect(answer.success).toBe(false);
+    expect(answer.error?.issues[0]?.path).toEqual(['savedAt']);
+    expect(
+      QeegDraftInput.safeParse({
+        id: REPORT,
+        clientId: CLIENT,
+        kind: 'qeeg',
+        savedAt: '2026-09-30T08:00:00Z',
+        content: {},
+      }).success,
+    ).toBe(false);
+  });
+
+  it('refuses every part of the row the server owns', () => {
+    for (const extra of [
+      { importedFrom: 'qeeg.json/1' },
+      { sourceSha256: 'a'.repeat(64) },
+      { twinOfId: REPORT },
+      { comparedWithId: REPORT },
+      { status: 'imported' },
+      { reference: 'RPT-000001' },
+    ]) {
+      expect(
+        QeegDraftInput.safeParse({ clientId: CLIENT, kind: 'qeeg', content: {}, ...extra }).success,
+        Object.keys(extra)[0],
+      ).toBe(false);
+    }
   });
 });
 
