@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { extractText } from './extract';
-import { PAGE_HEIGHT, renderPdf, type DocumentImage, type FontSet, type Page } from './pdf';
+import {
+  PAGE_HEIGHT,
+  PAGE_WIDTH,
+  renderPdf,
+  type DocumentImage,
+  type FontSet,
+  type Page,
+} from './pdf';
 import type { Font } from './truetype';
 
 /**
@@ -519,5 +526,227 @@ describe('a rule that is not horizontal', () => {
     expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe(
       'q 0.50 w 0.80 G 56 690 m 256 690 l S Q',
     );
+  });
+});
+
+/**
+ * The filled and stroked rectangle the practice's own invoice design is drawn
+ * with: violet bands, tinted cards, rounded corners and a pill.
+ *
+ * Every rectangle lives inside its own q/Q, as a rule does, so the colour it
+ * paints is discarded at the Q and the writer's record of what fill the text
+ * was last given stays true. The golden greyscale stream above is the proof
+ * that a page drawing no rectangle is the page it always was.
+ */
+describe('a rectangle', () => {
+  const VIOLET = [0.22, 0.02, 0.45] as const;
+
+  it('fills a square rectangle in one line, inside its own q and Q', () => {
+    const page: Page = {
+      ops: [{ kind: 'rect', x: 20, y: 30, width: 100, height: 40, fill: { rgb: VIOLET } }],
+    };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe(
+      'q 0.22 0.02 0.45 rg 20 30 100 40 re f Q',
+    );
+  });
+
+  it('fills in grey when given a grey rather than a colour', () => {
+    const page: Page = {
+      ops: [{ kind: 'rect', x: 20, y: 30, width: 100, height: 40, fill: { grey: 0.95 } }],
+    };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe('q 0.95 g 20 30 100 40 re f Q');
+  });
+
+  it('rounds its corners with four lines and four arcs, closed before it is painted', () => {
+    const page: Page = {
+      ops: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 30,
+          width: 100,
+          height: 40,
+          radius: 10,
+          fill: { rgb: VIOLET },
+        },
+      ],
+    };
+    // κ·r = 5.523, so each arc's control points sit 4.48 in from the corner's
+    // tangent points (10 − 5.523), which is what bends a quarter circle.
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe(
+      'q 0.22 0.02 0.45 rg ' +
+        '30 30 m 110 30 l 115.52 30 120 34.48 120 40 c ' +
+        '120 60 l 120 65.52 115.52 70 110 70 c ' +
+        '30 70 l 24.48 70 20 65.52 20 60 c ' +
+        '20 40 l 20 34.48 24.48 30 30 30 c h f Q',
+    );
+  });
+
+  it('never lets a radius exceed half the shorter side, so a pill stays a pill', () => {
+    const page: Page = {
+      ops: [{ kind: 'rect', x: 0, y: 0, width: 60, height: 20, radius: 50, fill: { grey: 0.9 } }],
+    };
+    const stream = streamOf(renderPdf([page], fonts, 'Synthetic'));
+    // Clamped to 10: the straight runs begin 10 in from either end.
+    expect(stream).toContain('10 0 m 50 0 l');
+    expect(stream.match(/ c /g)).toHaveLength(4);
+    expect(stream.match(/ l /g)).toHaveLength(4);
+    expect(stream.endsWith(' h f Q')).toBe(true);
+  });
+
+  it('paints fill and stroke together with B', () => {
+    const page: Page = {
+      ops: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 30,
+          width: 100,
+          height: 40,
+          fill: { grey: 1 },
+          stroke: { rgb: VIOLET, thickness: 1 },
+        },
+      ],
+    };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe(
+      'q 1 g 0.22 0.02 0.45 RG 1 w 20 30 100 40 re B Q',
+    );
+  });
+
+  it('strokes only, with S, in the rule’s own default hairline when nothing else is said', () => {
+    const page: Page = {
+      ops: [{ kind: 'rect', x: 20, y: 30, width: 100, height: 40, stroke: {} }],
+    };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe(
+      'q 0.80 G 0.50 w 20 30 100 40 re S Q',
+    );
+  });
+
+  it('strokes a rounded rectangle with S after closing it', () => {
+    const page: Page = {
+      ops: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 30,
+          width: 100,
+          height: 40,
+          radius: 6,
+          stroke: { grey: 0.3, thickness: 0.75 },
+        },
+      ],
+    };
+    const stream = streamOf(renderPdf([page], fonts, 'Synthetic'));
+    expect(stream.startsWith('q 0.30 G 0.75 w 26 30 m ')).toBe(true);
+    expect(stream.endsWith(' h S Q')).toBe(true);
+  });
+
+  it('clamps a colour outside 0 to 1, as every other colour in the file is', () => {
+    const page: Page = {
+      ops: [{ kind: 'rect', x: 0, y: 0, width: 10, height: 10, fill: { rgb: [1.4, -0.2, 0.5] } }],
+    };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe('q 1 0 0.50 rg 0 0 10 10 re f Q');
+  });
+
+  it('leaves the text after it to set its own fill, and leaks nothing onto it', () => {
+    // A rectangle first on a page: the text after it has been told nothing, so
+    // it says its grey itself.
+    const first: Page = {
+      ops: [
+        { kind: 'rect', x: 20, y: 30, width: 100, height: 40, fill: { rgb: VIOLET } },
+        { kind: 'text', x: 56, y: 700, text: 'Ink', style: { font: 'regular', size: 10 } },
+      ],
+    };
+    expect(
+      streamOf(renderPdf([first], fonts, 'Synthetic'))
+        .split('\n')
+        .slice(0, 3),
+    ).toEqual(['q 0.22 0.02 0.45 rg 20 30 100 40 re f Q', '0 g', 'BT']);
+
+    // Between two lines of ink: the violet is discarded at the Q, so the
+    // reader's fill is still the ink the first line set, and the violet is
+    // said nowhere but inside the rectangle's own q/Q.
+    const between: Page = {
+      ops: [
+        { kind: 'text', x: 56, y: 700, text: 'Ink', style: { font: 'regular', size: 10 } },
+        { kind: 'rect', x: 20, y: 30, width: 100, height: 40, fill: { rgb: VIOLET } },
+        { kind: 'text', x: 56, y: 670, text: 'Ink', style: { font: 'regular', size: 10 } },
+      ],
+    };
+    const lines = streamOf(renderPdf([between], fonts, 'Synthetic')).split('\n');
+    expect(lines.filter((line) => line === '0 g')).toHaveLength(1);
+    expect(
+      lines.filter((line) => line.includes(' rg')).every((line) => line.startsWith('q ')),
+    ).toBe(true);
+
+    // And a page with no rectangle on it is the page it always was.
+    expect(streamOf(renderPdf([GREY_PAGE], fonts, 'Synthetic'))).toBe(GREY_STREAM_BEFORE_COLOUR);
+  });
+
+  it('writes nought for a number that is not finite, so the stream still parses', () => {
+    // A NaN or an infinity written as itself is "NaN" or "Infinity" in the
+    // content stream — not a number, and a page a reader refuses to open.
+    const square: Page = {
+      ops: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 30,
+          width: Number.POSITIVE_INFINITY,
+          height: 1e21,
+          fill: { grey: 0.9 },
+        },
+      ],
+    };
+    expect(streamOf(renderPdf([square], fonts, 'Synthetic'))).toBe('q 0.90 g 20 30 0 0 re f Q');
+
+    const rounded: Page = {
+      ops: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 30,
+          width: Number.NaN,
+          height: 40,
+          radius: Number.POSITIVE_INFINITY,
+          fill: { grey: 0.9 },
+        },
+      ],
+    };
+    const stream = streamOf(renderPdf([rounded], fonts, 'Synthetic'));
+    expect(stream).not.toMatch(/NaN|Infinity|e\+/);
+    // Every token is a number or one of the operators a rectangle uses.
+    for (const token of stream.split(' ')) {
+      expect(token, stream).toMatch(/^(-?\d+(\.\d+)?|q|Q|g|m|l|c|h|f)$/);
+    }
+    expect(stream.startsWith('q 0.90 g ')).toBe(true);
+    expect(stream.endsWith(' h f Q')).toBe(true);
+  });
+
+  it('draws nothing for a rectangle with neither a fill nor a stroke', () => {
+    const page: Page = { ops: [{ kind: 'rect', x: 0, y: 0, width: 10, height: 10 }] };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe('');
+  });
+
+  it('renders the same rectangles to the same bytes every time', () => {
+    const page: Page = {
+      ops: [
+        { kind: 'rect', x: 0, y: 780, width: PAGE_WIDTH, height: 62, fill: { rgb: VIOLET } },
+        {
+          kind: 'rect',
+          x: 40,
+          y: 500,
+          width: 250,
+          height: 120,
+          radius: 8,
+          fill: { rgb: [0.95, 0.93, 0.98] },
+          stroke: { rgb: VIOLET, thickness: 0.5 },
+        },
+        { kind: 'text', x: 56, y: 700, text: 'Ink', style: { font: 'regular', size: 10 } },
+      ],
+    };
+    const once = renderPdf([page], fonts, 'Synthetic');
+    const again = renderPdf([page], fonts, 'Synthetic');
+    expect(Buffer.from(once).equals(Buffer.from(again))).toBe(true);
   });
 });
