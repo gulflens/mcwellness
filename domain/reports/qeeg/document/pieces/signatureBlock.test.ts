@@ -7,7 +7,16 @@ import { INK, MUTED } from '../palette';
 import type { LayoutOp } from '../scale';
 import { styleOf } from '../styles';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, FACE, measure, outside, unmirrored, wordsOf } from './checks';
+import {
+  ARABIC,
+  ENGLISH,
+  FACE,
+  downThePage,
+  measure,
+  outside,
+  unmirrored,
+  wordsOf,
+} from './checks';
 import { signatureBlock } from './signatureBlock';
 import { fixed, typed } from './words';
 import type { Words } from './words';
@@ -88,6 +97,15 @@ describe('signatureBlock', () => {
     expect(ops[2]?.y).toBeCloseTo(-(firstLine + ONE_LINE), 9);
     expect(extentOf(ops, measure).left).toBeCloseTo(0, 9);
     expect(block.height).toBeCloseTo(WORDS_AT + LABEL_LINE + 2 * ONE_LINE, 9);
+  });
+
+  it('sets the rule, then the label, then each line in the order given, down the page, in both languages', () => {
+    const lines = [fixed('Hazel'), fixed('Dune'), fixed('Sage')];
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = signatureBlock({ label: 'Signed', lines }, WIDTH, drawing);
+      const order = downThePage(block, measure).map((each) => each.what);
+      expect(order).toEqual(['rule', 'Signed', 'Hazel', 'Dune', 'Sage']);
+    }
   });
 
   it('draws the rule before the words under it, the label before the lines', () => {

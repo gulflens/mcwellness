@@ -5,6 +5,7 @@ import type { Block } from '../block';
 import { FOOTER } from '../geometry';
 import { lineBox } from '../metrics';
 import { HAIRLINE, MUTED } from '../palette';
+import type { Measure } from '../paragraph';
 import type { LayoutOp } from '../scale';
 import { styleOf } from '../styles';
 import type { Drawing } from '../typeset';
@@ -20,6 +21,19 @@ const DEEP_ARABIC_FACE: Drawing = {
   ...ENGLISH,
   faces: { latin: FACE, arabic: { ascent: 1.3, descent: -0.6 } },
 };
+
+/** An Arabic report whose Arabic face stands far taller than its Latin one. */
+const TALL_ARABIC_FACE: Drawing = {
+  ...ARABIC,
+  faces: { latin: FACE, arabic: { ascent: 1.6, descent: -0.3 } },
+};
+
+/** A measure whose figure one is narrower than the other figures. */
+const narrowOne: Measure = (text, weight, size, rtl) =>
+  measure(text, weight, size, rtl) - [...text].filter((each) => each === '1').length * size * 0.2;
+
+/** An English report set with figures of two widths. */
+const FIGURES_OF_TWO_WIDTHS: Drawing = { ...ENGLISH, measure: narrowOne };
 
 const STYLE = styleOf('footer', 'ltr').style;
 const LINE = STYLE.size * STYLE.lineHeight;
@@ -136,18 +150,48 @@ describe('pageFooter', () => {
       [ENGLISH, (n: number, of: number) => `Page ${n} of ${of}`],
       [ARABIC, (n: number, of: number) => `صفحة ${n} من ${of}`],
     ] as const) {
-      const lines = [fixed('word '.repeat(37)), typed(PHONE)];
+      // A line that just fails to fit in the room the ninety-ninth page
+      // leaves, and would fit in the room the first leaves: room that
+      // followed the page's words would wrap it differently.
+      const letter = STYLE.size * 0.5;
+      const kept = measure(pageOf(99, 99), 'regular', STYLE.size, false);
+      const room = WIDTH - kept - FOOTER.gutter;
+      const count = Math.floor(room / letter) + 1;
+      const edge = fixed(`${'a'.repeat(count - 5)} abcd`);
+      const lines = [edge, typed(PHONE)];
       const pages = [pageOf(1, 1), pageOf(2, 9), pageOf(10, 12), pageOf(99, 99)];
       const blocks = pages.map((page) => pageFooter({ lines, page }, WIDTH, drawing));
       const heights = new Set(blocks.map((block) => block.height.toFixed(9)));
       expect(heights.size).toBe(1);
-      // The lines are of words and a number, and the page's words hold neither.
+      // The lines are of letters and a number, and the page's words hold neither.
       const ofTheLines = (block: Block) =>
-        texts(block.ops).filter((op) => op.text.includes('word') || op.text.includes('971'));
+        texts(block.ops).filter((op) => /a|971/.test(op.text) && !/Page|صفحة/.test(op.text));
       const drawn = blocks.map(ofTheLines);
-      expect(drawn[0]?.length).toBeGreaterThan(2);
+      expect(drawn[0]?.map((op) => op.text)).toEqual(['a'.repeat(count - 5), 'abcd', PHONE]);
       for (const each of drawn) expect(each).toEqual(drawn[0]);
     }
+  });
+
+  it('keeps room for its page’s words as if each figure were the widest', () => {
+    const lines = [fixed('Dubai')];
+    const pages = ['Page 1 of 1', 'Page 11 of 11', 'Page 88 of 88'];
+    const blocks = pages.map((page) => pageFooter({ lines, page }, WIDTH, FIGURES_OF_TWO_WIDTHS));
+    expect(new Set(blocks.map((block) => block.height.toFixed(9))).size).toBe(1);
+    blocks.forEach((block, index) => {
+      expect(outside(block, narrowOne)).toEqual([]);
+      expect(wordsOf(block, narrowOne)).toEqual([`Dubai ${pages[index] ?? ''}`]);
+    });
+  });
+
+  it('lowers the practice’s lines to the page’s words when those stand lower', () => {
+    const page = 'صفحة 2 من 9';
+    const block = pageFooter({ lines: [typed('Dubai')], page }, WIDTH, TALL_ARABIC_FACE);
+    const [line] = texts(block.ops).filter((op) => op.text === 'Dubai');
+    const words = texts(block.ops).filter((op) => op.text !== 'Dubai');
+    expect(words.length).toBeGreaterThan(0);
+    for (const op of words) expect(op.y).toBeCloseTo(line?.y ?? Number.NaN, 9);
+    expect(line?.y).toBeLessThan(-(WORDS_AT + lineBox(STYLE, FACE).firstBaseline) - 1e-6);
+    expect(outside(block, measure)).toEqual([]);
   });
 
   it('stands the figures of a telephone number in order on an Arabic page', () => {

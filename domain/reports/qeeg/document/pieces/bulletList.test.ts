@@ -3,12 +3,12 @@ import type { Op } from '@domain/shared/document';
 import { extentOf } from '../block';
 import type { Block } from '../block';
 import { BULLETS, columnWidth } from '../geometry';
-import { ACCENT, MUTED } from '../palette';
+import { ACCENT, INK, MUTED } from '../palette';
 import type { LayoutOp } from '../scale';
 import type { PathOp } from '../shapes';
 import { styleOf } from '../styles';
 import { bulletList } from './bulletList';
-import { ARABIC, ENGLISH, measure, outside, unmirrored, wordsOf } from './checks';
+import { ARABIC, ENGLISH, downThePage, measure, outside, unmirrored, wordsOf } from './checks';
 import { fixed, typed } from './words';
 import type { Words } from './words';
 
@@ -88,6 +88,33 @@ describe('bulletList', () => {
     const box = extents(block)[0];
     expect(box?.right).toBeCloseTo(WIDTH - BULLETS.diamondInset, 9);
     expect(extentOf(texts(block.ops), measure).right).toBeCloseTo(WIDTH - BULLETS.indent, 9);
+  });
+
+  it('sets its items in ink, in the body’s size', () => {
+    const block = bulletList(
+      { items: [fixed('Sleep'), fixed('Water')], columns: 'auto', empty: EMPTY },
+      WIDTH,
+      ENGLISH,
+    );
+    for (const op of texts(block.ops).filter((each) => ['Sleep', 'Water'].includes(each.text))) {
+      expect(op.style.grey).toBe(INK.grey);
+      expect(op.style.size).toBe(BODY.size);
+    }
+    expect(texts(block.ops)).toHaveLength(2);
+  });
+
+  it('sets its items down the page in the order given, each under its diamond’s top, in both languages', () => {
+    const input = {
+      items: [fixed('Sleep'), fixed('Water'), fixed('Walks')],
+      columns: 'auto' as const,
+      empty: EMPTY,
+    };
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const order = downThePage(bulletList(input, WIDTH, drawing), measure).map(
+        (each) => each.what,
+      );
+      expect(order).toEqual(['path', 'Sleep', 'path', 'Water', 'path', 'Walks']);
+    }
   });
 
   it('keeps a row gap between rows and none after the last', () => {

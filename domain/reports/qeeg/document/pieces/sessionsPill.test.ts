@@ -96,6 +96,27 @@ describe('sessionsPill', () => {
     expect(block.baseline).toBeCloseTo(first + lineBox(PILL_STYLE, FACE).firstBaseline, 9);
   });
 
+  it('centres each line of a label that wraps in the pill, in both languages', () => {
+    const label = `${'sessions '.repeat(14)}more`;
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = sessionsPill({ label }, WIDTH, drawing);
+      const baselines = [...new Set(texts(block.ops).map((op) => op.y))];
+      expect(baselines.length).toBeGreaterThan(1);
+      const middle =
+        (extentOf(paths(block.ops), measure).left + extentOf(paths(block.ops), measure).right) / 2;
+      const widths = baselines.map((y) => {
+        const line = extentOf(
+          texts(block.ops).filter((op) => op.y === y),
+          measure,
+        );
+        expect((line.left + line.right) / 2).toBeCloseTo(middle, 9);
+        return line.right - line.left;
+      });
+      // The last line is the shorter, so a line set from the start would show.
+      expect(widths.at(-1)).toBeLessThan(widths[0] ?? 0);
+    }
+  });
+
   it('keeps the room above and below as part of the block', () => {
     const block = sessionsPill({ label: LABEL }, WIDTH, ENGLISH);
     expect(block.height).toBeCloseTo(PILL.above + PILL_HEIGHT + PILL.below, 9);
