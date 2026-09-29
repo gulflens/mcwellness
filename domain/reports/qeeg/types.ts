@@ -393,10 +393,16 @@ export type QeegFollowUp = QeegCommon & {
 
 export type QeegContent = QeegInitial | QeegFollowUp;
 
-/** Something a report still needs before it can be signed. Names, never words. */
+/**
+ * Something a report still needs before it can be signed.
+ *
+ * Both halves are keys of the wording, so a screen can say either in words
+ * with `phrase` and no table of its own. A test holds that to be true of
+ * every one a blank report of either edition returns.
+ */
 export type Missing = {
-  /** Which part of the form it is in, by the key of its heading in the wording. */
+  /** Which part of the form it is in: the key of its heading. */
   readonly section: string;
-  /** What is missing, by a key of its own. */
+  /** What is missing: the key of its name. */
   readonly what: string;
 };

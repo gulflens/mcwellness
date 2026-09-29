@@ -201,7 +201,7 @@ describe('what no sentence may say', () => {
     /(مريض|مرضى|علاج|سريري|عيادة|أعراض|تشخيص|اضطراب|شفاء|دواء|طبي|يعالج|نعالج|تعالج|عولج|نفسي|انتكاس)/;
 
   /**
-   * The one who gives what a clinic gives, as a whole word. "معالجة" is the
+   * The one who works in another kind of practice, as a whole word. "معالجة" is the
    * ordinary Arabic for processing, as in "معالجة المعلومات", and is a
    * different word that happens to begin the same way; it ends in a letter
    * this pattern does not allow.
@@ -210,7 +210,7 @@ describe('what no sentence may say', () => {
 
   /**
    * "طبيعي", "الطبيعية" and "بطبيعته" (natural, normal, by its nature) begin
-   * with the letters of the word for what a clinic is, and are not it: the
+   * with the letters of a word on the list above, and are not it: the
    * limits a band is measured against are "normal limits".
    */
   const withoutNatural = (text: string) => text.replaceAll('طبيع', '');
