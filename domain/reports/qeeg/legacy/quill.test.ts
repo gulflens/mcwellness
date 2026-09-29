@@ -186,6 +186,37 @@ describe('reading a formatted summary from the old tool', () => {
   });
 });
 
+describe('a mark and a letter written as a pair', () => {
+  it('moves a mark that ends between the two halves of a pair out to the edge of the letter', () => {
+    const result = read({
+      ops: [
+        { insert: 'a\ud83d', attributes: { bold: true } },
+        { insert: '\ude00b', attributes: { underline: true } },
+        { insert: '\n' },
+      ],
+    });
+    expect(result.rich.text).toBe('a\u{1F600}b');
+    expect(result.rich.marks).toEqual([
+      { from: 0, to: 3, bold: true },
+      { from: 3, to: 4, underline: true },
+    ]);
+  });
+
+  it('composes the text as a whole when an insert opens with a combining mark, and re-bases the marks', () => {
+    const result = read({
+      ops: [
+        { insert: 'cafe', attributes: { bold: true } },
+        { insert: '\u0301 au ' },
+        { insert: 'lait', attributes: { underline: true } },
+        { insert: '\n' },
+      ],
+    });
+    expect(result.rich.text).toBe('caf\u00e9 au lait');
+    expect(result.rich.text).toBe(result.rich.text.normalize('NFC'));
+    expect(marked(result.rich.text, result.rich.marks)).toEqual(['caf\u00e9', 'lait']);
+  });
+});
+
 describe('what cannot be read', () => {
   const unreadable: ReadonlyArray<readonly [string, unknown]> = [
     ['a broken string', '{"ops": [ { "insert": '],

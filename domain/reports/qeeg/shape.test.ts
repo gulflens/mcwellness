@@ -560,6 +560,14 @@ describe('validateQeegContent', () => {
       expectRefusedAt(withMarks([{ from: 8, to: 11, bold: true }]), `${at}.0`);
     });
 
+    it('refuses a mark that begins or ends between the two halves of a pair', () => {
+      const over = (marks: unknown) =>
+        withValue(validInitial(), 'summary.en', { text: '\u{1F600} hi', marks });
+      expectRefusedAt(over([{ from: 0, to: 1, bold: true }]), `${at}.0`);
+      expectRefusedAt(over([{ from: 1, to: 3, bold: true }]), `${at}.0`);
+      expectAccepted(over([{ from: 0, to: 2, bold: true }]));
+    });
+
     it('refuses marks out of order or overlapping', () => {
       expectRefusedAt(
         withMarks([

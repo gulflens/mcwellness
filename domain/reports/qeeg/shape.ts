@@ -118,12 +118,26 @@ const richText = (most: number) =>
         } else if (each.from < end) {
           ctx.addIssue({ code: 'custom', path, message: 'Marks are in order and never overlap.' });
         }
+        if (splitsPair(rich.text, each.from) || splitsPair(rich.text, each.to)) {
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: 'A mark begins and ends on the edge of a letter, never inside one.',
+          });
+        }
         if (!each.bold && !each.underline) {
           ctx.addIssue({ code: 'custom', path, message: 'A mark is bold, underlined, or both.' });
         }
         end = Math.max(end, each.to);
       });
     });
+
+/** Whether `at` falls between the two halves of a letter written as a pair. */
+function splitsPair(text: string, at: number): boolean {
+  const high = text.charCodeAt(at - 1);
+  const low = text.charCodeAt(at);
+  return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff;
+}
 
 const bilingualRich = (most: number) =>
   z.object({ en: richText(most), ar: richText(most).nullable() }).strict();

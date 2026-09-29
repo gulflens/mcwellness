@@ -16,11 +16,14 @@
  * summary was not carried exactly as printed.
  *
  * **Counting.** Offsets count UTF-16 units of the text, as `Mark` says, which
- * is what `String.prototype.length` counts. Each insert is written in
- * composed form (NFC) before it is counted, so a mark lands on the letters it
- * was typed over. What `clean` would remove (control characters and the
- * like, `../text.ts`) is removed from each insert before it is counted too,
- * for the same reason, and `removed` says whether anything was.
+ * is what `String.prototype.length` counts. The text is written in composed
+ * form (NFC) before it is counted, so a mark lands on the letters it was
+ * typed over. What `clean` would remove (control characters and the
+ * like, `../text.ts`) is removed before it is counted too, for the same
+ * reason, and `removed` says whether anything was. The inserts are joined
+ * first and composed as a whole, so an insert that opens with a combining
+ * mark joins the letter before it, and a mark whose edge falls inside a
+ * letter written as a pair is moved outward to take the whole letter.
  *
  * It never throws. Whatever cannot be read gives `{ ok: false }`, and the
  * reader falls back to the plain summary the old file also kept.
@@ -73,11 +76,73 @@ function withoutEmptyEnd(text: string): string {
   return paragraphs.slice(0, end).join('\n');
 }
 
+const isHigh = (code: number) => code >= 0xd800 && code <= 0xdbff;
+const isLow = (code: number) => code >= 0xdc00 && code <= 0xdfff;
+const COMBINING = /\p{M}/u;
+
+/** Whether `at` falls between the two halves of a letter written as a pair. */
+function splitsPair(text: string, at: number): boolean {
+  return at > 0 && isHigh(text.charCodeAt(at - 1)) && isLow(text.charCodeAt(at));
+}
+
+/** Past any combining mark at `at`: a mark belongs to the letter before it. */
+function pastCombining(text: string, at: number): number {
+  let edge = at;
+  while (edge < text.length && COMBINING.test(text.charAt(edge))) edge += 1;
+  return edge;
+}
+
+/**
+ * A span whose edges fall on the edges of letters: one that begins or ends
+ * inside a pair is moved outward to take the whole letter, and an edge
+ * before a combining mark is moved after it, to the letter's end.
+ */
+function atLetterEdges(text: string, span: Span): Span {
+  const from = splitsPair(text, span.from) ? span.from - 1 : span.from;
+  const to = splitsPair(text, span.to) ? span.to + 1 : span.to;
+  return { ...span, from: pastCombining(text, from), to: pastCombining(text, to) };
+}
+
+/**
+ * The joined text, composed (NFC) and with what `clean` removes taken out,
+ * and each span re-based onto it. The text is worked a stretch at a time
+ * between the spans' edges, which fall on the edges of letters, so the
+ * whole comes out composed and every span still covers the letters it was
+ * typed over.
+ */
+function settle(
+  text: string,
+  spans: readonly Span[],
+): { text: string; spans: Span[]; removed: boolean } {
+  const edges = [...new Set([0, text.length, ...spans.flatMap((s) => [s.from, s.to])])].sort(
+    (a, b) => a - b,
+  );
+  const moved = new Map<number, number>();
+  let out = '';
+  let removed = false;
+  let previous = 0;
+  for (const edge of edges) {
+    const composed = text.slice(previous, edge).normalize('NFC');
+    const piece = withoutUnseen(composed);
+    if (piece.length < composed.length) removed = true;
+    out += piece;
+    moved.set(edge, out.length);
+    previous = edge;
+  }
+  const at = (edge: number) => moved.get(edge) ?? out.length;
+  return {
+    text: out,
+    spans: spans.map((span) => ({ ...span, from: at(span.from), to: at(span.to) })),
+    removed,
+  };
+}
+
 /** Marks inside the text, joined where two neighbours are alike. */
 function toMarks(spans: readonly Span[], length: number): Mark[] {
   const marks: Span[] = [];
   for (const span of spans) {
-    const from = Math.min(span.from, length);
+    // A span moved outward to the edge of a letter may reach into the one before.
+    const from = Math.min(Math.max(span.from, marks[marks.length - 1]?.to ?? 0), length);
     const to = Math.min(span.to, length);
     if (to <= from) continue;
     const last = marks[marks.length - 1];
@@ -116,7 +181,6 @@ export function fromQuillDelta(
     const dropped = new Set<Dropped>();
     const spans: Span[] = [];
     let text = '';
-    let removed = false;
 
     for (const op of ops as readonly unknown[]) {
       if (!isRecord(op)) {
@@ -148,20 +212,21 @@ export function fromQuillDelta(
         dropped.add('other');
       }
 
-      const composed = insert.normalize('NFC');
-      const piece = withoutUnseen(composed);
-      if (piece.length < composed.length) removed = true;
       const from = text.length;
-      text += piece;
+      text += insert;
       if (bold || underline) spans.push({ from, to: text.length, bold, underline });
     }
 
-    const kept = withoutEmptyEnd(text);
+    const settled = settle(
+      text,
+      spans.map((span) => atLetterEdges(text, span)),
+    );
+    const kept = withoutEmptyEnd(settled.text);
     return {
       ok: true,
-      rich: { text: kept, marks: toMarks(spans, kept.length) },
+      rich: { text: kept, marks: toMarks(settled.spans, kept.length) },
       dropped: DROPPED_ORDER.filter((kind) => dropped.has(kind)),
-      removed,
+      removed: settled.removed,
     };
   } catch {
     return { ok: false };
