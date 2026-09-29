@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ProgressReportContent } from '@domain/reports';
+import type { ProgressReportContent, ReportKind } from '@domain/reports';
 import { DeliverResponse, ReportResponse, SupersedeResponse } from '../../api/reports/schema';
 import type { ReportResponse as Report } from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
+import { kindLabel, mayBeSent } from './kinds';
 import { Ribbon } from './Ribbon';
 
 /**
@@ -51,7 +52,7 @@ export function ReportView({
    * correction the practitioner cannot then read over and sign is a correction
    * only the API can finish (section 4.3).
    */
-  onSuperseded?: (draftId: string, kind: 'session' | 'progress') => void;
+  onSuperseded?: (draftId: string, kind: ReportKind) => void;
 }) {
   const { apiFetch } = useAuth();
   const [report, setReport] = useState<Report | null>(null);
@@ -207,7 +208,7 @@ export function ReportView({
         <dt>Reference</dt>
         <dd>{row.reference ?? 'Not yet signed'}</dd>
         <dt>Kind</dt>
-        <dd>{row.kind === 'progress' ? 'Progress report' : 'Session report'}</dd>
+        <dd>{kindLabel(row.kind)}</dd>
         {row.coverageFrom && row.coverageTo ? (
           <>
             <dt>Covers</dt>
@@ -256,7 +257,7 @@ export function ReportView({
         </Button>
       </div>
 
-      {maySend && row.status !== 'draft' ? (
+      {maySend && mayBeSent(row.status) ? (
         <section>
           <h3 className="report-editor__heading">Send it to the household</h3>
           {contacts.length === 0 ? (

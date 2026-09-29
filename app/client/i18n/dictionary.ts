@@ -207,6 +207,7 @@ export const WORDS = {
   noReports: t('No reports have been written yet.', 'لم تُكتب أي تقارير بعد.'),
   sessionReport: t('Session report', 'تقرير الجلسة'),
   progressReport: t('Progress report', 'تقرير التقدّم'),
+  brainMapReport: t('Brain map report', 'تقرير خريطة الدماغ'),
   reportCovers: t('Covers', 'يغطي'),
   reportIssued: t('Issued', 'صدر في'),
   reportReplaced: t('Replaced by a newer version', 'استُبدل بإصدار أحدث'),

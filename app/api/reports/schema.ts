@@ -19,6 +19,15 @@ import {
  */
 
 export const ReportKindInput = z.enum(REPORT_KINDS);
+/**
+ * The kinds `POST /api/reports/draft` writes: the two whose figures it
+ * gathers from the record. A brain-map report is not one of them — its body,
+ * its figures and its source are its own route's (docs/SPEC/reports-qeeg.md
+ * section 14) — so a draft of one sent here is refused at the edge rather
+ * than read as a session report's.
+ */
+export const DraftKindInput = z.enum(['session', 'progress']);
+export type DraftKind = z.infer<typeof DraftKindInput>;
 export const ReportStatusOutput = z.enum(REPORT_STATUSES);
 export const ReportLocaleInput = z.enum(REPORT_LOCALES);
 export const DeliveryChannelInput = z.enum(DELIVERY_CHANNELS);
@@ -78,7 +87,7 @@ export type ReportResponse = z.infer<typeof ReportResponse>;
 export const DraftInput = z.object({
   id: z.uuid().optional(),
   clientId: z.uuid(),
-  kind: ReportKindInput,
+  kind: DraftKindInput,
   locale: ReportLocaleInput.default('en'),
   serviceTypeId: z.uuid().nullable().default(null),
   /**

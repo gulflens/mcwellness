@@ -146,7 +146,9 @@ describe('GET /api/reports', () => {
     const res = await call('GET', '/api/reports/schema', authIdOf(0));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { kinds: string[] };
-    expect(body.kinds).toEqual(['session', 'progress']);
+    // The brain-map report is a kind like the others (docs/CHANGE-REQUESTS/reports-02.md,
+    // request 4); no route of its own is mounted yet.
+    expect(body.kinds).toEqual(['session', 'progress', 'qeeg']);
   });
 });
 

@@ -1,4 +1,9 @@
-import type { ReportDocument, ReportContent } from '../../../domain/reports';
+import type {
+  ReportContent,
+  ReportDocument,
+  ReportKind,
+  ReportStatus,
+} from '../../../domain/reports';
 import { validateContent } from '../../../domain/reports';
 import type { Db } from '../_middleware/request-context';
 import type { ReportRow } from './schema';
@@ -41,8 +46,8 @@ export const REPORT_COLUMNS =
 export type ReportRecord = {
   id: string;
   client_id: string;
-  kind: 'session' | 'progress';
-  status: 'draft' | 'issued' | 'superseded';
+  kind: ReportKind;
+  status: ReportStatus;
   locale: 'en' | 'ar';
   service_type_id: string | null;
   reference: string | null;
@@ -150,12 +155,14 @@ export async function readRecipient(db: Db, clientId: string): Promise<Recipient
  * the day it is asked on.
  *
  * Answers null when the report is not one that can be rendered: a draft has no
- * reference and no signature, and a row whose content the shape no longer
- * recognises is a row nothing should quietly render half of.
+ * reference and no signature, a past record brought in from the old tool has
+ * neither and never will (docs/SPEC/reports-qeeg.md section 11), and a row
+ * whose content the shape no longer recognises is a row nothing should
+ * quietly render half of.
  */
 export function documentFrom(record: ReportRecord): ReportDocument | null {
   if (
-    record.status === 'draft' ||
+    (record.status !== 'issued' && record.status !== 'superseded') ||
     record.reference === null ||
     record.issued_on === null ||
     record.signed_by_name === null ||

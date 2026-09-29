@@ -1,8 +1,9 @@
 import { Fragment, useState } from 'react';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
-import { StatusChip, type StatusTone } from '../../shell/components/StatusChip';
+import { StatusChip } from '../../shell/components/StatusChip';
 import type { ReportRow } from '../../api/reports/schema';
+import { editorKindFor, kindWord, statusTone, statusWord } from './kinds';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
 import { canDeliverReports, canDraftReports, canSupersedeReports } from './reportsAccess';
@@ -34,23 +35,6 @@ import './reports.css';
  * there, which is what section 4.3 describes.
  */
 
-const KIND_WORDS: Record<string, string> = {
-  session: 'Session',
-  progress: 'Progress',
-};
-
-const STATUS_WORDS: Record<string, string> = {
-  draft: 'Draft',
-  issued: 'Issued',
-  superseded: 'Replaced',
-};
-
-const STATUS_TONE: Record<string, StatusTone> = {
-  draft: 'neutral',
-  issued: 'ok',
-  superseded: 'neutral',
-};
-
 function coverageOf(report: ReportRow): string {
   if (report.coverageFrom && report.coverageTo) {
     return `${report.coverageFrom} to ${report.coverageTo}`;
@@ -77,13 +61,10 @@ function Row({
           <span className="reports__reason small">Replaced: {report.amendmentReason}</span>
         ) : null}
       </td>
-      <td>{KIND_WORDS[report.kind] ?? report.kind}</td>
+      <td>{kindWord(report.kind)}</td>
       <td className="numeric">{coverageOf(report)}</td>
       <td>
-        <StatusChip
-          label={STATUS_WORDS[report.status] ?? report.status}
-          tone={STATUS_TONE[report.status] ?? 'neutral'}
-        />
+        <StatusChip label={statusWord(report.status)} tone={statusTone(report.status)} />
       </td>
       <td>{report.signedByName ?? ''}</td>
       <td className="numeric">
@@ -157,18 +138,27 @@ export function ReportsTab({
           // practitioner cannot then read over and sign is a correction that
           // only the API can finish.
           setOpenId(null);
+          const editor = editorKindFor(superseded);
+          if (editor === null) {
+            setOpenId(id);
+            return;
+          }
           setDraftId(id);
-          setWriting(superseded);
+          setWriting(editor);
         }}
       />
     );
   }
 
-  /** A draft is edited; anything signed is read. */
+  /**
+   * A draft is edited; anything signed is read. A brain-map draft has an
+   * editor of its own that this tab does not yet open, so it is read here.
+   */
   function open(report: ReportRow): void {
-    if (report.status === 'draft' && mayWrite) {
+    const editor = editorKindFor(report.kind);
+    if (report.status === 'draft' && mayWrite && editor !== null) {
       setDraftId(report.id);
-      setWriting(report.kind);
+      setWriting(editor);
       return;
     }
     setOpenId(report.id);

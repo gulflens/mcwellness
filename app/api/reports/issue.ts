@@ -87,6 +87,14 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
     if (draft.status !== 'draft') {
       return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
     }
+    if (draft.kind === 'qeeg') {
+      // A brain-map report is signed through its own door, which asks what
+      // this one cannot: its wording approved in that language, its maps
+      // present (docs/SPEC/reports-qeeg.md section 14). Refused before a
+      // number is taken, rather than after, when the render it cannot do
+      // would roll the signature back as a server error.
+      return c.json({ error: 'unprocessable', code: 'wrong_kind', requestId }, 422);
+    }
 
     const timeZone = await practiceTimeZone(db);
     const today = isoDateIn(now(), timeZone);

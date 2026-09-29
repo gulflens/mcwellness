@@ -654,6 +654,28 @@ describe('issuing', () => {
     });
   });
 
+  it('refuses a brain-map draft at this signing door, before a number is taken', async () => {
+    // A brain-map report is signed through its own door, which asks for its
+    // wording and its maps (docs/SPEC/reports-qeeg.md section 14). This one
+    // cannot render it, and would otherwise sign it and roll back as a 500.
+    const { rows: made } = await h.owner.query<{ id: string }>(
+      'insert into report (tenant_id, client_id, kind, content) ' +
+        "select tenant_id, id, 'qeeg', '{}'::jsonb from client where id = $1 returning id",
+      [h.clientId(0)],
+    );
+    const id = made[0]!.id;
+
+    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {});
+    expect(res.status).toBe(422);
+    expect((await res.json()) as { code: string }).toMatchObject({ code: 'wrong_kind' });
+
+    const { rows } = await h.owner.query<{ status: string; number: number | null }>(
+      'select status, number from report where id = $1',
+      [id],
+    );
+    expect(rows[0]).toEqual({ status: 'draft', number: null });
+  });
+
   it('refuses an id that is not a uuid with a 400, on every route that takes one', async () => {
     // Unvalidated, the path reached a uuid column and Postgres raised, which
     // the error handler answered as a 500 — on a path a stranger can call.

@@ -68,7 +68,7 @@ const DOCUMENT_SQL =
 type PortalReportRow = {
   id: string;
   client_id: string;
-  kind: 'session' | 'progress';
+  kind: 'session' | 'progress' | 'qeeg';
   status: 'draft' | 'issued' | 'superseded';
   reference: string | null;
   issued_on: string | null;
