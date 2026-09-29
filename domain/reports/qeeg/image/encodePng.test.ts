@@ -59,10 +59,11 @@ function unfilter(
   raw: Uint8Array,
   width: number,
   height: number,
-): { rgb: Uint8Array; filters: number[] } {
+): { rgb: Uint8Array; filters: number[]; ties: number } {
   const stride = width * 3;
   const rgb = new Uint8Array(stride * height);
   const filters: number[] = [];
+  let ties = 0;
   for (let y = 0; y < height; y += 1) {
     const filter = raw[y * (stride + 1)] ?? -1;
     filters.push(filter);
@@ -71,11 +72,25 @@ function unfilter(
       const a = x >= 3 ? (rgb[y * stride + x - 3] ?? 0) : 0;
       const b = y > 0 ? (rgb[(y - 1) * stride + x] ?? 0) : 0;
       const c = x >= 3 && y > 0 ? (rgb[(y - 1) * stride + x - 3] ?? 0) : 0;
+      if (filter === 4 && paethTie(a, b, c)) ties += 1;
       const predicted = [0, a, b, (a + b) >> 1, paeth(a, b, c)][filter] ?? 0;
       rgb[y * stride + x] = (byte + predicted) & 0xff;
     }
   }
-  return { rgb, filters };
+  return { rgb, filters, ties };
+}
+
+/**
+ * Whether Paeth's order of preference decided the byte: two or more of its
+ * three neighbours stand equally near the estimate and are not equal, so
+ * taking them in another order would predict another value.
+ */
+function paethTie(a: number, b: number, c: number): boolean {
+  const p = a + b - c;
+  const distances = [Math.abs(p - a), Math.abs(p - b), Math.abs(p - c)];
+  const nearest = Math.min(...distances);
+  const values = new Set([a, b, c].filter((_, i) => distances[i] === nearest));
+  return values.size > 1;
 }
 
 function picture(
@@ -93,6 +108,61 @@ function picture(
 const checkerboard = picture(700, 500, (x, y) => ((x + y) % 2 === 0 ? [0, 0, 0] : [255, 255, 255]));
 const flat = picture(64, 48, () => [56, 4, 115]);
 const gradient = picture(256, 200, (x, y) => [x, y, (x + y) & 0xff]);
+
+/**
+ * A fixed arithmetic sequence, no randomness: a linear congruential step,
+ * so the same picture is built on every run and every machine.
+ */
+const grain = (x: number, y: number, k: number): number =>
+  (((x * 7919 + y * 104729 + k * 31) * 1103515245 + 12345) >>> 16) % 32;
+
+/**
+ * A picture with texture, as a real map has: a ridged band above a smooth
+ * one, each with a little grain. Its rows choose every predicting filter,
+ * where the three pictures above never reach the average filter or a Paeth
+ * tie.
+ */
+const textured = picture(96, 64, (x, y) =>
+  y < 32
+    ? [
+        (128 + Math.trunc((((x % 24) - 12) * ((y % 16) - 8)) / 2) + (grain(x, y, 0) % 16)) & 0xff,
+        (x * 4 + (grain(x, y, 1) % 4)) & 0xff,
+        (200 - y * 3 + grain(x, y, 2)) & 0xff,
+      ]
+    : [
+        (((x * y) >> 4) + (grain(x, y, 0) % 8)) & 0xff,
+        (x * 3 + (grain(x, y, 1) % 8)) & 0xff,
+        (y * 5 + (grain(x, y, 2) % 8)) & 0xff,
+      ],
+);
+
+/**
+ * A zlib stream of stored blocks, written out by hand: no compression, so the
+ * file it goes into depends on the encoder's own choices alone, never on the
+ * version of zlib the machine carries.
+ */
+/** The textured picture's file through `stored`, as this encoder writes it. */
+const PINNED_LENGTH = 18564;
+const PINNED_CRC = 0x0a5c38dc;
+
+const stored: Deflate = (bytes) => {
+  const blocks: number[] = [0x78, 0x01];
+  for (let at = 0; at < bytes.length || at === 0; at += 65535) {
+    const piece = bytes.subarray(at, at + 65535);
+    const last = at + 65535 >= bytes.length;
+    blocks.push(last ? 1 : 0, piece.length & 0xff, piece.length >> 8);
+    blocks.push(~piece.length & 0xff, (~piece.length >> 8) & 0xff, ...piece);
+  }
+  let low = 1;
+  let high = 0;
+  for (const byte of bytes) {
+    low = (low + byte) % 65521;
+    high = (high + low) % 65521;
+  }
+  const adler = ((high << 16) | low) >>> 0;
+  blocks.push(adler >>> 24, (adler >>> 16) & 0xff, (adler >>> 8) & 0xff, adler & 0xff);
+  return Promise.resolve(new Uint8Array(blocks));
+};
 
 describe('encoding pixels as a PNG the engine embeds', () => {
   it('writes a file readPng accepts, with the right width and height', async () => {
@@ -138,6 +208,22 @@ describe('encoding pixels as a PNG the engine embeds', () => {
       expect(filter).toBeGreaterThanOrEqual(0);
       expect(filter).toBeLessThanOrEqual(4);
     }
+  });
+
+  it('gives back every pixel of a textured picture, whose rows reach the average and Paeth filters', async () => {
+    const png = await encodePng(textured, 96, 64, deflate);
+    const { rgb, filters, ties } = unfilter(new Uint8Array(inflateSync(idatOf(png))), 96, 64);
+    expect(Buffer.from(rgb).equals(Buffer.from(textured))).toBe(true);
+    expect(filters).toContain(3);
+    expect(filters).toContain(4);
+    expect(ties).toBeGreaterThan(0);
+  });
+
+  it('writes the textured picture to the same file in every version, byte for byte', async () => {
+    const png = await encodePng(textured, 96, 64, stored);
+    expect(inflateSync(idatOf(png)).length).toBe(64 * (1 + 3 * 96));
+    expect(png.length).toBe(PINNED_LENGTH);
+    expect(crc32(png)).toBe(PINNED_CRC);
   });
 
   it('chooses a predicting filter where one helps, rather than none on every row', async () => {
