@@ -932,6 +932,39 @@ describe('voiding a visit logged from the records', () => {
     expect(rows[0]?.broken).toBeNull();
   });
 
+  it('refuses a void stamp with the reason missing, on the session and on the appointment', async () => {
+    // The second line under the function (973): a void stamped with who and
+    // when but no reason at all must fail the check, not slip past it as
+    // unknown. The table's own triggers (the guards, set to fire even in
+    // replica mode) are disabled inside the rolled-back transaction, so the
+    // check alone answers.
+    const target = await logVisit(WITHOUT_PACKAGE, {
+      on: '2026-03-31',
+      billing: 'settled_outside',
+    });
+    const refusedBy = async (table: 'session' | 'appointment', id: string) => {
+      await h.owner.query('begin');
+      try {
+        await h.owner.query(`alter table ${table} disable trigger user`);
+        await h.owner.query("select set_config('app.tenant_id', $1, true)", [tenantId]);
+        const written = await h.owner.query(
+          `update ${table} set status = 'voided', voided_at = now(), voided_by = $2, ` +
+            'void_reason = null where id = $1',
+          [id, userId(SEEDED.owner)],
+        );
+        return `went through, ${written.rowCount} row(s)`;
+      } catch (error) {
+        return (error as { constraint?: string }).constraint;
+      } finally {
+        await h.owner.query('rollback');
+      }
+    };
+    expect(await refusedBy('session', target.sessionId)).toBe('session_void_columns_together');
+    expect(await refusedBy('appointment', target.appointmentId)).toBe(
+      'appointment_void_columns_together',
+    );
+  });
+
   it('leaves the audit chain intact', async () => {
     const { rows } = await h.owner.query<{ broken: string | null }>(
       'select app.verify_audit_chain()::text as broken',
