@@ -68,6 +68,32 @@ the visit. Whether the practice should be able to give a session free is not
 this round's question; it could, it did, and the books must not fall over when
 it does.
 
+### A year that holds one can still be closed
+
+The mend had a consequence of its own, found by reading every caller of
+`app.unposted_money_events()` before the pull request was reviewed. That
+function names each billing row with no entry in the journal, and an event
+that posts nothing never will have one. The closing of a year
+(`app/api/accounting/years.ts`, rule 11) counted every row the function
+answered that was dated inside the year, so a year in which a session had once
+been given free would have been refused for ever, `409 year_not_closable`,
+with nothing on any screen to say why.
+
+It was already so for one event before this round: a waived credit with no
+replacement posts nothing by section 7, and would have held its year open in
+the same way. No test had met it, and production has no such credit.
+
+So the question is now asked in one place. `waitingEvents`
+(`app/api/accounting/poster.ts`) answers every event the books are still
+**owed**, with its day: what would be posted, and what this build has no rule
+for. The overview counts that list, as `classifyPending` did, and the close
+counts the part of it inside the year. An event with no rule still holds a
+year open, because the books cannot call themselves whole while it is there.
+Proved in `tests/accounting/db/year_close_nought.test.ts`, which failed with
+the 409 before the change: a free session sold and used inside a year, the
+year closed from the January after it, and a payment the books were owed still
+posted by the close before it shut.
+
 ### The scheduler's line, written twice
 
 The host keeps two worker processes of the API alive, and each runs the
@@ -112,14 +138,19 @@ production.
   with nothing counted as waiting; the visit uses the credit and nothing is
   written for it, while a payment taken afterwards is posted; a second run
   answers nothing and the books balance.
+- `tests/accounting/db/year_close_nought.test.ts` — 3, new, run with
+  `pnpm test:db`, on a clock the test moves: a year holding a free session,
+  used, is closed once it is over; reopened, with a payment taken inside it
+  and not yet posted, the close posts the payment and then shuts the year.
 
 ### Every file this round touched outside the trunk's own paths
 
-Five, all the accounting stream's, riding in this round's own pull request by
+Eight, all the accounting stream's, riding in this round's own pull request by
 the integrator's widening for one round (`docs/SPEC/OWNERSHIP.md`):
-`domain/accounting/posting.ts` and its test; `tests/accounting/db/posting.test.ts`
-and `fixture.ts` (one function exported); and `docs/SPEC/accounting.md`
-sections 6, 7 and 12. The trunk's own half is `docs/SPEC/hosting.md` and the
+`domain/accounting/posting.ts` and its test; `app/api/accounting/poster.ts`
+and `years.ts`; under `tests/accounting/db/`, `posting.test.ts`,
+`year_close_nought.test.ts` (new) and `fixture.ts` (one function exported);
+and `docs/SPEC/accounting.md` sections 6, 7 and 12. The trunk's own half is `docs/SPEC/hosting.md` and the
 documents. No migration, no policy file.
 
 ### Going live

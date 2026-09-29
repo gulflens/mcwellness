@@ -150,7 +150,7 @@ Each is a pure function under `domain/accounting/` with a test file named after 
 8. **An account with a role or a balance is not archived.** `mayArchive(account, balanceFils)`.
 9. **The opening entry is dated the books' start day**, is of kind `opening`, and `balanceWithOpeningEquity(lines, chart)` returns the lines plus one on the `opening_balance` account for whatever difference remains, or the lines unchanged when there is none.
 10. **Year end changes only while the journal is empty.** `mayChangeYearEnd(entryCount)`.
-11. **A year closes only when whole.** `mayCloseYear(year, today, unpostedInYear)`: the last day is not after today and nothing dated inside it is unposted.
+11. **A year closes only when whole.** `mayCloseYear(year, today, unpostedInYear)`: the last day is not after today and nothing dated inside it is unposted. *Unposted means owed to the books* (amended 2026-09-30, trunk round 66): an event that rightly posts nothing — rule 18, or a waived credit with no replacement — is never in the journal and is not counted, or a year in which a session was once given free could never be closed; an event the build has no rule for is still counted, because the books cannot call themselves whole while it is there (`waitingEvents`, `app/api/accounting/poster.ts`).
 12. **The balance sheet balances or throws.** `balanceSheet` computes retained earnings and the year-to-date result and asserts the identity; a chart that has drifted is a thrown error, never a statement that looks right.
 13. **Statements are the same whoever asks.** No statement route or function takes the actor as an input; the poster reads through `app.unposted_money_events()`, and the reads of section 9 read the journal, which names nobody.
 14. **The lock date is never in the future**, `mayLockThrough(date, today)`, and moving it backward is a distinct outcome of `lockMove(current, next)` — `forward`, `backward` or `unchanged` — so the route can demand the reason and the audit sentence can say which.
@@ -253,7 +253,7 @@ Database tests under `tests/accounting/db/` on the worktree's own Postgres (`doc
 10. Year end cannot change once an entry exists; an account with a role or a balance cannot be archived; the opening entry can only be dated the books' start day; the lock date cannot be in the future.
 11. On the seed the tax estimate reads zero while relief is elected, the relief watch reads `clear`, and switching the election off yields the rate above the taxable threshold on the year-to-date result.
 12. `pnpm verify`, `pnpm test:db` and `pnpm build` are green, and the Books rail entry is invisible to every role but the owner and finance.
-13. A session sold for nought, and the visit that uses its credit, write nothing; the overview answers with nothing counted as waiting; and a payment taken after them is posted (rule 18).
+13. A session sold for nought, and the visit that uses its credit, write nothing; the overview answers with nothing counted as waiting; a payment taken after them is posted; and the year that holds them can be closed once it is over (rules 11 and 18).
 
 ## 13. Decisions taken by default
 
