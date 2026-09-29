@@ -42,7 +42,7 @@ export type MapRoom = {
   readonly room: number;
 };
 
-/** The unit the least picture is counted in: a map must have a point of height to be drawn. */
+/** The least height of picture worth drawing: one point, the unit. */
 const ONE_POINT = 1;
 
 type Laid = { readonly label: Block | null; readonly placed: PlacedImage };

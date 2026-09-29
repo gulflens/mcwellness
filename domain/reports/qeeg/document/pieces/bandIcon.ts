@@ -29,7 +29,7 @@ import type { Drawing } from '../typeset';
 
 export type BandIconInput = { readonly band: ReportBand };
 
-/** The icon of a band, `size` on each side. It reads the same in either language. */
+/** A band's icon, `size` on each side, the same in either language. */
 export function bandIcon(input: BandIconInput, size: number, drawing: Drawing): Block {
   finite('bandIcon', 'size', size);
   if (size < 0) {

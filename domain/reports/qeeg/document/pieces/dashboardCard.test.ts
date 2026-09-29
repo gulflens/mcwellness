@@ -25,7 +25,7 @@ const WIDTH = cardWidth(BODY_WIDTH);
 const INNER = WIDTH - 2 * CARD.padH;
 const COLUMN = INNER - CARD.ring - CARD.ringGutter;
 const ITEM = INNER - CARD.bulletIndent;
-/** How far below the top the panel's corner circle crosses the bar's inner side. */
+/** How far below the top the panel's corner meets the bar's inner side. */
 const DROP = CARD.radius - Math.sqrt(CARD.radius ** 2 - (CARD.radius - CARD.accent) ** 2);
 
 const texts = (ops: readonly LayoutOp[]) =>

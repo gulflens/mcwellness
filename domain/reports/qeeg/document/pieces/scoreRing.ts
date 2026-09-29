@@ -74,7 +74,7 @@ function checked(input: ScoreRingInput): void {
   }
 }
 
-/** The ring of a score, `size` on each side. It reads the same in either language. */
+/** A score's ring, `size` on each side, the same in either language. */
 export function scoreRing(input: ScoreRingInput, size: number, drawing: Drawing): Block {
   finite('scoreRing', 'size', size);
   if (size < 0) {

@@ -57,7 +57,7 @@ export type CardInput = {
 };
 
 export type CardOptions = {
-  /** The height of the row the card stands in. A card is never shorter than its own. */
+  /** The height of the card's row. A card is never shorter than its own. */
   readonly height?: number;
 };
 
@@ -76,7 +76,7 @@ function joined(parts: readonly Block[], gap: number): (Block | number)[] {
     .flatMap((part, index) => (index === 0 ? [part] : [gap, part]));
 }
 
-/** The ring at the start, and the category over the title beside it, centred on each other. */
+/** The ring at the start, the category over the title beside it, centred. */
 function headOf(input: CardInput, inner: number, drawing: Drawing): Block {
   const frame: Frame = { direction: drawing.direction, left: 0, width: inner };
   const column = inner - CARD.ring - CARD.ringGutter;
@@ -122,7 +122,7 @@ function itemOf(item: string, inner: number, drawing: Drawing): Block {
   };
 }
 
-/** Every x of a path, written as a distance from the start edge, turned into x by the frame. */
+/** A path drawn in distances from the start edge, turned into x by the frame. */
 function fromStartEdge(frame: Frame, segments: readonly PathSegment[]): PathSegment[] {
   const x = (offset: number) => fromStart(frame, offset);
   return segments.map((segment): PathSegment => {
