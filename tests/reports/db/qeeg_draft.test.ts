@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PortalReportsResponse } from '../../../app/api/portal/schema';
 import type {
   DraftResponse,
@@ -6,6 +6,7 @@ import type {
   ReportListResponse,
   ReportResponse,
 } from '../../../app/api/reports/schema';
+import type * as Source from '../../../app/api/reports/source';
 import { ageOn } from '../../../domain/shared/dates';
 import { blankFollowUp, blankInitial } from '../../../domain/reports/qeeg/blank';
 import type { ComparedWith, QeegInitial } from '../../../domain/reports/qeeg/types';
@@ -26,6 +27,38 @@ import { progressBody, sessionBody, SEEDED, startHarness, type Harness } from '.
  * Everything here is synthetic: the seed's own invented people, and bodies
  * built from the domain's blanks.
  */
+
+/**
+ * A step run once, right after the route reads a given report: the moment a
+ * race between two people happens. Null for every test but the two races.
+ *
+ * It runs on the request's own connection. Another person's commit cannot be
+ * made from a second connection while the request waits here: the request
+ * already holds the audit chain (every read it logged), and the other
+ * connection's audit row would wait for it for ever. A change made inside the
+ * request before its write is, to that write, exactly a change committed by
+ * someone else a moment before.
+ */
+type Query = (text: string, params?: unknown[]) => Promise<unknown>;
+const race = vi.hoisted(() => ({
+  after: null as null | { id: string; run: (query: Query) => Promise<void> },
+}));
+
+vi.mock('../../../app/api/reports/source', async (importOriginal) => {
+  const actual = await importOriginal<typeof Source>();
+  return {
+    ...actual,
+    readReport: async (db: Parameters<typeof actual.readReport>[0], id: string) => {
+      const found = await actual.readReport(db, id);
+      const step = race.after;
+      if (step !== null && step.id === id) {
+        race.after = null;
+        await step.run((text, params) => db.query(text, params));
+      }
+      return found;
+    },
+  };
+});
 
 const NOW = () => new Date('2026-09-30T08:00:00.000Z');
 const REASON = 'Saving the brain-map draft';
@@ -730,5 +763,44 @@ describe('the two older kinds beside it', () => {
       [brainMap.report.id],
     );
     expect(rows[0]?.kind).toBe('qeeg');
+  });
+});
+
+/** A past record of `clientId`, kept, as the table owner writes one. */
+async function keptRecord(sha: string): Promise<string> {
+  const { rows } = await h.owner.query<{ id: string }>(
+    'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
+      "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
+    [h.data.tenant.id, clientId, JSON.stringify(earlierContent()), sha],
+  );
+  const id = rows[0]?.id ?? '';
+  await h.owner.query("update report set status = 'imported' where id = $1", [id]);
+  return id;
+}
+
+/** Withdrawn as kept against the wrong client: the stamp set, the content cleared. */
+async function withdraw(id: string, query: Query = (t, p) => h.owner.query(t, p)): Promise<void> {
+  await query(
+    "update report set withdrawn_at = now(), withdraw_reason = 'Kept against the wrong client', " +
+      "content = '{}'::jsonb where id = $1",
+    [id],
+  );
+}
+
+describe('fix round 1: races between two people', () => {
+  it('answers a comparison withdrawn between the read and the write with 409, and writes nothing', async () => {
+    const kept = await keptRecord('d'.repeat(64));
+    const before = await reportCount();
+    // The owner saves, since withdrawing is the owner's or the lead's.
+    race.after = { id: kept, run: (query) => withdraw(kept, query) };
+    const res = await save({ clientId, kind: 'qeeg', content: sentFollowUp(kept) }, SEEDED.owner);
+    expect(race.after).toBeNull();
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { code: string; reason: string; field: string }).toMatchObject({
+      code: 'cannot_compare',
+      reason: 'withdrawn',
+      field: 'comparedWith.reportId',
+    });
+    expect(await reportCount()).toBe(before);
   });
 });

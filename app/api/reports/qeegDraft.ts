@@ -95,6 +95,13 @@ function reasonOf(c: Context<ApiEnv>): string | null {
   return reason.length > 0 ? reason : null;
 }
 
+/** The database refusing a link to a report that can no longer be compared with. */
+function isComparisonRefused(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { code, constraint } = error as { code?: unknown; constraint?: unknown };
+  return code === '23503' && constraint === 'report_compared_with_comparable';
+}
+
 /** A key's own value, never one its prototype answers to. */
 function own(record: unknown, key: string): unknown {
   return isRecord(record) && Object.hasOwn(record, key) ? record[key] : undefined;
@@ -301,21 +308,51 @@ export async function saveQeegDraft(
   }
 
   const body = JSON.stringify(checked.content);
-  const written = input.id
-    ? await db.query<{ id: string }>(UPDATE_SQL, [
-        input.id,
-        input.serviceTypeId,
-        comparedWithId,
-        body,
-        input.savedAt,
-      ])
-    : await db.query<{ id: string }>(INSERT_SQL, [
-        input.clientId,
-        input.locale ?? 'en',
-        input.serviceTypeId,
-        comparedWithId,
-        body,
-      ]);
+  // The write in a savepoint of its own. What a follow-up is compared with
+  // was read above; if it was withdrawn since, the database refuses the link
+  // (`report_compared_with_comparable`, 603). That refusal is an answer, not a
+  // fault, so it is rolled back to here and the request goes on to say so: a
+  // caught error left standing would abort the transaction, and the fence
+  // would turn the answer into a 500.
+  await db.query('savepoint qeeg_draft_write');
+  let written: { rows: { id: string }[] };
+  try {
+    written = input.id
+      ? await db.query<{ id: string }>(UPDATE_SQL, [
+          input.id,
+          input.serviceTypeId,
+          comparedWithId,
+          body,
+          input.savedAt,
+        ])
+      : await db.query<{ id: string }>(INSERT_SQL, [
+          input.clientId,
+          input.locale ?? 'en',
+          input.serviceTypeId,
+          comparedWithId,
+          body,
+        ]);
+  } catch (error) {
+    if (!isComparisonRefused(error) || comparedWithId === null) throw error;
+    await db.query('rollback to savepoint qeeg_draft_write');
+    const current = await comparedFrom(db, comparedWithId, {
+      clientId: input.clientId,
+      draftId: input.id ?? null,
+      erased: false,
+    });
+    return c.json(
+      {
+        error: 'conflict',
+        code: 'cannot_compare',
+        // What the report is now. A withdraw is the one change the key
+        // refuses that the read above could not have seen coming.
+        reason: current.ok ? 'withdrawn' : current.reason,
+        field: 'comparedWith.reportId',
+        requestId,
+      },
+      409,
+    );
+  }
   const id = written.rows[0]?.id;
   if (!id) {
     if (input.id && (await readReport(db, input.id))) {
