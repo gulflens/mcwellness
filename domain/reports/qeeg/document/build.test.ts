@@ -616,6 +616,15 @@ describe('a follow-up', () => {
       expect(words).toContain('10/06/2026');
       expect(words).toContain('RPT-000041');
     }
+    // Set as the other values of the column are, with a capital.
+    expect(wordsDrawn([partOf(build(fullFollowUp()), 'client')], ENGLISH)).toContain(
+      'Initial QEEG, 10/06/2026, RPT-000041',
+    );
+    const previous: QeegFollowUp = {
+      ...fullFollowUp(),
+      comparedWith: { ...COMPARED_WITH, relation: 'previous' },
+    };
+    expect(wordsDrawn([partOf(build(previous), 'client')], ENGLISH)).toContain('Previous QEEG,');
     const imported: QeegFollowUp = {
       ...fullFollowUp(),
       comparedWith: { ...COMPARED_WITH, origin: 'imported', reference: null },

@@ -205,6 +205,10 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
 
   'term.earlier.initial': later('initial QEEG', 'تقييم خريطة الدماغ الأولي'),
   'term.earlier.previous': later('previous QEEG', 'تقييم خريطة الدماغ السابق'),
+  // The earlier report as the value of "Compared with:" at the head of a
+  // follow-up, set as the other values there are. Draft wording.
+  'value.earlier.initial': later('Initial QEEG', 'تقييم خريطة الدماغ الأولي'),
+  'value.earlier.previous': later('Previous QEEG', 'تقييم خريطة الدماغ السابق'),
 
   // -------------------------------------------------------------------------
   // Key findings

@@ -69,7 +69,6 @@ import {
   bandHeading,
   bandSentence,
   connectivitySentence,
-  earlierTerm,
   paragraph,
   programmeAgreed,
   sessionLabel,
@@ -375,7 +374,7 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
           line(
             'label.compared_with',
             [
-              earlierTerm(content, locale),
+              say(`value.earlier.${content.comparedWith.relation}`),
               dayOf(content.comparedWith.recordedOn),
               ...(content.comparedWith.reference === null ? [] : [content.comparedWith.reference]),
             ].join(say('list.between')),
