@@ -174,23 +174,46 @@ function isUnknown(event: MoneyEvent | null): boolean {
   return event.event === 'invoice.issued' && event.invoiceKind === 'statement';
 }
 
-/** What the poster would do, without doing any of it: the overview's two counts. */
-export async function classifyPending(db: Db): Promise<{ pending: number; unknown: number }> {
+/** An event the books are still owed, and the practice's own day it belongs to. */
+export type WaitingEvent = { occurredOn: string; state: 'pending' | 'unknown' };
+
+/**
+ * What the poster would do, without doing any of it: every event the books
+ * are still owed, with its day.
+ *
+ * **Owed, and not merely absent.** `app.unposted_money_events()` names every
+ * billing row that has no entry in the journal, and an event that posts
+ * nothing never will have one: a session given free (rule 18), a waived credit
+ * with no replacement (section 7). Those are left out here, because nothing
+ * is owed for them. Whoever asks "is anything still to be posted" — the
+ * overview, the closing of a year — asks it of this list, so that a row which
+ * will rightly never be posted cannot hold a count above nought for ever.
+ *
+ * An event this build has no rule for stays on the list as `unknown`: the
+ * books cannot say they are whole while it is there.
+ */
+export async function waitingEvents(db: Db): Promise<WaitingEvent[]> {
   const chart = await readChart(db);
   const { rows } = await db.query<EventRow>(EVENTS_SQL);
-  let pending = 0;
-  let unknown = 0;
+  const waiting: WaitingEvent[] = [];
   for (const row of rows) {
     const event = toEvent(row);
     if (isUnknown(event)) {
-      unknown += 1;
+      waiting.push({ occurredOn: row.occurred_on, state: 'unknown' });
       continue;
     }
     if (postingsFor(event as MoneyEvent, chart) !== null) {
-      pending += 1;
+      waiting.push({ occurredOn: row.occurred_on, state: 'pending' });
     }
   }
-  return { pending, unknown };
+  return waiting;
+}
+
+/** The same, as the overview's two counts. */
+export async function classifyPending(db: Db): Promise<{ pending: number; unknown: number }> {
+  const waiting = await waitingEvents(db);
+  const pending = waiting.filter((event) => event.state === 'pending').length;
+  return { pending, unknown: waiting.length - pending };
 }
 
 async function yearIdFor(
