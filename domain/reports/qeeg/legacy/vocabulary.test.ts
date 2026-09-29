@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 /**
- * The words of a clinic appear nowhere in the brain-map report's code
- * (CLAUDE.md rule 1), with two exceptions this file names exactly.
+ * The words of another kind of practice appear nowhere in the brain-map
+ * report's code (CLAUDE.md rule 1), with two exceptions this file names
+ * exactly.
  *
  * **Why there are exceptions at all.** The old tool's file keeps the person a
  * report is about under a key this app does not use. Reading the file means
@@ -10,6 +11,9 @@ import { describe, expect, it } from 'vitest';
  * `LEGACY_SUBJECT_KEY` in `keys.ts`, and every other line says the constant.
  * The other exception is the guards themselves: the wording's guard in
  * `wording/wording.test.ts` and this file must spell the words to catch them.
+ * In the wording's guard only the lines that hold its lists are let off, and
+ * its comment lines, two of which still spell a word; once those are
+ * reworded, the comments can be held too.
  *
  * **Why every file under `domain/reports/qeeg/` and not only `legacy/`.** The
  * importer is where the old tool's words come closest to this app's code,
@@ -29,6 +33,12 @@ const KEY_LINE = /^export const LEGACY_SUBJECT_KEY = '[a-z]+';$/;
 /** Where the wording's guard begins, and the line that ends it. */
 const WORDING_GUARD_START = "describe('what no sentence may say', () => {";
 const WORDING_GUARD_END = '});';
+
+/** A line of the wording's guard that holds one of its lists: a pattern or an array. */
+const LIST_LINE = /^\s*\/.+\/[a-z]*;?$|\[.*\]/;
+
+/** A comment line of the wording's guard. */
+const COMMENT_LINE = /^\s*(\/\/|\/\*\*|\*)/;
 
 const SOURCES = import.meta.glob<string>('../**/*.ts', {
   query: '?raw',
@@ -56,7 +66,7 @@ function offences(path: string, source: string): string[] {
       if (line.trim() === WORDING_GUARD_START) inWordingGuard = true;
       if (inWordingGuard) {
         if (line === WORDING_GUARD_END) inWordingGuard = false;
-        return;
+        if (LIST_LINE.test(line) || COMMENT_LINE.test(line)) return;
       }
     }
     if (path === 'legacy/keys.ts' && KEY_LINE.test(line)) return;
@@ -65,7 +75,7 @@ function offences(path: string, source: string): string[] {
   return found;
 }
 
-describe('the words of a clinic', () => {
+describe('the words of another kind of practice', () => {
   it('reads the whole of the report code, guards and all, except this file, which the bundler leaves out of its own glob', () => {
     const paths = FILES.map(([path]) => path);
     for (const expected of [
@@ -110,7 +120,7 @@ describe('the guard itself', () => {
     }
   });
 
-  it('leaves alone a word that only contains the letters of cure', () => {
+  it('leaves alone a word that only holds the letters of the fourth stem', () => {
     expect(offences('legacy/probe.ts', 'const secure = accurate;\n')).toEqual([]);
   });
 
@@ -123,6 +133,17 @@ describe('the guard itself', () => {
     expect(offences('legacy/read.ts', "export const LEGACY_SUBJECT_KEY = 'patient';\n")).toEqual([
       'legacy/read.ts:1',
     ]);
+  });
+
+  it('catches a word inside the wording guard on a line that is neither a list nor a comment', () => {
+    const source = [
+      "describe('what no sentence may say', () => {",
+      "  const words = ['a clinic list'];",
+      '  // a clinic, in a comment',
+      "  it('reads a clinic note', () => {});",
+      '});',
+    ].join('\n');
+    expect(offences('wording/wording.test.ts', source)).toEqual(['wording/wording.test.ts:4']);
   });
 
   it('catches a word in the wording test outside its own guard', () => {

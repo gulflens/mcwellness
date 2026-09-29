@@ -16,7 +16,7 @@ describe('the old file format, by name', () => {
     expect(LEGACY_SUBJECT_KEY).toMatch(/^[a-z]+$/);
   });
 
-  it('keeps the key frozen as a constant nobody can reassign', () => {
+  it('holds the key as a string that is not empty', () => {
     expect(typeof LEGACY_SUBJECT_KEY).toBe('string');
     expect(LEGACY_SUBJECT_KEY.length).toBeGreaterThan(0);
   });
