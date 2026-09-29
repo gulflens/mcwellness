@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from './catalogue/ids';
 import { blankFollowUp, blankInitial, EMPTY_RICH, NOTHING_PICKED } from './blank';
+import { validateQeegContent } from './shape';
 import type { ComparedWith } from './types';
 
 /** Part 1 of brief C1: a report nobody has filled in yet. */
@@ -114,6 +115,14 @@ describe('two blanks', () => {
     const inBlank = objectsIn(blankInitial());
     expect(inBlank.has(EMPTY_RICH)).toBe(false);
     expect(inBlank.has(NOTHING_PICKED)).toBe(false);
+  });
+});
+
+describe('a blank', () => {
+  it('passes the shape, in either edition and at either later stage', () => {
+    expect(validateQeegContent(blankInitial()).ok).toBe(true);
+    expect(validateQeegContent(blankFollowUp(EARLIER, 'follow_up')).ok).toBe(true);
+    expect(validateQeegContent(blankFollowUp(EARLIER, 'final')).ok).toBe(true);
   });
 });
 
