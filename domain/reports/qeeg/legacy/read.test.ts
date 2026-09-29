@@ -716,6 +716,24 @@ describe('what the reader tolerates, following the old tool', () => {
     expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'maps' }]);
   });
 
+  it('carries a PNG, JPEG, WebP or BMP picture and nothing else, and says what it dropped', () => {
+    for (const type of ['png', 'jpeg', 'webp', 'bmp', 'PNG']) {
+      const url = `data:image/${type};base64,AAAA`;
+      const maps = [{ label: 'EO: Eyes Open', name: '', img: { url, w: 1, h: 1 } }];
+      expect(
+        readOk(withFile({ maps })).images.map((i) => i.dataUrl),
+        type,
+      ).toEqual([url]);
+    }
+    for (const type of ['svg+xml', 'x-anything', 'gif', 'png+xml']) {
+      const url = `data:image/${type};base64,AAAA`;
+      const maps = [{ label: 'EO: Eyes Open', name: '', img: { url, w: 1, h: 1 } }];
+      const result = readOk(withFile({ maps }));
+      expect(result.images, type).toEqual([]);
+      expect(result.notes, type).toEqual([{ code: 'map_without_image_dropped', at: 'maps' }]);
+    }
+  });
+
   it('keeps at most eight maps', () => {
     const maps = Array.from({ length: 10 }, () => ({
       label: 'EO: Eyes Open',

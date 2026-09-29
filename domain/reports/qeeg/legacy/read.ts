@@ -431,11 +431,18 @@ function approachOf(value: unknown, notes: Notes): ApproachId | null {
   return approach;
 }
 
-/** A picture held in the file itself. Anything else would send the browser elsewhere. */
+/**
+ * A picture held in the file itself, of a kind a brain map is saved as: PNG,
+ * JPEG, WebP or BMP. Anything else would send the browser elsewhere, or, as
+ * an SVG, carry a page of its own. How large one may be is the upload's
+ * question, not this reader's.
+ */
 function imageUrl(img: unknown): string | null {
   if (!isRecord(img)) return null;
   const url = field(img, 'url');
-  return typeof url === 'string' && /^data:image\/[a-z0-9.+-]+[;,]/i.test(url) ? url : null;
+  return typeof url === 'string' && /^data:image\/(?:png|jpeg|webp|bmp)[;,]/i.test(url)
+    ? url
+    : null;
 }
 
 function pixels(value: unknown): number {
