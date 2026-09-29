@@ -222,43 +222,54 @@ export function paginate<B extends Flow>(
   const pages: Sized<B>[][] = [[]];
   const none = new Map<string, number>();
   const current = (): Sized<B>[] => pages[pages.length - 1] ?? [];
-  const startPage = (carried: readonly Sized<B>[]): void => {
-    pages.push([...carried]);
+  const startPage = (): void => {
+    pages.push([]);
   };
   /** Where a block would sit if it were added to the current page now. */
   const yFor = (block: B): number => {
     const placed = stack([...current(), { block, height: 0, fit: null }], none, limits);
     return placed[placed.length - 1]?.y ?? 0;
   };
-  /** Takes the trailing kept run off the current page and opens a page with it. */
-  const moveOn = (): void => {
-    const page = current();
-    const count = carryOf(page);
-    const carried = page.slice(page.length - count);
-    pages[pages.length - 1] = page.slice(0, page.length - count);
-    startPage(carried);
-  };
-
   const queue: { block: B; continued: boolean }[] = blocks.map((block) => ({
     block,
     continued: false,
   }));
+
+  /**
+   * Takes the trailing kept run off the current page, opens an empty page,
+   * and puts the run and then `block` back at the head of the queue, in
+   * order. Each is placed on the new page by the rules again, so a carried
+   * fit block is fitted to the room it has there and a block taller than a
+   * page is split there. It cannot move twice: on the new page everything
+   * before it is the carried kept chain, or nothing.
+   */
+  const moveOn = (block: B): void => {
+    const page = current();
+    const count = carryOf(page);
+    const carried = page.slice(page.length - count);
+    pages[pages.length - 1] = page.slice(0, page.length - count);
+    startPage();
+    queue.unshift(...carried.map((each) => ({ block: each.block, continued: false })), {
+      block,
+      continued: false,
+    });
+  };
   while (queue.length > 0) {
     const next = queue.shift();
     if (!next) break;
     const { block } = next;
-    if ((block.newPage || next.continued) && current().length > 0) startPage([]);
+    if ((block.newPage || next.continued) && current().length > 0) startPage();
 
     if (block.fit) {
-      let y = yFor(block);
+      const y = yFor(block);
       const page = current();
       if (
         page.length > 0 &&
         limits.bodyHeight - y < limits.fitThreshold * limits.bodyHeight &&
         !isOneKeptChain(page)
       ) {
-        moveOn();
-        y = yFor(block);
+        moveOn(block);
+        continue;
       }
       const fit = fitBlock((width) => heightAt(block, width), limits.bodyHeight - y, limits);
       current().push({ block, height: fit.height, fit });
@@ -288,8 +299,7 @@ export function paginate<B extends Flow>(
       page.push({ block, height, fit: null });
       continue;
     }
-    moveOn();
-    current().push({ block, height, fit: null });
+    moveOn(block);
   }
 
   return pages.filter((page) => page.length > 0).map((page) => stack(page, none, limits));
@@ -324,8 +334,13 @@ export function breathe<B extends Flow>(
       }
     }
 
-    // A refit can only be given less room than the block was fitted to, so it
-    // only ever shrinks, and whatever follows it moves up.
+    // Breathing lowers a fit block, and a lowered block has less room than it
+    // was fitted to. Under the default share it still fits, but a negative
+    // top margin can lower it by more than the page's slack, past the foot;
+    // so each fit block is fitted again to the room it now has, and the page
+    // is reflowed so what follows moves up to it. A refit never returns a
+    // block taller than it came in: a block handed over at a scale it was
+    // given elsewhere keeps that scale rather than growing over what follows.
     if (placed.some((p) => p.block.fit)) {
       const refitted: Sized<B>[] = [];
       for (const [index, p] of placed.entries()) {
@@ -335,7 +350,7 @@ export function breathe<B extends Flow>(
         }
         const y = stack([...refitted, p], overrides, limits)[index]?.y ?? p.y;
         const fit = fitBlock((width) => heightAt(p.block, width), limits.bodyHeight - y, limits);
-        refitted.push({ block: p.block, height: fit.height, fit });
+        refitted.push(fit.height < p.height ? { block: p.block, height: fit.height, fit } : p);
       }
       placed = stack(refitted, overrides, limits);
     }

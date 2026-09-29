@@ -306,6 +306,40 @@ describe('paginate', () => {
     expect(map?.fit?.overflow).toBeGreaterThan(0);
   });
 
+  it('fits a carried fit block to the room it has on its new page, and breathing keeps it so', () => {
+    const pages = paginate(
+      [block('a', 40), block('map', 100, { fit: true, keep: true }), block('c', 10)],
+      limits,
+      heightAt,
+    );
+    expect(ids(pages)).toEqual([['a'], ['map', 'c']]);
+    const map = pages[1]?.[0];
+    expect(map?.fit?.scale).toBe(1);
+    expect(map?.height).toBe(100);
+    expect(breathe(pages, limits, heightAt)).toEqual(pages);
+    expect(overflowing(pages, limits).map((p) => p.block.id)).toEqual(['c']);
+  });
+
+  it('splits a block taller than a page on the page it is moved to', () => {
+    type Part = Flow & { lines: number };
+    const lines = (id: string, count: number): Part => ({ ...block(id, count * 10), lines: count });
+    const split = (b: Part, room: number): readonly [Part, Part] | null => {
+      const fit = Math.floor(room / 10);
+      if (fit < 2 || b.lines - fit < 2) return null;
+      return [lines(`${b.id}.1`, fit), lines(`${b.id}.2`, b.lines - fit)];
+    };
+    const pages = paginate(
+      [block('a', 85) as Part, lines('p', 12)],
+      limits,
+      (b) => b.height,
+      split,
+    );
+    expect(ids(pages)).toEqual([['a'], ['p.1'], ['p.2']]);
+    expect(pages[1]?.[0]?.height).toBe(100);
+    expect(pages[2]?.[0]?.height).toBe(20);
+    expect(overflowing(pages, limits)).toEqual([]);
+  });
+
   it('fits a fit block into the room left when there is enough of it', () => {
     const pages = paginate([block('a', 20), block('map', 100, { fit: true })], limits, heightAt);
     expect(ids(pages)).toEqual([['a', 'map']]);
@@ -379,6 +413,61 @@ describe('breathe', () => {
   it('does not move a pinned block alone on its page', () => {
     const pages = paginate([block('s', 10, { pinBottom: true, newPage: true })], limits, heightAt);
     expect(breathe(pages, limits, heightAt)[0]?.[0]?.y).toBe(0);
+  });
+
+  /**
+   * A map five lines of 20 tall at the body width, four lines when laid a
+   * little wider: its height steps with the width it is laid at. Set after a
+   * block with a negative top margin, breathing lowers it by more than the
+   * page's slack, past the foot, unless it is fitted again.
+   */
+  const stepped = (b: Flow, width: number): number =>
+    b.id === 'map' ? Math.ceil(1625 / width) * 20 : b.height;
+  const steppedPage = () =>
+    paginate(
+      [
+        block('a', 20),
+        block('map', 100, { fit: true, gapBefore: true, marginTop: -10 }),
+        block('c', 0.5),
+      ],
+      limits,
+      stepped,
+    );
+
+  it('fits a fit block again when breathing lowers it past the foot', () => {
+    const pages = steppedPage();
+    expect(ids(pages)).toEqual([['a', 'map', 'c']]);
+    const before = pages[0]?.[1];
+    const after = breathe(pages, limits, stepped)[0]?.[1];
+    expect(after?.y ?? 0).toBeGreaterThan(before?.y ?? 0);
+    expect(after?.height ?? 0).toBeLessThan(before?.height ?? 0);
+    expect((after?.y ?? 0) + (after?.height ?? 0)).toBeLessThanOrEqual(HEIGHT);
+    expect(after?.fit?.overflow).toBe(0);
+  });
+
+  it('moves the block after a refitted one up to it, so nothing passes the foot', () => {
+    const breathed = breathe(steppedPage(), limits, stepped)[0] ?? [];
+    const [, map, c] = breathed;
+    expect(c?.y).toBe((map?.y ?? 0) + (map?.height ?? 0));
+    expect(overflowing([breathed], limits)).toEqual([]);
+  });
+
+  it('never makes a fit block taller than it came in', () => {
+    // A map fitted at 0.775 to 60 points of room, as a page may hand it over.
+    const map = block('map', 100, { fit: true, keep: true });
+    const page: Placement<Flow>[] = [
+      {
+        block: map,
+        y: 0,
+        height: 60,
+        fit: { scale: 0.775, laidWidth: WIDTH / 0.775, height: 60, overflow: 0 },
+      },
+      { block: block('c', 10), y: 60, height: 10, fit: null },
+    ];
+    const breathed = breathe([page], limits, heightAt)[0] ?? [];
+    expect(breathed[0]?.height).toBe(60);
+    expect(breathed[1]?.y).toBe(60);
+    expect(overflowing([breathed], limits)).toEqual([]);
   });
 
   it('refits a fit block after breathing and reflows before pinning', () => {
