@@ -113,6 +113,13 @@ describe('scaling ops about an origin', () => {
     expect(scaled.stroke?.rgb).toEqual(path.stroke?.rgb);
   });
 
+  it('scales a stroke that names no width from the width of 1 PDF starts with', () => {
+    const bare: PathOp = { kind: 'path', segments: circle(150, 150, 20), stroke: { grey: 0 } };
+    const [scaled] = scaleOps([bare], 2, origin);
+    if (scaled?.kind !== 'path') throw new Error('expected a path');
+    expect(scaled.stroke?.width).toBe(2);
+  });
+
   it('gives the same result scaling by a then b as scaling once by a times b', () => {
     const twice = scaleOps(scaleOps(block, 1.7, origin), 0.3, origin);
     const once = scaleOps(block, 1.7 * 0.3, origin);

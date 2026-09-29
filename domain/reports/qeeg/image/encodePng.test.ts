@@ -226,6 +226,22 @@ describe('encoding pixels as a PNG the engine embeds', () => {
     expect(crc32(png)).toBe(PINNED_CRC);
   });
 
+  it('scores a filter by its bytes read as signed, so a run of small falls counts as small', async () => {
+    // Row 0 falls by one each pixel: Sub leaves 255 after the first pixel,
+    // which is -1 read as signed and 255 read as unsigned.
+    const falling = picture(64, 2, (x) => [200 - x, 200 - x, 200 - x]);
+    const png = await encodePng(falling, 64, 2, deflate);
+    const { filters } = unfilter(new Uint8Array(inflateSync(idatOf(png))), 64, 2);
+    expect(filters[0]).toBe(1);
+  });
+
+  it('gives a tie to the lower-numbered filter', async () => {
+    // A flat colour: after the first row, Up and Paeth both leave nothing.
+    const png = await encodePng(flat, 64, 48, deflate);
+    const { filters } = unfilter(new Uint8Array(inflateSync(idatOf(png))), 64, 48);
+    expect(filters).toEqual([1, ...Array.from({ length: 47 }, () => 2)]);
+  });
+
   it('chooses a predicting filter where one helps, rather than none on every row', async () => {
     const png = await encodePng(gradient, 256, 200, deflate);
     const { filters } = unfilter(new Uint8Array(inflateSync(idatOf(png))), 256, 200);

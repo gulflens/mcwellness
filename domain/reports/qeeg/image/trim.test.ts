@@ -90,6 +90,25 @@ describe('trimming a white border', () => {
     expect(trimWhiteBorder(wide).left).toBe(500 - 16);
   });
 
+  it('samples rows every second pixel, so content only in odd columns is not seen', () => {
+    let image = filled(200, 200, WHITE);
+    for (let x = 51; x < 150; x += 2) image = withBlock(image, x, 50, x, 149, INK);
+    expect(trimWhiteBorder(image)).toEqual(whole(image));
+  });
+
+  it('samples columns every second pixel, so content only in odd rows is not seen', () => {
+    let image = filled(200, 200, WHITE);
+    for (let y = 51; y < 150; y += 2) image = withBlock(image, 50, y, 149, y, INK);
+    expect(trimWhiteBorder(image)).toEqual(whole(image));
+  });
+
+  it('counts an alpha under 16 as blank, and 16 as content', () => {
+    const faint = withBlock(filled(400, 400, [0, 0, 0, 15]), 100, 100, 299, 299, INK);
+    expect(trimWhiteBorder(faint)).toEqual({ left: 96, top: 96, width: 208, height: 208 });
+    const seen = withBlock(filled(400, 400, [0, 0, 0, 16]), 100, 100, 299, 299, INK);
+    expect(trimWhiteBorder(seen)).toEqual(whole(seen));
+  });
+
   it('never gives a crop that leaves the image', () => {
     const cases = [
       withBlock(filled(500, 400, WHITE), 1, 1, 300, 300, INK),

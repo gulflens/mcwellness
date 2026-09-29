@@ -21,6 +21,11 @@ describe('flattening a map onto white paper', () => {
     expect(Array.from(flattenOverWhite(pixels(0, 200, 255, 128)))).toEqual([127, 227, 255]);
   });
 
+  it('rounds to the nearest byte rather than down', () => {
+    // 128/255 * 1 + 127/255 * 255 = 127.502: 128 rounded, 127 floored.
+    expect(Array.from(flattenOverWhite(pixels(1, 1, 1, 128)))).toEqual([128, 128, 128]);
+  });
+
   it('writes three bytes a pixel, row by row', () => {
     const image = { width: 3, height: 2, data: new Uint8ClampedArray(3 * 2 * 4).fill(255) };
     const out = flattenOverWhite(image);
