@@ -46,14 +46,25 @@ let issuedId: string;
 let importedId: string;
 let household: { authId: string };
 
+/** A body with the parts the server writes taken out, as the editor sends it. */
+function withoutServerParts(content: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(structuredClone(content)).filter(
+      ([key]) => key !== 'subject' && key !== 'provenance',
+    ),
+  );
+}
+
 /** A body as the editor sends it: no client, no source. */
 function sentInitial(over: Record<string, unknown> = {}): Record<string, unknown> {
-  const { subject: _subject, provenance: _provenance, ...rest } = blankInitial();
-  return { ...structuredClone(rest), ...over };
+  return { ...withoutServerParts(blankInitial()), ...over };
 }
 
 /** A follow-up as the editor sends it: what it is compared with, by id alone. */
-function sentFollowUp(reportId: string, over: Record<string, unknown> = {}) {
+function sentFollowUp(
+  reportId: string,
+  over: Record<string, unknown> = {},
+): Record<string, unknown> {
   const placeholder: ComparedWith = {
     reportId,
     recordedOn: EARLIER_DAY,
@@ -61,12 +72,11 @@ function sentFollowUp(reportId: string, over: Record<string, unknown> = {}) {
     origin: 'issued',
     reference: 'RPT-000000',
   };
-  const {
-    subject: _subject,
-    provenance: _provenance,
-    ...rest
-  } = blankFollowUp(placeholder, 'follow_up');
-  return { ...structuredClone(rest), comparedWith: { reportId }, ...over };
+  return {
+    ...withoutServerParts(blankFollowUp(placeholder, 'follow_up')),
+    comparedWith: { reportId },
+    ...over,
+  };
 }
 
 async function save(

@@ -58,19 +58,25 @@ function broughtForward(): QeegFollowUp {
   };
 }
 
+/** A body with the parts the server writes taken out, as the editor sends it. */
+function withoutServerParts(content: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(structuredClone(content)).filter(
+      ([key]) => key !== 'subject' && key !== 'provenance',
+    ),
+  );
+}
+
 /** A body as the editor sends it: no client, no source, only the id of what it is compared with. */
 function sentFollowUp(): Record<string, unknown> {
-  const {
-    subject: _subject,
-    provenance: _provenance,
-    ...rest
-  } = blankFollowUp(COMPARED, 'follow_up');
-  return { ...structuredClone(rest), comparedWith: { reportId: EARLIER } };
+  return {
+    ...withoutServerParts(blankFollowUp(COMPARED, 'follow_up')),
+    comparedWith: { reportId: EARLIER },
+  };
 }
 
 function sentInitial(): Record<string, unknown> {
-  const { subject: _subject, provenance: _provenance, ...rest } = blankInitial();
-  return structuredClone(rest);
+  return withoutServerParts(blankInitial());
 }
 
 describe('subjectFrom', () => {
