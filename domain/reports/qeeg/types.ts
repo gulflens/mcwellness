@@ -89,6 +89,13 @@ export const LIMITS = Object.freeze({
   caption: 120,
   customPerList: 12,
   maps: 8,
+  /**
+   * How many places an old file may leave out of its maps, each with a note
+   * of its own, before one note says that more were. The old tool let a
+   * practitioner add map cards without end, and the shape holds a past
+   * record to 500 notes.
+   */
+  placesLeftOut: 20,
   tiles: 2,
   sessionsMost: 200,
 });

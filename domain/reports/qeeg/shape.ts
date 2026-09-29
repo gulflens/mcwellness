@@ -30,6 +30,7 @@
  */
 
 import { z } from 'zod';
+import { eachOf } from './blank';
 import {
   APPROACH_IDS,
   BAND_CHANGES,
@@ -59,7 +60,7 @@ import {
   type QeegFollowUp,
   type QeegInitial,
 } from './types';
-import { clean, isRealDay, withoutUnseen } from './text';
+import { UNCUT, clean, isBlank, isRealDay, isRecord, withoutUnseen } from './text';
 
 // ---------------------------------------------------------------------------
 // Small pieces
@@ -90,9 +91,6 @@ function uniqueOf<const T extends readonly [string, ...string[]]>(ids: T) {
 
 const regions = uniqueOf(REGION_IDS);
 
-/** No cut: a length is checked after cleaning, never made to fit by it. */
-const UNCUT = Number.MAX_SAFE_INTEGER;
-
 /**
  * A string a person typed, handed back as `clean` makes it, the rule the
  * editor uses, and held to `least` and `most` AFTER cleaning, so what is
@@ -102,14 +100,20 @@ function typed(most: number, least = 0, empty = 'This is never empty.') {
   return z
     .string()
     .transform((value) => clean(value, UNCUT))
-    .pipe(z.string().min(least, empty).max(most));
+    .pipe(
+      z
+        .string()
+        .max(most)
+        // Required text must draw something: a label of U+200C alone is empty.
+        .refine((value) => least === 0 || !isBlank(value), empty),
+    );
 }
 
-/** An optional Arabic: one that is empty once cleaned is none. */
+/** An optional Arabic: one that draws nothing once cleaned is none. */
 function typedOrNone(most: number) {
   return typed(most)
     .nullable()
-    .transform((value) => (value === '' ? null : value));
+    .transform((value) => (value === null || isBlank(value) ? null : value));
 }
 
 /** Typed once in English, with an optional Arabic, each held to `most`. */
@@ -139,7 +143,7 @@ const richText = (most: number) =>
         .string()
         .max(most)
         .refine(
-          (text) => withoutUnseen(text.normalize('NFC')) === text,
+          (text) => withoutUnseen(text).normalize('NFC') === text,
           'Rich text holds only what the editor keeps, composed, since its marks count from it.',
         ),
       marks: z.array(mark).max(LIMITS.marks),
@@ -175,8 +179,21 @@ function splitsPair(text: string, at: number): boolean {
   return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff;
 }
 
+/**
+ * A formatted summary. An Arabic that draws nothing is handed back as
+ * none, as a plain Arabic is (`typedOrNone`), and as the page reads it anyway
+ * (`richFor`). The English is never none, so an English of nothing stays as
+ * it was given.
+ */
 const bilingualRich = (most: number) =>
-  z.object({ en: richText(most), ar: richText(most).nullable() }).strict();
+  z
+    .object({
+      en: richText(most),
+      ar: richText(most)
+        .nullable()
+        .transform((value) => (value !== null && isBlank(value.text) ? null : value)),
+    })
+    .strict();
 
 /** The keys the app makes for an ordered list's items: `c0`, `map-0`, `t1`. */
 const ORDERED_KEY = /^[a-z][a-z0-9-]{0,31}$/;
@@ -224,22 +241,24 @@ function ordered<const F extends z.core.$ZodLooseShape>(fields: F, most: number)
         if (keys.length > most) {
           ctx.addIssue({ code: 'custom', path: [], message: `At most ${most} may be kept here.` });
         }
-        checkPositions(items as Readonly<Record<string, { position: number }>>, ctx);
+        checkPositions(items, ctx);
       }),
   );
 }
 
-/** Places run from 0 with no gap and no repeat. Refused at the place that breaks it. */
-function checkPositions(
-  items: Readonly<Record<string, { position: number } | undefined>>,
-  ctx: z.core.$RefinementCtx,
-) {
-  const present = Object.entries(items).filter(
-    (entry): entry is [string, { position: number }] => entry[1] !== undefined,
-  );
+/**
+ * Places run from 0 with no gap and no repeat. Refused at the place that
+ * breaks it. Each item's place is asked for, not assumed: zod has already
+ * refused an item that has none, and such an item is passed over here.
+ */
+function checkPositions(items: Readonly<Record<string, unknown>>, ctx: z.core.$RefinementCtx) {
+  const present: Array<[string, number]> = [];
+  for (const [key, item] of Object.entries(items)) {
+    const position = isRecord(item) ? item['position'] : undefined;
+    if (typeof position === 'number') present.push([key, position]);
+  }
   const seen = new Set<number>();
-  for (const [key, item] of present) {
-    const { position } = item;
+  for (const [key, position] of present) {
     if (position < 0 || position >= present.length || seen.has(position)) {
       ctx.addIssue({
         code: 'custom',
@@ -278,6 +297,16 @@ const mapFields = {
   caption: bilingual(LIMITS.caption).nullable(),
 };
 
+/**
+ * Where an import note points: a dotted path as the old-file reader writes
+ * one (`findings.custom.c0.label.en`, `images.map-2`,
+ * `provenance.asPrinted`). It begins with a small letter; each part between
+ * dots is not empty and begins with a letter or a figure, and holds letters
+ * (capitals inside a name), figures, hyphens and underscores; up to 200 in
+ * all. The reader writes it, so anything else is a forged body.
+ */
+const NOTE_PATH = /^[a-z][a-zA-Z0-9_-]*(?:\.[a-zA-Z0-9][a-zA-Z0-9_-]*)*$/;
+
 const provenance = z.discriminatedUnion('origin', [
   z.object({ origin: z.literal('app') }).strict(),
   z
@@ -288,7 +317,14 @@ const provenance = z.discriminatedUnion('origin', [
       notes: z
         .array(
           z
-            .object({ code: z.enum(IMPORT_NOTE_CODES), at: z.string().max(200).nullable() })
+            .object({
+              code: z.enum(IMPORT_NOTE_CODES),
+              at: z
+                .string()
+                .max(200)
+                .regex(NOTE_PATH, 'A note points at a path this app writes.')
+                .nullable(),
+            })
             .strict(),
         )
         .max(500),
@@ -321,10 +357,8 @@ const recording = z
 const sessions = whole(1, LIMITS.sessionsMost).nullable();
 
 /** One entry for every key of a list, each of the same shape. */
-function everyOf<const K extends readonly string[], S extends z.ZodType>(keys: K, shape: S) {
-  return z
-    .object(Object.fromEntries(keys.map((key) => [key, shape])) as { [P in K[number]]: S })
-    .strict();
+function everyOf<K extends string, S extends z.ZodType>(keys: readonly K[], shape: S) {
+  return z.object(eachOf(keys, () => shape)).strict();
 }
 
 const common = {
@@ -474,11 +508,7 @@ const changeRow = z
 const CALCULABLE: ReadonlySet<string> = new Set(CALCULABLE_MEASURES);
 
 const table = z
-  .object(
-    Object.fromEntries(MEASURE_IDS.map((id) => [id, changeRow.optional()])) as {
-      [P in (typeof MEASURE_IDS)[number]]: z.ZodOptional<typeof changeRow>;
-    },
-  )
+  .object(eachOf(MEASURE_IDS, () => changeRow.optional()))
   .strict()
   .superRefine((rows, ctx) => {
     checkPositions(rows, ctx);
@@ -562,7 +592,23 @@ const followUpShape = z
     change: changeSection,
     plan: z.object({ sessions, next: z.enum(NEXT_STAGE_IDS).nullable() }).strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((content, ctx) => {
+    // What has changed since an earlier recording is measured from it, so a
+    // follow-up is never recorded before it. The same day is allowed, and a
+    // draft with no day yet is saved before it is filled. Two days are
+    // compared only when both are days: one that is none has been refused
+    // for that already, and nothing more can be known of it.
+    const day = content.recording.recordedOn;
+    const earlier = content.comparedWith.recordedOn;
+    if (day !== null && isRealDay(day) && isRealDay(earlier) && day < earlier) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['recording', 'recordedOn'],
+        message: 'A follow-up is not recorded before the report it is compared with.',
+      });
+    }
+  });
 
 // ---------------------------------------------------------------------------
 // The door

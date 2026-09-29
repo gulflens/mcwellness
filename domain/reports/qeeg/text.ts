@@ -6,8 +6,8 @@
  * **Her English stands in for a missing Arabic.** A practitioner types once
  * in English and may add Arabic. An Arabic report prints her Arabic where she
  * gave some and her English where she did not, so nothing she wrote is lost
- * from either report. Arabic of nothing but white space counts as none: a
- * blank line on an Arabic page is worse than an English sentence.
+ * from either report. Arabic that draws nothing (`isBlank`) counts as none:
+ * a blank line on an Arabic page is worse than an English sentence.
  *
  * **Marks are cut, never stretched.** A bold stretch that crosses a newline is
  * cut into one stretch per paragraph, because the document writer lays out a
@@ -22,7 +22,41 @@
 
 import type { Bilingual, BilingualRich, Locale, Mark, RichText } from './types';
 
-const hasSomething = (text: string) => text.trim().length > 0;
+/**
+ * What draws nothing: white space of every kind, the characters that part
+ * and join letters (U+200C, U+200D), the soft hyphen, the Hangul fillers,
+ * the variation selectors, and combining marks. A combining mark after a
+ * letter draws, but then the letter is there and the text is not blank.
+ */
+const DRAWS_NOTHING: ReadonlySet<number> = new Set([
+  0x200c, 0x200d, 0x00ad, 0x3164, 0x115f, 0x1160, 0xffa0,
+]);
+const WHITE_SPACE = /^\s$/u;
+const MARK = /^\p{M}$/u;
+
+/**
+ * Whether nothing in `text` would be drawn. The one test of "empty" for
+ * typed text: an English that must have words, an Arabic that is none when
+ * it has none, and the fallback to her English. It changes nothing: what is
+ * stored keeps its U+200C, as the re-check ruled.
+ */
+export function isBlank(text: string): boolean {
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    const selector = code >= 0xfe00 && code <= 0xfe0f;
+    if (
+      !DRAWS_NOTHING.has(code) &&
+      !selector &&
+      !WHITE_SPACE.test(character) &&
+      !MARK.test(character)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const hasSomething = (text: string) => !isBlank(text);
 
 /** A plain set of fields: an object that is not an array. The one test of it here. */
 export function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -39,7 +73,7 @@ export function richFor(locale: Locale, text: BilingualRich): RichText {
   return text.en;
 }
 
-/** Nothing but white space. */
+/** Nothing that would be drawn (`isBlank`). */
 export function isEmpty(rich: RichText): boolean {
   return !hasSomething(rich.text);
 }
@@ -147,22 +181,207 @@ export function withoutUnseen(typed: string): string {
 }
 
 /**
- * What a person typed, made fit to store: composed, trimmed, with control
- * characters removed, and cut at `most` UTF-16 units without splitting a
+ * What a person typed, made fit to store: with control characters removed,
+ * then composed, trimmed, and cut at `most` UTF-16 units without splitting a
  * character in two.
  */
 export function clean(typed: string, most: number): string {
+  checkMost(most);
+  // Removed first, then composed: a letter and its accent with a removed
+  // character between them compose, and cleaning twice is cleaning once.
+  let text = withoutUnseen(typed).normalize('NFC').trim();
+  if (text.length > most) text = text.slice(0, cutAt(text, most)).trimEnd();
+  return text;
+}
+
+function checkMost(most: number): void {
   if (!Number.isInteger(most) || most < 1) {
     throw new RangeError('A length to cut at is a whole number above 0.');
   }
-  let text = withoutUnseen(typed.normalize('NFC')).trim();
-  if (text.length > most) {
-    let cut = most;
-    if (cut > 0 && isHighSurrogate(text.charCodeAt(cut - 1))) cut -= 1;
-    text = text.slice(0, cut).trimEnd();
-  }
-  return text;
 }
+
+/** Where to cut `text` at `most` units without splitting a letter written as a pair. */
+function cutAt(text: string, most: number): number {
+  return isHighSurrogate(text.charCodeAt(most - 1)) ? most - 1 : most;
+}
+
+const BOLD_BIT = 1;
+const UNDERLINE_BIT = 2;
+const COMBINING = /\p{M}/u;
+
+/**
+ * A mark as the type declares it: whole numbers for `from` and `to`, and
+ * `bold` and `underline` each absent or exactly `true`. What a person's
+ * editor sends is asked this before it is taken for a mark.
+ */
+export function isMark(value: unknown): value is Mark {
+  if (!isRecord(value)) return false;
+  const { from, to, bold, underline } = value;
+  return (
+    Number.isInteger(from) &&
+    Number.isInteger(to) &&
+    (bold === undefined || bold === true) &&
+    (underline === undefined || underline === true)
+  );
+}
+
+/**
+ * The style of every UTF-16 unit of a text of `length`: bold, underlined,
+ * both, or neither. Marks out of order, overlapping, or running past the
+ * text are what a person's editor may hand over, so they are read, never
+ * refused: a unit is bold when any bold mark covers it, and so for
+ * underline. An edge that is no number covers nothing.
+ */
+function unitStyles(marks: readonly unknown[], length: number): Uint8Array {
+  const bold = new Int32Array(length + 1);
+  const underline = new Int32Array(length + 1);
+  for (const mark of marks) {
+    // What JSON can hold and is no mark at all is passed over.
+    if (!isRecord(mark) || typeof mark['from'] !== 'number' || typeof mark['to'] !== 'number') {
+      continue;
+    }
+    const isBold = mark['bold'] === true;
+    const isUnderlined = mark['underline'] === true;
+    if (!isBold && !isUnderlined) continue;
+    // A unit at `i` is covered when from <= i < to.
+    const from = Math.min(Math.max(Math.ceil(mark['from']), 0), length);
+    const to = Math.min(Math.max(Math.ceil(mark['to']), 0), length);
+    if (!(from < to)) continue;
+    if (isBold) {
+      bold[from] = (bold[from] ?? 0) + 1;
+      bold[to] = (bold[to] ?? 0) - 1;
+    }
+    if (isUnderlined) {
+      underline[from] = (underline[from] ?? 0) + 1;
+      underline[to] = (underline[to] ?? 0) - 1;
+    }
+  }
+  const styles = new Uint8Array(length);
+  let inBold = 0;
+  let inUnderline = 0;
+  for (let i = 0; i < length; i += 1) {
+    inBold += bold[i] ?? 0;
+    inUnderline += underline[i] ?? 0;
+    styles[i] = (inBold > 0 ? BOLD_BIT : 0) | (inUnderline > 0 ? UNDERLINE_BIT : 0);
+  }
+  return styles;
+}
+
+/** Whether `next` becomes part of the letter `letter` when the text is composed. */
+function joins(letter: string, next: string): boolean {
+  if (letter === '') return false;
+  if (COMBINING.test(next)) return true;
+  return (letter + next).normalize('NFC') !== letter.normalize('NFC') + next.normalize('NFC');
+}
+
+type Styled = { readonly text: string; readonly style: number };
+
+/**
+ * What a person typed with its bold and underline, made fit to store by the
+ * rule `clean` follows: composed, rid of what `withoutUnseen` removes,
+ * trimmed at both ends, and cut at `most` UTF-16 units without splitting a
+ * letter written as a pair. Every mark still covers the letters it was typed
+ * over.
+ *
+ * **Why it works a letter at a time.** Composing joins two characters into
+ * one letter: a letter and its accent, or two Korean jamo, where the second
+ * is no combining mark at all. A mark whose edge fell between them would
+ * slip by one if the text were composed as a whole and the mark left where
+ * it was. So what is removed goes first, the rest is gathered into the runs
+ * that compose into one letter, and each letter takes the style of the first
+ * of its characters that has one: an edge that falls inside a letter is
+ * moved OUTWARD to take the whole of it, and where two marks meet inside
+ * one letter, the earlier keeps it.
+ *
+ * **What comes back is tidy.** Marks are in order, never overlap, and never
+ * run past the text; alike neighbours that touch are one mark; a mark that
+ * ends up empty, or is neither bold nor underlined, is gone. Cleaning twice
+ * is cleaning once.
+ *
+ * It never throws on what JSON can hold, but on a `most` that is no length
+ * and a `text` that is no string, each refused by name: `marks` that is no
+ * list is no marks, and a mark that is no mark (no numbers for its edges) is
+ * passed over.
+ *
+ * How many marks there may be is not this function's to decide: the shape
+ * refuses too many by name (`LIMITS.marks`), and the old-file reader keeps
+ * the first ones with a note.
+ */
+export function cleanRich(rich: RichText, most: number): RichText {
+  checkMost(most);
+  const source: unknown = rich.text;
+  if (typeof source !== 'string') {
+    throw new TypeError('Rich text has a text, and its text is a string.');
+  }
+  const marks: unknown = rich.marks;
+  const units = unitStyles(Array.isArray(marks) ? marks : [], source.length);
+
+  // What `withoutUnseen` removes, removed, each character keeping its style.
+  const kept: Styled[] = [];
+  for (let i = 0; i < source.length;) {
+    const code = source.codePointAt(i) ?? 0;
+    const size = code > 0xffff ? 2 : 1;
+    const style = (units[i] ?? 0) || (size === 2 ? (units[i + 1] ?? 0) : 0);
+    if (code === TAB) kept.push({ text: SPACE, style });
+    else if (!isRemoved(code)) kept.push({ text: source.slice(i, i + size), style });
+    i += size;
+  }
+
+  // Gathered into letters, each composed, each styled by its first styled part.
+  let text = '';
+  const styles: number[] = [];
+  let letter = '';
+  let letterStyle = 0;
+  const flush = () => {
+    const composed = letter.normalize('NFC');
+    text += composed;
+    for (let i = 0; i < composed.length; i += 1) styles.push(letterStyle);
+    letter = '';
+    letterStyle = 0;
+  };
+  for (const character of kept) {
+    if (!joins(letter, character.text)) flush();
+    letter += character.text;
+    if (letterStyle === 0) letterStyle = character.style;
+  }
+  flush();
+
+  // Trimmed, then cut, as `clean` does.
+  const lead = text.length - text.trimStart().length;
+  let end = text.trimEnd().length;
+  if (end - lead > most) {
+    const cut = cutAt(text.slice(lead, end), most);
+    end = lead + text.slice(lead, lead + cut).trimEnd().length;
+  }
+  return { text: text.slice(Math.min(lead, end), end), marks: marksOf(styles.slice(lead, end)) };
+}
+
+/** One mark for each run of units alike in style, leaving out the unstyled. */
+function marksOf(styles: readonly number[]): Mark[] {
+  const marks: Mark[] = [];
+  let from = 0;
+  for (let i = 1; i <= styles.length; i += 1) {
+    const style = styles[from] ?? 0;
+    if (i < styles.length && styles[i] === style) continue;
+    if (style !== 0) {
+      marks.push({
+        from,
+        to: i,
+        ...((style & BOLD_BIT) !== 0 ? { bold: true as const } : {}),
+        ...((style & UNDERLINE_BIT) !== 0 ? { underline: true as const } : {}),
+      });
+    }
+    from = i;
+  }
+  return marks;
+}
+
+/**
+ * A length to cut at that cuts nothing. The shape, the delta reader and the
+ * rebuild of a second-language report clean with it: text that is too long
+ * is refused by name, never cut (the specification, section 4 rule 6).
+ */
+export const UNCUT = Number.MAX_SAFE_INTEGER;
 
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 

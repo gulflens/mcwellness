@@ -25,7 +25,9 @@
  *
  * **Why the maps come back apart.** A map is stored and referred to only after
  * it is uploaded, which is not this module's work. The images are handed back
- * as the file held them, and `content.maps` is empty.
+ * as the file held them, and `content.maps` is empty. Each carries the key
+ * and the `position` it takes in `maps` once uploaded: the key keeps its
+ * place in the file, the position keeps the order, from 0 with no gap.
  *
  * **Tolerant as the old tool was, and honest about it.** The old tool's own
  * reader (`ReportState.fromJson`) filled a short list with blanks, ignored a
@@ -34,19 +36,31 @@
  * `ImportNote` naming the FIELD. A note never holds what was typed.
  *
  * **Where a note points.** `at` is a path into the reader's RESULT, not into
- * `content` alone: a path of the content as it stands (`findings.custom.c0`),
- * or of what is handed back beside it: `asTyped.name`, `images.map-0` for a
- * picture by the key it is handed back under (`images` for one left out),
- * and `asPrinted.signature` for the signature, which is not carried. A route
- * that stores a note for good keeps the image's key with the upload, or
- * the note names a place that is gone.
+ * `content` alone, written as the shape holds it (`NOTE_PATH` in
+ * `../shape.ts`): a path of the content as it stands
+ * (`findings.custom.c0.label.en`, `provenance.asPrinted` for the signature,
+ * which is not carried), or of what is handed back beside it: `asTyped.name`,
+ * or `images.map-2` for the picture in the file's third place. A picture is
+ * keyed by its place in the file, counting the places left out, so a note
+ * about a place left out (`images.map-1`) names that place, and one note is
+ * written for each of the first twenty (`LIMITS.placesLeftOut`); after them,
+ * one note at `images` says more were. A route that stores a note for good keeps the image's
+ * key with the upload, or the note names a place that is gone.
  *
  * It is pure and it never throws: whatever it is given, it returns a result.
  * The caller hashes the file's bytes; nothing here does I/O.
  */
 
-import type { ApproachId, BandId, ConnectivityId, DimensionId, RegionId } from '../catalogue/ids';
-import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from '../catalogue/ids';
+import { eachOf } from '../blank';
+import type {
+  ApproachId,
+  BandId,
+  ConnectivityId,
+  DimensionId,
+  InitialConnectivityLevel,
+  RegionId,
+} from '../catalogue/ids';
+import { BAND_IDS, DIMENSION_IDS } from '../catalogue/ids';
 import type {
   Bilingual,
   Condition,
@@ -55,7 +69,6 @@ import type {
   ImportNoteCode,
   InitialBand,
   InitialConnectivity,
-  Mark,
   Ordered,
   Picked,
   QeegInitial,
@@ -63,7 +76,7 @@ import type {
   Score,
   Stage,
 } from '../types';
-import { clean, isRealDay, isRecord } from '../text';
+import { clean, cleanRich, isBlank, isRealDay, isRecord } from '../text';
 import { LIMITS } from '../types';
 import { LEGACY_FORMAT, LEGACY_SUBJECT_KEY, LEGACY_VERSION } from './keys';
 import { fromQuillDelta } from './quill';
@@ -86,8 +99,13 @@ import {
 } from './v1Tables';
 
 export type LegacyImage = {
-  /** 'map-0', 'map-1', and so on, in the file's order. */
+  /**
+   * `map-` and the picture's place in the file, counting the places left
+   * out: a file whose second place was empty hands back `map-0` and `map-2`.
+   */
   key: string;
+  /** Its place among the pictures kept, from 0 with no gap: `position` in `maps`. */
+  position: number;
   /** As the file held it; the browser decodes it. */
   dataUrl: string;
   widthPx: number;
@@ -161,10 +179,14 @@ class Notes {
     return kept;
   }
 
-  /** Her English and her Arabic, or null when she typed neither. */
+  /**
+   * Her English and her Arabic, or null when she typed neither. A half that
+   * draws nothing (`isBlank`) is none, as the shape holds it.
+   */
   bilingual(en: string, ar: string, limit: number, at: string): Bilingual | null {
-    const english = this.limited(en, limit, `${at}.en`);
-    const arabic = this.limited(ar, limit, `${at}.ar`);
+    const drawn = (value: string) => (isBlank(value) ? '' : value);
+    const english = drawn(this.limited(en, limit, `${at}.en`));
+    const arabic = drawn(this.limited(ar, limit, `${at}.ar`));
     if (english === '' && arabic === '') return null;
     return { en: english, ar: arabic === '' ? null : arabic };
   }
@@ -182,7 +204,7 @@ function ticked<Id extends string>(
   notes: Notes,
 ): Id[] {
   if (!Array.isArray(value)) return [];
-  const row = value as readonly unknown[];
+  const row: readonly unknown[] = value;
   if (row.length > table.length) notes.add('extra_positions_ignored', at);
   return table.filter((_, i) => i < row.length && row[i] === true);
 }
@@ -195,10 +217,11 @@ function customItems(
   notes: Notes,
 ): Ordered<CustomItem> {
   if (!Array.isArray(value)) return {};
-  const items = (value as readonly unknown[])
+  const list: readonly unknown[] = value;
+  const items = list
     .filter(isRecord)
     .filter((item) =>
-      ['text', 'textAr'].some((key) => clean(text(field(item, key)), LIMITS.label) !== ''),
+      ['text', 'textAr'].some((key) => !isBlank(clean(text(field(item, key)), LIMITS.label))),
     );
   if (items.length > LIMITS.customPerList) notes.add('extra_positions_ignored', `${at}.custom`);
   const out: Record<string, CustomItem & { position: number }> = {};
@@ -253,7 +276,9 @@ function picked<Id extends string>(
 
 /** The entry at `position` of a list the file may or may not hold. */
 function entryAt(list: unknown, position: number): unknown {
-  return Array.isArray(list) ? (list as readonly unknown[])[position] : undefined;
+  if (!Array.isArray(list)) return undefined;
+  const entries: readonly unknown[] = list;
+  return entries[position];
 }
 
 function longerThan(list: unknown, length: number): boolean {
@@ -301,40 +326,45 @@ function dayOf(value: unknown, notes: Notes): string | null {
 function bandsOf(file: Loose, notes: Notes): Readonly<Record<BandId, InitialBand>> {
   const list = field(file, 'bands');
   if (longerThan(list, BANDS_BY_POSITION.length)) notes.add('extra_positions_ignored', 'bands');
-  const out = {} as Record<BandId, InitialBand>;
-  BANDS_BY_POSITION.forEach((band, position) => {
-    const entry = entryAt(list, position);
+  // In this app's order, each read from its place in the old list.
+  return eachOf(BAND_IDS, (band): InitialBand => {
+    const entry = entryAt(list, BANDS_BY_POSITION.indexOf(band));
     const at = `bands.${band}`;
-    out[band] = isRecord(entry)
+    return isRecord(entry)
       ? {
           level: chosenWord(field(entry, 'lvl'), BAND_LEVEL_BY_OLD_WORD, at, notes),
           regions: ticked(field(entry, 'regions'), REGIONS_BY_POSITION, `${at}.regions`, notes),
         }
       : { level: null, regions: [] };
   });
-  // In this app's order, whatever the old order was.
-  return Object.fromEntries(BAND_IDS.map((id) => [id, out[id]])) as Record<BandId, InitialBand>;
+}
+
+/** One kind of connectivity, its level read from that kind's own table. */
+function linkOf<K extends ConnectivityId>(
+  links: unknown,
+  oldKey: keyof typeof CONNECTIVITY_BY_OLD_KEY,
+  id: K,
+  notes: Notes,
+): { level: InitialConnectivityLevel<K> | null; regions: RegionId[] } {
+  const entry = isRecord(links) ? field(links, oldKey) : undefined;
+  const at = `connectivity.${id}`;
+  const levels: Readonly<Record<string, InitialConnectivityLevel<K>>> =
+    CONNECTIVITY_LEVEL_BY_OLD_WORD[id];
+  return isRecord(entry)
+    ? {
+        level: chosenWord(field(entry, 'lvl'), levels, at, notes),
+        regions: ticked(field(entry, 'regions'), REGIONS_BY_POSITION, `${at}.regions`, notes),
+      }
+    : { level: null, regions: [] };
 }
 
 function connectivityOf(file: Loose, notes: Notes): InitialConnectivity {
   const links = field(file, 'links');
-  // Each kind's level comes from that kind's own table, so the loose
-  // type below is narrowed back to `InitialConnectivity` safely at the end.
-  const out = {} as Record<ConnectivityId, { level: string | null; regions: RegionId[] }>;
-  for (const [oldKey, id] of Object.entries(CONNECTIVITY_BY_OLD_KEY)) {
-    const entry = isRecord(links) ? field(links, oldKey) : undefined;
-    const at = `connectivity.${id}`;
-    const levels: Readonly<Record<string, string>> = CONNECTIVITY_LEVEL_BY_OLD_WORD[id];
-    out[id] = isRecord(entry)
-      ? {
-          level: chosenWord(field(entry, 'lvl'), levels, at, notes),
-          regions: ticked(field(entry, 'regions'), REGIONS_BY_POSITION, `${at}.regions`, notes),
-        }
-      : { level: null, regions: [] };
-  }
-  return Object.fromEntries(
-    CONNECTIVITY_IDS.map((id) => [id, out[id]]),
-  ) as unknown as InitialConnectivity;
+  return {
+    connectivity: linkOf(links, 'conn', 'connectivity', notes),
+    asymmetry: linkOf(links, 'asym', 'asymmetry', notes),
+    phase_lag: linkOf(links, 'phase', 'phase_lag', notes),
+  };
 }
 
 /** The whole number the old tool would have read, or null where it would have printed 5. */
@@ -349,9 +379,9 @@ function dashboardOf(file: Loose, notes: Notes): Readonly<Record<DimensionId, Sc
   if (longerThan(list, DIMENSIONS_BY_POSITION.length)) {
     notes.add('extra_positions_ignored', 'dashboard');
   }
-  const out = {} as Record<DimensionId, Score>;
-  DIMENSIONS_BY_POSITION.forEach((dimension, position) => {
-    const entry = entryAt(list, position);
+  // In this app's order, each read from its place in the old list.
+  return eachOf(DIMENSION_IDS, (dimension): Score => {
+    const entry = entryAt(list, DIMENSIONS_BY_POSITION.indexOf(dimension));
     const at = `dashboard.${dimension}`;
     const read = isRecord(entry) ? wholeNumber(field(entry, 'score')) : null;
     let score: number;
@@ -372,29 +402,21 @@ function dashboardOf(file: Loose, notes: Notes): Readonly<Record<DimensionId, Sc
           `${at}.evidence`,
         )
       : null;
-    out[dimension] = { score, evidence };
+    return { score, evidence };
   });
-  return Object.fromEntries(DIMENSION_IDS.map((id) => [id, out[id]])) as Record<DimensionId, Score>;
 }
 
 /**
- * Rich text made fit to store: trimmed and cut as `clean` would, with its
- * marks moved by what was trimmed from the start and kept inside what is
- * left. `removed` says the delta reader already took characters out.
+ * Rich text made fit to store by the editor's rule (`cleanRich`), cut to the
+ * summary's limit with its marks kept on their letters. What the delta
+ * reader hands over is already clean, so anything shorter now was cut.
+ * `removed` says the delta reader took characters out.
  */
 function limitedRich(rich: RichText, at: string, notes: Notes, removed: boolean): RichText {
-  const lead = rich.text.length - rich.text.trimStart().length;
-  const kept = clean(rich.text.slice(lead), LIMITS.summary);
-  if (removed || kept.length < rich.text.trim().length) notes.add('text_shortened', at);
-  const marks: Mark[] = rich.marks
-    .map((m) => ({
-      ...m,
-      from: Math.max(0, m.from - lead),
-      to: Math.min(kept.length, m.to - lead),
-    }))
-    .filter((m) => m.from < m.to);
-  if (marks.length > LIMITS.marks) notes.add('extra_positions_ignored', `${at}.marks`);
-  return { text: kept, marks: marks.slice(0, LIMITS.marks) };
+  const kept = cleanRich(rich, LIMITS.summary);
+  if (removed || kept.text.length < rich.text.length) notes.add('text_shortened', at);
+  if (kept.marks.length > LIMITS.marks) notes.add('extra_positions_ignored', `${at}.marks`);
+  return { text: kept.text, marks: kept.marks.slice(0, LIMITS.marks) };
 }
 
 /**
@@ -412,12 +434,15 @@ function summaryIn(plainValue: unknown, richValue: unknown, at: string, notes: N
     notes.add('summary_formatting_unreadable', at);
     return plain();
   }
-  if (read.rich.text.trim() === '') return plain();
-  if (read.dropped.includes('colour')) notes.add('summary_colour_dropped', at);
-  if (read.dropped.includes('slant')) notes.add('summary_slant_dropped', at);
+  // A picture or a list the old summary printed is gone whichever version is
+  // read, so it is noted before falling back: a summary that was only a
+  // picture still says so.
   if (read.dropped.includes('embed') || read.dropped.includes('other')) {
     notes.add('summary_content_dropped', at);
   }
+  if (isBlank(read.rich.text)) return plain();
+  if (read.dropped.includes('colour')) notes.add('summary_colour_dropped', at);
+  if (read.dropped.includes('slant')) notes.add('summary_slant_dropped', at);
   return limitedRich(read.rich, at, notes, read.removed);
 }
 
@@ -468,26 +493,48 @@ function pixels(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
 }
 
+/**
+ * The pictures the file held, each keyed by ITS PLACE IN THE FILE (`map-0`,
+ * `map-2`), so a note about a place left out (`images.map-1`) names that
+ * place and no other. `position` keeps their order, from 0 with no gap, as
+ * the shape requires of `maps`. At most `LIMITS.maps` are kept; the note
+ * names the first place with a picture that was not. At most
+ * `LIMITS.placesLeftOut` places left out are noted one by one; after them
+ * one `extra_positions_ignored` at `images` says that more were, so a file
+ * of endless empty cards still earns no more notes than the shape keeps.
+ */
 function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
   const slots = field(file, 'maps');
   if (!Array.isArray(slots)) return [];
   const images: LegacyImage[] = [];
-  for (const slot of slots as readonly unknown[]) {
+  const list: readonly unknown[] = slots;
+  let leftOut = 0;
+  for (let place = 0; place < list.length; place += 1) {
+    const slot = list[place];
     if (!isRecord(slot)) continue;
-    const label = text(field(slot, 'label')).trim();
+    const key = `map-${place}`;
+    const written = text(field(slot, 'label')).trim();
+    // A label that draws nothing is no label, and never becomes a caption.
+    const label = isBlank(written) ? '' : written;
     const img = field(slot, 'img');
     const url = imageUrl(img);
     if (url === null || !isRecord(img)) {
       const held = isRecord(img) && typeof field(img, 'url') === 'string';
       const herLabel = label !== '' && lookUp(CONDITION_BY_OLD_LABEL, label) === undefined;
-      if (held || herLabel) notes.add('map_without_image_dropped', 'images');
+      if (held || herLabel) {
+        leftOut += 1;
+        if (leftOut <= LIMITS.placesLeftOut) {
+          notes.add('map_without_image_dropped', `images.${key}`);
+        } else if (leftOut === LIMITS.placesLeftOut + 1) {
+          notes.add('extra_positions_ignored', 'images');
+        }
+      }
       continue;
     }
     if (images.length === LIMITS.maps) {
-      notes.add('extra_positions_ignored', 'images');
+      notes.add('extra_positions_ignored', `images.${key}`);
       break;
     }
-    const key = `map-${images.length}`;
     const condition = label === '' ? null : (lookUp(CONDITION_BY_OLD_LABEL, label) ?? null);
     let caption: Bilingual | null = null;
     if (label !== '' && condition === null) {
@@ -496,6 +543,7 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
     }
     images.push({
       key,
+      position: images.length,
       dataUrl: url,
       widthPx: pixels(field(img, 'w')),
       heightPx: pixels(field(img, 'h')),
@@ -509,7 +557,7 @@ function imagesOf(file: Loose, notes: Notes): LegacyImage[] {
 /** Who the old report named beneath its signature, or null where it named nobody. */
 function printed(value: unknown, at: string, notes: Notes): string | null {
   const written = notes.limited(text(value), LIMITS.label, at);
-  return written === '' ? null : written;
+  return isBlank(written) ? null : written;
 }
 
 // ---------------------------------------------------------------------------
@@ -578,7 +626,7 @@ function read(file: unknown, sourceSha256: string): LegacyRead {
   };
   const signature = field(file, 'signature');
   if (isRecord(signature) && typeof field(signature, 'url') === 'string') {
-    notes.add('signature_image_dropped', 'asPrinted.signature');
+    notes.add('signature_image_dropped', 'provenance.asPrinted');
   }
 
   const content: QeegInitial = {
@@ -603,7 +651,7 @@ function read(file: unknown, sourceSha256: string): LegacyRead {
     connectivity,
     dashboard,
     recommendations,
-    summary: { en: english, ar: arabic.text.trim() === '' ? null : arabic },
+    summary: { en: english, ar: isBlank(arabic.text) ? null : arabic },
     benefits,
     plan,
   };

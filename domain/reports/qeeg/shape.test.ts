@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { blankFollowUp, blankInitial } from './blank';
+import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from './catalogue/ids';
 import { validateQeegContent } from './shape';
+import { DRAWS_NOTHING } from './testing/drawsNothing';
 import {
   LIMITS,
   type CalculatedFigure,
@@ -375,6 +377,129 @@ describe('validateQeegContent', () => {
     });
   });
 
+  describe('where an import note points', () => {
+    const withNoteAt = (at: unknown) =>
+      withValue(validInitial(), 'provenance', {
+        origin: 'legacy_tool',
+        format: 'qeeg.json/1',
+        sourceSha256: SHA,
+        notes: [{ code: 'value_not_recognised', at }],
+        asPrinted: { signerName: null, signerRole: null },
+      });
+
+    it('accepts every place the old-file reader writes a note today, and none', () => {
+      // Every `at` in the reader's own tests, and the kinds its code builds.
+      const written = [
+        null,
+        'stage',
+        'recording.recordedOn',
+        'recording.eyes',
+        'recording.handedness',
+        'asTyped.name',
+        'asTyped.nameAr',
+        'asTyped.age',
+        'asTyped.sex',
+        'findings',
+        'findings.custom',
+        'findings.custom.c0.label.en',
+        'findings.custom.c0.label.ar',
+        'recommendations.custom.c11.note.en',
+        'benefits.custom.c0.label.en',
+        'bands',
+        'bands.beta',
+        'bands.delta.regions',
+        'bands.high_beta.regions',
+        'connectivity.asymmetry',
+        'connectivity.phase_lag.regions',
+        'dashboard',
+        'dashboard.mental_energy',
+        'dashboard.mental_energy.evidence.en',
+        'dashboard.decision_making.evidence.ar',
+        'summary.en',
+        'summary.ar',
+        'summary.en.marks',
+        'images.map-0',
+        'images.map-3',
+        'images.map-0.caption.en',
+        'plan.sessions',
+        'plan.approach',
+        'provenance.asPrinted',
+        'provenance.asPrinted.signerName',
+        'provenance.asPrinted.signerRole',
+        `a${'b'.repeat(199)}`,
+      ];
+      for (const at of written) expectAccepted(withNoteAt(at));
+    });
+
+    it('accepts every path the old-file reader can write, listed from its code', () => {
+      const lists = ['findings', 'focus', 'recommendations', 'benefits'];
+      const keys = Array.from({ length: LIMITS.customPerList }, (_, i) => `c${i}`);
+      const places = Array.from({ length: 40 }, (_, i) => `images.map-${i}`);
+      const paths = [
+        'stage',
+        'recording.recordedOn',
+        'recording.eyes',
+        'recording.handedness',
+        ...['name', 'nameAr', 'age', 'sex'].map((field) => `asTyped.${field}`),
+        ...lists.flatMap((list) => [list, `${list}.custom`]),
+        ...lists.flatMap((list) =>
+          keys.flatMap((key) =>
+            ['label', ...(list === 'recommendations' ? ['note'] : [])].flatMap((part) =>
+              ['en', 'ar'].map((half) => `${list}.custom.${key}.${part}.${half}`),
+            ),
+          ),
+        ),
+        'bands',
+        ...BAND_IDS.flatMap((band) => [`bands.${band}`, `bands.${band}.regions`]),
+        ...CONNECTIVITY_IDS.flatMap((id) => [`connectivity.${id}`, `connectivity.${id}.regions`]),
+        'dashboard',
+        ...DIMENSION_IDS.flatMap((d) => [
+          `dashboard.${d}`,
+          `dashboard.${d}.evidence.en`,
+          `dashboard.${d}.evidence.ar`,
+        ]),
+        ...['en', 'ar'].flatMap((half) => [`summary.${half}`, `summary.${half}.marks`]),
+        'plan.sessions',
+        'plan.approach',
+        'provenance.asPrinted',
+        'provenance.asPrinted.signerName',
+        'provenance.asPrinted.signerRole',
+        'images',
+        ...places,
+        ...places.map((place) => `${place}.caption.en`),
+      ];
+      expect(new Set(paths).size).toBe(paths.length);
+      expect(paths.length).toBeGreaterThan(260);
+      const notes = paths.map((at) => ({ code: 'value_not_recognised' as const, at }));
+      const answer = validateQeegContent(withValue(withNoteAt(null), 'provenance.notes', notes));
+      if (!answer.ok) expect(answer.refusals).toEqual([]);
+      expect(answer.ok).toBe(true);
+    });
+
+    it('refuses a place that is not a path this app writes', () => {
+      for (const at of [
+        '',
+        'a\u0000b\ud800',
+        'Stage',
+        '1st',
+        '.summary',
+        '-images',
+        'summary en',
+        'summary/en',
+        'summary.en\n',
+        'a..b',
+        'a.',
+        'summary..en',
+        'a.__proto__.b',
+        'images.-map',
+        'سجل',
+        `a${'b'.repeat(200)}`,
+      ]) {
+        expectRefusedAt(withNoteAt(at), 'provenance.notes.0.at');
+      }
+    });
+  });
+
   describe('ordered lists are in order', () => {
     it('refuses a repeated position', () => {
       const input = withValue(validInitial(), 'findings.custom.b.position', 0);
@@ -575,6 +700,38 @@ describe('validateQeegContent', () => {
       expect(maps['m1']?.caption).toEqual({ en: 'Slow mornings', ar: 'Slow mornings' });
     });
 
+    it('hands back the same text when what it handed back is saved again', () => {
+      const once = validateQeegContent(
+        withValue(validInitial(), 'findings.custom.a.label.ar', 'e\u200b\u0301'),
+      );
+      expect(once.ok && once.content.findings.custom['a']?.label.ar).toBe('\u00e9');
+      const twice = once.ok ? validateQeegContent(once.content) : once;
+      expect(twice).toEqual(once);
+    });
+
+    it('holds each character that draws nothing, alone, as nothing', () => {
+      for (const character of DRAWS_NOTHING) {
+        const code = character.codePointAt(0)?.toString(16);
+        expectRefusedAt(
+          withValue(validInitial(), 'findings.custom.a.label.en', character),
+          'findings.custom.a.label.en',
+        );
+        expectRefusedAt(
+          withValue(validFollowUp(), 'change.tiles.t1.caption.en', character),
+          'change.tiles.t1.caption.en',
+        );
+        let input = withValue(validInitial(), 'findings.custom.a.label.ar', character);
+        input = withValue(input, 'dashboard.mental_energy.evidence.ar', character);
+        input = withValue(input, 'summary.ar', { text: character, marks: [] });
+        const answer = validateQeegContent(input);
+        expect(answer.ok, code).toBe(true);
+        if (!answer.ok || answer.content.edition !== 'initial') return;
+        expect(answer.content.findings.custom['a']?.label.ar, code).toBeNull();
+        expect(answer.content.dashboard.mental_energy.evidence?.ar, code).toBeNull();
+        expect(answer.content.summary.ar, code).toBeNull();
+      }
+    });
+
     it('checks a length after cleaning', () => {
       const padded = `x${' '.repeat(LIMITS.label)}`;
       const answer = validateQeegContent(
@@ -597,6 +754,41 @@ describe('validateQeegContent', () => {
       expect(
         answer.ok && answer.content.edition === 'follow-up' && answer.content.comparedWith,
       ).toMatchObject({ reference: 'RPT-000001' });
+    });
+
+    it('hands back a formatted Arabic of nothing but white space as none, in both summaries', () => {
+      const spaces = { text: '   ', marks: [] };
+      const first = validateQeegContent(withValue(validInitial(), 'summary.ar', spaces));
+      expect(first.ok && first.content.summary.ar).toBeNull();
+      let input = withValue(validFollowUp(), 'summary.ar', { text: ' \n ', marks: [] });
+      input = withValue(input, 'change.summary.ar', spaces);
+      const answer = validateQeegContent(input);
+      expect(answer.ok).toBe(true);
+      if (!answer.ok || answer.content.edition !== 'follow-up') return;
+      expect(answer.content.summary.ar).toBeNull();
+      expect(answer.content.change.summary.ar).toBeNull();
+    });
+
+    it('hands back a formatted Arabic of no text at all as none', () => {
+      const answer = validateQeegContent(
+        withValue(validInitial(), 'summary.ar', { text: '', marks: [] }),
+      );
+      expect(answer.ok && answer.content.summary.ar).toBeNull();
+    });
+
+    it('keeps a formatted English of nothing as empty rich text, since English is never none', () => {
+      const answer = validateQeegContent(
+        withValue(validFollowUp(), 'change.summary.en', { text: '   ', marks: [] }),
+      );
+      expect(
+        answer.ok && answer.content.edition === 'follow-up' && answer.content.change.summary.en,
+      ).toEqual({ text: '   ', marks: [] });
+    });
+
+    it('keeps a formatted Arabic with words in it', () => {
+      const arabic = { text: 'ملخص مهم', marks: [{ from: 5, to: 8, bold: true }] };
+      const answer = validateQeegContent(withValue(validInitial(), 'summary.ar', arabic));
+      expect(answer.ok && answer.content.summary.ar).toEqual(arabic);
     });
 
     it('refuses rich text holding a character the editor removes, since marks count from it', () => {
@@ -818,6 +1010,44 @@ describe('validateQeegContent', () => {
     it('refuses a calculated figure on a tile', () => {
       const path = 'change.tiles.t1.figure';
       expectRefusedAt(withValue(validFollowUp(), path, calculatedFigure), `${path}.source`);
+    });
+  });
+
+  describe('a follow-up is not recorded before what it is compared with', () => {
+    it('refuses a recording made before the earlier one, at its day', () => {
+      expectRefusedAt(
+        withValue(validFollowUp(), 'recording.recordedOn', '2026-05-31'),
+        'recording.recordedOn',
+      );
+    });
+
+    it('allows the same day, and a recording with no day yet', () => {
+      expectAccepted(withValue(validFollowUp(), 'recording.recordedOn', '2026-06-01'));
+      expectAccepted(withValue(validFollowUp(), 'recording.recordedOn', null));
+      expectAccepted(blankFollowUp(EARLIER, 'final'));
+    });
+
+    it('says of a day that is no day only that it is none, and never that it is too early', () => {
+      // Two days are compared only when both are days. A day that is none was
+      // refused for being too early as well, which nobody could know of it.
+      for (const day of ['2026-02-30', '', 'yesterday', '1999-12-31']) {
+        const answer = validateQeegContent(withValue(validFollowUp(), 'recording.recordedOn', day));
+        if (answer.ok) throw new Error(`${day} was accepted`);
+        expect(answer.refusals.length, day).toBeGreaterThan(0);
+        for (const refusal of answer.refusals) {
+          expect(refusal.path, day).toBe('recording.recordedOn');
+          expect(refusal.reason, day).not.toMatch(/compared with/);
+        }
+      }
+    });
+
+    it('does not blame the new recording when the earlier day is no day', () => {
+      // The thirty-first of September reads as later than any day of June, and is no day.
+      const answer = validateQeegContent(
+        withValue(validFollowUp(), 'comparedWith.recordedOn', '2026-09-31'),
+      );
+      if (answer.ok) throw new Error('accepted');
+      expect(answer.refusals.map((refusal) => refusal.path)).toEqual(['comparedWith.recordedOn']);
     });
   });
 

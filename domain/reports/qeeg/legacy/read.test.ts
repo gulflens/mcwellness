@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateQeegContent } from '../shape';
-import type { ImportNote, QeegInitial } from '../types';
+import { LIMITS, type ImportNote, type QeegInitial } from '../types';
+import { DRAWS_NOTHING } from '../testing/drawsNothing';
 import { LEGACY_SUBJECT_KEY } from './keys';
 import { readLegacyReport } from './read';
 
@@ -243,6 +244,7 @@ describe('a full report from the old tool', () => {
     expect(readOk(fullFile()).images).toEqual([
       {
         key: 'map-0',
+        position: 0,
         dataUrl: PNG,
         widthPx: 800,
         heightPx: 600,
@@ -251,6 +253,7 @@ describe('a full report from the old tool', () => {
       },
       {
         key: 'map-1',
+        position: 1,
         dataUrl: PNG,
         widthPx: 640,
         heightPx: 480,
@@ -635,6 +638,32 @@ describe('what the reader tolerates, following the old tool', () => {
     expect(result.notes).toEqual([{ code: 'summary_content_dropped', at: 'summary.en' }]);
   });
 
+  it('says so when the formatted summary was only a picture, and reads the plain one', () => {
+    const summaryRich = JSON.stringify({
+      ops: [{ insert: { image: 'data:image/png;base64,AAAA' } }, { insert: '\n' }],
+    });
+    const result = readOk(withFile({ summary: 'Plain words', summaryRich }));
+    expect(result.content.summary.en).toEqual({ text: 'Plain words', marks: [] });
+    expect(result.notes).toEqual([{ code: 'summary_content_dropped', at: 'summary.en' }]);
+  });
+
+  it('keeps the first two hundred marks of a summary, and says more were left out', () => {
+    const summaryRich = JSON.stringify({
+      ops: [
+        ...Array.from({ length: 250 }, (_, i) => [
+          { insert: 'w', attributes: i % 2 === 0 ? { bold: true } : { underline: true } },
+          { insert: ' ' },
+        ]).flat(),
+        { insert: '\n' },
+      ],
+    });
+    const result = readOk(withFile({ summaryRich }));
+    expect(result.content.summary.en.marks).toHaveLength(LIMITS.marks);
+    expect(result.content.summary.en.marks.at(-1)).toEqual({ from: 398, to: 399, underline: true });
+    expect(result.notes).toEqual([{ code: 'extra_positions_ignored', at: 'summary.en.marks' }]);
+    expect(validateQeegContent(result.content)).toEqual({ ok: true, content: result.content });
+  });
+
   it('falls back to the plain summary when the formatted one cannot be read', () => {
     const result = readOk(withFile({ summary: 'Plain words', summaryRich: '{"ops": [' }));
     expect(result.content.summary.en).toEqual({ text: 'Plain words', marks: [] });
@@ -683,9 +712,26 @@ describe('what the reader tolerates, following the old tool', () => {
       { label: 'EC: Eyes Closed', name: 'b.png', img: { url: PNG, w: 10, h: 20 } },
     ];
     const result = readOk(withFile({ maps }));
-    expect(result.images.map((i) => i.key)).toEqual(['map-0']);
+    expect(result.images.map((i) => [i.key, i.position])).toEqual([['map-3', 0]]);
     expect(result.images[0]?.condition).toBe('eyes_closed');
-    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
+    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images.map-2' }]);
+  });
+
+  it('keys each picture by its place in the file, and notes each place left out', () => {
+    const map = { label: 'EO: Eyes Open', name: '', img: { url: PNG, w: 1, h: 1 } };
+    const unreadable = { label: '', name: '', img: { url: 'https://example.com/a.png' } };
+    const maps = [map, unreadable, map, { label: 'Her own view', img: null }, map];
+    const result = readOk(withFile({ maps }));
+    expect(result.images.map((i) => [i.key, i.position])).toEqual([
+      ['map-0', 0],
+      ['map-2', 1],
+      ['map-4', 2],
+    ]);
+    expect(result.notes).toEqual([
+      { code: 'map_without_image_dropped', at: 'images.map-1' },
+      { code: 'map_without_image_dropped', at: 'images.map-3' },
+    ]);
+    expect(validateQeegContent(result.content)).toMatchObject({ ok: true });
   });
 
   it('keeps any other label of a map as its caption, and says so', () => {
@@ -694,6 +740,7 @@ describe('what the reader tolerates, following the old tool', () => {
     expect(result.images).toEqual([
       {
         key: 'map-0',
+        position: 0,
         dataUrl: PNG,
         widthPx: 1,
         heightPx: 2,
@@ -722,7 +769,7 @@ describe('what the reader tolerates, following the old tool', () => {
     ];
     const result = readOk(withFile({ maps }));
     expect(result.images).toEqual([]);
-    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
+    expect(result.notes).toEqual([{ code: 'map_without_image_dropped', at: 'images.map-0' }]);
   });
 
   it('carries a PNG, JPEG, WebP or BMP picture and nothing else, and says what it dropped', () => {
@@ -739,26 +786,73 @@ describe('what the reader tolerates, following the old tool', () => {
       const maps = [{ label: 'EO: Eyes Open', name: '', img: { url, w: 1, h: 1 } }];
       const result = readOk(withFile({ maps }));
       expect(result.images, type).toEqual([]);
-      expect(result.notes, type).toEqual([{ code: 'map_without_image_dropped', at: 'images' }]);
+      expect(result.notes, type).toEqual([
+        { code: 'map_without_image_dropped', at: 'images.map-0' },
+      ]);
     }
   });
 
-  it('keeps at most eight maps', () => {
-    const maps = Array.from({ length: 10 }, () => ({
-      label: 'EO: Eyes Open',
-      name: '',
-      img: { url: PNG, w: 1, h: 1 },
-    }));
+  it('notes twenty places left out, and then one note that more were', () => {
+    const maps = Array.from({ length: 25 }, () => ({ label: 'Her own view', img: null }));
+    const result = readOk(withFile({ maps }));
+    expect(result.notes).toEqual([
+      ...Array.from({ length: LIMITS.placesLeftOut }, (_, i) => ({
+        code: 'map_without_image_dropped',
+        at: `images.map-${i}`,
+      })),
+      { code: 'extra_positions_ignored', at: 'images' },
+    ]);
+  });
+
+  it('notes twenty places one by one and no fewer: the twentieth has a note of its own', () => {
+    expect(LIMITS.placesLeftOut).toBe(20);
+    const left = (count: number) =>
+      readOk(
+        withFile({
+          maps: Array.from({ length: count }, () => ({ label: 'Her own view', img: null })),
+        }),
+      ).notes;
+    expect(left(20)).toHaveLength(20);
+    expect(left(20).at(-1)).toEqual({ code: 'map_without_image_dropped', at: 'images.map-19' });
+    expect(left(21)).toHaveLength(21);
+    expect(left(21).at(-1)).toEqual({ code: 'extra_positions_ignored', at: 'images' });
+    expect(left(500)).toHaveLength(21);
+  });
+
+  it('counts the places left out wherever they stand, a picture kept between them or not', () => {
+    const kept = { label: 'EO: Eyes Open', name: '', img: { url: PNG, w: 1, h: 1 } };
+    const empty = { label: 'Her own view', img: null };
+    // Three pictures kept, at places 0, 30 and 59, and 57 places left out round them.
+    const maps = Array.from({ length: 60 }, (_, place) =>
+      place === 0 || place === 30 || place === 59 ? kept : empty,
+    );
+    const result = readOk(withFile({ maps }));
+    expect(result.images.map((image) => image.key)).toEqual(['map-0', 'map-30', 'map-59']);
+    expect(result.images.map((image) => image.position)).toEqual([0, 1, 2]);
+    expect(result.notes).toEqual([
+      ...Array.from({ length: 20 }, (_, i) => ({
+        code: 'map_without_image_dropped',
+        at: `images.map-${i + 1}`,
+      })),
+      { code: 'extra_positions_ignored', at: 'images' },
+    ]);
+  });
+
+  it('keeps at most eight pictures, and names the first place not kept', () => {
+    const map = { label: 'EO: Eyes Open', name: '', img: { url: PNG, w: 1, h: 1 } };
+    const maps = [{ label: '', img: null }, ...Array.from({ length: 10 }, () => map)];
     const result = readOk(withFile({ maps }));
     expect(result.images).toHaveLength(8);
-    expect(result.notes).toEqual([{ code: 'extra_positions_ignored', at: 'images' }]);
+    expect(result.images.map((i) => i.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(result.images.at(-1)?.key).toBe('map-8');
+    expect(result.notes).toEqual([{ code: 'extra_positions_ignored', at: 'images.map-9' }]);
   });
 
   it('does not carry a signature image, and says so', () => {
     const signed = 'data:image/png;base64,U0lHTkVE';
     const result = readOk(withFile({ signature: { url: signed, name: 'sig.png' } }));
     expect(JSON.stringify(result)).not.toContain('U0lHTkVE');
-    expect(result.notes).toEqual([{ code: 'signature_image_dropped', at: 'asPrinted.signature' }]);
+    expect(result.notes).toEqual([{ code: 'signature_image_dropped', at: 'provenance.asPrinted' }]);
   });
 
   it('reads a date that is not a real day as unset, and says so', () => {
@@ -841,6 +935,29 @@ describe('typed text is made fit to store', () => {
     expect(result.notes).toEqual([{ code: 'text_shortened', at: 'summary.en' }]);
   });
 
+  it('composes two letters across the edge of a mark without moving the next mark', () => {
+    // The re-check's input: two Korean jamo that compose into one letter, bold
+    // over the first only, the second no combining mark.
+    const summaryRich = JSON.stringify({
+      ops: [
+        { insert: '\u1100', attributes: { bold: true } },
+        { insert: '\u1161 ' },
+        { insert: 'word', attributes: { underline: true } },
+        { insert: '\n' },
+      ],
+    });
+    const result = readOk(withFile({ summaryRich }));
+    expect(result.content.summary.en).toEqual({
+      text: '\uac00 word',
+      marks: [
+        { from: 0, to: 1, bold: true },
+        { from: 2, to: 6, underline: true },
+      ],
+    });
+    expect(result.notes).toEqual([]);
+    expect(validateQeegContent(result.content)).toMatchObject({ ok: true });
+  });
+
   it('trims a formatted summary at its start and keeps its marks on their letters', () => {
     const summaryRich = JSON.stringify({
       ops: [{ insert: '  lead ' }, { insert: 'x', attributes: { bold: true } }, { insert: '\n' }],
@@ -851,6 +968,36 @@ describe('typed text is made fit to store', () => {
       marks: [{ from: 5, to: 6, bold: true }],
     });
     expect(result.notes).toEqual([]);
+  });
+
+  it('reads typed text that draws nothing as nothing, and its output meets the shape', () => {
+    for (const character of DRAWS_NOTHING) {
+      const code = character.codePointAt(0)?.toString(16);
+      const result = readOk(
+        withFile({
+          customKF: [
+            { text: character, checked: true },
+            { text: 'Kept', textAr: character, checked: true },
+          ],
+          dims: [{ score: '5', evid: 'Seen', evidAr: character }],
+          summaryAr: character,
+          summaryRichAr: JSON.stringify({ ops: [{ insert: `${character}\n` }] }),
+          signer: character,
+        }),
+      );
+      expect(Object.keys(result.content.findings.custom), code).toEqual(['c0']);
+      expect(result.content.findings.custom['c0']?.label, code).toEqual({ en: 'Kept', ar: null });
+      expect(result.content.dashboard.mental_energy.evidence, code).toEqual({
+        en: 'Seen',
+        ar: null,
+      });
+      expect(result.content.summary.ar, code).toBeNull();
+      expect(result.content.provenance, code).toMatchObject({ asPrinted: { signerName: null } });
+      expect(validateQeegContent(result.content), code).toEqual({
+        ok: true,
+        content: result.content,
+      });
+    }
   });
 
   it('trims what was padded, without a note', () => {
@@ -889,7 +1036,7 @@ describe('where a note points', () => {
     expect(result.notes).toEqual([
       { code: 'map_label_kept_as_caption', at: 'images.map-0' },
       { code: 'text_shortened', at: 'images.map-0.caption.en' },
-      { code: 'signature_image_dropped', at: 'asPrinted.signature' },
+      { code: 'signature_image_dropped', at: 'provenance.asPrinted' },
     ]);
     expect(result.images[0]?.key).toBe('map-0');
   });
