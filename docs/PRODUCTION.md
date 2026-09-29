@@ -3266,11 +3266,32 @@ only as that.
 
 **Not checked, and why.** No document was rendered on production. Rendering
 takes the owner's sign-in, and an invoice not yet filed files on its first
-opening, with her name on the act. The renderer was proved before the merge
-by the round's own tests and three reviews (3,218 unit and screen tests, the
-two billing database files that file and recover a document through the
-route), and by CI on the merged head. The proof that remains is hers: the
-next invoice she issues.
+opening, with her name on the act. The renderer was proved before the merge by
+the round's own tests and three reviews (3,218 unit and screen tests, the two
+billing database files that file and recover a document through the route),
+and by CI on the pull request's head. CI on main itself is the next
+paragraph's. The proof that remains is hers: the next invoice she issues.
+
+**Main went red with the merge, and the pass had already run.** Pull request
+223 taught the writer a new op, `rect`. Pull request 226, merged to main two
+hours earlier, ends every `switch` over an op's kind in a `never` check, so
+that the compiler points there the day the writer gains an op. Neither touched
+a file of the other's, each had passed alone and GitHub read clean; but 223's
+checks had run before 226 landed, so the two had never met. Main's own
+`verify` on `9f358124` failed at typecheck in four places, all in
+`domain/reports/qeeg/document/scale.ts` and its test. It was read a few
+minutes after the build completed: the archive had been made without waiting
+for it, which was this pass's mistake. Production was not harmed. The host
+does not type-check, no route and no screen reaches that folder, and health
+never left 200. The report stream, which owns the file, mended it in pull
+request 230, merged as `7c689baa` at 20:00:02 UTC on 29 September after both
+checks and a review of its own. **Two rules from it.** Before a merge, a green
+check is read for its age against main as well as for its colour: when main
+has moved since the checks ran, the branch is brought up to main and checked
+again, and the merge waits for those. And a pass waits for main's own check on
+the merge commit before the archive is made. Production runs `9f358124`; main
+at `7c689baa` differs from it in those two files alone, which nothing that
+runs reaches.
 
 **For the owner.** Every invoice issued from now on, and every receipt
 rendered from now on, is the new page: the violet header band, the discount as
