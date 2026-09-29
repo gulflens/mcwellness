@@ -97,6 +97,29 @@ export function baseDirection(text: string, fallback: Direction): Direction {
   return fallback;
 }
 
+/**
+ * Which way words a person typed read, in a report that reads `report`'s way.
+ *
+ * The report's way when they hold a letter of its script, wherever it
+ * stands; otherwise the way of the letters they do hold; and the report's
+ * way when they hold no letter at all.
+ *
+ * **Why not by the first letter**, which is the usual rule. A practitioner
+ * writing in Arabic begins a sentence with "EEG" or "Alpha" as readily as
+ * with an Arabic word, and by its first letter that sentence would be read
+ * left to right and stand the wrong way round. What she typed into a report
+ * is in the report's language unless none of it is: a name in the other
+ * script, or an English note printed in an Arabic report because she gave
+ * no Arabic for it. Those are the two cases this tells apart.
+ */
+export function readingDirection(text: string, report: Direction): Direction {
+  const codes = codesOf(text);
+  const arabic = codes.some(isArabicLetter);
+  const latin = codes.some(isLatin);
+  if (report === 'rtl') return arabic || !latin ? 'rtl' : 'ltr';
+  return latin || !arabic ? 'ltr' : 'rtl';
+}
+
 export function classify(word: string): TokenClass {
   const codes = codesOf(word);
   if (codes.some(isArabicLetter)) return 'R';

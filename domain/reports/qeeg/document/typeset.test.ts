@@ -80,17 +80,44 @@ describe('typeset', () => {
     expect((middle.left + middle.right) / 2).toBeCloseTo(50, 9);
   });
 
-  it('reads typed English in an Arabic report left to right, set against the report’s start edge', () => {
-    const block = typeset('body', 'Typed in English', 300, arabic, { typed: true });
-    const [op] = texts(block.ops);
-    expect(op?.rtl ?? false).toBe(false);
-    expect(extentOf(block.ops, measure).right).toBe(300);
+  /** The words of a line as they stand on the page, from its left to its right. */
+  const across = (ops: readonly LayoutOp[]): string =>
+    texts(ops)
+      .map((op) => ({ text: op.text, left: extentOf([op], measure).left }))
+      .sort((one, other) => one.left - other.left)
+      .map((each) => each.text)
+      .join(' ');
+
+  it('reads typed English in an Arabic report left to right: its full stop ends it', () => {
+    const block = typeset('body', 'Steady progress.', 300, arabic, { typed: true });
+    expect(across(block.ops)).toBe('Steady progress.');
+    expect(texts(block.ops).every((op) => op.rtl !== true)).toBe(true);
+    expect(extentOf(block.ops, measure).right).toBeCloseTo(300, 9);
+  });
+
+  it('reads the same words the report’s way when they are its own wording', () => {
+    // Read right to left, a sentence of English ends at its left: the full
+    // stop stands before the first word. It is why a piece must be told.
+    const block = typeset('body', 'Steady progress.', 300, arabic);
+    expect(across(block.ops)).toBe('. Steady progress');
+    expect(extentOf(block.ops, measure).right).toBeCloseTo(300, 9);
   });
 
   it('reads typed Arabic in an English report right to left, set against the report’s start edge', () => {
-    const block = typeset('body', 'كتب بالعربية', 300, english, { typed: true });
-    expect(texts(block.ops).every((op) => op.rtl === true)).toBe(true);
-    expect(extentOf(block.ops, measure).left).toBe(0);
+    const block = typeset('body', 'كتب ١٥', 300, english, { typed: true });
+    expect(across(block.ops)).toBe('١٥ كتب');
+    expect(extentOf(block.ops, measure).left).toBeCloseTo(0, 9);
+  });
+
+  it('reads the same words the report’s way when they are its own wording, in English too', () => {
+    expect(across(typeset('body', 'كتب ١٥', 300, english).ops)).toBe('كتب ١٥');
+  });
+
+  it('reads typed Arabic that begins with a word of English the way its report does', () => {
+    // By its first letter alone it would read left to right, and stand the wrong way round.
+    const block = typeset('body', 'EEG ثم', 300, arabic, { typed: true });
+    expect(across(block.ops)).toBe('ثم EEG');
+    expect(extentOf(block.ops, measure).right).toBeCloseTo(300, 9);
   });
 
   it('gives typed Arabic the room its face needs, in a report of either language', () => {
@@ -102,8 +129,37 @@ describe('typeset', () => {
   });
 
   it('reads fixed wording in its report’s direction whatever it begins with', () => {
-    const block = typeset('body', 'QEEG تقييم', 300, arabic);
-    expect(extentOf(block.ops, measure).right).toBe(300);
+    expect(across(typeset('body', 'QEEG تقييم', 300, arabic).ops)).toBe('تقييم QEEG');
+    expect(across(typeset('body', 'تقييم QEEG', 300, english).ops)).toBe('تقييم QEEG');
+  });
+
+  it('sets from the start edge and no further, unless it is asked to reach both', () => {
+    // Two words of four letters and a space fill 45.9 of a line of 50.
+    const first = (block: { ops: readonly LayoutOp[] }) => {
+      const top = Math.max(...texts(block.ops).map((op) => op.y));
+      return extentOf(
+        texts(block.ops).filter((op) => op.y === top),
+        measure,
+      );
+    };
+    expect(first(typeset('body', 'aaaa bbbb cccc', 50, english)).right).toBeCloseTo(45.9, 9);
+    expect(
+      first(typeset('body', 'aaaa bbbb cccc', 50, english, { justify: true })).right,
+    ).toBeCloseTo(50, 9);
+  });
+
+  it('draws a word marked for it in the accent, and the words round it in their own colour', () => {
+    const block = typeset(
+      'body',
+      [{ text: 'Alpha', accent: true }, { text: ' rose' }],
+      300,
+      english,
+    );
+    const [marked, plain] = texts(block.ops);
+    expect(marked?.text).toBe('Alpha');
+    expect(marked?.style.rgb).toEqual(ACCENT.rgb);
+    expect(plain?.style.rgb).toBeUndefined();
+    expect(plain?.style.grey).toBe(INK.grey);
   });
 
   it('sets a card’s category in the hue of its score', () => {

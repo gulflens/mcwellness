@@ -8,10 +8,13 @@
  * Arabic reports came apart, so they are made here, once, for every piece.
  *
  * **Which way a paragraph reads.** Fixed wording reads the way its report
- * does, whatever it begins with. What a person typed reads the way its first
- * letter does: English typed into an Arabic report is an English paragraph,
- * wrapped left to right. It is still set against the REPORT's start edge, so
- * a column of answers keeps one edge whatever language each was typed in.
+ * does, whatever it begins with. What a person typed reads the report's way
+ * too when it holds a letter of the report's script, and otherwise the way
+ * of its own letters (`readingDirection`): English typed into an Arabic
+ * report is an English paragraph, wrapped left to right, and an Arabic
+ * sentence that begins with "EEG" is still an Arabic one. Either is set
+ * against the REPORT's start edge, so a column of answers keeps one edge
+ * whatever language each was typed in.
  *
  * **`align` is the report's.** 'start' is where a line of the report begins:
  * the left of an English page and the right of an Arabic one. A paragraph's
@@ -22,7 +25,7 @@
  * into an English report is given the room an Arabic face needs.
  */
 
-import { baseDirection } from './bidi';
+import { readingDirection } from './bidi';
 import { blank, paragraphBlock } from './block';
 import type { Block } from './block';
 import type { Direction } from './direction';
@@ -44,7 +47,7 @@ export type Drawing = {
 export type Setting = {
   /** Against which edge of the report. Default 'start'. */
   readonly align?: 'start' | 'end' | 'centre';
-  /** A person typed it, so it reads the way its first letter does. Default false. */
+  /** A person typed it, so which way it reads is asked of its letters. Default false. */
   readonly typed?: boolean;
   /** The score whose hue a card's category takes. */
   readonly tier?: Tier;
@@ -83,7 +86,7 @@ export function typeset(
   if (plain.trim() === '') return blank(width, 0);
 
   const paragraph =
-    setting.typed === true ? baseDirection(plain, drawing.direction) : drawing.direction;
+    setting.typed === true ? readingDirection(plain, drawing.direction) : drawing.direction;
   const { style, underline } = styleOf(role, paragraph);
   return paragraphBlock(
     {
