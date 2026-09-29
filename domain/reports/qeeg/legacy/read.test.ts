@@ -502,11 +502,23 @@ describe('what the reader tolerates, following the old tool', () => {
     expect(content(withFile({ sessions: '30 Sessions' })).plan.sessions).toBe(30);
     expect(content(withFile({ sessions: '1 Session' })).plan.sessions).toBe(1);
     expect(content(withFile({ sessions: '200 Sessions' })).plan.sessions).toBe(200);
+    expect(content(withFile({ sessions: ' 12 sessions ' })).plan.sessions).toBe(12);
+    expect(content(withFile({ sessions: '2 Session' })).plan.sessions).toBe(2);
     expect(notes(withFile({ sessions: '24 Sessions' }))).toEqual([]);
   });
 
-  it('reads sessions with no number, or outside 1 to 200, as unset, and says so', () => {
-    for (const sessions of ['Sessions', '0 Sessions', '201 Sessions', 'Ongoing']) {
+  it('reads sessions not written as N Sessions, or outside 1 to 200, as unset, and says so', () => {
+    for (const sessions of [
+      'Sessions',
+      '0 Sessions',
+      '201 Sessions',
+      'Ongoing',
+      '10 to 15 Sessions',
+      'Week 12: 40 Sessions',
+      '3.5 Sessions',
+      '1000 Sessions',
+      '30',
+    ]) {
       const result = readOk(withFile({ sessions }));
       expect(result.content.plan.sessions).toBeNull();
       expect(result.notes).toEqual([{ code: 'value_not_recognised', at: 'plan.sessions' }]);

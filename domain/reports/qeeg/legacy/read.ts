@@ -413,11 +413,16 @@ function summaryIn(plainValue: unknown, richValue: unknown, at: string, notes: N
   return limitedRich(read.rich, at, notes, read.removed);
 }
 
+/**
+ * The number of sessions, from the label the old form wrote: `N Session` or
+ * `N Sessions`, and nothing else. A number found anywhere else in the text
+ * (a range, a week, a fraction) is not taken for it.
+ */
 function sessionsOf(value: unknown, notes: Notes): number | null {
-  const label = text(value).trim();
-  if (label === '') return null;
-  const digits = /\d+/.exec(label);
-  const count = digits === null ? null : Number(digits[0]);
+  const label = text(value);
+  if (label.trim() === '') return null;
+  const digits = /^\s*(\d{1,3})\s+Sessions?\s*$/i.exec(label);
+  const count = digits?.[1] === undefined ? null : Number(digits[1]);
   if (count === null || count < 1 || count > LIMITS.sessionsMost) {
     notes.add('value_not_recognised', 'plan.sessions');
     return null;
