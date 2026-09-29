@@ -4,7 +4,7 @@ import { isWithin, mayCloseYear } from '../../../domain/accounting';
 import { isoDateIn } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayCloseYear as actorMayCloseYear, mayReadBooks } from './access';
-import { postPendingEvents } from './poster';
+import { postPendingEvents, waitingEvents } from './poster';
 import { requiredReason } from './reason';
 import { readYears } from './rows';
 import { YearResponse, YearsResponse } from './schema';
@@ -28,8 +28,6 @@ export function mountYears(api: Hono<ApiEnv>, now: () => Date = () => new Date()
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
-const UNPOSTED_SQL = 'select occurred_on::text as occurred_on from app.unposted_money_events()';
-
 const CLOSE_SQL =
   "update fiscal_year set status = 'closed', closed_at = now(), closed_by = app.current_actor_id(), " +
   'close_reason = $2 where tenant_id = app.current_tenant_id() and id = $1';
@@ -41,8 +39,12 @@ const REOPEN_SQL =
 /**
  * Closing a year and reopening one, the owner's alone (docs/SPEC/accounting.md
  * section 4.4, rule 11). Closing runs the poster first and then asks whether
- * anything dated inside the year is still outstanding: a year closed over an
- * unposted payment would be a year that is closed and wrong.
+ * anything dated inside the year is still owed to the books: a year closed
+ * over an unposted payment would be a year that is closed and wrong.
+ *
+ * Owed, and not merely absent from the journal (`waitingEvents`): an event
+ * that rightly posts nothing is never in the journal, and a close that counted
+ * it would refuse for ever a year in which a session was once given free.
  */
 export function mountYearWrites(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.post('/api/accounting/years/:id/close', async (c) => {
@@ -66,9 +68,9 @@ export function mountYearWrites(api: Hono<ApiEnv>, now: () => Date = () => new D
     // The poster first, then the question: what is left unposted inside the
     // year after everything that could be posted has been.
     await postPendingEvents(db);
-    const pending = await db.query<{ occurred_on: string }>(UNPOSTED_SQL);
-    const unpostedInYear = pending.rows.filter((row) =>
-      isWithin(row.occurred_on, year.startsOn, year.endsOn),
+    const waiting = await waitingEvents(db);
+    const unpostedInYear = waiting.filter((event) =>
+      isWithin(event.occurredOn, year.startsOn, year.endsOn),
     ).length;
     if (!mayCloseYear(year, isoDateIn(now(), PRACTICE_TIME_ZONE), unpostedInYear)) {
       return c.json({ error: 'conflict', code: 'year_not_closable', requestId }, 409);
