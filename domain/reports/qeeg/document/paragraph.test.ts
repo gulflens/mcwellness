@@ -275,6 +275,37 @@ describe('layoutParagraph', () => {
     }
   });
 
+  it('pairs the brackets round a figure beside another figure in an Arabic line', () => {
+    const cases: [string, string][] = [
+      ['ألفا 10.2 (8–12) هرتز', `${engine('هرتز')} (8–12) ${engine('ألفا 10.2')}`],
+      ['بعد 15 (20) جلسة', `${engine('جلسة')} (20) ${engine('بعد 15')}`],
+      ['بعد (15) 20 جلسة', `${engine('20 جلسة')} (15) ${engine('بعد')}`],
+      ['ألفا 10.2 [8–12] هرتز', `${engine('هرتز')} [8–12] ${engine('ألفا 10.2')}`],
+      ['بعد 15 [20] جلسة', `${engine('جلسة')} [20] ${engine('بعد 15')}`],
+      ['بعد [15] 20 جلسة', `${engine('20 جلسة')} [15] ${engine('بعد')}`],
+      ['بنسبة 25% (30%) فقط', `${engine('فقط')} (30%) 25% ${engine('بنسبة')}`],
+      ['بعد ١٥ (٢٠) جلسة', `${engine('جلسة')} (٢٠) ١٥ ${engine('بعد')}`],
+    ];
+    for (const [text, page] of cases) {
+      const ops = draw([{ text }], { paragraph: 'rtl', width: 200 });
+      expect(onPage(ops), text).toBe(page);
+    }
+  });
+
+  it('keeps the first of figures parted by an Arabic comma at the right', () => {
+    const ops = draw([{ text: 'جلسات 15، 20 و 25' }], { paragraph: 'rtl', width: 200 });
+    expect(onPage(ops)).toBe(`${engine('20 و 25')} ${engine('،')}${engine('جلسات 15')}`);
+  });
+
+  it('draws the ranges, the times and the telephone number of an Arabic line as typed', () => {
+    for (const range of ['8–12', '8 – 12', '8 - 12', '8-12', '12:30 — 14:00']) {
+      const ops = draw([{ text: `ألفا ${range} هرتز` }], { paragraph: 'rtl', width: 200 });
+      expect(onPage(ops), range).toBe(`${engine('هرتز')} ${range} ${engine('ألفا')}`);
+    }
+    const ops = draw([{ text: 'هاتف: +971 50 000 0012' }], { paragraph: 'rtl', width: 200 });
+    expect(onPage(ops)).toBe(`+971 50 000 0012 ${engine('هاتف:')}`);
+  });
+
   it('keeps a plain number inside the Arabic op of an Arabic line', () => {
     const ops = texts(draw([{ text: 'بعد 15 جلسة' }], { paragraph: 'rtl' }));
     expect(ops.map((op) => [op.text, op.rtl])).toEqual([['بعد 15 جلسة', true]]);

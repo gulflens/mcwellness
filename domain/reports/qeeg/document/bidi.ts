@@ -18,9 +18,11 @@
  * script are peeled off (off a Latin word or a figure in a right-to-left
  * paragraph, off an Arabic word in a left-to-right one) so they can take the
  * paragraph's side; a neutral word between two words of one direction takes
- * it, else the paragraph's; every unbroken run of neutrals holding a figure
- * is one left-to-right run, the punctuation at its ends left outside; and
- * only a plain number may join an Arabic run.
+ * it, else the paragraph's; every unbroken run of two or more neutrals that
+ * holds at least one figure is one left-to-right run, a group stopping at a
+ * bracket and at a sentence mark, neither of which is ever inside one; and
+ * only a plain number may join an Arabic run, a lone one still joining the
+ * Arabic run beside it.
  *
  * **Figures typed on an Arabic keyboard are figures.** U+0660 to 0669 and the
  * Persian U+06F0 to 06F9 sit inside the Arabic block, but they are digits:
@@ -238,21 +240,26 @@ export function runsOf(text: string, paragraph: Direction): Run[] {
   const tokens = tokenise(text, paragraph);
   const directions = resolve(tokens, paragraph);
 
-  // A figure is a neutral holding a digit. Every unbroken run of neutrals
-  // that holds one — a telephone number, a range typed with spaces round its
-  // dash, a range of times — is one left-to-right run, however its words
-  // resolved, with the punctuation at its two ends left outside it as marks.
-  // A lone figure is not a group: a plain number may still join the Arabic.
+  // A figure is a neutral holding a digit. Every unbroken run of TWO OR MORE
+  // neutrals that holds at least one figure — a telephone number, a range
+  // typed with spaces round its dash, a range of times — is one left-to-right
+  // run, however its words resolved. A group stops at a bracket and at a
+  // sentence mark: neither is ever inside one, so a bracket pairs with its
+  // partner on the Arabic side and is never taken into a group alone. The
+  // group runs from its first figure to its last, the punctuation at its two
+  // ends left outside it as marks. A lone plain number still joins the Arabic
+  // run beside it, as the last rule says.
   const figure = tokens.map((token) => token.class === 'N' && holdsDigit(token));
+  const stop = tokens.map((token) => [...token.text].every(peelable));
   const grouped: boolean[] = tokens.map(() => false);
   let at = 0;
   while (at < tokens.length) {
-    if (tokens[at]?.class !== 'N') {
+    if (tokens[at]?.class !== 'N' || stop[at]) {
       at += 1;
       continue;
     }
     let end = at;
-    while (end + 1 < tokens.length && tokens[end + 1]?.class === 'N') end += 1;
+    while (end + 1 < tokens.length && tokens[end + 1]?.class === 'N' && !stop[end + 1]) end += 1;
     let first = at;
     while (first <= end && !figure[first]) first += 1;
     let last = end;
