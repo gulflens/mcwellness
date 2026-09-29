@@ -3,6 +3,7 @@ import { blankFollowUp, blankInitial } from './blank';
 import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from './catalogue/ids';
 import { bandIsComplete, measureIsComplete, missingForIssue } from './complete';
 import type { ComparedWith, Missing, QeegContent, QeegFollowUp, QeegInitial } from './types';
+import { phrase } from './wording';
 
 /** Part 4 of brief C1: what a report still needs before it can be signed. */
 
@@ -32,14 +33,17 @@ const EVERYTHING: Missing[] = [
   { section: 'heading.client', what: 'label.age' },
   { section: 'heading.findings', what: 'heading.findings' },
   { section: 'heading.focus', what: 'heading.focus' },
-  { section: 'heading.brain', what: 'map' },
-  ...BAND_IDS.map((id) => ({ section: 'heading.brain', what: `band.${id}` })),
-  ...CONNECTIVITY_IDS.map((id) => ({ section: 'label.findings', what: `connectivity.${id}` })),
-  ...DIMENSION_IDS.map((id) => ({ section: 'heading.dashboard', what: `dimension.${id}` })),
+  { section: 'heading.brain', what: 'label.maps' },
+  ...BAND_IDS.map((id) => ({ section: 'heading.brain', what: `band.${id}.name` })),
+  ...CONNECTIVITY_IDS.map((id) => ({
+    section: 'label.findings',
+    what: `connectivity.${id}.title`,
+  })),
+  ...DIMENSION_IDS.map((id) => ({ section: 'heading.dashboard', what: `dimension.${id}.title` })),
   { section: 'heading.recommendations', what: 'heading.recommendations' },
   { section: 'heading.summary', what: 'heading.summary' },
   { section: 'heading.benefits', what: 'heading.benefits' },
-  { section: 'heading.programme', what: 'sessions' },
+  { section: 'heading.programme', what: 'label.sessions' },
   { section: 'heading.approach', what: 'heading.approach' },
 ];
 
@@ -54,7 +58,7 @@ function commonFills<T extends QeegContent>(): Array<[string, Fill<T>]> {
     ['label.age', (c) => ({ ...c, subject: { ...c.subject, ageYears: 40 } })],
     ['heading.findings', (c) => ({ ...c, findings: { chosen: ['mental_fatigue'], custom: {} } })],
     ['heading.focus', (c) => ({ ...c, focus: { chosen: ['sleep_recovery'], custom: {} } })],
-    ['map', (c) => ({ ...c, maps: { m: MAP } })],
+    ['label.maps', (c) => ({ ...c, maps: { m: MAP } })],
     [
       'heading.recommendations',
       (c) => ({ ...c, recommendations: { chosen: ['decision_making'], custom: {} } }),
@@ -64,7 +68,7 @@ function commonFills<T extends QeegContent>(): Array<[string, Fill<T>]> {
       (c) => ({ ...c, summary: { en: { text: 'Steady.', marks: [] }, ar: null } }),
     ],
     ['heading.benefits', (c) => ({ ...c, benefits: { chosen: ['sleep'], custom: {} } })],
-    ['sessions', (c) => ({ ...c, plan: { ...c.plan, sessions: 20 } })],
+    ['label.sessions', (c) => ({ ...c, plan: { ...c.plan, sessions: 20 } })],
   ];
 }
 
@@ -72,32 +76,32 @@ function initialFills(): Array<[string, Fill<QeegInitial>]> {
   return [
     ...commonFills<QeegInitial>(),
     ...BAND_IDS.map((id): [string, Fill<QeegInitial>] => [
-      `band.${id}`,
+      `band.${id}.name`,
       (c) => ({ ...c, bands: { ...c.bands, [id]: { level: 'reduced', regions: ['occipital'] } } }),
     ]),
     [
-      'connectivity.connectivity',
+      'connectivity.connectivity.title',
       (c) => ({
         ...c,
         connectivity: { ...c.connectivity, connectivity: { level: 'mixed', regions: ['frontal'] } },
       }),
     ],
     [
-      'connectivity.asymmetry',
+      'connectivity.asymmetry.title',
       (c) => ({
         ...c,
         connectivity: { ...c.connectivity, asymmetry: { level: 'right', regions: ['frontal'] } },
       }),
     ],
     [
-      'connectivity.phase_lag',
+      'connectivity.phase_lag.title',
       (c) => ({
         ...c,
         connectivity: { ...c.connectivity, phase_lag: { level: 'normal', regions: ['central'] } },
       }),
     ],
     ...DIMENSION_IDS.map((id): [string, Fill<QeegInitial>] => [
-      `dimension.${id}`,
+      `dimension.${id}.title`,
       (c) => ({ ...c, dashboard: { ...c.dashboard, [id]: { score: 0, evidence: null } } }),
     ]),
     ['heading.approach', (c) => ({ ...c, plan: { ...c.plan, approach: 'stabilising' } })],
@@ -108,11 +112,11 @@ function followUpFills(): Array<[string, Fill<QeegFollowUp>]> {
   return [
     ...commonFills<QeegFollowUp>(),
     ...BAND_IDS.map((id): [string, Fill<QeegFollowUp>] => [
-      `band.${id}`,
+      `band.${id}.name`,
       (c) => ({ ...c, bands: { ...c.bands, [id]: { change: 'improved', regions: ['frontal'] } } }),
     ]),
     ...CONNECTIVITY_IDS.map((id): [string, Fill<QeegFollowUp>] => [
-      `connectivity.${id}`,
+      `connectivity.${id}.title`,
       (c) => ({
         ...c,
         connectivity: {
@@ -122,7 +126,7 @@ function followUpFills(): Array<[string, Fill<QeegFollowUp>]> {
       }),
     ]),
     ...DIMENSION_IDS.map((id): [string, Fill<QeegFollowUp>] => [
-      `dimension.${id}`,
+      `dimension.${id}.title`,
       (c) => ({
         ...c,
         dashboard: { ...c.dashboard, [id]: { score: 10, evidence: null, earlierScore: null } },
@@ -143,6 +147,18 @@ describe('missingForIssue', () => {
 
   it('finds exactly the 26 things missing from a blank follow-up, in order', () => {
     expect(missingForIssue(blankFollowUp(EARLIER, 'follow_up'))).toEqual(EVERYTHING);
+  });
+
+  it('names every section and every thing missing by a sentence of the wording', () => {
+    const blanks: QeegContent[] = [blankInitial(), blankFollowUp(EARLIER, 'follow_up')];
+    for (const blank of blanks) {
+      for (const { section, what } of missingForIssue(blank)) {
+        for (const locale of ['en', 'ar'] as const) {
+          expect(() => phrase(section, blank.edition, locale), section).not.toThrow();
+          expect(() => phrase(what, blank.edition, locale), what).not.toThrow();
+        }
+      }
+    }
   });
 
   it('has a fill for every row on each edition', () => {

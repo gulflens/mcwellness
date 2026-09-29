@@ -8,8 +8,9 @@
  * has anything in it.
  *
  * **Names, never words.** Each thing missing is named by the wording key of
- * the heading it sits under and a key of its own, so the form can say it in
- * whichever language it is showing, and a test can hold the list exactly.
+ * the heading it sits under and the wording key of what it is, so the form
+ * can say both in whichever language it is showing, through `phrase`, and a
+ * test can hold the list exactly.
  *
  * **What counts as done for a band or a measure.** A sentence about a band
  * names the regions it involves, so a level with no region, or a region with
@@ -79,24 +80,24 @@ export function missingForIssue(content: QeegContent): Missing[] {
   need(content.subject.ageYears !== null, 'heading.client', 'label.age');
   need(anyPicked(content.findings), 'heading.findings', 'heading.findings');
   need(anyPicked(content.focus), 'heading.focus', 'heading.focus');
-  need(Object.keys(content.maps).length > 0, 'heading.brain', 'map');
+  need(Object.keys(content.maps).length > 0, 'heading.brain', 'label.maps');
   for (const band of BAND_IDS) {
-    need(bandIsComplete(content, band), 'heading.brain', `band.${band}`);
+    need(bandIsComplete(content, band), 'heading.brain', `band.${band}.name`);
   }
   for (const measure of CONNECTIVITY_IDS) {
-    need(measureIsComplete(content, measure), 'label.findings', `connectivity.${measure}`);
+    need(measureIsComplete(content, measure), 'label.findings', `connectivity.${measure}.title`);
   }
   for (const dimension of DIMENSION_IDS) {
     need(
       content.dashboard[dimension].score !== null,
       'heading.dashboard',
-      `dimension.${dimension}`,
+      `dimension.${dimension}.title`,
     );
   }
   need(anyPicked(content.recommendations), 'heading.recommendations', 'heading.recommendations');
   need(!isEmpty(content.summary.en), 'heading.summary', 'heading.summary');
   need(anyPicked(content.benefits), 'heading.benefits', 'heading.benefits');
-  need(content.plan.sessions !== null, 'heading.programme', 'sessions');
+  need(content.plan.sessions !== null, 'heading.programme', 'label.sessions');
   const direction = content.edition === 'initial' ? content.plan.approach : content.plan.next;
   need(direction !== null, 'heading.approach', 'heading.approach');
   return missing;
