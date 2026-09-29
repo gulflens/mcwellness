@@ -137,20 +137,55 @@ const richText = (most: number) =>
 const bilingualRich = (most: number) =>
   z.object({ en: richText(most), ar: richText(most).nullable() }).strict();
 
+/** The keys the app makes for an ordered list's items: `c0`, `map-0`, `t1`. */
+const ORDERED_KEY = /^[a-z][a-z0-9-]{0,31}$/;
+
+/**
+ * A key the app would make, and not one every object answers to.
+ * `constructor` fits the pattern, so it is refused by name besides.
+ */
+const isOrderedKey = (key: string) => ORDERED_KEY.test(key) && !(key in Object.prototype);
+
+/**
+ * Every key of an ordered list, read from the input AS IT WAS SENT. A record
+ * in zod passes over a key named after the prototype, so its value would be
+ * neither read nor handed back; looking at the raw keys first is what lets
+ * such a key be refused by name, with `constructor` and `toString` beside it.
+ */
+function keysAreTheApps(input: unknown, ctx: z.core.$RefinementCtx): unknown {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) return input;
+  for (const key of Object.keys(input)) {
+    if (!isOrderedKey(key)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: 'An item is kept under a short lower-case key the app makes.',
+      });
+    }
+  }
+  return input;
+}
+
 /**
  * A list of typed things kept in order without being an array: each item
  * under its own key, with a place from 0 to n-1, none repeated.
  */
 function ordered<const F extends z.core.$ZodLooseShape>(fields: F, most: number) {
-  return z
-    .record(z.string().min(1).max(64), z.object({ ...fields, position: z.number().int() }).strict())
-    .superRefine((items, ctx) => {
-      const keys = Object.keys(items);
-      if (keys.length > most) {
-        ctx.addIssue({ code: 'custom', path: [], message: `At most ${most} may be kept here.` });
-      }
-      checkPositions(items as Readonly<Record<string, { position: number }>>, ctx);
-    });
+  return z.preprocess(
+    keysAreTheApps,
+    z
+      .record(
+        z.string().refine(isOrderedKey),
+        z.object({ ...fields, position: z.number().int() }).strict(),
+      )
+      .superRefine((items, ctx) => {
+        const keys = Object.keys(items);
+        if (keys.length > most) {
+          ctx.addIssue({ code: 'custom', path: [], message: `At most ${most} may be kept here.` });
+        }
+        checkPositions(items as Readonly<Record<string, { position: number }>>, ctx);
+      }),
+  );
 }
 
 /** Places run from 0 with no gap and no repeat. Refused at the place that breaks it. */

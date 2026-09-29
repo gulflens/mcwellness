@@ -387,6 +387,79 @@ describe('validateQeegContent', () => {
     });
   });
 
+  describe('an ordered list’s keys', () => {
+    /** The body as a request would carry it: parsed from JSON, with one list replaced. */
+    function asSent(content: unknown, path: string, listJson: string): unknown {
+      const body = JSON.parse(JSON.stringify(content)) as Record<string, unknown>;
+      const parts = path.split('.');
+      const last = parts.pop() as string;
+      let at = body;
+      for (const part of parts) at = at[part] as Record<string, unknown>;
+      at[last] = JSON.parse(listJson);
+      return body;
+    }
+
+    it('refuses the prototype’s own name by name, in a custom list, the maps and the tiles', () => {
+      expectRefusedAt(
+        asSent(
+          validInitial(),
+          'findings.custom',
+          '{"__proto__": {"anything": "at all", "position": "not a number"}}',
+        ),
+        'findings.custom.__proto__',
+      );
+      expectRefusedAt(
+        asSent(validInitial(), 'maps', '{"__proto__": {"dataUrl": "data:text/html;base64,AAAA"}}'),
+        'maps.__proto__',
+      );
+      expectRefusedAt(
+        asSent(
+          validFollowUp(),
+          'change.tiles',
+          '{"__proto__": {"figure": {"kind":"percent","low":900,"source":"calculated"}}}',
+        ),
+        'change.tiles.__proto__',
+      );
+    });
+
+    it('refuses a well-formed item hidden under the prototype’s own name', () => {
+      const item = JSON.stringify({
+        label: { en: 'Slow mornings', ar: null },
+        note: null,
+        chosen: true,
+        position: 0,
+      });
+      const input = asSent(blankInitial(), 'findings.custom', `{"__proto__": ${item}}`);
+      expectRefusedAt(input, 'findings.custom.__proto__');
+    });
+
+    it('refuses a key an object answers to, or one the app would never make', () => {
+      for (const key of ['constructor', 'toString', 'Upper', '0a', 'a b', 'x'.repeat(33), '']) {
+        const input = asSent(
+          validInitial(),
+          'focus.custom',
+          JSON.stringify({
+            [key]: { label: { en: 'Item', ar: null }, note: null, chosen: true, position: 0 },
+          }),
+        );
+        expectRefusedAt(input, `focus.custom.${key}`);
+      }
+    });
+
+    it('accepts the keys the app makes', () => {
+      for (const key of ['c0', 'map-0', 't1', 'x'.repeat(32)]) {
+        const input = asSent(
+          validInitial(),
+          'focus.custom',
+          JSON.stringify({
+            [key]: { label: { en: 'Item', ar: null }, note: null, chosen: true, position: 0 },
+          }),
+        );
+        expectAccepted(input);
+      }
+    });
+  });
+
   describe('counts', () => {
     it('refuses more custom items than a list may hold', () => {
       const custom = Object.fromEntries(
