@@ -11,8 +11,9 @@ import { describe, expect, it } from 'vitest';
  * `LEGACY_SUBJECT_KEY` in `keys.ts`, and every other line says the constant.
  * The other exception is the guards themselves: the lists the guards share
  * (`testing/vocabulary.ts`), the wording's guard in `wording/wording.test.ts`
- * and this file must spell the words to catch them. In the first two only
- * the lines that hold a list are let off. Their comments are held as any
+ * and this file must spell the words to catch them. In the first only the
+ * lines that hold a pattern are let off, and in the second the lines that
+ * hold a list. Their comments are held as any
  * other line is: they say "another kind of practice" and never the word.
  *
  * **Why every file under `domain/reports/qeeg/` and not only `legacy/`.** The
@@ -36,6 +37,13 @@ const WORDING_GUARD_END = '});';
 
 /** A line of the wording's guard that holds one of its lists: a pattern or an array. */
 const LIST_LINE = /^\s*\/.+\/[a-z]*;?$|\[.*\]/;
+
+/**
+ * A line of `testing/vocabulary.ts` that holds a pattern and nothing else.
+ * That file holds no array, so a comment with brackets in it is held as any
+ * other line is.
+ */
+const PATTERN_LINE = /^\s*\/.+\/[a-z]*;?$/;
 
 const SOURCES = import.meta.glob<string>('../**/*.ts', {
   query: '?raw',
@@ -67,7 +75,7 @@ function offences(path: string, source: string): string[] {
       }
     }
     if (path === 'legacy/keys.ts' && KEY_LINE.test(line)) return;
-    if (path === 'testing/vocabulary.ts' && LIST_LINE.test(line)) return;
+    if (path === 'testing/vocabulary.ts' && PATTERN_LINE.test(line)) return;
     if (STEMS.test(line)) found.push(`${path}:${index + 1}`);
   });
   return found;
