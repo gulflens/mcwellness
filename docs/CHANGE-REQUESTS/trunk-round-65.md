@@ -259,13 +259,7 @@ not served to a browser at all. The proof is two other things: the runtime
 log after the restart showing the new build's start, and an invoice rendered
 from the live site after the pass actually carrying the violet header band,
 the "Payment details" card and "TOTAL DUE" — read off the file, the way the
-goldens are read in the tests, not off a claim about the code. Production
-holds two invoices. `INV-000001` is filed and keeps the page it was filed
-with, the 8 September design; nothing re-renders a filed document.
-`INV-000002` has not been filed: the first time it is opened it files with
-whatever page the server renders that day — opened before the pass it keeps
-round 61's page for good, opened after it carries this one. Every document
-rendered after the pass is the new page.
+goldens are read in the tests, not off a claim about the code. An invoice already filed keeps the page it was filed with; nothing re-renders a filed document. An invoice not yet filed files the first time it is opened, with whatever page the server renders that day — opened before the pass it keeps round 61's page for good, opened after it carries this one. Read on 29 September 2026, production held four invoices: `INV-000001` and `INV-000003` filed, `INV-000002` and `INV-000004` not. Read the list again at the pass rather than trust this one. Every document rendered after the pass is the new page.
 
 **For the operator.** A continuation sheet — an invoice with more lines than
 one page holds — carries a small running header, the practice's name and the
