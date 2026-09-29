@@ -3175,3 +3175,137 @@ and "Reinstate" brings it back; households who bought one keep their sessions.
 The name typed beneath a signature now keeps every letter. An installed window
 still on the old build should be reloaded once (the rail's next click does it)
 before voiding anything.
+
+## What was done on 2026-09-29: the thirty-eighth live pass — the money documents in the operator's design
+
+Production runs `main` `9f358124`, build `01a0eea7`. **No migration, no policy
+file**: `main` holds 115 migrations and both databases stand at 115, as the
+thirty-seventh pass left them. Nothing was written to either database.
+
+**Why it began.** Round 65 (`docs/CHANGE-REQUESTS/trunk-round-65.md`, pull
+request 223): the invoice and the receipt in the operator's own design of 24
+September, under his two instructions — his colours and his simplicity. The
+renderer runs on the server, so the round is server code and documents only.
+
+**The word.** "go ahead", at 23:26 +04 on 29 September (19:26 UTC), to a
+report that ended by saying what his word would set moving: the merge of 223
+and this pass, a build only. The pull request had waited five days, green.
+It was merged by squash at 19:28:59 UTC, once both checks read `SUCCESS` and
+GitHub read `MERGEABLE CLEAN`; main moved `a581407c` → `9f358124`.
+
+**What was live before, and four builds this file never heard of.** The
+host's own list shows four builds after the thirty-seventh pass, all in the
+small hours of 24 September (23:06, 23:28 and 23:51 UTC on the 23rd, 00:29 UTC
+on the 24th), from archives named for what they carried and not for a commit.
+None has a section here. They line up with pull requests 220, 221, 222 and
+224, the client workspaces. Before this pass the site served entry
+`index-BeLlRAFk.js` and shell stylesheet `index-DyQiM6IW.css`, the stylesheet
+byte for byte the one a local build of main `a581407c` writes (39,060 bytes,
+sha256 `6b4b8004…`), so the screens live were level with main. This pass
+therefore took live, besides round 65, pull request 226: 28 files under
+`domain/reports/qeeg/`, reached by no route and no screen, as its author
+confirmed before the build.
+
+**The hold.** Two other sessions were on the laptop. Both were asked before
+the merge and both answered clear within three minutes: one builds the
+brain-map report in its own worktrees and held main still until told; the
+other was reading the databases and plans a staff-account data step on the
+operator's word, which the build neither reads nor waits for.
+
+**Before-state, 19:30 UTC.** Health 200 in 0.48 s, deep 0.59 s. Both ledgers
+115. `app.verify_audit_chain()` null on production. The runtime log's
+`last_deployed_at` read 24 September 00:30:36 UTC. Four invoices on
+production, all four filed, two of them earlier the same evening.
+
+**A pass that changes no file a browser loads.** Local builds of `a581407c`
+and of `9f358124` write the same 87 files under the same names with the same
+bytes. The renderer is the server's, and the five comment-only edits in the
+settings screens vanish in the minifier. So no screen marker could prove this
+pass; the archive, the build's own log and the runtime log had to.
+
+**The pass.** Archive `mcwellness-9f358124.tar.gz` from main after the merge,
+7,023,038 bytes, with its `mcwellness/` root folder and the round's files
+inside (`receipt.ts`, `page.ts`, `invoice.ts`, `sheet.ts`, the writer's
+`pdf.ts`). Stored build settings read back and sent unchanged (Node 24,
+`hono`, root `mcwellness`, output `.`, `build:production`,
+`app/api/start.mjs`, npm). TUS create 201, PATCH 204 with `upload-offset`
+equal to the size, the keys read by `curl` from a file of mode 0600 deleted in
+the same command. Build asked 19:32:38 UTC, served entry changed 19:34:04,
+read `completed` 19:34:11. Health answered 200 at every poll across it.
+
+**The entry's name moved though no screen's source did, and that is a
+finding.** The host installs with npm, which cannot read the repository's pnpm
+lockfile. Its first attempt fails inside npm itself (`Cannot read properties
+of null (reading 'edgesOut')`), the host retries with `--legacy-peer-deps`,
+and the versions that retry resolves are whatever each range allows that day.
+The previous build's log shows the same failure and the same retry. This build
+took Vite 8.3.1 where the last took 8.3.0, and the Supabase client 2.117.2
+where the last took 2.117.1; the repository locks the client at 2.112.4, which
+is what every test and every CI run uses. The two served entries have the same
+length and differ in 376 characters: the client's version string, and the
+names of some two dozen chunks renamed along with it. **What production runs
+is not pinned by what the repository locks.** Nothing failed; it is recorded
+to be mended, by a lockfile npm can read or by a package manager the host can
+run.
+
+**Proved to be this build.** The names this build's own log wrote are the
+names served: entry `index-BrjtYHAd.js` (478,109 bytes),
+`BillingPage-C6oI7qmi.js`, `PracticePage-BztPdKi5.js`,
+`ClientsPage-BtVtjrMZ.js`, each 200. The previous build's names —
+`index-BeLlRAFk.js`, `BillingPage-B_l4gJQg.js`, `PracticePage-fPTFK7V1.js`,
+`ClientsPage-DGFGhzjg.js` — answer 404, and a nonsense name 404s too. The
+shell stylesheet did not move and is byte for byte the local build's. The
+build log names its source, "uploaded archive mcwellness-9f358124.tar.gz", and
+ends "Application restarted". Runtime log: fresh start-up blocks at 19:34:06,
+19:34:12 and 19:34:19 UTC, each ending "Serving the built app from dist/" and
+"API listening", `started_at` 19:34:06 against `last_deployed_at` 19:34:11, no
+error line. No restart was needed. After: health 200 in 0.51 s, deep 200 in
+0.48 s. A stranger at the invoice's document route answers 401, which proves
+nothing about the code behind it (the thirtieth pass's lesson) and is recorded
+only as that.
+
+**Not checked, and why.** No document was rendered on production. Rendering
+takes the owner's sign-in, and an invoice not yet filed files on its first
+opening, with her name on the act. The renderer was proved before the merge by
+the round's own tests and three reviews (3,218 unit and screen tests, the two
+billing database files that file and recover a document through the route),
+and by CI on the pull request's head. CI on main itself is the next
+paragraph's. The proof that remains is hers: the next invoice she issues.
+
+**Main went red with the merge, and the pass had already run.** Pull request
+223 taught the writer a new op, `rect`. Pull request 226, merged to main two
+hours earlier, ends every `switch` over an op's kind in a `never` check, so
+that the compiler points there the day the writer gains an op. Neither touched
+a file of the other's, each had passed alone and GitHub read clean; but 223's
+checks had run before 226 landed, so the two had never met. Main's own
+`verify` on `9f358124` failed at typecheck in four places, all in
+`domain/reports/qeeg/document/scale.ts` and its test. It was read a few
+minutes after the build completed: the archive had been made without waiting
+for it, which was this pass's mistake. Production was not harmed. The host
+does not type-check, no route and no screen reaches that folder, and health
+never left 200. The report stream, which owns the file, mended it in pull
+request 230, merged as `7c689baa` at 20:00:02 UTC on 29 September after both
+checks and a review of its own. **Two rules from it.** Before a merge, a green
+check is read for its age against main as well as for its colour: when main
+has moved since the checks ran, the branch is brought up to main and checked
+again, and the merge waits for those. And a pass waits for main's own check on
+the merge commit before the archive is made. Production runs `9f358124`; main
+at `7c689baa` differs from it in those two files alone, which nothing that
+runs reaches.
+
+**For the owner.** Every invoice issued from now on, and every receipt
+rendered from now on, is the new page: the violet header band, the discount as
+a pill, "Payment details" with English labels, "TOTAL DUE" and "TOTAL PAID" in
+a violet block. **The four invoices already on production keep the pages they
+were filed with.** A filed document never changes; two of the four were
+opened, and so filed, a few hours before this pass, on the page of round 61.
+An installed window needs no reload for this pass: nothing it loads changed in
+meaning.
+
+**Seen in passing, and not this round's.** Before the pass the runtime log
+held four error lines from 17:09 UTC the same evening: `/api/accounting/post`
+once and `/api/accounting/overview` three times, each 500 with
+`UnbalancedEntryError`. And the scheduler's hourly line is written twice each
+hour, seven seconds apart, which reads as two worker processes each running
+the scheduler the tenth pass warned must run once. Neither was looked into
+here; both are reported to the operator.
