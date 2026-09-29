@@ -21,8 +21,7 @@
  * `y` is measured down from the top of the page body, in points.
  */
 
-/** Points in a millimetre. */
-const POINTS_PER_MM = 72 / 25.4;
+import { mm } from './metrics';
 
 /** One block to be placed: its natural height and how it behaves at a break. */
 export type Flow = {
@@ -67,7 +66,7 @@ export function limitsFor(bodyWidth: number, bodyHeight: number): Limits {
   return {
     bodyWidth,
     bodyHeight,
-    sectionGap: 3 * POINTS_PER_MM,
+    sectionGap: mm(3),
     tolerance: 0.75,
     fitThreshold: 0.55,
     minScale: 0.75,
