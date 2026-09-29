@@ -32,6 +32,7 @@ export type {
   Op,
   Page,
   Paint,
+  PathOp,
   PathSegment,
   Stroke,
   Style,

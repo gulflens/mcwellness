@@ -837,6 +837,36 @@ describe('a path', () => {
     ).toBe('');
   });
 
+  it('draws nothing for a number past what a PDF number can say', () => {
+    expect(
+      draw({
+        kind: 'path',
+        segments: [
+          ['M', 0, 0],
+          ['L', 1e22, 1],
+        ],
+        stroke: {},
+      }),
+    ).toBe('');
+  });
+
+  it('draws nothing for a negative width, or a cap, a join or a segment the type does not allow', () => {
+    expect(draw({ kind: 'path', segments: TRIANGLE, stroke: { width: -2 } })).toBe('');
+    const bad = (stroke: object, segments: readonly unknown[] = TRIANGLE): string =>
+      draw({ kind: 'path', segments, stroke } as Page['ops'][number]);
+    expect(bad({ cap: 'pointed' })).toBe('');
+    expect(bad({ join: 'wavy' })).toBe('');
+    expect(
+      bad({}, [
+        ['M', 0, 0],
+        ['C', 1, 2],
+      ]),
+    ).toBe('');
+    expect(draw({ kind: 'path', segments: TRIANGLE, stroke: { width: 0 } })).toBe(
+      'q 0 G 0 w 10 10 m 50 10 l 30 40 l h S Q',
+    );
+  });
+
   it('leaves the text after it in the colour the text asked for', () => {
     const stream = streamOf(
       renderPdf(

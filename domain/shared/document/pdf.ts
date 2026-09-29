@@ -233,6 +233,9 @@ export type Op =
 
 export type Page = { ops: Op[] };
 
+/** The path op on its own, for a caller that builds paths before it builds a page. */
+export type PathOp = Extract<Op, { kind: 'path' }>;
+
 /** A run of text one font can draw, already in the order it is placed. */
 type Run = { slot: FontSlot; glyphs: Placed[] };
 
@@ -573,6 +576,7 @@ function contentOf(
 
 const CAP = { butt: 0, round: 1, square: 2 } as const;
 const JOIN = { miter: 0, round: 1, bevel: 2 } as const;
+const ARITY = { M: 3, L: 3, C: 7, Z: 1 } as const;
 
 /** A paint as its operator: `rg` or `g` to fill, `RG` or `G` to stroke; ink when it names neither. */
 function paintOf(paint: Paint, stroke: boolean): string {
@@ -589,14 +593,28 @@ function paintOf(paint: Paint, stroke: boolean): string {
  * after it is drawn in the fill the writer last told the reader. Null when
  * there is nothing sound to draw.
  */
-function pathLine(op: Extract<Op, { kind: 'path' }>): string | null {
+function pathLine(op: PathOp): string | null {
   if (!op.fill && !op.stroke) return null;
   if (op.segments[0]?.[0] !== 'M') return null;
+  // Each kind of segment has its own count of numbers; one built with the
+  // wrong count (past the type, by a cast) would write an operator no reader
+  // can parse.
+  if (!op.segments.every((segment) => segment.length === ARITY[segment[0]])) return null;
   const numbers = op.segments.flatMap((segment) => segment.slice(1) as number[]);
-  if (op.stroke?.width !== undefined) numbers.push(op.stroke.width);
-  // Written as nought, a coordinate that was not a number would put a spike
-  // across the figure; a path with one is not drawn at all.
-  if (!numbers.every(Number.isFinite)) return null;
+  // `num()` writes anything past 1e21, and anything not finite, as nought,
+  // which would put a spike across the figure: a path with such a number is
+  // not drawn at all.
+  if (!numbers.every((n) => Number.isFinite(n) && Math.abs(n) < 1e21)) return null;
+  const stroke = op.stroke;
+  if (stroke) {
+    // A negative width is one PDF readers disagree about; an unknown cap or
+    // join (past the type) has no number to write.
+    if (stroke.width !== undefined && !(Number.isFinite(stroke.width) && stroke.width >= 0)) {
+      return null;
+    }
+    if (stroke.cap !== undefined && !(stroke.cap in CAP)) return null;
+    if (stroke.join !== undefined && !(stroke.join in JOIN)) return null;
+  }
 
   const parts: string[] = ['q'];
   if (op.fill) parts.push(paintOf(op.fill, false));

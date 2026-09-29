@@ -30,7 +30,7 @@ describe('the report faces', () => {
   it('set bold Arabic wider than regular, and render it so it reads back', () => {
     const fonts = reportFonts();
     const word = 'الفاتورة';
-    expect(measure(word, { font: 'bold', size: 12 }, fonts, true)).not.toBe(
+    expect(measure(word, { font: 'bold', size: 12 }, fonts, true)).toBeGreaterThan(
       measure(word, { font: 'regular', size: 12 }, fonts, true),
     );
     const pageIn = (font: 'regular' | 'bold'): Page => ({

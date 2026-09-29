@@ -12,14 +12,16 @@ applies them here. Nothing in the report stream's own folder is touched.
 
 ### What the writer gains
 
-- **A path** (`Op` kind `path`, with `PathSegment`, `Paint` and `Stroke`,
+- **A path** (`Op` kind `path`, with `PathOp`, `PathSegment`, `Paint` and `Stroke`,
   exported from `domain/shared/document`). Moves, lines, cubic curves and a
   close; a fill, a stroke or both; a width, a cap and a join; the even-odd
   rule. One line in the content stream, inside its own `q … Q` as a rule and a
   rectangle are, so the colour it paints with dies at the `Q` and the text
   after it is drawn in the fill the writer last set. A path with no paint, one
-  that does not begin with a move, or one with a number that is not finite is
-  not drawn at all, as an image nobody supplied is not. The types are exactly
+  that does not begin with a move, or one with a number that is not finite or
+  too large to write, a negative width, a segment of the wrong length or a
+  cap or join it does not know is not drawn at all, as an image nobody
+  supplied is not. The types are exactly
   the shape `domain/reports/qeeg/document/shapes.ts` already declares, so the
   report stream's change is an import and nothing else.
 - **An optional bold Arabic face.** `FontSet` carries `arabicBold` when the
@@ -60,7 +62,7 @@ shape as the writer's.
 
 ### The tests
 
-- `domain/shared/document/pdf.test.ts` — 55 (40 before): a path's exact line
+- `domain/shared/document/pdf.test.ts` — 57 (40 before): a path's exact line
   for a fill, a curve, a stroke with width, cap and join, each cap and join by
   number, fill and stroke together and under the even-odd rule; a path with no
   paint, no move or a number that is not finite, drawn not at all; the text
@@ -75,7 +77,7 @@ shape as the writer's.
   faces stay three; the set is read once; a bold Arabic word is drawn in the
   fourth face and copies off the page exactly as the regular one does.
 
-`pnpm -s format` and `pnpm verify` green at the branch head (281 files, 3,581
+`pnpm -s format` and `pnpm verify` green at the branch head (281 files, 3,583
 tests, one skipped: the check of a built app, which this worktree has not
 built). No database test was run here: nothing that reaches a database
 changed, and CI's `verify-db` runs them.
@@ -84,8 +86,7 @@ changed, and CI's `verify-db` runs them.
 
 Two of billing's, riding in this round's pull request by the integrator's
 widening for one round, as rounds 41, 51, 52, 58 to 61, 65 and 66 were
-widened: `app/api/billing/fonts.ts` (`reportFonts`, beside and not touching
-`documentFonts`) and `tests/billing/palette.test.ts` (the path case). The
+widened: `app/api/billing/fonts.ts` (`reportFonts`, beside `documentFonts`, whose two helpers were hoisted to be shared and whose output is unchanged) and `tests/billing/palette.test.ts` (the path case). The
 trunk's own half is `domain/shared/document/pdf.ts`, `index.ts` and
 `pdf.test.ts`, `tests/reports/report-fonts.test.ts` and the documents.
 
