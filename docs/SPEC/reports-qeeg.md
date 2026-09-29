@@ -202,19 +202,23 @@ The writer is `domain/shared/document`. The layout is this piece's own, under `d
 | Rule | What it says |
 | --- | --- |
 | A figure is a figure | Figures typed on an Arabic keyboard are figures and not letters. They are drawn left to right, as ops of their own, and never handed to the writer inside a right-to-left op, which would turn "15" into "51" |
-| A range keeps its order | Every unbroken run of figures and the signs between them is one left-to-right run, however it was spaced when typed |
+| A range keeps its order | Every unbroken run of two or more figures and the signs between them is one left-to-right run, however it was spaced when typed. A lone plain figure stays with the Arabic beside it |
+| A pair of brackets stays a pair | A run of figures stops at a bracket and at a sentence mark. Neither is ever inside one, so a value followed by its range in brackets keeps both brackets round the range |
 | An underline is its own words' | One rule for each unbroken run of underlined words on a line, in the paint of that run. Words between two underlined phrases are not underlined |
 | A carried block is placed afresh | A block moved to the next page is placed there by the same rules as any other, and a fitted block is fitted to the room it really has |
 | A fitted block never grows | Sharing out spare room may make a fitted block smaller and never larger |
+| A page that fitted still fits | Where sharing out spare room would put a page's bottom past its foot, the page is left as it came |
 | A fitted block takes a fresh page before it overflows | When it cannot shrink into the room left, and the page holds other things, it moves on and is fitted there |
 | A split makes progress | A block is split only when its first part has height and its second is shorter than the block it came from |
 | A number is a number | A height, a width or a limit that is not finite is refused by name. What a person supplied is answered with a value and never thrown |
 
 **Known limits, accepted.**
 
-1. **A change of weight inside one Arabic word** breaks the joining of its letters at the change, because the writer shapes each run on its own. A formatted summary that makes half a word bold is rare. It prints, and reads oddly.
-2. **Vowel marks** are placed roughly. The fixed wording carries none. What a practitioner types may.
-3. **The same bytes, from the same place.** A signed report renders again to the bytes it was filed as when it is rendered where it was rendered, on the server. The last digit of a sine is not promised to agree between two engines, and the writer keeps two decimals, so a coordinate on a rounding boundary could differ elsewhere. The filed PDF is the record. The repair path refuses a render that differs from it; it never serves one.
+1. **A block that is both fitted and kept** fills the room its page has. It is not fitted to the room less what follows it, so what follows may run over the foot. It is never silent: the layout reports it, and **no file is produced while anything runs over**. No block of this report is both. A rule that fitted such a block to its room less what it keeps would have to look ahead through everything kept with it, and wants a specification and tests of its own.
+
+2. **A change of weight inside one Arabic word** breaks the joining of its letters at the change, because the writer shapes each run on its own. A formatted summary that makes half a word bold is rare. It prints, and reads oddly.
+3. **Vowel marks** are placed roughly. The fixed wording carries none. What a practitioner types may.
+4. **The same bytes, from the same place.** A signed report renders again to the bytes it was filed as when it is rendered where it was rendered, on the server. The last digit of a sine is not promised to agree between two engines, and the writer keeps two decimals, so a coordinate on a rounding boundary could differ elsewhere. The filed PDF is the record. The repair path refuses a render that differs from it; it never serves one.
 
 ## 13. Data owned
 
