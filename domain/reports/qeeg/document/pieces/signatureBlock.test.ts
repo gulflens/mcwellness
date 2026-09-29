@@ -18,7 +18,8 @@ const LABEL_STYLE = styleOf('signatureLabel', 'ltr').style;
 const LINE_STYLE = styleOf('signature', 'ltr').style;
 const LABEL_LINE = LABEL_STYLE.size * LABEL_STYLE.lineHeight;
 const ONE_LINE = LINE_STYLE.size * LINE_STYLE.lineHeight;
-const WORDS_AT = SIGNATURE.room + SIGNATURE.rule + SIGNATURE.gap;
+/** A line takes no room: the rule is drawn inside the upper edge of the gap. */
+const WORDS_AT = SIGNATURE.room + SIGNATURE.gap;
 
 const texts = (ops: readonly LayoutOp[]) =>
   ops.filter((op): op is Extract<Op, { kind: 'text' }> => op.kind === 'text');

@@ -90,7 +90,9 @@ export function pageFooter(input: PageFooterInput, width: number, drawing: Drawi
   ];
   const content = beside(width, cells);
 
-  const top = FOOTER.rule + FOOTER.padTop;
+  // A line takes no room: the hairline is drawn inside the upper edge of
+  // the padding under it.
+  const top = FOOTER.padTop;
   const first = practice.baseline ?? page.baseline;
   const firstDown = practice.baseline === null ? level - pageLast : level - practiceLast;
   const hairline: LayoutOp = {

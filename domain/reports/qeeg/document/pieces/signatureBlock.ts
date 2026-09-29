@@ -60,7 +60,8 @@ export function signatureBlock(input: SignatureBlockInput, width: number, drawin
     thickness: SIGNATURE.rule,
     ...INK,
   };
-  const top = SIGNATURE.room + SIGNATURE.rule + SIGNATURE.gap;
+  // A line takes no room: the rule is drawn inside the upper edge of the gap.
+  const top = SIGNATURE.room + SIGNATURE.gap;
   return {
     width,
     height: top + words.height,

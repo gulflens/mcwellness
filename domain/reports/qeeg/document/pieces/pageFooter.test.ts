@@ -22,7 +22,8 @@ const DEEP_ARABIC_FACE: Drawing = {
 
 const STYLE = styleOf('footer', 'ltr').style;
 const LINE = STYLE.size * STYLE.lineHeight;
-const WORDS_AT = FOOTER.rule + FOOTER.padTop;
+/** A line takes no room: the hairline is drawn inside the upper edge of the padding. */
+const WORDS_AT = FOOTER.padTop;
 const PHONE = '+971 50 000 0001';
 
 const PLACE = fixed('McWellness, Dubai, United Arab Emirates');

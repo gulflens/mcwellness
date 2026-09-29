@@ -96,9 +96,9 @@ export function recommendationRow(
     down: ROW.padV + (block.baseline === null ? 0 : line - block.baseline),
   }));
   const content = beside(width, cells);
-  // The hairline stands under the padding and adds its thickness, as a
-  // border does on the practice's page.
-  const height = content.height + ROW.padV + ROW.rule;
+  // A line takes no room: the hairline is drawn inside the lower edge of
+  // the bottom padding, as a border is on the practice's page.
+  const height = content.height + ROW.padV;
   const hairline: LayoutOp = {
     kind: 'rule',
     x: 0,

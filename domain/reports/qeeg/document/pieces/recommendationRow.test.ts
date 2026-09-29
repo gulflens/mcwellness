@@ -138,10 +138,11 @@ describe('recommendationRow', () => {
     expect(outside(block, measure)).toEqual([]);
   });
 
-  it('keeps the padding above and below, with the hairline under it along the foot', () => {
+  it('keeps the padding above and below, the hairline inside the lower edge of it', () => {
     const block = row(ENGLISH);
     const number = styleOf('rowNumber', 'ltr').style;
-    expect(block.height).toBeCloseTo(2 * ROW.padV + number.size * number.lineHeight + ROW.rule, 9);
+    // A line takes no room: the hairline is inside the lower edge of the padding.
+    expect(block.height).toBeCloseTo(2 * ROW.padV + number.size * number.lineHeight, 9);
     const [hairline] = rules(block.ops);
     expect(rules(block.ops)).toHaveLength(1);
     expect(hairline?.x).toBe(0);

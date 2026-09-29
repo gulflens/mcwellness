@@ -17,8 +17,9 @@ const LABEL = '20 sessions';
 const PILL_STYLE = styleOf('pill', 'ltr').style;
 const LINE = PILL_STYLE.size * PILL_STYLE.lineHeight;
 const WORDS = measure(LABEL, 'bold', PILL_STYLE.size, false);
-const PILL_WIDTH = WORDS + 2 * PILL.padH + 2 * PILL.edge;
-const PILL_HEIGHT = LINE + 2 * PILL.padV + 2 * PILL.edge;
+/** A line takes no room: the pill is its words and its padding, the outline inside. */
+const PILL_WIDTH = WORDS + 2 * PILL.padH;
+const PILL_HEIGHT = LINE + 2 * PILL.padV;
 
 const texts = (ops: readonly LayoutOp[]) =>
   ops.filter((op): op is Extract<Op, { kind: 'text' }> => op.kind === 'text');
@@ -91,7 +92,7 @@ describe('sessionsPill', () => {
       expect(op.style.size).toBe(PILL_STYLE.size);
       expect(op.style.rgb).toEqual(ACCENT.rgb);
     }
-    const first = PILL.above + PILL.edge + PILL.padV;
+    const first = PILL.above + PILL.padV;
     expect(block.baseline).toBeCloseTo(first + lineBox(PILL_STYLE, FACE).firstBaseline, 9);
   });
 
