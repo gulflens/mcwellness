@@ -272,7 +272,9 @@ describe('the words of each part', () => {
     const first = wordsDrawn([partOf(parts, 'recommendation.1')], ENGLISH);
     expect(first).toContain('01');
     expect(first).toContain(say('recommendation.mental_energy.name', 'en'));
-    expect(wordsDrawn([partOf(parts, 'recommendation.4')], ENGLISH)).toContain('Item 1.');
+    expect(wordsDrawn([partOf(parts, 'recommendation.4')], ENGLISH)).toContain(
+      'Screen-free evenings',
+    );
   });
 
   it('set the summary one part to a paragraph, and a dash where there is none', () => {
@@ -307,7 +309,7 @@ describe('the words of each part', () => {
 
   it('print her Arabic summary on an Arabic page', () => {
     const words = wordsDrawn([partOf(build(fullReport(), 'ar'), 'summary.1')], ARABIC);
-    expect(words).toContain('انتباه');
+    expect(words).toContain('مقدمة الرأس');
   });
 
   it('put the number of sessions in the pill, in the words of the report', () => {

@@ -133,12 +133,42 @@ function summaryOf(length: number, paragraphs: number, arabic: boolean): QeegIni
   };
 }
 
+const SUMMARY_EN = [
+  `${given.en}'s recording shows a busy, alert pattern at the front of the head, with slower activity when the eyes were closed. This fits what ${given.en} described: a mind that stays switched on late into the evening.`,
+  'The programme begins by helping the brain settle, then builds steady attention for longer stretches of work. We will review progress together after the first ten sessions.',
+].join('\n');
+
+const SUMMARY_AR = [
+  'يظهر التسجيل نمطا نشطا ويقظا في مقدمة الرأس، مع نشاط أبطأ عند إغلاق العينين. ويتفق ذلك مع ما وصفه العميل: ذهن يبقى منشغلا حتى وقت متأخر من المساء.',
+  'يبدأ البرنامج بمساعدة الدماغ على الهدوء، ثم يبني انتباها ثابتا لفترات عمل أطول. وسنراجع التقدم معا بعد الجلسات العشر الأولى.',
+].join('\n');
+
+/** A summary as a practitioner writes one: two short paragraphs, a name in bold, a phrase underlined. */
+const NATURAL_SUMMARY: QeegInitial['summary'] = {
+  en: {
+    text: SUMMARY_EN,
+    marks: [
+      { from: 0, to: given.en.length, bold: true },
+      {
+        from: SUMMARY_EN.indexOf('a busy, alert pattern'),
+        to: SUMMARY_EN.indexOf('a busy, alert pattern') + 'a busy, alert pattern'.length,
+        underline: true,
+      },
+    ],
+  },
+  ar: { text: SUMMARY_AR, marks: [{ from: 0, to: 4, bold: true }] },
+};
+
 /** Almost everything left blank: a draft previewed before it is filled. */
 export function sparseReport(): QeegInitial {
   return blankInitial();
 }
 
-/** A report as one is usually filled in. */
+/**
+ * A report as one is usually filled in: short, natural items of her own, in
+ * English and Arabic, as the sample pages show them. Filler of the longest
+ * lengths the shape allows is the long report's alone.
+ */
 export function fullReport(): QeegInitial {
   const blank = blankInitial();
   return {
@@ -147,7 +177,14 @@ export function fullReport(): QeegInitial {
     recording: { recordedOn: '2026-09-14', eyes: 'closed_and_open', handedness: 'right' },
     findings: {
       chosen: ['reduced_attention_focus', 'mental_fatigue', 'sleep_dysregulation'],
-      custom: customItems(1, 40, false),
+      custom: {
+        c0: {
+          label: bilingual('Difficulty winding down in the evening', 'صعوبة في الاسترخاء مساء'),
+          note: null,
+          chosen: true,
+          position: 0,
+        },
+      },
     },
     focus: {
       chosen: ['attention_focus', 'stress_regulation', 'sleep_recovery', 'mental_energy'],
@@ -176,9 +213,19 @@ export function fullReport(): QeegInitial {
     },
     recommendations: {
       chosen: ['mental_energy', 'attention_focus', 'stress_regulation'],
-      custom: customItems(1, 30, true),
+      custom: {
+        c0: {
+          label: bilingual('Screen-free evenings', 'أمسيات بلا شاشات'),
+          note: bilingual(
+            'Put screens away an hour before bed to help the mind settle.',
+            'ضع الشاشات جانبا قبل النوم بساعة ليهدأ الذهن.',
+          ),
+          chosen: true,
+          position: 0,
+        },
+      },
     },
-    summary: summaryOf(900, 2, true),
+    summary: NATURAL_SUMMARY,
     benefits: {
       chosen: ['attention_focus', 'sleep', 'mental_energy', 'resilience', 'recovery'],
       custom: {},
