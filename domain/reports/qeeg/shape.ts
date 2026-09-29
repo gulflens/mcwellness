@@ -47,6 +47,7 @@ import {
   NEXT_STAGE_IDS,
   RECOMMENDATION_IDS,
   REGION_IDS,
+  QEEG_ONLY,
 } from './catalogue/ids';
 import {
   CONDITIONS,
@@ -401,10 +402,24 @@ const initialShape = z
       })
       .strict(),
     dashboard: everyOf(DIMENSION_IDS, score),
-    plan: z.object({ sessions, approach: z.enum(APPROACH_IDS).nullable() }).strict(),
+    plan: z
+      .object({
+        sessions: z.union([whole(1, LIMITS.sessionsMost), z.literal(QEEG_ONLY)]).nullable(),
+        approach: z.enum(APPROACH_IDS).nullable(),
+      })
+      .strict(),
   })
   .strict()
   .superRefine((content, ctx) => {
+    // A brain map with no programme after it has no training approach either:
+    // a report carrying both would print an approach nobody agreed to.
+    if (content.plan.sessions === QEEG_ONLY && content.plan.approach !== null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['plan', 'approach'],
+        message: 'A brain map with no programme after it has no training approach.',
+      });
+    }
     // The old tool had only the first report's lists, so a report brought in
     // from it is a first report whatever the practitioner called it.
     if (content.stage !== 'initial' && content.provenance.origin !== 'legacy_tool') {

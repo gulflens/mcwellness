@@ -22,7 +22,13 @@
  * fault to catch at the desk and never a blank on a household's page.
  */
 
-import { BAND_RANGES, REGION_IDS, type BandId, type ConnectivityId } from './catalogue/ids';
+import {
+  BAND_RANGES,
+  QEEG_ONLY,
+  REGION_IDS,
+  type BandId,
+  type ConnectivityId,
+} from './catalogue/ids';
 import type { Edition, Locale, QeegContent, QeegFollowUp, Regions } from './types';
 import { fill, phrase } from './wording';
 
@@ -135,8 +141,18 @@ export function sessionLabel(count: number, locale: Locale): string {
   return fill(shared(sessionForm(count, locale), locale), { count });
 }
 
+/**
+ * Whether the report carries a programme at all. False only for a first
+ * report of a brain map with no programme after it: its page then prints
+ * neither the programme length nor the training approach.
+ */
+export function programmeAgreed(content: QeegContent): boolean {
+  return !(content.edition === 'initial' && content.plan.sessions === QEEG_ONLY);
+}
+
 /** The approach of a first report, or the next stage of a follow-up; `null` until chosen. */
 export function approachLine(content: QeegContent, locale: Locale): string | null {
+  if (!programmeAgreed(content)) return null;
   const { edition } = content;
   const key =
     content.edition === 'initial'

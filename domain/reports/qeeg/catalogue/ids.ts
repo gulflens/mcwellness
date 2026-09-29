@@ -242,6 +242,15 @@ export const CALCULABLE_MEASURES = list('delta', 'theta', 'alpha', 'beta');
 export const SESSION_OPTIONS = list(15, 20, 30, 40);
 
 /**
+ * Chosen where the number of sessions goes, on a first report only, when the
+ * client has come for the brain map alone and no training programme has been
+ * agreed (the practice's request of 30 September 2026). The report then
+ * prints neither the programme length nor the initial training approach.
+ */
+export const QEEG_ONLY = 'qeeg_only';
+export type QeegOnly = typeof QEEG_ONLY;
+
+/**
  * Which wording a score is printed with: 0 to 4, 5 to 7, 8 to 10.
  *
  * A score is the practitioner's judgement and lives only in a signed report.

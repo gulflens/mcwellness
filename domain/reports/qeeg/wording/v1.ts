@@ -94,6 +94,9 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
   'label.compared_with': later('Compared with', 'بالمقارنة مع'),
   'label.maps': both('Brain maps', 'خرائط الدماغ'),
   'label.sessions': both('Number of sessions', 'عدد الجلسات'),
+  // Chosen where the number of sessions goes, for a brain map with no
+  // programme after it (the practice's request of 30 September 2026).
+  'label.qeeg_only': both('Not applicable / QEEG only', 'غير منطبق / تخطيط الدماغ فقط'),
 
   'value.sex.female': both('Female', 'أنثى'),
   'value.sex.male': both('Male', 'ذكر'),

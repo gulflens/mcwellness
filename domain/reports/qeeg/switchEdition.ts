@@ -29,7 +29,7 @@
  */
 
 import { blankFollowUp, eachOf } from './blank';
-import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from './catalogue/ids';
+import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS, QEEG_ONLY } from './catalogue/ids';
 import type { ComparedWith, QeegCommon, QeegFollowUp, QeegInitial } from './types';
 
 /** A choice that was cleared, where it was, and what it had been. */
@@ -79,6 +79,9 @@ export function toFollowUp(
     return { change: null, regions: [...content.connectivity[id].regions] };
   });
   setAsideIf('plan.approach', content.plan.approach);
+  // A follow-up comes after training, so it has no brain-map-only choice.
+  const sessions = content.plan.sessions === QEEG_ONLY ? null : content.plan.sessions;
+  if (content.plan.sessions === QEEG_ONLY) setAside.push({ at: 'plan.sessions', was: QEEG_ONLY });
 
   const blank = blankFollowUp(comparedWith, stage);
   return {
@@ -93,7 +96,7 @@ export function toFollowUp(
         ...structuredClone(content.dashboard[dimension]),
         earlierScore: null,
       })),
-      plan: { sessions: content.plan.sessions, next: null },
+      plan: { sessions, next: null },
     },
     setAside,
   };

@@ -31,6 +31,7 @@ import {
   DIMENSION_IDS,
   type BandId,
   type ConnectivityId,
+  QEEG_ONLY,
 } from './catalogue/ids';
 import { isEmpty } from './text';
 import type { Missing, Picked, QeegContent, Regions } from './types';
@@ -97,6 +98,9 @@ export function missingForIssue(content: QeegContent): Missing[] {
   need(anyPicked(content.recommendations), 'heading.recommendations', 'heading.recommendations');
   need(!isEmpty(content.summary.en), 'heading.summary', 'heading.summary');
   need(anyPicked(content.benefits), 'heading.benefits', 'heading.benefits');
+  // A brain map with no programme after it asks for no approach: the report
+  // prints neither (the practice's request of 30 September 2026).
+  if (content.edition === 'initial' && content.plan.sessions === QEEG_ONLY) return missing;
   need(content.plan.sessions !== null, 'heading.programme', 'label.sessions');
   const direction = content.edition === 'initial' ? content.plan.approach : content.plan.next;
   need(direction !== null, 'heading.approach', 'heading.approach');

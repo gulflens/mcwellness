@@ -55,6 +55,7 @@ import type {
   InitialConnectivityLevel,
   MeasureId,
   NextStageId,
+  QeegOnly,
   RecommendationId,
   RegionId,
 } from './catalogue/ids';
@@ -278,7 +279,11 @@ export type QeegInitial = QeegCommon & {
   readonly bands: Readonly<Record<BandId, InitialBand>>;
   readonly connectivity: InitialConnectivity;
   readonly dashboard: Readonly<Record<DimensionId, Score>>;
-  readonly plan: { readonly sessions: number | null; readonly approach: ApproachId | null };
+  /** `sessions` is a number, or `'qeeg_only'` for a brain map with no programme after it. */
+  readonly plan: {
+    readonly sessions: number | QeegOnly | null;
+    readonly approach: ApproachId | null;
+  };
 };
 
 // ---------------------------------------------------------------------------
