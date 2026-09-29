@@ -291,6 +291,15 @@ const mapFields = {
   caption: bilingual(LIMITS.caption).nullable(),
 };
 
+/**
+ * Where an import note points: a dotted path as the old-file reader writes
+ * one (`findings.custom.c0.label.en`, `images.map-2`,
+ * `provenance.asPrinted`). It begins with a small letter and holds small
+ * letters, capitals inside a name, figures, dots, hyphens and underscores,
+ * up to 200 in all. The reader writes it, so anything else is a forged body.
+ */
+const NOTE_PATH = /^[a-z][a-zA-Z0-9._-]{0,199}$/;
+
 const provenance = z.discriminatedUnion('origin', [
   z.object({ origin: z.literal('app') }).strict(),
   z
@@ -301,7 +310,13 @@ const provenance = z.discriminatedUnion('origin', [
       notes: z
         .array(
           z
-            .object({ code: z.enum(IMPORT_NOTE_CODES), at: z.string().max(200).nullable() })
+            .object({
+              code: z.enum(IMPORT_NOTE_CODES),
+              at: z
+                .string()
+                .regex(NOTE_PATH, 'A note points at a path this app writes.')
+                .nullable(),
+            })
             .strict(),
         )
         .max(500),

@@ -25,7 +25,9 @@
  *
  * **Why the maps come back apart.** A map is stored and referred to only after
  * it is uploaded, which is not this module's work. The images are handed back
- * as the file held them, and `content.maps` is empty.
+ * as the file held them, and `content.maps` is empty. Each carries the key
+ * and the `position` it takes in `maps` once uploaded: the key keeps its
+ * place in the file, the position keeps the order, from 0 with no gap.
  *
  * **Tolerant as the old tool was, and honest about it.** The old tool's own
  * reader (`ReportState.fromJson`) filled a short list with blanks, ignored a
@@ -34,12 +36,15 @@
  * `ImportNote` naming the FIELD. A note never holds what was typed.
  *
  * **Where a note points.** `at` is a path into the reader's RESULT, not into
- * `content` alone: a path of the content as it stands (`findings.custom.c0`),
- * or of what is handed back beside it: `asTyped.name`, `images.map-0` for a
- * picture by the key it is handed back under (`images` for one left out),
- * and `asPrinted.signature` for the signature, which is not carried. A route
- * that stores a note for good keeps the image's key with the upload, or
- * the note names a place that is gone.
+ * `content` alone, written as the shape holds it (`NOTE_PATH` in
+ * `../shape.ts`): a path of the content as it stands
+ * (`findings.custom.c0.label.en`, `provenance.asPrinted` for the signature,
+ * which is not carried), or of what is handed back beside it: `asTyped.name`,
+ * or `images.map-2` for the picture in the file's third place. A picture is
+ * keyed by its place in the file, counting the places left out, so a note
+ * about a place left out (`images.map-1`) names that place, and one note is
+ * written for each. A route that stores a note for good keeps the image's
+ * key with the upload, or the note names a place that is gone.
  *
  * It is pure and it never throws: whatever it is given, it returns a result.
  * The caller hashes the file's bytes; nothing here does I/O.
@@ -409,12 +414,15 @@ function summaryIn(plainValue: unknown, richValue: unknown, at: string, notes: N
     notes.add('summary_formatting_unreadable', at);
     return plain();
   }
-  if (read.rich.text.trim() === '') return plain();
-  if (read.dropped.includes('colour')) notes.add('summary_colour_dropped', at);
-  if (read.dropped.includes('slant')) notes.add('summary_slant_dropped', at);
+  // A picture or a list the old summary printed is gone whichever version is
+  // read, so it is noted before falling back: a summary that was only a
+  // picture still says so.
   if (read.dropped.includes('embed') || read.dropped.includes('other')) {
     notes.add('summary_content_dropped', at);
   }
+  if (read.rich.text.trim() === '') return plain();
+  if (read.dropped.includes('colour')) notes.add('summary_colour_dropped', at);
+  if (read.dropped.includes('slant')) notes.add('summary_slant_dropped', at);
   return limitedRich(read.rich, at, notes, read.removed);
 }
 
@@ -585,7 +593,7 @@ function read(file: unknown, sourceSha256: string): LegacyRead {
   };
   const signature = field(file, 'signature');
   if (isRecord(signature) && typeof field(signature, 'url') === 'string') {
-    notes.add('signature_image_dropped', 'asPrinted.signature');
+    notes.add('signature_image_dropped', 'provenance.asPrinted');
   }
 
   const content: QeegInitial = {

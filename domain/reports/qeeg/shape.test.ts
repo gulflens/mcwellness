@@ -375,6 +375,79 @@ describe('validateQeegContent', () => {
     });
   });
 
+  describe('where an import note points', () => {
+    const withNoteAt = (at: unknown) =>
+      withValue(validInitial(), 'provenance', {
+        origin: 'legacy_tool',
+        format: 'qeeg.json/1',
+        sourceSha256: SHA,
+        notes: [{ code: 'value_not_recognised', at }],
+        asPrinted: { signerName: null, signerRole: null },
+      });
+
+    it('accepts every place the old-file reader writes a note today, and none', () => {
+      // Every `at` in the reader's own tests, and the kinds its code builds.
+      const written = [
+        null,
+        'stage',
+        'recording.recordedOn',
+        'recording.eyes',
+        'recording.handedness',
+        'asTyped.name',
+        'asTyped.nameAr',
+        'asTyped.age',
+        'asTyped.sex',
+        'findings',
+        'findings.custom',
+        'findings.custom.c0.label.en',
+        'findings.custom.c0.label.ar',
+        'recommendations.custom.c11.note.en',
+        'benefits.custom.c0.label.en',
+        'bands',
+        'bands.beta',
+        'bands.delta.regions',
+        'bands.high_beta.regions',
+        'connectivity.asymmetry',
+        'connectivity.phase_lag.regions',
+        'dashboard',
+        'dashboard.mental_energy',
+        'dashboard.mental_energy.evidence.en',
+        'dashboard.decision_making.evidence.ar',
+        'summary.en',
+        'summary.ar',
+        'summary.en.marks',
+        'images.map-0',
+        'images.map-3',
+        'images.map-0.caption.en',
+        'plan.sessions',
+        'plan.approach',
+        'provenance.asPrinted',
+        'provenance.asPrinted.signerName',
+        'provenance.asPrinted.signerRole',
+        `a${'b'.repeat(199)}`,
+      ];
+      for (const at of written) expectAccepted(withNoteAt(at));
+    });
+
+    it('refuses a place that is not a path this app writes', () => {
+      for (const at of [
+        '',
+        'a\u0000b\ud800',
+        'Stage',
+        '1st',
+        '.summary',
+        '-images',
+        'summary en',
+        'summary/en',
+        'summary.en\n',
+        'سجل',
+        `a${'b'.repeat(200)}`,
+      ]) {
+        expectRefusedAt(withNoteAt(at), 'provenance.notes.0.at');
+      }
+    });
+  });
+
   describe('ordered lists are in order', () => {
     it('refuses a repeated position', () => {
       const input = withValue(validInitial(), 'findings.custom.b.position', 0);

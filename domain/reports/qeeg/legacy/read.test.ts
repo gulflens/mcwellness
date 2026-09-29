@@ -637,6 +637,15 @@ describe('what the reader tolerates, following the old tool', () => {
     expect(result.notes).toEqual([{ code: 'summary_content_dropped', at: 'summary.en' }]);
   });
 
+  it('says so when the formatted summary was only a picture, and reads the plain one', () => {
+    const summaryRich = JSON.stringify({
+      ops: [{ insert: { image: 'data:image/png;base64,AAAA' } }, { insert: '\n' }],
+    });
+    const result = readOk(withFile({ summary: 'Plain words', summaryRich }));
+    expect(result.content.summary.en).toEqual({ text: 'Plain words', marks: [] });
+    expect(result.notes).toEqual([{ code: 'summary_content_dropped', at: 'summary.en' }]);
+  });
+
   it('falls back to the plain summary when the formatted one cannot be read', () => {
     const result = readOk(withFile({ summary: 'Plain words', summaryRich: '{"ops": [' }));
     expect(result.content.summary.en).toEqual({ text: 'Plain words', marks: [] });
@@ -779,7 +788,7 @@ describe('what the reader tolerates, following the old tool', () => {
     const signed = 'data:image/png;base64,U0lHTkVE';
     const result = readOk(withFile({ signature: { url: signed, name: 'sig.png' } }));
     expect(JSON.stringify(result)).not.toContain('U0lHTkVE');
-    expect(result.notes).toEqual([{ code: 'signature_image_dropped', at: 'asPrinted.signature' }]);
+    expect(result.notes).toEqual([{ code: 'signature_image_dropped', at: 'provenance.asPrinted' }]);
   });
 
   it('reads a date that is not a real day as unset, and says so', () => {
@@ -933,7 +942,7 @@ describe('where a note points', () => {
     expect(result.notes).toEqual([
       { code: 'map_label_kept_as_caption', at: 'images.map-0' },
       { code: 'text_shortened', at: 'images.map-0.caption.en' },
-      { code: 'signature_image_dropped', at: 'asPrinted.signature' },
+      { code: 'signature_image_dropped', at: 'provenance.asPrinted' },
     ]);
     expect(result.images[0]?.key).toBe('map-0');
   });
