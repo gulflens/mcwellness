@@ -88,16 +88,29 @@ export function spansOf(marked: string): BoldSpan[] {
 const TAB = 0x09;
 const SPACE = ' ';
 
-/** A character with no glyph, which the document writer would drop in silence. */
+/**
+ * A character with no glyph, which the document writer would drop in
+ * silence, or one that would move what follows it about the page: the two
+ * blocks of controls, a carriage return (so a Windows line end becomes a
+ * newline), the line and paragraph separators, the zero-width characters,
+ * the direction marks, embeddings and isolates, and the byte-order mark. A
+ * lone half of a surrogate pair is removed too: it is no letter, and the
+ * database refuses it.
+ */
 function isRemoved(code: number): boolean {
   return (
     code <= 0x08 ||
     code === 0x0b ||
     code === 0x0c ||
-    (code >= 0x0e && code <= 0x1f) ||
-    code === 0x7f ||
-    (code >= 0x202a && code <= 0x202e) ||
-    (code >= 0x2066 && code <= 0x2069)
+    (code >= 0x0d && code <= 0x1f) ||
+    (code >= 0x7f && code <= 0x9f) ||
+    code === 0x061c ||
+    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x2028 && code <= 0x202e) ||
+    code === 0x2060 ||
+    (code >= 0x2066 && code <= 0x2069) ||
+    code === 0xfeff ||
+    (code >= 0xd800 && code <= 0xdfff)
   );
 }
 
@@ -125,6 +138,9 @@ export function withoutUnseen(typed: string): string {
  * character in two.
  */
 export function clean(typed: string, most: number): string {
+  if (!Number.isInteger(most) || most < 1) {
+    throw new RangeError('A length to cut at is a whole number above 0.');
+  }
   let text = withoutUnseen(typed.normalize('NFC')).trim();
   if (text.length > most) {
     let cut = most;

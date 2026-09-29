@@ -166,8 +166,44 @@ describe('clean', () => {
     expect(clean(`a${removed.join('')}b`, 100)).toBe('ab');
   });
 
+  it('turns a Windows line end into a newline and removes a lone carriage return', () => {
+    expect(clean('one\r\ntwo\rthree', 100)).toBe('one\ntwothree');
+  });
+
+  it('removes the second block of controls, the line and paragraph separators, the zero-width characters, the direction marks and the byte-order mark', () => {
+    const removed = [
+      '\u0080',
+      '\u0085',
+      '\u009f',
+      '\u2028',
+      '\u2029',
+      '\u200b',
+      '\u200c',
+      '\u200d',
+      '\u2060',
+      '\u200e',
+      '\u200f',
+      '\u061c',
+      '\ufeff',
+    ];
+    for (const character of removed) {
+      expect(clean(`a${character}b`, 100), character.codePointAt(0)?.toString(16)).toBe('ab');
+    }
+  });
+
+  it('removes a lone half of a surrogate pair and keeps a whole pair', () => {
+    expect(clean('a\ud800b\udc00c', 100)).toBe('abc');
+    expect(clean('a\u{1F600}b', 100)).toBe('a\u{1F600}b');
+  });
+
   it('cuts at the length it is given', () => {
     expect(clean('abcdef', 4)).toBe('abcd');
+  });
+
+  it('refuses a length that is not a whole number above 0', () => {
+    for (const most of [0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => clean('abc', most), String(most)).toThrow(RangeError);
+    }
   });
 
   it('never cuts a surrogate pair in half', () => {
