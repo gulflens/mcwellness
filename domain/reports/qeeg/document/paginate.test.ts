@@ -456,6 +456,25 @@ describe('breathe', () => {
     expect(breathe(pages, limits, heightAt)).toEqual(pages);
   });
 
+  it('leaves a page that fitted as it came when its shares would push it past the foot', () => {
+    // The share replaces the negative margin, so the gap grows by more than the share.
+    const pages = paginate(
+      [block('a', 20), block('b', 74, { gapBefore: true, marginTop: -10 })],
+      limits,
+      heightAt,
+    );
+    expect(pages.map((page) => page.map((p) => [p.block.id, p.y, p.height]))).toEqual([
+      [
+        ['a', 0, 20],
+        ['b', 10, 74],
+      ],
+    ]);
+    expect(overflowing(pages, limits)).toEqual([]);
+    const breathed = breathe(pages, limits, heightAt);
+    expect(breathed).toEqual(pages);
+    expect(overflowing(breathed, limits)).toEqual([]);
+  });
+
   it('lowers the pinned block, and keeps a margin beneath it', () => {
     const pages = paginate([block('a', 20), block('s', 10, { pinBottom: true })], limits, heightAt);
     const breathed = breathe(pages, limits, heightAt)[0] ?? [];

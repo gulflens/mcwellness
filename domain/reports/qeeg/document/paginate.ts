@@ -403,7 +403,12 @@ export function paginate<B extends Flow>(
  * last block towards the foot.
  *
  * Only ever widens: a mark is given the larger of its own margin and its
- * share, so a heading that already had room never loses any.
+ * share, so a heading that already had room never loses any. Never pushes a
+ * page past its foot: a share replaces a mark's margin, so where that margin
+ * is negative the gap grows by more than the share, and a page that fitted
+ * could end below the foot. When the page with its shares applied (and its
+ * fit blocks fitted again) would do so, the page is left exactly as it came
+ * and nothing is shared out on it.
  */
 export function breathe<B extends Flow>(
   pages: readonly Placement<B>[][],
@@ -419,7 +424,8 @@ export function breathe<B extends Flow>(
     }
   }
   return pages.map((page) => {
-    let placed = stack(page, new Map(), limits);
+    const asItCame = stack(page, new Map(), limits);
+    let placed = asItCame;
     const overrides = new Map<string, number>();
     const marks = placed.slice(1).filter((p) => p.block.sectionStart || p.block.gapBefore);
 
@@ -436,12 +442,15 @@ export function breathe<B extends Flow>(
     }
 
     // Breathing lowers a fit block, and a lowered block has less room than it
-    // was fitted to. Under the default share it still fits, but a negative
-    // top margin can lower it by more than the page's slack, past the foot;
-    // so each fit block is fitted again to the room it now has, and the page
-    // is reflowed so what follows moves up to it. A refit never returns a
-    // block taller than it came in: a block handed over at a scale it was
-    // given elsewhere keeps that scale rather than growing over what follows.
+    // was fitted to. The refit can act only where a marked block has a
+    // negative top margin, which the report as designed never has: with
+    // margins of 0 or more the shares add at most half the slack, so a fit
+    // block's old scale still fits. Where one does, the share can lower a fit
+    // block by more than the page's slack, past the foot; so each fit block is
+    // fitted again to the room it now has, and the page is reflowed so what
+    // follows moves up to it. A refit never returns a block taller than it
+    // came in: a block handed over at a scale it was given elsewhere keeps
+    // that scale rather than growing over what follows.
     if (placed.some((p) => p.block.fit)) {
       const refitted: Sized<B>[] = [];
       for (const [index, p] of placed.entries()) {
@@ -455,6 +464,11 @@ export function breathe<B extends Flow>(
       }
       placed = stack(refitted, overrides, limits);
     }
+
+    // Shares that would still carry the page past its foot are not given.
+    // The foot is where `paginate` and `overflowing` put it, tolerance included.
+    const foot = limits.bodyHeight + limits.tolerance;
+    if (overrides.size > 0 && pageBottom(placed) > foot) placed = asItCame;
 
     const last = placed[placed.length - 1];
     if (placed.length > 1 && last?.block.pinBottom) {
