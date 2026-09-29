@@ -68,6 +68,8 @@ The layout is the practice's own and is kept: the score rings, the band icons, t
 | The programme | the number of sessions; the approach or the next stage | Typed |
 | The signer | — | **Not in the content.** Snapshotted on the row at signing, from the signer's credential |
 
+**A brain map with no programme after it** (the practice's request of 30 September 2026). A client may come for the brain map alone and not go on to training. On a first report the practitioner may then choose **Not applicable / QEEG only** where the number of sessions goes. The report then asks for no training approach and refuses one beside it, and its page prints neither the programme length nor the initial training approach, because no programme has been agreed; the sign-off prints as always. A follow-up comes after training and does not offer the choice; a first report turned into one has the choice set aside. `QEEG_ONLY` and `programmeAgreed` in `domain/reports/qeeg/`; the Arabic label is on the wording sheet with the rest.
+
 Rules of the shape:
 
 1. **Names, never positions.** A choice from a list is stored as the name of what was chosen.
