@@ -3,7 +3,7 @@
  * finally lands can be read straight off the op a test holds.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Op } from '@domain/shared/document';
 import { scaleOps, translateOps } from './scale';
 import type { LayoutOp } from './scale';
@@ -66,6 +66,20 @@ function expectClose(actual: readonly LayoutOp[], expected: readonly LayoutOp[])
 describe('scaling ops about an origin', () => {
   it('changes nothing when the scale is one', () => {
     expect(scaleOps(block, 1, origin)).toEqual(block);
+  });
+
+  it('copies ops at a scale of one by hand, where a browser has no structuredClone', () => {
+    vi.stubGlobal('structuredClone', undefined);
+    try {
+      const copied = scaleOps(block, 1, origin);
+      expect(copied).toEqual(block);
+      copied.forEach((op, i) => expect(op).not.toBe(block[i]));
+      const [textCopy] = copied;
+      if (textCopy?.kind !== 'text' || text.kind !== 'text') throw new Error('expected text');
+      expect(textCopy.style).not.toBe(text.style);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('does not move a point that sits at the origin', () => {

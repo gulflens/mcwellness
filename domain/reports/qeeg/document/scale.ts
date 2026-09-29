@@ -73,6 +73,45 @@ function mapPoints(
 }
 
 /**
+ * A copy of an op, written out by hand: every object and array inside it is
+ * new, so a caller changing the copy changes nothing it was made from. By
+ * hand rather than with the host's `structuredClone`, which Safari lacks
+ * before 15.4.
+ */
+function copyOf(op: LayoutOp): LayoutOp {
+  switch (op.kind) {
+    case 'text':
+      return { ...op, style: copyPaint(op.style) };
+    case 'rule':
+      return op.rgb ? { ...op, rgb: [...op.rgb] } : { ...op };
+    case 'image':
+      return { ...op };
+    case 'path': {
+      const segments = mapPoints(
+        op.segments,
+        (x) => x,
+        (y) => y,
+      );
+      return {
+        ...op,
+        segments,
+        ...(op.fill ? { fill: copyPaint(op.fill) } : {}),
+        ...(op.stroke ? { stroke: copyPaint(op.stroke) } : {}),
+      };
+    }
+    default: {
+      const unknown: never = op;
+      throw new RangeError(`scaleOps does not know the op ${String(unknown)}.`);
+    }
+  }
+}
+
+/** A paint, or anything carrying one, with its colour triple copied too. */
+function copyPaint<T extends { readonly rgb?: readonly [number, number, number] }>(paint: T): T {
+  return paint.rgb ? { ...paint, rgb: [...paint.rgb] } : { ...paint };
+}
+
+/**
  * Every op scaled by `k` about `origin`. `k` must be finite and above 0; a
  * scale of 1 gives back equal ops, copied, rather than ops pushed through
  * arithmetic that could move a number by a rounding error.
@@ -86,7 +125,7 @@ export function scaleOps(
   if (k <= 0) throw new RangeError(`scaleOps needs a scale above 0, and was given ${k}.`);
   finite('origin x', origin.x);
   finite('origin y', origin.y);
-  if (k === 1) return ops.map((op) => structuredClone(op));
+  if (k === 1) return ops.map(copyOf);
 
   const sx = (x: number): number => origin.x + (x - origin.x) * k;
   const sy = (y: number): number => origin.y + (y - origin.y) * k;
