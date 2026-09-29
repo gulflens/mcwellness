@@ -30,6 +30,20 @@ const SLACK = 0.01;
 /** How far past the foot `paginate` lets a part end, and `overflowing` does not count. */
 const TOLERANCE = limitsFor(1, 1).tolerance;
 
+/**
+ * The one part allowed past the foot, and by no more than the pages' own
+ * rule lets it: `paginate` places a part that ends within `tolerance` of the
+ * foot, and `overflowing` does not count it. With the test measure the long
+ * follow-up's Arabic asymmetry block ends 0.72 of a point past the foot on
+ * its page; the installed faces set it clear (`tests/reports/qeeg-pages`).
+ * Every other part of every case is held to the foot exactly.
+ */
+const PAST_THE_FOOT = 'followUpLong ar connectivity.asymmetry';
+
+function allowanceFor(which: string): number {
+  return which === PAST_THE_FOOT ? TOLERANCE : 0;
+}
+
 function inputOf(name: CaseName, locale: Locale): ReportInput {
   const content = CASES[name]();
   return { content, locale, facts: factsFor(content) };
@@ -150,14 +164,27 @@ describe('the pages of a first report', () => {
             expect(reach.bottom, where).toBeGreaterThanOrEqual(
               bodyTop() - part.y - part.height - SLACK,
             );
-            // The pages' own rule lets a part end within `tolerance` of the
-            // foot (`paginate`, `overflowing`); the long follow-up in Arabic
-            // is the one case whose ink meets that allowance.
-            expect(reach.bottom, where).toBeGreaterThanOrEqual(foot - TOLERANCE - SLACK);
+            expect(reach.bottom, where).toBeGreaterThanOrEqual(
+              foot - allowanceFor(`${name} ${locale} ${part.id}`) - SLACK,
+            );
           }
         }
       }
     }
+  });
+
+  it('lets its one named part past the foot only as far as the pages’ own rule allows', () => {
+    // So the exception above cannot outlive its reason unnoticed.
+    const result = laid('followUpLong', 'ar');
+    const foot = PAD.bottom + result.footerHeight;
+    const reaches = result.sheets
+      .flatMap((sheet) => sheet.parts)
+      .filter((part) => part.id === 'connectivity.asymmetry')
+      .map((part) => extentOf(part.ops, ARABIC.measure).bottom);
+    expect(reaches).toHaveLength(1);
+    const past = foot - (reaches[0] ?? foot);
+    expect(past).toBeGreaterThan(SLACK);
+    expect(past).toBeLessThanOrEqual(TOLERANCE);
   });
 
   it('draw the header and the footer on every page, inside the margins', () => {
