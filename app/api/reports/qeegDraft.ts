@@ -355,8 +355,13 @@ export async function saveQeegDraft(
   }
   const id = written.rows[0]?.id;
   if (!id) {
-    if (input.id && (await readReport(db, input.id))) {
-      // It is there and it is a draft, so what moved is the save itself.
+    const current = input.id ? await readReport(db, input.id) : null;
+    if (current && current.status !== 'draft') {
+      // Signed, or kept, since it was read: no longer a draft to save over.
+      return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
+    }
+    if (current) {
+      // Still a draft, so what moved is the save itself: a newer one stands.
       return c.json({ error: 'conflict', code: 'stale_draft', requestId }, 409);
     }
     return c.json({ error: 'not_found', requestId }, 404);

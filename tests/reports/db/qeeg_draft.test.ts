@@ -787,6 +787,18 @@ async function withdraw(id: string, query: Query = (t, p) => h.owner.query(t, p)
   );
 }
 
+/** The snapshots signing leaves on a row, written onto a draft as the table owner. */
+async function signAsOwner(id: string, number: number, query: Query): Promise<void> {
+  await query(
+    "update report set status = 'issued', number = $2, issued_on = current_date, " +
+      "signed_at = now(), signed_by_practitioner_id = $3, signed_by_name = 'Rowan Ridge', " +
+      "signed_by_certification = 'bcia_bcn', recipient_name = 'Cedar Meadow', " +
+      "recipient_record_number = 'MW-000001', practice_legal_name = 'Synthetic Studio' " +
+      'where id = $1',
+    [id, number, h.practitionerIdOf(SEEDED.owner)],
+  );
+}
+
 describe('fix round 1: races between two people', () => {
   it('answers a comparison withdrawn between the read and the write with 409, and writes nothing', async () => {
     const kept = await keptRecord('d'.repeat(64));
@@ -802,5 +814,23 @@ describe('fix round 1: races between two people', () => {
       field: 'comparedWith.reportId',
     });
     expect(await reportCount()).toBe(before);
+  });
+
+  it('answers already issued, not stale, when the draft was signed between the read and the write', async () => {
+    const first = await created(sentInitial(), SEEDED.owner);
+    race.after = { id: first.report.id, run: (query) => signAsOwner(first.report.id, 950, query) };
+    const res = await save(
+      {
+        id: first.report.id,
+        clientId,
+        kind: 'qeeg',
+        savedAt: first.savedAt,
+        content: sentInitial({ summary: { en: { text: 'Late.', marks: [] }, ar: null } }),
+      },
+      SEEDED.owner,
+    );
+    expect(race.after).toBeNull();
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { code: string }).code).toBe('already_issued');
   });
 });
