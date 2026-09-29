@@ -195,4 +195,31 @@ describe('mapBlock', () => {
     expect(() => mapBlock(input, WIDTH, ENGLISH, Object.freeze({ room: ROOM }))).not.toThrow();
     expect(JSON.stringify(input)).toBe(before);
   });
+
+  it('centres a map narrower than the block across it, in either language', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const [picture] = images(mapBlock(SMALL, WIDTH, drawing, { room: ROOM }).ops);
+      expect(picture?.width ?? WIDTH).toBeLessThan(WIDTH / 2);
+      expect(picture?.x).toBeCloseTo((WIDTH - (picture?.width ?? 0)) / 2, 9);
+    }
+  });
+
+  it('allows for what hangs below its label, above the picture and in the room', () => {
+    // A face that stands far above its line box, so a label's underline
+    // hangs further below it than the gap under the label.
+    const tall = { ascent: 4, descent: 0 };
+    const drawing: Drawing = { ...ENGLISH, faces: { latin: tall, arabic: tall } };
+    const label = typeset('subheading', 'Absolute power', WIDTH, drawing, { typed: true });
+    expect(label.overhang).toBeGreaterThan(MAP.labelGap);
+    const block = mapBlock({ ...TALL, label: typed('Absolute power') }, WIDTH, drawing, {
+      room: 400,
+    });
+    expect(outside(block, measure)).toEqual([]);
+    const [picture] = images(block.ops);
+    expect((picture?.y ?? 0) + (picture?.height ?? 0)).toBeCloseTo(
+      -(label.height + label.overhang),
+      9,
+    );
+    expect(block.height).toBeCloseTo(400 - MAP.reserve, 9);
+  });
 });

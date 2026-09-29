@@ -9,7 +9,7 @@ import { boundsOf } from '../shapes';
 import type { PathOp } from '../shapes';
 import { typeset } from '../typeset';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, measure, outside, unmirrored, wordsOf } from './checks';
+import { ARABIC, ENGLISH, downThePage, measure, outside, unmirrored, wordsOf } from './checks';
 import { dashboardCard } from './dashboardCard';
 import type { CardInput } from './dashboardCard';
 import { scoreRing } from './scoreRing';
@@ -70,6 +70,18 @@ function parts(input: CardInput, drawing: Drawing) {
     items: input.meaning.items.map((item) => typeset('cardBullet', item, ITEM, drawing).height),
     advice: typeset('cardAdvice', input.advice, INNER, drawing).height,
   };
+}
+
+/** Where each mark first stands down the page: its place among what the block draws. */
+function placesOf(block: Block, marks: readonly string[]): number[] {
+  const down = downThePage(block, measure).map((each) => each.what);
+  return marks.map((mark) => down.findIndex((what) => what.includes(mark)));
+}
+
+/** Every mark is found, and each stands below the one before. */
+function inOrder(places: readonly number[]): void {
+  expect(places.every((place) => place >= 0)).toBe(true);
+  expect([...places].sort((one, other) => one - other)).toEqual(places);
 }
 
 describe('dashboardCard', () => {
@@ -143,22 +155,49 @@ describe('dashboardCard', () => {
     }
   });
 
-  it('sets the ring at the start of the head, centred on the words beside it', () => {
-    for (const [input, drawing] of [
-      [EN_INPUT, ENGLISH],
-      [AR_INPUT, ARABIC],
-    ] as const) {
-      const block = dashboardCard(input, WIDTH, drawing);
-      const [track] = paths(scoreRing(input, CARD.ring, drawing).ops);
+  it('sets the ring at the start of the head', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = dashboardCard(EN_INPUT, WIDTH, drawing);
+      const [track] = paths(scoreRing(EN_INPUT, CARD.ring, drawing).ops);
       const ringTrack = paths(block.ops)[2];
       expect(ringTrack?.stroke).toEqual(track?.stroke);
       const bounds = boundsOf(ringTrack?.segments ?? []);
-      const middle = drawing.direction === 'ltr' ? bounds.left : WIDTH - bounds.right;
-      const own = boundsOf(track?.segments ?? []);
-      expect(middle).toBeCloseTo(CARD.padH + own.left, 9);
-      const head = parts(input, drawing).head;
-      const down = (head - CARD.ring) / 2;
-      expect(bounds.top).toBeCloseTo(own.top - CARD.padV - down, 9);
+      const start = drawing.direction === 'ltr' ? bounds.left : WIDTH - bounds.right;
+      expect(start).toBeCloseTo(CARD.padH + boundsOf(track?.segments ?? []).left, 9);
+    }
+  });
+
+  it('centres the ring and the words beside it on each other, the shorter lowered', () => {
+    const tall = 'Attention and the ease of holding it through a long task';
+    for (const title of ['Attention', tall]) {
+      for (const drawing of [ENGLISH, ARABIC]) {
+        const input: CardInput = { ...EN_INPUT, title };
+        const block = dashboardCard(input, WIDTH, drawing);
+        const category = typeset('cardCategory', input.category, COLUMN, drawing, {
+          tier: 'middle',
+        });
+        const heading = typeset('cardTitle', title, COLUMN, drawing);
+        const words = category.height + CARD.titleTop + heading.height;
+        const head = Math.max(CARD.ring, words);
+        const ringDown = (head - CARD.ring) / 2;
+        const wordsDown = (head - words) / 2;
+        // Which of the two is lowered depends on which is the taller.
+        expect(title === tall ? ringDown : wordsDown).toBeGreaterThan(0);
+
+        const track = boundsOf(paths(block.ops)[2]?.segments ?? []);
+        expect((track.top + track.bottom) / 2).toBeCloseTo(
+          -(CARD.padV + ringDown + CARD.ring / 2),
+          9,
+        );
+        const ops = texts(block.ops);
+        const first = ops.find((op) => op.text === 'Room to grow');
+        expect(first?.y).toBeCloseTo(-(CARD.padV + wordsDown + (category.baseline ?? 0)), 9);
+        const second = ops.find((op) => title.startsWith(op.text));
+        expect(second?.y).toBeCloseTo(
+          -(CARD.padV + wordsDown + category.height + CARD.titleTop + (heading.baseline ?? 0)),
+          9,
+        );
+      }
     }
   });
 
@@ -407,5 +446,50 @@ describe('dashboardCard', () => {
       dashboardCard(input, WIDTH, ENGLISH, Object.freeze({ height: 300 })),
     ).not.toThrow();
     expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it('sets its parts one under another, in either language', () => {
+    const input: CardInput = {
+      ...EN_INPUT,
+      summary: 'Focus held',
+      evidence: { label: 'Recording evidence', words: typed('Frontal theta raised') },
+      meaning: { label: 'What this may mean', items: ['Drifting in long tasks', 'Needing breaks'] },
+      advice: [{ text: 'Advice', bold: true }, { text: ' short blocks' }],
+    };
+    for (const drawing of [ENGLISH, ARABIC]) {
+      inOrder(
+        placesOf(dashboardCard(input, WIDTH, drawing), [
+          'Room to grow',
+          'Attention',
+          'Focus held',
+          'Recording evidence',
+          'Frontal theta raised',
+          'What this may mean',
+          'Drifting in long tasks',
+          'Needing breaks',
+          'short blocks',
+        ]),
+      );
+    }
+  });
+
+  it('draws each dash of the list before the words it stands by', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const ops = dashboardCard(EN_INPUT, WIDTH, drawing).ops;
+      const dashes = ops.flatMap((op, index) =>
+        op.kind === 'path' && op.fill === MUTED ? [index] : [],
+      );
+      const words = EN_INPUT.meaning.items.map((item) =>
+        ops.findIndex((op) => op.kind === 'text' && item.includes(op.text)),
+      );
+      expect(dashes).toHaveLength(2);
+      dashes.forEach((dash, index) => expect(dash).toBeLessThan(words[index] ?? -1));
+      expect(dashes[1] ?? 0).toBeGreaterThan(words[0] ?? 0);
+    }
+  });
+
+  it('rounds the panel’s corners', () => {
+    const [panel] = paths(dashboardCard(EN_INPUT, WIDTH, ENGLISH).ops);
+    expect(panel?.segments.filter((segment) => segment[0] === 'C')).toHaveLength(4);
   });
 });

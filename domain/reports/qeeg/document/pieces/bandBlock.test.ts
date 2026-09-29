@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { INK } from '../palette';
+import type { Block } from '../block';
 import type { Op } from '@domain/shared/document';
 import { extentOf } from '../block';
 import { BAND_ICON } from '../geometry';
@@ -7,7 +9,7 @@ import { translateOps } from '../scale';
 import type { LayoutOp } from '../scale';
 import { typeset } from '../typeset';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, downThePage, measure, outside, unmirrored } from './checks';
 import { bandBlock } from './bandBlock';
 import type { BandLines } from './bandBlock';
 import { bandIcon } from './bandIcon';
@@ -39,6 +41,18 @@ const LONG: readonly Span[] = [{ text: 'steady '.repeat(20).trim() }];
 
 const heightOf = (spans: readonly Span[], drawing: Drawing) =>
   typeset('band', spans, WORDS, drawing).height;
+
+/** Where each mark first stands down the page: its place among what the block draws. */
+function placesOf(block: Block, marks: readonly string[]): number[] {
+  const down = downThePage(block, measure).map((each) => each.what);
+  return marks.map((mark) => down.findIndex((what) => what.includes(mark)));
+}
+
+/** Every mark is found, and each stands below the one before. */
+function inOrder(places: readonly number[]): void {
+  expect(places.every((place) => place >= 0)).toBe(true);
+  expect([...places].sort((one, other) => one - other)).toEqual(places);
+}
 
 describe('bandBlock', () => {
   it('keeps every part inside its box, in either language', () => {
@@ -170,5 +184,18 @@ describe('bandBlock', () => {
     const before = JSON.stringify(input);
     expect(() => bandBlock(input, WIDTH, ENGLISH)).not.toThrow();
     expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it('sets its three lines in ink, one under another, in either language', () => {
+    const lines: BandLines = [
+      [{ text: 'First line' }],
+      [{ text: 'Second line' }],
+      [{ text: 'Third line' }],
+    ];
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = bandBlock({ band: 'alpha', lines }, WIDTH, drawing);
+      inOrder(placesOf(block, ['First line', 'Second line', 'Third line']));
+      for (const op of texts(block.ops)) expect(op.style.grey).toBe(INK.grey);
+    }
   });
 });

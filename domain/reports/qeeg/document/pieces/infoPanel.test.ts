@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { INK } from '../palette';
+import type { Block } from '../block';
 import type { Op } from '@domain/shared/document';
 import { extentOf } from '../block';
 import { BODY_WIDTH, PANEL, panelColumnWidth } from '../geometry';
@@ -7,7 +9,7 @@ import type { LayoutOp } from '../scale';
 import type { PathOp } from '../shapes';
 import { typeset } from '../typeset';
 import type { Drawing } from '../typeset';
-import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, downThePage, measure, outside, unmirrored } from './checks';
 import { infoPanel } from './infoPanel';
 import type { InfoColumn } from './infoPanel';
 
@@ -62,6 +64,18 @@ function columnHeight(column: InfoColumn, drawing: Drawing): number {
       0,
     )
   );
+}
+
+/** Where each mark first stands down the page: its place among what the block draws. */
+function placesOf(block: Block, marks: readonly string[]): number[] {
+  const down = downThePage(block, measure).map((each) => each.what);
+  return marks.map((mark) => down.findIndex((what) => what.includes(mark)));
+}
+
+/** Every mark is found, and each stands below the one before. */
+function inOrder(places: readonly number[]): void {
+  expect(places.every((place) => place >= 0)).toBe(true);
+  expect([...places].sort((one, other) => one - other)).toEqual(places);
 }
 
 describe('infoPanel', () => {
@@ -224,5 +238,29 @@ describe('infoPanel', () => {
     const before = JSON.stringify(input);
     expect(() => infoPanel(input, WIDTH, ENGLISH)).not.toThrow();
     expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it('sets a column’s title and its lines one under another, in either language', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = infoPanel({ first: PERSON, second: RECORDING }, WIDTH, drawing);
+      inOrder(placesOf(block, ['About you', 'Amber Dune', '34', 'Right']));
+      inOrder(placesOf(block, ['Recording', '12/09/2026', 'Initial']));
+    }
+  });
+
+  it('sets its lines in ink', () => {
+    const ops = texts(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH).ops);
+    expect(ops.find((op) => op.text === 'Name: Amber Dune')?.style.grey).toBe(INK.grey);
+  });
+
+  it('rounds the panel’s corners', () => {
+    const [panel] = paths(infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH).ops);
+    expect(panel?.segments.filter((segment) => segment[0] === 'C')).toHaveLength(4);
+  });
+
+  it('draws the first column before the second', () => {
+    const ops = infoPanel({ first: PERSON, second: RECORDING }, WIDTH, ENGLISH).ops;
+    const at = (words: string) => ops.findIndex((op) => op.kind === 'text' && op.text === words);
+    expect(at('About you:')).toBeLessThan(at('Recording:'));
   });
 });

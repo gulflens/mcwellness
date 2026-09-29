@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { INK } from '../palette';
+import type { Block } from '../block';
 import type { Op } from '@domain/shared/document';
 import { extentOf } from '../block';
 import { CONNECTIVITY } from '../geometry';
@@ -8,7 +10,7 @@ import type { LayoutOp } from '../scale';
 import { boundsOf } from '../shapes';
 import type { PathOp } from '../shapes';
 import { typeset } from '../typeset';
-import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
+import { ARABIC, ENGLISH, downThePage, measure, outside, unmirrored } from './checks';
 import { connectivityBlock } from './connectivityBlock';
 import type { ConnectivityInput } from './connectivityBlock';
 
@@ -33,6 +35,18 @@ const AR_INPUT: ConnectivityInput = {
   description: 'مدى توافق منطقتين في الإيقاع أثناء الراحة.',
   finding: [{ text: 'النتائج: ', bold: true }, { text: 'كان الترابط ثابتا.' }],
 };
+
+/** Where each mark first stands down the page: its place among what the block draws. */
+function placesOf(block: Block, marks: readonly string[]): number[] {
+  const down = downThePage(block, measure).map((each) => each.what);
+  return marks.map((mark) => down.findIndex((what) => what.includes(mark)));
+}
+
+/** Every mark is found, and each stands below the one before. */
+function inOrder(places: readonly number[]): void {
+  expect(places.every((place) => place >= 0)).toBe(true);
+  expect([...places].sort((one, other) => one - other)).toEqual(places);
+}
 
 describe('connectivityBlock', () => {
   it('keeps every part inside its box, in either language', () => {
@@ -154,5 +168,28 @@ describe('connectivityBlock', () => {
     const before = JSON.stringify(input);
     expect(() => connectivityBlock(input, WIDTH, ENGLISH)).not.toThrow();
     expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it('sets the title, the description and the finding one under another, in either language', () => {
+    const input: ConnectivityInput = {
+      title: 'Coherence',
+      description: 'How two regions keep time',
+      finding: [{ text: 'Findings', bold: true }, { text: ' a steady link' }],
+    };
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = connectivityBlock(input, WIDTH, drawing);
+      inOrder(placesOf(block, ['Coherence', 'How two regions', 'a steady link']));
+    }
+  });
+
+  it('sets the finding in ink and the description in the muted grey', () => {
+    const ops = texts(connectivityBlock(EN_INPUT, WIDTH, ENGLISH).ops);
+    expect(ops.find((op) => op.text.startsWith('the link'))?.style.grey).toBe(INK.grey);
+    expect(ops.find((op) => op.text.startsWith('How closely'))?.style.grey).toBe(MUTED.grey);
+  });
+
+  it('draws the bar with square corners', () => {
+    const [bar] = paths(connectivityBlock(EN_INPUT, WIDTH, ENGLISH).ops);
+    expect(bar?.segments.every((segment) => segment[0] !== 'C')).toBe(true);
   });
 });
