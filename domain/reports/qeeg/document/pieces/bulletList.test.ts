@@ -4,19 +4,13 @@ import { extentOf } from '../block';
 import type { Block } from '../block';
 import { BULLETS, columnWidth } from '../geometry';
 import { ACCENT, MUTED } from '../palette';
-import type { Measure } from '../paragraph';
 import type { LayoutOp } from '../scale';
 import type { PathOp } from '../shapes';
 import { styleOf } from '../styles';
-import type { Drawing } from '../typeset';
 import { bulletList } from './bulletList';
+import { ARABIC, ENGLISH, measure, outside, unmirrored } from './checks';
 import { fixed, typed } from './words';
 
-/** Every character is half its size wide, so every width in a test is exact. */
-const measure: Measure = (text, _weight, size) => [...text].length * size * 0.5;
-const FACE = { ascent: 1, descent: -0.25 };
-const english: Drawing = { direction: 'ltr', measure, faces: { latin: FACE, arabic: FACE } };
-const arabic: Drawing = { ...english, direction: 'rtl' };
 const WIDTH = 480;
 const EMPTY = 'None chosen.';
 
@@ -27,14 +21,6 @@ const LINE = BODY.size * BODY.lineHeight;
 const texts = (ops: readonly LayoutOp[]) =>
   ops.filter((op): op is Extract<Op, { kind: 'text' }> => op.kind === 'text');
 const paths = (ops: readonly LayoutOp[]) => ops.filter((op): op is PathOp => op.kind === 'path');
-
-function expectInside(block: Block, width: number): void {
-  const extent = extentOf(block.ops, measure);
-  expect(extent.left).toBeGreaterThanOrEqual(-1e-9);
-  expect(extent.right).toBeLessThanOrEqual(width + 1e-9);
-  expect(extent.top).toBeLessThanOrEqual(1e-9);
-  expect(extent.bottom).toBeGreaterThanOrEqual(-(block.height + block.overhang) - 1e-9);
-}
 
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
@@ -47,40 +33,41 @@ function deepFreeze<T>(value: T): T {
 const items = (count: number) =>
   Array.from({ length: count }, (_, index) => fixed(`Item ${index + 1}`));
 
-const list = (count: number, columns: 'auto' | 'two' = 'auto', drawing = english) =>
+const list = (count: number, columns: 'auto' | 'two' = 'auto', drawing = ENGLISH) =>
   bulletList({ items: items(count), columns, empty: EMPTY }, WIDTH, drawing);
 
 const extents = (block: Block) => paths(block.ops).map((op) => extentOf([op], measure));
 
 describe('bulletList', () => {
   for (const [name, drawing] of [
-    ['English', english],
-    ['Arabic', arabic],
+    ['English', ENGLISH],
+    ['Arabic', ARABIC],
   ] as const) {
     it(`keeps everything inside its box, in ${name}`, () => {
       for (const count of [0, 1, 6, 7, 12]) {
         for (const columns of ['auto', 'two'] as const) {
-          expectInside(list(count, columns, drawing), WIDTH);
+          expect(outside(list(count, columns, drawing), measure)).toEqual([]);
         }
       }
     });
   }
 
-  it('draws the Arabic diamonds as the mirror of the English ones', () => {
-    for (const count of [1, 5, 9]) {
+  it('draws the Arabic list as the mirror of the English one, words and diamonds', () => {
+    for (const count of [0, 1, 5, 7, 9]) {
       for (const columns of ['auto', 'two'] as const) {
-        const en = extents(list(count, columns, english));
-        const ar = extents(list(count, columns, arabic));
-        expect(ar).toHaveLength(en.length);
-        en.forEach((e, index) => {
-          const a = ar[index];
-          expect(a?.left).toBeCloseTo(WIDTH - e.right, 9);
-          expect(a?.right).toBeCloseTo(WIDTH - e.left, 9);
-          expect(a?.top).toBeCloseTo(e.top, 9);
-          expect(a?.bottom).toBeCloseTo(e.bottom, 9);
-        });
+        const en = list(count, columns, ENGLISH);
+        const ar = list(count, columns, ARABIC);
+        expect(unmirrored(en, ar, measure, { upAndDown: true })).toEqual([]);
       }
     }
+    const input = {
+      items: [typed('Steady progress.'), fixed('word '.repeat(40))],
+      columns: 'auto' as const,
+      empty: EMPTY,
+    };
+    const en = bulletList(input, WIDTH, ENGLISH);
+    const ar = bulletList(input, WIDTH, ARABIC);
+    expect(unmirrored(en, ar, measure)).toEqual([]);
   });
 
   it('sets a diamond in the accent at the start edge, its words indented', () => {
@@ -96,7 +83,7 @@ describe('bulletList', () => {
   });
 
   it('sets the diamond and the words at the right of an Arabic page', () => {
-    const block = list(1, 'auto', arabic);
+    const block = list(1, 'auto', ARABIC);
     const box = extents(block)[0];
     expect(box?.right).toBeCloseTo(WIDTH - BULLETS.diamondInset, 9);
     expect(extentOf(texts(block.ops), measure).right).toBeCloseTo(WIDTH - BULLETS.indent, 9);
@@ -123,7 +110,7 @@ describe('bulletList', () => {
   });
 
   it('balances two columns, the first taking the odd one, the first at the start', () => {
-    const block = list(9, 'auto', arabic);
+    const block = list(9, 'auto', ARABIC);
     const firstRight = WIDTH - BULLETS.diamondInset;
     const secondRight = columnWidth(WIDTH) - BULLETS.diamondInset;
     expect(extents(block).map((e) => e.right)).toEqual([
@@ -135,10 +122,10 @@ describe('bulletList', () => {
 
   it('sets a list asked for in two columns in two, even with one item', () => {
     const long = fixed('word '.repeat(30));
-    const block = bulletList({ items: [long], columns: 'two', empty: EMPTY }, WIDTH, english);
+    const block = bulletList({ items: [long], columns: 'two', empty: EMPTY }, WIDTH, ENGLISH);
     const extent = extentOf(texts(block.ops), measure);
     expect(extent.right).toBeLessThanOrEqual(columnWidth(WIDTH) + 1e-9);
-    const wide = bulletList({ items: [long], columns: 'auto', empty: EMPTY }, WIDTH, english);
+    const wide = bulletList({ items: [long], columns: 'auto', empty: EMPTY }, WIDTH, ENGLISH);
     expect(block.height).toBeGreaterThan(wide.height);
   });
 
@@ -150,7 +137,7 @@ describe('bulletList', () => {
   });
 
   it('sets the words for an empty list in the role for it, with no diamond', () => {
-    const block = bulletList({ items: [], columns: 'auto', empty: EMPTY }, WIDTH, english);
+    const block = bulletList({ items: [], columns: 'auto', empty: EMPTY }, WIDTH, ENGLISH);
     expect(paths(block.ops)).toEqual([]);
     expect(
       texts(block.ops)
@@ -166,11 +153,11 @@ describe('bulletList', () => {
     const block = bulletList(
       { items: [fixed('One'), typed('   '), fixed('Two')], columns: 'auto', empty: EMPTY },
       WIDTH,
-      english,
+      ENGLISH,
     );
     expect(paths(block.ops)).toHaveLength(2);
     expect(block.height).toBeCloseTo(list(2).height, 9);
-    const none = bulletList({ items: [typed(' ')], columns: 'auto', empty: EMPTY }, WIDTH, english);
+    const none = bulletList({ items: [typed(' ')], columns: 'auto', empty: EMPTY }, WIDTH, ENGLISH);
     expect(
       texts(none.ops)
         .map((op) => op.text)
@@ -182,7 +169,7 @@ describe('bulletList', () => {
     const block = bulletList(
       { items: [typed('Morning walk')], columns: 'auto', empty: EMPTY },
       WIDTH,
-      arabic,
+      ARABIC,
     );
     expect(texts(block.ops).some((op) => op.rtl === true)).toBe(false);
     expect(extentOf(texts(block.ops), measure).right).toBeCloseTo(WIDTH - BULLETS.indent, 9);
@@ -190,13 +177,13 @@ describe('bulletList', () => {
 
   it('wraps a long item inside its box, and grows', () => {
     for (const text of ['word '.repeat(90), 'w'.repeat(400)]) {
-      for (const drawing of [english, arabic]) {
+      for (const drawing of [ENGLISH, ARABIC]) {
         const block = bulletList(
           { items: [typed(text), fixed('Short')], columns: 'auto', empty: EMPTY },
           WIDTH,
           drawing,
         );
-        expectInside(block, WIDTH);
+        expect(outside(block, measure)).toEqual([]);
         expect(block.height).toBeGreaterThan(list(2).height);
       }
     }
@@ -209,21 +196,21 @@ describe('bulletList', () => {
     const empty = bulletList(
       { items: [], columns: 'auto', empty: 'word '.repeat(200) },
       WIDTH,
-      english,
+      ENGLISH,
     );
     expect(empty.split).toBeUndefined();
   });
 
   it('refuses a width that is not a number, is below nothing, or leaves no room, by name', () => {
     const input = { items: items(2), columns: 'auto' as const, empty: EMPTY };
-    expect(() => bulletList(input, Number.NaN, english)).toThrow(/bulletList needs a finite width/);
-    expect(() => bulletList(input, -1, english)).toThrow(
+    expect(() => bulletList(input, Number.NaN, ENGLISH)).toThrow(/bulletList needs a finite width/);
+    expect(() => bulletList(input, -1, ENGLISH)).toThrow(
       /bulletList needs a width of zero or more/,
     );
-    expect(() => bulletList(input, BULLETS.indent, english)).toThrow(
+    expect(() => bulletList(input, BULLETS.indent, ENGLISH)).toThrow(
       /bulletList is left no room for its words by a width of/,
     );
-    expect(() => bulletList({ ...input, columns: 'two' }, BULLETS.gutter, english)).toThrow(
+    expect(() => bulletList({ ...input, columns: 'two' }, BULLETS.gutter, ENGLISH)).toThrow(
       /bulletList is left no room for its words by a width of/,
     );
   });
@@ -234,6 +221,6 @@ describe('bulletList', () => {
       columns: 'auto' as const,
       empty: EMPTY,
     });
-    expect(() => bulletList(input, WIDTH, deepFreeze({ ...arabic }))).not.toThrow();
+    expect(() => bulletList(input, WIDTH, ARABIC)).not.toThrow();
   });
 });
