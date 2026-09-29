@@ -57,11 +57,11 @@ export type {
   ReceiptDocument,
   SupplierSnapshot,
 } from './model';
-export { clampForDocument, GEOMETRY, layout, titleOf } from './render';
+export { clampForDocument, GEOMETRY, layout, layoutWithBlocks, titleOf } from './render';
+export type { Block, BlockName } from './render';
 export {
   arabicDocumentDate,
   callOutFeeDescription,
-  discountLine,
   discountTotalLabel,
   formatDocumentDate,
   formatRate,

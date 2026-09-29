@@ -24,16 +24,20 @@ export const WORDS = {
   invoice: { en: 'Invoice', ar: 'فاتورة' },
   receipt: { en: 'Receipt', ar: 'إيصال استلام' },
 
-  invoiceNumber: { en: 'Invoice number', ar: 'رقم الفاتورة' },
-  receiptNumber: { en: 'Receipt number', ar: 'رقم الإيصال' },
-  dateOfIssue: { en: 'Date of issue', ar: 'تاريخ الإصدار' },
-  /** The short form the design sets beneath the reference: "Issued 8 September 2026". */
-  issued: { en: 'Issued', ar: 'صدرت في' },
   dateOfSupply: { en: 'Date of supply', ar: 'تاريخ التوريد' },
   dateReceived: { en: 'Date received', ar: 'تاريخ الاستلام' },
 
-  client: { en: 'Client', ar: 'العميل' },
-  recordNumber: { en: 'Record number', ar: 'رقم السجل' },
+  /**
+   * The number card's captions (docs/superpowers/specs/2026-09-24-invoice-
+   * redesign-design.md, "The page, top to bottom", point 2, and "The
+   * receipt"), abbreviated as the operator's page sets them.
+   */
+  invoiceNo: { en: 'Invoice no.', ar: 'رقم الفاتورة' },
+  receiptNo: { en: 'Receipt no.', ar: 'رقم الإيصال' },
+  issueDate: { en: 'Issue date', ar: 'تاريخ الإصدار' },
+
+  /** The redesign's own phrasing on the billed-to / received-from card: "Client record: MW-000099" (round 65, point 3). */
+  clientRecord: { en: 'Client record', ar: 'رقم السجل' },
 
   licenceNumber: { en: 'Licence number', ar: 'رقم الرخصة' },
   licensingAuthority: { en: 'Licensing authority', ar: 'جهة الترخيص' },
@@ -55,14 +59,23 @@ export const WORDS = {
   },
 
   /**
-   * Who the document is for, above the household's name. A receipt says the
-   * other one: money came from a family rather than a charge going to it.
+   * The round 65 tax card's own title (point 6); the sentence beneath it is
+   * `SIMPLIFIED_BASIS` or `NOT_REGISTERED_BASIS`, unchanged.
    */
-  billedTo: { en: 'Billed to', ar: 'إلى' },
-  receivedFrom: { en: 'Received from', ar: 'من' },
+  taxInformation: { en: 'Tax information', ar: 'المعلومات الضريبية' },
+
+  /**
+   * Who the document is for, as the party card's small caption: capitalised
+   * and worded as the design itself sets it (point 3, and "The receipt"). A
+   * receipt says the other one: money came from a family rather than a
+   * charge going to it.
+   */
+  billedToCaption: { en: 'BILLED TO', ar: 'الفاتورة إلى' },
+  receivedFromCaption: { en: 'RECEIVED FROM', ar: 'مستلم من' },
 
   description: { en: 'Description', ar: 'الوصف' },
-  quantity: { en: 'Quantity', ar: 'الكمية' },
+  /** The lines table's own column heading (round 65, point 4). */
+  qty: { en: 'Qty', ar: 'الكمية' },
   /**
    * **The headings carry no `(AED)` any more**, and every figure beneath them
    * carries its own currency instead (`money` below). That is the operator's
@@ -73,41 +86,78 @@ export const WORDS = {
    * figures are in, in every cell, on its own.
    */
   unitPrice: { en: 'Unit price', ar: 'سعر الوحدة' },
-  vatRate: { en: 'VAT rate', ar: 'نسبة الضريبة' },
-  vatAmount: { en: 'VAT', ar: 'ضريبة القيمة المضافة' },
   /**
-   * The same column, named short. "ضريبة القيمة المضافة" is the term, and it is
-   * what the totals row says; as a column heading beside "نسبة الضريبة" it is
-   * wider than the column and runs into its neighbour. A table heading may be
-   * the short form where the row beneath it is unambiguous — the figures are in
-   * dirhams under a heading that says so in English on the same line.
+   * The VAT column, named short. "ضريبة القيمة المضافة" is the term; as a
+   * column heading it is wider than the column and runs into its neighbour. A
+   * table heading may be the short form where the row beneath it is
+   * unambiguous — the figures are in dirhams under a heading that says so in
+   * English on the same line.
    */
   vatColumn: { en: 'VAT', ar: 'الضريبة' },
-  amount: { en: 'Amount', ar: 'المبلغ' },
 
-  beforeDiscount: { en: 'Before discount', ar: 'قبل الخصم' },
   discount: { en: 'Discount', ar: 'الخصم' },
   net: { en: 'Net', ar: 'المبلغ الصافي' },
   total: { en: 'Total', ar: 'الإجمالي' },
-  amountReceived: { en: 'Received', ar: 'المبلغ المستلم' },
-
-  paymentMethod: { en: 'Payment method', ar: 'طريقة الدفع' },
-  paymentReference: { en: 'Payment reference', ar: 'مرجع الدفع' },
-  settlesInvoice: { en: 'Settles invoice', ar: 'سداد الفاتورة' },
 
   /**
-   * How to pay, beside the totals on an invoice (round 61, the owner's ask of
-   * 23 September 2026). A heading and four labels; the values are the
-   * practice's own, and the IBAN is printed grouped in fours (`groupIban`).
+   * The round 65 summary card (point 5, and "The receipt"). `total` and
+   * `discount` above already say what most of the card's own rows need —
+   * this is only what is genuinely new: the card's own title, the list-total
+   * row a discounted invoice starts from, and the violet block's two
+   * captions.
    */
-  payByTransfer: { en: 'Pay by bank transfer', ar: 'الدفع بالتحويل المصرفي' },
-  accountHolder: { en: 'Account holder', ar: 'اسم صاحب الحساب' },
+  invoiceSummary: { en: 'Invoice summary', ar: 'ملخص الفاتورة' },
+  receiptSummary: { en: 'Receipt summary', ar: 'ملخص الإيصال' },
+  subtotal: { en: 'Subtotal', ar: 'المجموع الفرعي' },
+  totalDue: { en: 'TOTAL DUE', ar: 'الإجمالي المستحق' },
+  totalPaid: { en: 'TOTAL PAID', ar: 'الإجمالي المدفوع' },
+
+  paymentReference: { en: 'Payment reference', ar: 'مرجع الدفع' },
+  settlesInvoice: { en: 'Settles invoice', ar: 'سداد الفاتورة' },
+  /**
+   * The round 65 card beside billed-to (point 3): "PAYMENT METHOD" over the
+   * method's own name in violet (`cash` / `transfer` / `link` below) — on an
+   * invoice always "Bank transfer", on a receipt whichever way the money came.
+   */
+  paymentMethodCaption: { en: 'PAYMENT METHOD', ar: 'طريقة الدفع' },
+
+  /**
+   * How to pay, on an invoice's "Payment details" card (round 61, the owner's
+   * ask of 23 September 2026, dressed in round 65, point 5). The values are
+   * the practice's own, and the IBAN is printed grouped in fours
+   * (`groupIban`). Set **English only**, as the design itself says: "English
+   * labels only, because an account number read against six labels is a
+   * number a payer misreads." The reference strip in its foot reads
+   * `paymentReference` above.
+   */
   iban: { en: 'IBAN', ar: 'رقم الآيبان' },
-  bic: { en: 'BIC', ar: 'رمز السويفت' },
   bankAddress: { en: 'Bank address', ar: 'عنوان البنك' },
 
+  paymentDetails: { en: 'Payment details', ar: 'تفاصيل الدفع' },
+  accountName: { en: 'Account name', ar: '' },
+  swiftBic: { en: 'SWIFT / BIC', ar: '' },
+
+  /**
+   * The receipt's own two lower cards (round 65, "The receipt"). Its title
+   * and its first two rows are what is new — the third, when there is one,
+   * already reads `settlesInvoice` above. `method` and `reference` are set
+   * **English only**, the same rule as the payment-details card's own rows;
+   * the value beside `method` is the payment's own name (`cash` /
+   * `transfer` / `link` below).
+   */
+  paymentReceived: { en: 'Payment received', ar: 'الدفعة المستلمة' },
+  method: { en: 'Method', ar: '' },
+  reference: { en: 'Reference', ar: '' },
+  /** The receipt's bottom card, carrying `receiptBasis` (round 65). */
+  note: { en: 'Note', ar: 'ملاحظة' },
+
+  /**
+   * The ways money arrives, as the payment method, on a receipt's row and in
+   * `receiptBasis`'s sentence. One spelling of each on both documents: a
+   * transfer is "تحويل مصرفي" wherever the practice's paper names it.
+   */
   cash: { en: 'Cash', ar: 'نقداً' },
-  transfer: { en: 'Bank transfer', ar: 'تحويل بنكي' },
+  transfer: { en: 'Bank transfer', ar: 'تحويل مصرفي' },
   link: { en: 'Payment link', ar: 'رابط دفع' },
 } as const satisfies Record<string, Phrase>;
 
@@ -217,46 +267,6 @@ export function waivedNotice(waivedOn: string): Phrase {
   return {
     en: `Waived on ${formatDocumentDate(waivedOn)}. Nothing is owed.`,
     ar: `أُعفي هذا المبلغ بتاريخ ${arabicDocumentDate(waivedOn)}. لا يوجد مبلغ مستحق.`,
-  };
-}
-
-/**
- * What a discounted line says beneath its description, in both languages:
- * the design's own phrasing, `List AED 7,950.00 · less AED 1,987.50`, and —
- * when the discount was typed as a share — that share after it, `(25%)`.
- *
- * **Both figures, and the percentage when there was one.** The operator's
- * design stated the list price and what came off it, the pair a family
- * actually wants: the number they were quoted and the number they are paying.
- * The percentage joined them on the owner's ask of 23 September 2026, and it
- * is what `docs/SPEC/billing.md` section 2.4 had said from the start ("with
- * the percentage when there was one"): a family told "15% off" at the door
- * should find 15% on the paper. It is the line's own `discount_basis_points`,
- * never worked out from the two figures — a discount typed as a sum carries
- * no share, and two discounts added together carry no single one
- * (`domain/billing/discount.ts`, `combineDiscounts`), so such a line prints the
- * two figures alone rather than a percentage somebody had to invent.
- *
- * The Federal Tax Authority asks a full tax invoice to state the amount of any
- * discount offered. A simplified one need not, and this document does anyway:
- * a family looking at a figure below the price they were quoted should be able
- * to see, on the page, why.
- *
- * The middle dot is the design's, and it is a document rather than a screen.
- * `CLAUDE.md`'s rule against middle-dot-joined metadata is a rule about the
- * console's own chrome (`.claude/rules/ui.md` scopes it to `app/**`); here it
- * joins two halves of one sentence a person reads once. The percentage is in
- * Western digits on the Arabic side too, like every other figure on the page.
- */
-export function discountLine(
-  listFils: number,
-  discountFils: number,
-  basisPoints: number | null,
-): Phrase {
-  const share = basisPoints === null ? '' : ` (${formatRate(basisPoints)})`;
-  return {
-    en: `List ${money(listFils)} · less ${money(discountFils)}${share}`,
-    ar: `السعر قبل الخصم ${formatFils(listFils)} درهم · ناقص ${formatFils(discountFils)} درهم${share}`,
   };
 }
 

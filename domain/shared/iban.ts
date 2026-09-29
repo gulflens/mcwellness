@@ -29,8 +29,8 @@ export function isValidIban(iban: string): boolean {
  * `AE360000000000000000001` as `AE36 0000 0000 0000 0000 001`: the IBAN as a
  * person reads it off paper and types it into their bank, grouped in fours.
  * The column holds it uppercase with no spaces (migration 924), so this only
- * puts the spaces back. Used on the invoice's "Pay by bank transfer" block
- * (`domain/billing/document/render.ts`) and on Settings › Practice
+ * puts the spaces back. Used on the invoice's "Payment details" card
+ * (`domain/billing/document/invoice.ts`) and on Settings › Practice
  * (`app/admin/settings/PracticePage.tsx`), which is why it lives beside
  * `isValidIban` rather than in either caller.
  */

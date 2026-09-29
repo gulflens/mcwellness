@@ -683,7 +683,9 @@ describe('the practice’s bank account on a filed invoice', () => {
       expect(res.status).toBe(201);
       const body = (await res.json()) as CreateDocumentResponse;
       const page = extractAll(new Uint8Array((await filedBytes(body.document.id)).bytes));
-      expect(page).toContain('Pay by bank transfer');
+      // The payment details card of the operator's design of 24 September
+      // 2026 (round 65), which replaced the old page's "Pay by bank transfer".
+      expect(page).toContain('Payment details');
       expect(page).toContain('Example Practice L.L.C-FZ');
       expect(page).toContain('AE36 0000 0000 0000 0000 001');
     } finally {

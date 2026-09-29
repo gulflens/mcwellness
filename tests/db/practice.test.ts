@@ -311,7 +311,7 @@ describe('the practice’s contact details', () => {
 
 /**
  * The practice's bank account (migration 924, round 61): what an invoice's
- * "Pay by bank transfer" block prints. Invented values only — a UAE-shaped
+ * "Payment details" card prints. Invented values only — a UAE-shaped
  * IBAN with an all-zero bank code and a sequential account, its check digits
  * computed so it passes mod 97, and a BIC in the shape of none.
  */
