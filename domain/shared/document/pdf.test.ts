@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { extractText } from './extract';
 import {
+  measure,
   PAGE_HEIGHT,
   PAGE_WIDTH,
   renderPdf,
   type DocumentImage,
   type FontSet,
   type Page,
+  type PathSegment,
 } from './pdf';
 import type { Font } from './truetype';
 
@@ -748,5 +750,251 @@ describe('a rectangle', () => {
     const once = renderPdf([page], fonts, 'Synthetic');
     const again = renderPdf([page], fonts, 'Synthetic');
     expect(Buffer.from(once).equals(Buffer.from(again))).toBe(true);
+  });
+});
+
+/**
+ * The three additions the brain-map report asked for
+ * (docs/CHANGE-REQUESTS/reports-02.md, request 1): a path, a bold Arabic face,
+ * and smooth resampling on an image. Each is additive — a document that uses
+ * none of them renders to the bytes it always did, which the greyscale golden
+ * above goes on asserting word for word.
+ */
+describe('a path', () => {
+  const draw = (op: Page['ops'][number]): string =>
+    streamOf(renderPdf([{ ops: [op] }], fonts, 'S'));
+  const TRIANGLE: readonly PathSegment[] = [['M', 10, 10], ['L', 50, 10], ['L', 30, 40], ['Z']];
+
+  it('fills its segments in one line, inside its own q and Q', () => {
+    expect(draw({ kind: 'path', segments: TRIANGLE, fill: { rgb: [0.22, 0.02, 0.45] } })).toBe(
+      'q 0.22 0.02 0.45 rg 10 10 m 50 10 l 30 40 l h f Q',
+    );
+  });
+
+  it('writes a curve as one c with its two control points and its end', () => {
+    expect(
+      draw({
+        kind: 'path',
+        segments: [
+          ['M', 0, 0],
+          ['C', 10, 20, 30, 40, 50, 60],
+        ],
+        stroke: { grey: 0 },
+      }),
+    ).toBe('q 0 G 0 0 m 10 20 30 40 50 60 c S Q');
+  });
+
+  it('strokes with the width, the cap and the join it was given', () => {
+    expect(
+      draw({
+        kind: 'path',
+        segments: TRIANGLE,
+        stroke: { rgb: [1, 0, 0], width: 2.5, cap: 'round', join: 'bevel' },
+      }),
+    ).toBe('q 1 0 0 RG 2.50 w 1 J 2 j 10 10 m 50 10 l 30 40 l h S Q');
+  });
+
+  it('names each cap and each join by the number PDF gives it', () => {
+    const line = (cap: 'butt' | 'round' | 'square', join: 'miter' | 'round' | 'bevel'): string =>
+      draw({ kind: 'path', segments: TRIANGLE, stroke: { grey: 0, cap, join } });
+    expect(line('butt', 'miter')).toContain(' 0 J 0 j ');
+    expect(line('round', 'round')).toContain(' 1 J 1 j ');
+    expect(line('square', 'bevel')).toContain(' 2 J 2 j ');
+  });
+
+  it('fills and strokes with B, and with B* under the even-odd rule', () => {
+    const both = { kind: 'path' as const, segments: TRIANGLE, fill: { grey: 0.9 }, stroke: {} };
+    expect(draw(both)).toBe('q 0.90 g 0 G 10 10 m 50 10 l 30 40 l h B Q');
+    expect(draw({ ...both, evenOdd: true })).toMatch(/ B\* Q$/);
+    expect(draw({ kind: 'path', segments: TRIANGLE, fill: {}, evenOdd: true })).toBe(
+      'q 0 g 10 10 m 50 10 l 30 40 l h f* Q',
+    );
+  });
+
+  it('draws nothing for a path with no paint, no starting move, or a number that is not finite', () => {
+    expect(draw({ kind: 'path', segments: TRIANGLE })).toBe('');
+    expect(draw({ kind: 'path', segments: [['L', 1, 1]], fill: {} })).toBe('');
+    expect(draw({ kind: 'path', segments: [], stroke: {} })).toBe('');
+    expect(
+      draw({
+        kind: 'path',
+        segments: [
+          ['M', 0, 0],
+          ['L', Number.NaN, 1],
+        ],
+        stroke: {},
+      }),
+    ).toBe('');
+    expect(
+      draw({
+        kind: 'path',
+        segments: [
+          ['M', 0, 0],
+          ['L', 1, 1],
+        ],
+        stroke: { width: Infinity },
+      }),
+    ).toBe('');
+  });
+
+  it('draws nothing for a number past what a PDF number can say', () => {
+    expect(
+      draw({
+        kind: 'path',
+        segments: [
+          ['M', 0, 0],
+          ['L', 1e22, 1],
+        ],
+        stroke: {},
+      }),
+    ).toBe('');
+  });
+
+  it('draws nothing for a negative width, or a cap, a join or a segment the type does not allow', () => {
+    expect(draw({ kind: 'path', segments: TRIANGLE, stroke: { width: -2 } })).toBe('');
+    const bad = (stroke: object, segments: readonly unknown[] = TRIANGLE): string =>
+      draw({ kind: 'path', segments, stroke } as Page['ops'][number]);
+    expect(bad({ cap: 'pointed' })).toBe('');
+    expect(bad({ join: 'wavy' })).toBe('');
+    expect(
+      bad({}, [
+        ['M', 0, 0],
+        ['C', 1, 2],
+      ]),
+    ).toBe('');
+    expect(draw({ kind: 'path', segments: TRIANGLE, stroke: { width: 0 } })).toBe(
+      'q 0 G 0 w 10 10 m 50 10 l 30 40 l h S Q',
+    );
+  });
+
+  it('leaves the text after it in the colour the text asked for', () => {
+    const stream = streamOf(
+      renderPdf(
+        [
+          {
+            ops: [
+              { kind: 'text', x: 56, y: 700, text: 'A', style: { font: 'regular', size: 10 } },
+              { kind: 'path', segments: TRIANGLE, fill: { rgb: [1, 0, 0] } },
+              { kind: 'text', x: 56, y: 680, text: 'B', style: { font: 'regular', size: 10 } },
+            ],
+          },
+        ],
+        fonts,
+        'S',
+      ),
+    );
+    // The path's red dies at its Q, and the fill the writer last told the
+    // reader is still ink, so the second line sets none of its own.
+    expect(stream.split('\n').filter((line) => line.endsWith(' g'))).toEqual(['0 g']);
+    expect(stream).toContain('q 1 0 0 rg 10 10 m 50 10 l 30 40 l h f Q');
+  });
+
+  it('is not read back as text', () => {
+    const bytes = renderPdf(
+      [
+        {
+          ops: [
+            { kind: 'path', segments: TRIANGLE, fill: {} },
+            { kind: 'text', x: 56, y: 700, text: 'Only', style: { font: 'regular', size: 10 } },
+          ],
+        },
+      ],
+      fonts,
+      'S',
+    );
+    expect(extractText(bytes).join('')).toBe('Only');
+  });
+});
+
+describe('a bold Arabic face', () => {
+  const boldArabic = ((): FontSet['arabic'] => {
+    const face = syntheticFont('SyntheticArabic-Bold', ARABIC, true);
+    return { ...face, widths: new Map([...face.widths.keys()].map((g) => [g, 600] as const)) };
+  })();
+  const four: FontSet = { ...fonts, arabicBold: boldArabic };
+  const arabicLine = (font: 'regular' | 'bold'): Page => ({
+    ops: [{ kind: 'text', x: 400, y: 700, text: 'سلام', style: { font, size: 10 }, rtl: true }],
+  });
+  const file = (page: Page, set: FontSet): string =>
+    new TextDecoder('latin1').decode(renderPdf([page], set, 'S'));
+
+  it('draws bold Arabic in the fourth face, as F4, when the set carries one', () => {
+    const text = file(arabicLine('bold'), four);
+    expect(text).toContain('/F4 10 Tf');
+    expect(text).toContain('/BaseFont /SyntheticArabic-Bold');
+    expect(text).not.toContain('/BaseFont /SyntheticArabic ');
+  });
+
+  it('draws bold Arabic in the regular Arabic face when the set has three, as it always has', () => {
+    expect(file(arabicLine('bold'), fonts)).toContain('/F3 10 Tf');
+  });
+
+  it('never selects the fourth face for Arabic that is not bold', () => {
+    expect(file(arabicLine('regular'), four)).toBe(file(arabicLine('regular'), fonts));
+  });
+
+  it('leaves a document that draws no bold Arabic byte for byte as it was', () => {
+    const page: Page = {
+      ops: [
+        ...GREY_PAGE.ops,
+        {
+          kind: 'text',
+          x: 400,
+          y: 600,
+          text: 'سلام',
+          style: { font: 'regular', size: 10 },
+          rtl: true,
+        },
+      ],
+    };
+    expect(renderPdf([page], four, 'S')).toEqual(renderPdf([page], fonts, 'S'));
+  });
+
+  it('keeps Latin in a bold line in the Latin bold face', () => {
+    const text = file(
+      {
+        ops: [
+          {
+            kind: 'text',
+            x: 400,
+            y: 700,
+            text: 'سلام AB',
+            style: { font: 'bold', size: 10 },
+            rtl: true,
+          },
+        ],
+      },
+      four,
+    );
+    expect(text).toContain('/F2 10 Tf');
+    expect(text).toContain('/F4 10 Tf');
+  });
+
+  it('measures bold Arabic with the face that will draw it', () => {
+    const style = { font: 'bold' as const, size: 10 };
+    expect(measure('سلام', style, four, true)).toBeGreaterThan(measure('سلام', style, fonts, true));
+    expect(measure('سلام', { ...style, font: 'regular' }, four, true)).toBe(
+      measure('سلام', { ...style, font: 'regular' }, fonts, true),
+    );
+  });
+});
+
+describe('an image asked to be resampled smoothly', () => {
+  const MAP: DocumentImage = { width: 2, height: 2, colours: 'rgb', data: new Uint8Array([1, 2]) };
+  const page: Page = {
+    ops: [{ kind: 'image', image: 'map', x: 0, y: 0, width: 100, height: 100 }],
+  };
+  const file = (image: DocumentImage): string =>
+    new TextDecoder('latin1').decode(renderPdf([page], fonts, 'S', { map: image }));
+
+  it('writes /Interpolate true in the image dictionary', () => {
+    expect(file({ ...MAP, interpolate: true })).toContain(
+      '/Columns 2 >> /Interpolate true /Length 2',
+    );
+  });
+
+  it('writes the dictionary it always wrote when the flag is absent or false', () => {
+    expect(file(MAP)).not.toContain('/Interpolate');
+    expect(file({ ...MAP, interpolate: false })).toBe(file(MAP));
   });
 });

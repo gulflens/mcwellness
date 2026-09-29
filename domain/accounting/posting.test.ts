@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fils } from '../shared';
-import { MissingRoleError, assertBalanced, cr, dr } from './journal';
+import { MissingRoleError, UnbalancedEntryError, assertBalanced, cr, dr } from './journal';
 import { SOURCE_TABLE, postingsFor, type MoneyEvent } from './posting';
 import type { AccountRole, AccountType, ChartAccount } from './types';
 
@@ -415,5 +415,83 @@ describe('postingsFor', () => {
       const draft = postingsFor(event, CHART);
       expect(() => assertBalanced(draft!.lines), event.event).not.toThrow();
     }
+  });
+});
+
+describe('an event worth nothing posts nothing', () => {
+  /**
+   * A session given free is an invoice for nought and a credit worth nought.
+   * The journal holds no line of nought (section 4.2, rule 1), so there is
+   * nothing to write, and saying so is the rule: on 29 September 2026 one
+   * such invoice was refused as unbalanced instead, and took the overview
+   * and every posting behind it down with it.
+   */
+  const NOUGHT = { netFils: fils(0), vatFils: fils(0), grossFils: fils(0) };
+
+  it.each(['session', 'package', 'single_session', 'call_out_fee'] as const)(
+    'posts nothing for a %s invoice of nought',
+    (invoiceKind) => {
+      const event: MoneyEvent = {
+        event: 'invoice.issued',
+        sourceId: INV,
+        occurredOn: '2026-09-29',
+        invoiceKind,
+        ...NOUGHT,
+      };
+      expect(postingsFor(event, CHART)).toBeNull();
+    },
+  );
+
+  it('posts nothing for a waived fee of nought', () => {
+    const event: MoneyEvent = {
+      event: 'fee.waived',
+      sourceId: INV3,
+      occurredOn: '2026-09-29',
+      ...NOUGHT,
+    };
+    expect(postingsFor(event, CHART)).toBeNull();
+  });
+
+  it('posts nothing for a payment of nought', () => {
+    expect(postingsFor({ ...PAYMENT, amountFils: fils(0) }, CHART)).toBeNull();
+  });
+
+  it('posts nothing when a credit worth nought is used, restored, expired or refunded', () => {
+    const at = { sourceId: ENT, occurredOn: '2026-09-30', allocatedNetFils: fils(0) };
+    const events: MoneyEvent[] = [
+      { event: 'credit.consumed', ...at, serviceCode: 'nf-session' },
+      { event: 'credit.waived', ...at, serviceCode: 'nf-session', hasReplacement: true },
+      { event: 'credit.expired', ...at },
+      { event: 'credit.refunded', ...at },
+    ];
+    for (const event of events) {
+      expect(postingsFor(event, CHART), event.event).toBeNull();
+    }
+  });
+
+  it('still refuses an invoice whose figures do not add up', () => {
+    const event: MoneyEvent = {
+      event: 'invoice.issued',
+      sourceId: INV2,
+      occurredOn: '2026-09-29',
+      invoiceKind: 'single_session',
+      netFils: fils(70_000),
+      vatFils: fils(0),
+      grossFils: fils(60_000),
+    };
+    expect(() => postingsFor(event, CHART)).toThrow(UnbalancedEntryError);
+  });
+
+  it('still refuses an invoice with a total and nothing sold behind it', () => {
+    const event: MoneyEvent = {
+      event: 'invoice.issued',
+      sourceId: INV2,
+      occurredOn: '2026-09-29',
+      invoiceKind: 'single_session',
+      netFils: fils(0),
+      vatFils: fils(0),
+      grossFils: fils(70_000),
+    };
+    expect(() => postingsFor(event, CHART)).toThrow(UnbalancedEntryError);
   });
 });
