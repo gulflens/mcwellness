@@ -11,6 +11,7 @@ import { ageOn } from '../../../domain/shared/dates';
 import { MEASURE_IDS } from '../../../domain/reports/qeeg/catalogue/ids';
 import { blankFollowUp, blankInitial } from '../../../domain/reports/qeeg/blank';
 import type { ComparedWith, QeegInitial } from '../../../domain/reports/qeeg/types';
+import { linkFigureAsOwner } from './figures-support';
 import { progressBody, sessionBody, SEEDED, startHarness, type Harness } from './support';
 
 /**
@@ -68,6 +69,8 @@ const WITH_REASON = { 'x-reason': REASON };
 const EARLIER_DAY = '2026-03-14';
 const ISSUED_NUMBER = 901;
 const SHA = 'c'.repeat(64);
+/** The earlier report's one map, a document linked to it (migration 604). */
+const EARLIER_MAP = '0000000d-0000-4000-8000-000000000091';
 
 let h: Harness;
 /** The client every save below is about: one with an Arabic name, a birth date and a sex on file. */
@@ -157,7 +160,7 @@ function earlierContent(): QeegInitial {
     dashboard: { ...blank.dashboard, mental_energy: { score: 7, evidence: null } },
     maps: {
       'map-0': {
-        figureId: '0000000d-0000-4000-8000-000000000091',
+        figureId: EARLIER_MAP,
         sha256: SHA,
         widthPx: 800,
         heightPx: 600,
@@ -191,31 +194,42 @@ beforeAll(async () => {
   if (!stranger) throw new Error('The practitioner reaches every client.');
   strangerId = stranger.id;
 
-  // A signed first report, written as the table owner with the snapshots
-  // signing leaves on a row.
+  // A signed first report, written as the table owner: drafted, its map
+  // linked while it is a draft (migration 604 freezes the links when it
+  // leaves draft), then signed with the snapshots signing leaves on a row.
   const issued = await h.owner.query<{ id: string }>(
-    'insert into report (tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
-      'signed_by_practitioner_id, signed_by_name, signed_by_certification, recipient_name, ' +
-      'recipient_record_number, practice_legal_name, content) values ' +
-      "($1, $2, 'qeeg', 'issued', $3, current_date, now(), $4, 'Rowan Ridge', 'bcia_bcn', " +
-      "'Cedar Meadow', 'MW-000001', 'Synthetic Studio', $5::jsonb) returning id",
-    [
-      h.data.tenant.id,
-      clientId,
-      ISSUED_NUMBER,
-      h.practitionerIdOf(SEEDED.owner),
-      JSON.stringify(earlierContent()),
-    ],
+    "insert into report (tenant_id, client_id, kind, content) values ($1, $2, 'qeeg', $3::jsonb) " +
+      'returning id',
+    [h.data.tenant.id, clientId, JSON.stringify(earlierContent())],
   );
   issuedId = issued.rows[0]?.id ?? '';
+  const where = { tenantId: h.data.tenant.id, clientId };
+  await linkFigureAsOwner(
+    h.owner,
+    { ...where, reportId: issuedId },
+    { documentId: EARLIER_MAP, sha256: SHA, widthPx: 800, heightPx: 600, condition: 'eyes_open' },
+  );
+  await h.owner.query(
+    "update report set status = 'issued', number = $2, issued_on = current_date, " +
+      "signed_at = now(), signed_by_practitioner_id = $3, signed_by_name = 'Rowan Ridge', " +
+      "signed_by_certification = 'bcia_bcn', recipient_name = 'Cedar Meadow', " +
+      "recipient_record_number = 'MW-000001', practice_legal_name = 'Synthetic Studio' " +
+      'where id = $1',
+    [issuedId, ISSUED_NUMBER, h.practitionerIdOf(SEEDED.owner)],
+  );
 
-  // A past record: drafted with its source, then kept.
+  // A past record: drafted with its source and its map, then kept.
   const imported = await h.owner.query<{ id: string }>(
     'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
       "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
     [h.data.tenant.id, clientId, JSON.stringify(earlierContent()), SHA],
   );
   importedId = imported.rows[0]?.id ?? '';
+  await linkFigureAsOwner(
+    h.owner,
+    { ...where, reportId: importedId },
+    { documentId: EARLIER_MAP, sha256: SHA, widthPx: 800, heightPx: 600, condition: 'eyes_open' },
+  );
   await h.owner.query("update report set status = 'imported' where id = $1", [importedId]);
 
   // A legal guardian of the client with a portal login of their own, made
@@ -993,7 +1007,7 @@ function customAtLimit() {
 }
 
 /** The largest brain-map body the shape accepts, near enough: every typed thing at its limit. */
-function maximalFollowUp(): Record<string, unknown> {
+function maximalFollowUp(mapIds: readonly string[]): Record<string, unknown> {
   const base = sentFollowUp(issuedId);
   const change = base['change'] as Record<string, unknown>;
   const dashboard = base['dashboard'] as Record<string, Record<string, unknown>>;
@@ -1018,7 +1032,7 @@ function maximalFollowUp(): Record<string, unknown> {
       Array.from({ length: 8 }, (_, i) => [
         `map-${i}`,
         {
-          figureId: `0000000d-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+          figureId: mapIds[i],
           sha256: SHA,
           widthPx: 1600,
           heightPx: 1200,
@@ -1056,13 +1070,32 @@ function maximalFollowUp(): Record<string, unknown> {
 
 describe('fix round 1: the size of a brain-map body', () => {
   it('saves the largest body the shape accepts, well over the ordinary 64 KiB', async () => {
-    const content = maximalFollowUp();
-    const request = { clientId, kind: 'qeeg', content };
+    // Eight maps, each linked to the draft first, as the door links them.
+    const draft = await created(sentFollowUp(issuedId));
+    const mapIds = Array.from(
+      { length: 8 },
+      (_, i) => `0000000d-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+    );
+    for (const documentId of mapIds) {
+      await linkFigureAsOwner(
+        h.owner,
+        { tenantId: h.data.tenant.id, clientId, reportId: draft.report.id },
+        { documentId, sha256: SHA, widthPx: 1600, heightPx: 1200 },
+      );
+    }
+    const content = maximalFollowUp(mapIds);
+    const request = {
+      id: draft.report.id,
+      savedAt: draft.savedAt,
+      clientId,
+      kind: 'qeeg',
+      content,
+    };
     const bytes = Buffer.byteLength(JSON.stringify(request));
     expect(bytes).toBeGreaterThan(64 * 1024);
     expect(bytes).toBeLessThan(512 * 1024);
     const res = await save(request);
-    expect(res.status, await res.clone().text()).toBe(201);
+    expect(res.status, await res.clone().text()).toBe(200);
   });
 
   it('refuses a body over its own limit with 413', async () => {
