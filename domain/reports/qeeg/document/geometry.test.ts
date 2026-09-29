@@ -26,6 +26,7 @@ import {
 } from './geometry';
 import { mm } from './metrics';
 import { REPORT_BANDS } from './palette';
+import { styleOf } from './styles';
 
 const GROUPS = {
   PAD,
@@ -140,6 +141,16 @@ describe('the figures', () => {
     const middle = RING.box / 2;
     expect(RING.scoreBaseline - RING.scoreSize).toBeGreaterThan(middle - inner);
     expect(RING.outOfBaseline).toBeLessThan(middle + inner);
+  });
+
+  it('draws the dash of a card’s list as an en dash of its type, inside the indent', () => {
+    const { size } = styleOf('cardBullet', 'ltr').style;
+    expect(CARD.dash).toBeCloseTo(size / 2, 9);
+    expect(CARD.dash).toBeLessThan(CARD.bulletIndent);
+    expect(CARD.dashLine).toBeLessThan(CARD.dash);
+    // Its middle stands above the baseline and below the top of a small letter.
+    expect(CARD.dashRise - CARD.dashLine / 2).toBeGreaterThan(0);
+    expect(CARD.dashRise + CARD.dashLine / 2).toBeLessThan(size / 2);
   });
 
   it('starts a list in two columns above six', () => {
