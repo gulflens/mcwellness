@@ -71,11 +71,12 @@ export function statusTone(status: ReportStatus): StatusTone {
 }
 
 /**
- * The editor a draft of this kind opens in, or none. The session and progress
- * editor writes those two kinds and gathers their figures; a brain-map report
- * has an editor of its own (docs/SPEC/reports-qeeg.md section 15), and until
- * it is on the screen a brain-map row opens where any signed report does, in
- * the report's own page, rather than in a form that would read it wrongly.
+ * Which of the session and progress editor's two kinds a draft of this kind
+ * opens as, or none. That editor writes those two kinds and gathers their
+ * figures. A brain-map report is never one of them: its draft opens in its
+ * own form (`qeeg/QeegEditor.tsx`, docs/SPEC/reports-qeeg.md section 15),
+ * which the Reports tab chooses before it asks this, so a brain-map row never
+ * reaches a form that would read it wrongly.
  */
 export function editorKindFor(kind: ReportKind): 'session' | 'progress' | null {
   switch (kind) {
