@@ -113,6 +113,10 @@ const WITHDRAW_SQL =
   "where tenant_id = app.current_tenant_id() and id = $1 and status = 'imported' " +
   'and withdrawn_at is null returning id';
 
+const LOCK_SQL =
+  'select status::text as status, withdrawn_at is not null as withdrawn from report ' +
+  'where tenant_id = app.current_tenant_id() and id = $1 for update';
+
 const COMPARED_SQL =
   'select id from report where tenant_id = app.current_tenant_id() and compared_with_id = $1 ' +
   'order by created_at, id';
@@ -510,6 +514,19 @@ async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> 
   }
   if (record.withdrawn) return refuse(422, 'already_withdrawn');
 
+  // The row first, then its pictures: the upload and the removal functions
+  // (604) lock the same row, so a picture filed in between waits for this
+  // withdraw to read it, and none can be left behind under this client.
+  await db.query('savepoint qeeg_withdraw');
+  const locked = (await db.query<{ status: string; withdrawn: boolean }>(LOCK_SQL, [record.id]))
+    .rows[0];
+  if (!locked || locked.withdrawn) {
+    // Withdrawn on another tab while this one waited.
+    await db.query('rollback to savepoint qeeg_withdraw');
+    return refuse(422, 'already_withdrawn');
+  }
+  // Kept on another tab while this one waited is kept: withdrawn as such.
+  const kept = locked.status === 'imported';
   const links = await linksOf(db, record.id);
   const gone: string[] = [];
   const removeMaps = async (): Promise<void> => {
@@ -523,8 +540,7 @@ async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> 
     }
   };
 
-  await db.query('savepoint qeeg_withdraw');
-  if (record.status === 'draft') {
+  if (!kept) {
     // Brought in and never kept. Its pictures are still mutable, so they are
     // removed first, as a draft's are; then it is kept and withdrawn in the
     // same step, so it ends as every withdrawn record does: stamped, cleared,
@@ -559,7 +575,7 @@ async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> 
   }
   // A kept record's pictures are removed once it is withdrawn: 604 admits
   // their removal, frozen as they are, only then.
-  if (record.status === 'imported') await removeMaps();
+  if (kept) await removeMaps();
   await db.query('release savepoint qeeg_withdraw');
   if (gone.length > 0) {
     // Each picture the record was the only holder of: its row went above,
@@ -586,7 +602,7 @@ async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> 
     db,
     'report.import_withdrawn',
     { type: 'report', id: record.id, clientId: record.client_id },
-    { maps: String(links.length), kept: record.status === 'imported' ? 'yes' : 'no' },
+    { maps: String(links.length), kept: kept ? 'yes' : 'no' },
   );
   const withdrawn = await readReport(db, record.id);
   if (!withdrawn) return answer(c, 404, 'not_found');

@@ -14,7 +14,9 @@ import {
 } from '../../../domain/reports/qeeg/testing/legacyFile';
 import type { FigureRef, QeegContent } from '../../../domain/reports/qeeg/types';
 import type * as Wording from '../../../domain/reports/qeeg/wording';
-import { goodPng, sha256Hex } from './figures-support';
+import { readFileSync } from 'node:fs';
+import pg from 'pg';
+import { goodPng, linkFigureAsOwner, sha256Hex } from './figures-support';
 import {
   clientToWriteAbout,
   completeReport,
@@ -239,6 +241,78 @@ async function listedAs(as: { seeded: number } | { authId: string }, forClient: 
   return ((await res.json()) as { documents: { id: string; kind: string }[] }).documents;
 }
 
+/** A second connection as the table owner, to hold a row or a write while a request runs. */
+async function secondConnection(): Promise<pg.Client> {
+  // The fresh database's own address, as the owner's connection was opened on it.
+  const at = (h.owner as unknown as { connectionParameters: pg.ClientConfig }).connectionParameters;
+  const other = new pg.Client({
+    host: at.host,
+    port: at.port,
+    user: at.user,
+    password: at.password,
+    database: at.database,
+  });
+  await other.connect();
+  return other;
+}
+
+/** Waits until some backend is blocked by `pid`, as the race tests of the twin do. */
+async function blockedBy(pid: number): Promise<boolean> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from pg_stat_activity where $1 = any(pg_blocking_pids(pid)) ' +
+        "and wait_event_type = 'Lock'",
+      [pid],
+    );
+    if (Number(rows[0]?.n) > 0) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
+
+/** The household login `householdOf(h, clientId, 7)` made. */
+const HOUSEHOLD_USER = '0000000d-0000-4000-8000-000000000107';
+
+/** Which of `ids` a person reads under row security, as the API reads them. */
+async function read(actorId: string, roles: string, ids: readonly string[]): Promise<string[]> {
+  await h.owner.query('begin');
+  try {
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.actor_roles', $3, true)",
+      [h.data.tenant.id, actorId, roles],
+    );
+    await h.owner.query('set local role app_role');
+    const { rows } = await h.owner.query<{ id: string }>(
+      'select id from document where id = any($1::uuid[])',
+      [ids],
+    );
+    return rows.map((row) => row.id);
+  } finally {
+    await h.owner.query('rollback');
+  }
+}
+
+/** A referral letter filed for the client by the owner: a document that is not a picture. */
+async function fileReferral(): Promise<string> {
+  const filed = await h.call(
+    'POST',
+    `/api/clients/${clientId}/documents`,
+    SEEDED.owner,
+    {
+      kind: 'referral',
+      file: {
+        mimeType: 'application/pdf',
+        bytesBase64: Buffer.from('%PDF-1.7\n% synthetic\n').toString('base64'),
+      },
+    },
+    { 'x-reason': 'Filing a referral letter' },
+  );
+  if (filed.status !== 201) throw new Error(`Refused: ${filed.status} ${await filed.text()}`);
+  return ((await filed.json()) as { id: string }).id;
+}
+
 /** The database's own answer to a statement, as a code, or null when it runs. */
 async function sqlState(run: () => Promise<unknown>): Promise<string | null> {
   try {
@@ -378,6 +452,47 @@ describe('bringing a past record in', () => {
     // Another client is another question: the same file may be theirs.
     const elsewhere = await bringIn(bodyFor(file, otherClientId));
     expect(elsewhere.status).toBe(201);
+  });
+
+  it('answers two imports of the same file at once with one draft and one refusal', async () => {
+    const body = bodyFor(newFile());
+    const answers = await Promise.all([bringIn(body), bringIn(body)]);
+    expect(answers.map((res) => res.status).sort()).toEqual([201, 409]);
+    const { rows } = await h.owner.query(
+      'select id from report where client_id = $1 and source_sha256 = $2',
+      [clientId, body.sourceSha256],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it('answers the import that loses the race at the write, by the unique index, with where the other is', async () => {
+    const body = bodyFor(newFile());
+    // Another connection writes the same file for the same client and holds
+    // it uncommitted, so the route's own question finds nothing and its
+    // insert waits on the index, then fails when the other commits.
+    const other = await secondConnection();
+    try {
+      await other.query('begin');
+      const held = await other.query<{ id: string }>(
+        'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
+          "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
+        [h.data.tenant.id, clientId, JSON.stringify(body.content), body.sourceSha256],
+      );
+      const pid = (await other.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]
+        ?.pid;
+      const pending = bringIn(body);
+      expect(await blockedBy(pid ?? -1)).toBe(true);
+      await other.query('commit');
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        code: 'already_imported',
+        reportId: held.rows[0]?.id,
+        status: 'draft',
+      });
+    } finally {
+      await other.end();
+    }
   });
 
   it('never stores the name, age or sex the file typed, in any column of any table', async () => {
@@ -660,6 +775,57 @@ describe('withdrawing a past record kept against the wrong client', () => {
     expect(trail[0]?.reason).toBe(WITHDRAW_REASON);
   });
 
+  it('leaves nothing of the erasure marker behind, and writes each picture’s deletion to the trail with the reason', async () => {
+    const record = await keptWithTwo();
+    const ids = record.maps.map((map) => map.figureId);
+    expect((await withdraw(record.id)).status).toBe(200);
+    const marker = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from app.erasure_active',
+    );
+    expect(marker.rows[0]?.n).toBe('0');
+    for (const id of ids) {
+      const { rows } = await h.owner.query<{ reason: string | null; client_id: string | null }>(
+        "select reason, client_id from audit_log where entity_type = 'document' " +
+          "and entity_id = $1 and action = 'delete'",
+        [id],
+      );
+      expect(rows, id).toHaveLength(1);
+      expect(rows[0]).toEqual({ reason: WITHDRAW_REASON, client_id: clientId });
+    }
+  });
+
+  it('removes a picture filed to an unfinished import while the withdraw waited for it', async () => {
+    const draft = await brought();
+    const first = await upload(draft.report.id, 850);
+    // Another connection files a second picture and holds the report's row,
+    // as the upload function does, uncommitted.
+    const other = await secondConnection();
+    const late = '0000000d-0000-4000-8000-0000000008a1';
+    try {
+      await other.query('begin');
+      await other.query('select id from report where id = $1 for update', [draft.report.id]);
+      const bytes = await goodPng(40, 30, 851);
+      await linkFigureAsOwner(
+        other,
+        { tenantId: h.data.tenant.id, clientId, reportId: draft.report.id },
+        { documentId: late, sha256: sha256Hex(bytes) },
+      );
+      const pid = (await other.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]
+        ?.pid;
+      const pending = withdraw(draft.report.id);
+      expect(await blockedBy(pid ?? -1)).toBe(true);
+      await other.query('commit');
+      expect((await pending).status).toBe(200);
+    } finally {
+      await other.end();
+    }
+    expect(await documentsOf([first.ref.figureId, late])).toHaveLength(0);
+    const links = await h.owner.query('select 1 from report_figure where report_id = $1', [
+      draft.report.id,
+    ]);
+    expect(links.rowCount).toBe(0);
+  });
+
   it('refuses a practitioner and a coordinator, and a withdraw with no reason', async () => {
     const record = await kept();
     for (const as of [SEEDED.practitioner, SEEDED.admin]) {
@@ -915,30 +1081,49 @@ describe('the row policy on a picture (change request 11a)', () => {
   it('gives a household contact no report_figure row under row security, and staff every one', async () => {
     const record = await keptWithTwo();
     const ids = record.maps.map((map) => map.figureId);
-    // The household login householdOf(…, 7) made, reading as the API does.
-    const householdUser = '0000000d-0000-4000-8000-000000000107';
-    const read = async (actorId: string, roles: string): Promise<string[]> => {
-      await h.owner.query('begin');
-      try {
-        await h.owner.query(
-          "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
-            "set_config('app.actor_roles', $3, true)",
-          [h.data.tenant.id, actorId, roles],
-        );
-        await h.owner.query('set local role app_role');
-        const { rows } = await h.owner.query<{ id: string }>(
-          'select id from document where id = any($1::uuid[])',
-          [ids],
-        );
-        return rows.map((row) => row.id);
-      } finally {
-        await h.owner.query('rollback');
-      }
-    };
-    expect(await read(householdUser, 'client_contact')).toEqual([]);
+    const householdUser = HOUSEHOLD_USER;
+    expect(await read(householdUser, 'client_contact', ids)).toEqual([]);
+    // A document of the household's own that is not a picture is read, so
+    // the empty answer above is the policy's exclusion and not a read that
+    // finds nothing at all.
+    const referral = await fileReferral();
+    expect(await read(householdUser, 'client_contact', [...ids, referral])).toEqual([referral]);
     const owner = h.data.users[SEEDED.owner];
     if (!owner) throw new Error('No owner.');
-    expect((await read(owner.id, 'owner')).sort()).toEqual([...ids].sort());
+    expect((await read(owner.id, 'owner', [...ids, referral])).sort()).toEqual(
+      [...ids, referral].sort(),
+    );
+  });
+});
+
+describe('the Documents route on a picture, with the policy’s exclusion taken away', () => {
+  it('still lists none and opens none for a household: the route’s own filter holds', async () => {
+    const record = await keptWithTwo();
+    const ids = record.maps.map((map) => map.figureId);
+    const referral = await fileReferral();
+    // The contact arm without `kind <> 'report_figure'`, as it stood before
+    // request 11a, so the household's reads reach the pictures' rows.
+    await h.owner.query('drop policy client_record_readers on public.document');
+    await h.owner.query(
+      'create policy client_record_readers on public.document as restrictive for select ' +
+        "to app_role using (case when client_id is null then app.actor_has_role('owner') " +
+        "else app.actor_has_role('owner') or (app.actor_has_role('client_contact') " +
+        'and app.actor_is_contact_of(client_id)) end)',
+    );
+    try {
+      expect(await read(HOUSEHOLD_USER, 'client_contact', ids)).toHaveLength(ids.length);
+      const home = await listedAs({ authId: household }, clientId);
+      expect(home.filter((doc) => doc.kind === 'report_figure')).toEqual([]);
+      expect(home.map((doc) => doc.id)).toContain(referral);
+      for (const id of ids) {
+        const path = `/api/clients/${clientId}/documents/${id}/link`;
+        expect((await h.callAs('GET', path, household)).status, id).toBe(404);
+      }
+    } finally {
+      // The policies as the runner applies them.
+      await h.owner.query(readFileSync('db/policies/client/readers.sql', 'utf8'));
+    }
+    expect(await read(HOUSEHOLD_USER, 'client_contact', ids)).toEqual([]);
   });
 });
 
