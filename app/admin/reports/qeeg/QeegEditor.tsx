@@ -140,6 +140,11 @@ type Props = {
   onDone: () => void;
   /** A corrected version was started from the report signed here: open it. */
   onCorrected?: (draftId: string) => void;
+  /**
+   * Whether this client's record has been erased, as the Reports tab knows
+   * it: nothing new, the other language included, is started for them.
+   */
+  erased?: boolean;
 };
 
 type Switching = { to: 'follow-up'; earlierId: string } | { to: 'initial' };
@@ -151,7 +156,15 @@ function leftWords(count: number): string {
   return count === 0 ? 'Nothing left to fill' : `${count} left to fill`;
 }
 
-export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorrected }: Props) {
+export function QeegEditor({
+  clientId,
+  reportId,
+  start,
+  reports,
+  onDone,
+  onCorrected,
+  erased = false,
+}: Props) {
   const draft = useQeegDraft({ clientId, reportId, start });
   const maps = useQeegMaps(draft);
   const signing = useQeegSigning(draft);
@@ -174,7 +187,7 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
       <SignedReport
         signing={signing}
         mayCorrect={canSupersedeReports(actor, now, clientId)}
-        mayTwin={canDraftReports(actor, now, clientId)}
+        mayTwin={canDraftReports(actor, now, clientId) && !erased}
         onCorrected={(id) => (onCorrected ? onCorrected(id) : onDone())}
         onTwin={(id) => (onCorrected ? onCorrected(id) : onDone())}
         onDone={onDone}

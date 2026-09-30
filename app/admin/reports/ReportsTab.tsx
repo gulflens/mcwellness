@@ -143,6 +143,7 @@ export function ReportsTab({
         reportId={qeeg.reportId}
         start={qeeg.start}
         reports={state.reports}
+        erased={erased}
         onDone={() => {
           setQeeg(null);
           void refetch();

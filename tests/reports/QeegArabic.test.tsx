@@ -193,6 +193,7 @@ function mountEditor(
     reportId?: string | null;
     start?: QeegContent | null;
     reports?: unknown[];
+    erased?: boolean;
   } = {},
 ) {
   const api = fakeApi(options.actor ?? SIGNER, options.api);
@@ -205,6 +206,7 @@ function mountEditor(
         reportId={options.reportId ?? null}
         start={options.reportId ? null : (options.start ?? blankInitial())}
         reports={(options.reports ?? []) as never}
+        erased={options.erased ?? false}
         onDone={onDone}
         onCorrected={onCorrected}
       />
@@ -572,6 +574,13 @@ describe('fix round 1: who is offered the other language (change request 6)', ()
   it('does not offer it on the signed form to a coordinator, who drafts nothing', async () => {
     const user = userEvent.setup();
     mountEditor({ actor: signing(ADMIN) });
+    await signIt(user);
+    expect(screen.queryByRole('button', { name: 'Sign the other language' })).toBeNull();
+  });
+
+  it('does not offer it on the signed form for a client whose record has been erased (fix round 2)', async () => {
+    const user = userEvent.setup();
+    mountEditor({ erased: true });
     await signIt(user);
     expect(screen.queryByRole('button', { name: 'Sign the other language' })).toBeNull();
   });
