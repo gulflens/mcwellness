@@ -193,3 +193,66 @@ export function qeegSteps(h: Harness, clientId: string) {
 
   return { saveAs, newDraft, upload, saveOver, saved, completeDraft };
 }
+
+export type VisitStatus = 'completed' | 'no_show' | 'voided' | 'in_progress';
+
+/**
+ * A visit of `client`'s checked in at `at` (an instant with its offset), run
+ * by the seeded person `by`. `voided` writes it as the office's void leaves
+ * one: a visit logged from the records, completed, then stamped voided under
+ * the void's marker. `in_progress` is a visit still open. Brief S.
+ */
+export async function visitAt(
+  h: Harness,
+  client: string,
+  at: string,
+  options: { status?: VisitStatus; by?: number } = {},
+): Promise<string> {
+  const status = options.status ?? 'completed';
+  const person = h.data.clients.find((c) => c.id === client);
+  const service = h.data.serviceTypes[0];
+  if (!person || !service) throw new Error('The seed is not what it was.');
+  const fromRecords = status === 'voided';
+  const open = status === 'in_progress';
+  await h.owner.query('begin');
+  try {
+    const { rows } = await h.owner.query<{ id: string }>(
+      'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+        'delivery_mode, location_id, checked_in_at, checked_out_at, status, closed_at, ' +
+        'recorded_from, settled_outside_app) values (gen_random_uuid(), $1, $2, $3, $4, ' +
+        "'home', $5, $6::timestamptz, case when $10 then null else $6::timestamptz + interval '50 minutes' end, " +
+        "$7::session_status, case when $10 then null else $6::timestamptz + interval '1 hour' end, $8, $9) " +
+        'returning id',
+      [
+        h.data.tenant.id,
+        client,
+        h.practitionerIdOf(options.by ?? 0),
+        service.id,
+        person.primaryLocationId,
+        at,
+        status === 'voided' ? 'completed' : status,
+        fromRecords ? 'records' : 'device',
+        fromRecords,
+        open,
+      ],
+    );
+    const id = rows[0]?.id ?? '';
+    if (status === 'voided') {
+      await h.owner.query(
+        'insert into app.void_active (txid, session_id) values (txid_current(), $1)',
+        [id],
+      );
+      await h.owner.query(
+        "update session set status = 'voided', voided_at = now(), voided_by = $2, " +
+          "void_reason = 'Logged in error' where id = $1",
+        [id, h.data.users[0]?.id],
+      );
+      await h.owner.query('delete from app.void_active where txid = txid_current()');
+    }
+    await h.owner.query('commit');
+    return id;
+  } catch (error) {
+    await h.owner.query('rollback');
+    throw error;
+  }
+}

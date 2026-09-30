@@ -26,6 +26,7 @@ import {
   pageCount,
   qeegSteps,
   sent,
+  visitAt,
 } from './qeeg-signing-support';
 import { progressBody, SEEDED, startHarness, type Harness } from './support';
 
@@ -154,59 +155,14 @@ function pastContent(recordedOn: string | null): QeegInitial {
   };
 }
 
-/**
- * A visit of the client's on `day`, checked in at nine in the practice's
- * morning. `voided` writes it as the office's void leaves one: a visit logged
- * from the records, completed, then stamped voided under the void's marker.
- */
+/** A visit of the client's on `day`, checked in at nine in the practice's morning. */
 async function visitOn(
   client: string,
   day: string,
   status: 'completed' | 'no_show' | 'voided' = 'completed',
+  by: number = SEEDED.owner,
 ): Promise<void> {
-  const person = h.data.clients.find((c) => c.id === client);
-  const service = h.data.serviceTypes[0];
-  if (!person || !service) throw new Error('The seed is not what it was.');
-  const at = `${day}T09:00:00+04:00`;
-  const fromRecords = status === 'voided';
-  await h.owner.query('begin');
-  try {
-    const { rows } = await h.owner.query<{ id: string }>(
-      'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
-        'delivery_mode, location_id, checked_in_at, checked_out_at, status, closed_at, ' +
-        'recorded_from, settled_outside_app) values (gen_random_uuid(), $1, $2, $3, $4, ' +
-        "'home', $5, $6::timestamptz, $6::timestamptz + interval '50 minutes', $7::session_status, " +
-        "$6::timestamptz + interval '1 hour', $8, $9) returning id",
-      [
-        h.data.tenant.id,
-        client,
-        h.practitionerIdOf(SEEDED.owner),
-        service.id,
-        person.primaryLocationId,
-        at,
-        status === 'voided' ? 'completed' : status,
-        fromRecords ? 'records' : 'device',
-        fromRecords,
-      ],
-    );
-    const id = rows[0]?.id;
-    if (status === 'voided') {
-      await h.owner.query(
-        'insert into app.void_active (txid, session_id) values (txid_current(), $1)',
-        [id],
-      );
-      await h.owner.query(
-        "update session set status = 'voided', voided_at = now(), voided_by = $2, " +
-          "void_reason = 'Logged in error' where id = $1",
-        [id, h.data.users[SEEDED.owner]?.id],
-      );
-      await h.owner.query('delete from app.void_active where txid = txid_current()');
-    }
-    await h.owner.query('commit');
-  } catch (error) {
-    await h.owner.query('rollback');
-    throw error;
-  }
+  await visitAt(h, client, `${day}T09:00:00+04:00`, { status, by });
 }
 
 beforeAll(async () => {
