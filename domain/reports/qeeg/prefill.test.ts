@@ -194,6 +194,41 @@ describe('prefillFollowUp', () => {
       });
     });
 
+    it('brings forward, from an earlier follow-up, the map it printed as each pair’s later side', () => {
+      // Decision 13: the before-picture is the map that earlier report printed
+      // as its own. A follow-up prints its own map of each condition as the
+      // later side of the pair, which need not be the first of its maps.
+      const ref = (n: number) => ({
+        figureId: ID(n),
+        sha256: SHA,
+        widthPx: 800 + n,
+        heightPx: 600,
+      });
+      const blank = blankFollowUp(ISSUED, 'follow_up');
+      const followUp: QeegFollowUp = {
+        ...blank,
+        recording: { recordedOn: '2026-06-01', eyes: null, handedness: null },
+        maps: {
+          'map-0': map(11, 'eyes_open', 0),
+          'map-1': map(12, 'eyes_open', 1),
+          'map-2': map(13, 'eyes_closed', 2),
+        },
+        change: {
+          ...blank.change,
+          pairs: {
+            eyes_open: { earlier: ref(5), later: ref(12) },
+            // No later side printed: the first map of the condition, as a first report's.
+            eyes_closed: { earlier: ref(6), later: null },
+          },
+        },
+      };
+      const { pairs } = prefilled(earlier({ content: followUp })).content.change;
+      expect(pairs).toEqual({
+        eyes_open: { earlier: ref(12), later: null },
+        eyes_closed: { earlier: ref(13), later: null },
+      });
+    });
+
     it('brings forward no picture for a condition the earlier report had none of', () => {
       const content = { ...earlierContent(), maps: { 'map-0': map(1, 'eyes_open', 0) } };
       const { pairs } = prefilled(earlier({ content })).content.change;

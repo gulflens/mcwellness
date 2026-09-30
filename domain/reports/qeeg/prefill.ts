@@ -4,7 +4,8 @@
  * **Facts come forward; judgements do not.** A follow-up says what has
  * changed since an earlier report, so it names that report
  * (`comparedWith`), prints the earlier score beside each new one, and shows
- * the earlier brain map beside the new. Those are facts about the earlier
+ * the earlier brain map beside the new: the one the earlier report printed as
+ * its own, which for an earlier follow-up is the later side of its pair. Those are facts about the earlier
  * report. So is the client's handedness, which is a fact about a person and
  * not a judgement. The day of the new recording and the stage are what she
  * gave in the request. Everything else is as `blankFollowUp` has it: no
@@ -152,28 +153,40 @@ function bilingualOf(value: unknown): Bilingual | null {
   return { en, ar };
 }
 
-/** The first map, by place, recorded under `condition`, as a reference to its picture. */
-function earlierPicture(maps: unknown, condition: Condition): FigureRef | null {
+/** A reference to a picture, read from a stored body, or null where it is not one. */
+function pictureRef(value: unknown): FigureRef | null {
+  const figureId = own(value, 'figureId');
+  const sha256 = own(value, 'sha256');
+  const widthPx = own(value, 'widthPx');
+  const heightPx = own(value, 'heightPx');
+  return typeof figureId === 'string' &&
+    typeof sha256 === 'string' &&
+    typeof widthPx === 'number' &&
+    typeof heightPx === 'number'
+    ? { figureId, sha256, widthPx, heightPx }
+    : null;
+}
+
+/**
+ * The picture of `condition` the earlier report printed as its own (decision
+ * 13). A follow-up prints its own map of a condition as the later side of
+ * that pair, so that is the one, where it printed one. Otherwise, and for a
+ * first report, the first map by place recorded under the condition.
+ */
+function earlierPicture(content: unknown, condition: Condition): FigureRef | null {
+  if (own(content, 'edition') === 'follow-up') {
+    const later = pictureRef(own(own(own(own(content, 'change'), 'pairs'), condition), 'later'));
+    if (later !== null) return later;
+  }
   let found: { position: number; ref: FigureRef } | null = null;
+  const maps = own(content, 'maps');
   for (const entry of isRecord(maps) ? Object.values(maps) : []) {
     const position = own(entry, 'position');
-    const figureId = own(entry, 'figureId');
-    const sha256 = own(entry, 'sha256');
-    const widthPx = own(entry, 'widthPx');
-    const heightPx = own(entry, 'heightPx');
-    if (
-      own(entry, 'condition') !== condition ||
-      typeof position !== 'number' ||
-      typeof figureId !== 'string' ||
-      typeof sha256 !== 'string' ||
-      typeof widthPx !== 'number' ||
-      typeof heightPx !== 'number'
-    ) {
+    const ref = pictureRef(entry);
+    if (own(entry, 'condition') !== condition || typeof position !== 'number' || ref === null) {
       continue;
     }
-    if (found === null || position < found.position) {
-      found = { position, ref: { figureId, sha256, widthPx, heightPx } };
-    }
+    if (found === null || position < found.position) found = { position, ref };
   }
   return found === null ? null : found.ref;
 }
@@ -242,7 +255,6 @@ export function prefillFollowUp(earlier: EarlierReport, request: PrefillRequest)
   const blank = blankFollowUp(comparedWith, request.stage);
   const handedness = own(recording, 'handedness');
   const dashboard = own(content, 'dashboard');
-  const maps = own(content, 'maps');
   const bands = own(content, 'bands');
   const connectivity = own(content, 'connectivity');
 
@@ -262,7 +274,7 @@ export function prefillFollowUp(earlier: EarlierReport, request: PrefillRequest)
       change: {
         ...blank.change,
         pairs: eachOf(CONDITIONS, (condition): Pair => ({
-          earlier: earlierPicture(maps, condition),
+          earlier: earlierPicture(content, condition),
           later: null,
         })),
       },
