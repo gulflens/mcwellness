@@ -27,6 +27,7 @@ import {
   qeegSteps,
   sent,
   visitAt,
+  voidVisit,
 } from './qeeg-signing-support';
 import { progressBody, SEEDED, startHarness, type Harness } from './support';
 
@@ -190,6 +191,8 @@ beforeAll(async () => {
   // The client's visits, and the ones that must not count.
   await visitOn(clientId, EARLIER_DAY); // the earlier recording's own day
   await visitOn(clientId, '2026-09-15');
+  // A colleague's visit: row security would hide it from the practitioner who asks.
+  await visitOn(clientId, '2026-09-16', 'completed', SEEDED.otherPractitioner);
   await visitOn(clientId, '2026-09-20');
   await visitOn(clientId, '2026-09-21', 'voided');
   await visitOn(clientId, '2026-09-23', 'no_show');
@@ -458,16 +461,51 @@ describe('each refusal, by its own code and sentence', () => {
 describe('the sessions completed, counted from the visits', () => {
   it('counts the completed visits between the two recording days, leaving out voided ones and another client’s', async () => {
     const body = await prefilled({ clientId, from: signed.id, recordedOn: LATER_DAY });
-    // The 15th, the 20th and the 27th: not the two recording days, the voided
+    // The 15th, the colleague's 16th, the 20th and the 27th: not the two recording days, the voided
     // visit, the no-show, the day after, or another client's.
     expect(body.sessions).toEqual({
-      count: 3,
+      count: 4,
       after: EARLIER_DAY,
       before: LATER_DAY,
       through: null,
     });
     expect((body.content as QeegFollowUp).change.sessionsCompleted).toEqual({
-      count: 3,
+      count: 4,
+      source: 'gathered',
+    });
+  });
+
+  it('gives a practitioner on the client’s schedule the owner’s count, a colleague’s visit included', async () => {
+    const asked = prefillPath({ clientId, from: signed.id, recordedOn: LATER_DAY });
+    const asOwner = (await (
+      await h.call('GET', asked, SEEDED.owner)
+    ).json()) as QeegPrefillResponse;
+    const res = await h.call('GET', asked, SEEDED.practitioner);
+    expect(res.status).toBe(200);
+    const asPractitioner = (await res.json()) as QeegPrefillResponse;
+    expect(asPractitioner.sessions.count).toBe(4);
+    expect(asPractitioner.sessions).toEqual(asOwner.sessions);
+
+    // And her save prints the owner's count.
+    const saved = await h.call(
+      'POST',
+      '/api/reports/draft',
+      SEEDED.practitioner,
+      {
+        clientId,
+        kind: 'qeeg',
+        locale: 'en',
+        content: {
+          ...sent(asPractitioner.content as QeegFollowUp),
+          comparedWith: { reportId: signed.id },
+        },
+      },
+      { 'x-reason': SAVE_REASON },
+    );
+    expect(saved.status).toBe(201);
+    const body = (await saved.json()) as QeegDraftResponse;
+    expect((body.content as QeegFollowUp).change.sessionsCompleted).toEqual({
+      count: 4,
       source: 'gathered',
     });
   });
@@ -475,7 +513,7 @@ describe('the sessions completed, counted from the visits', () => {
   it('counts through today while the new recording has no day', async () => {
     const body = await prefilled({ clientId, from: signed.id });
     expect(body.sessions).toEqual({
-      count: 5,
+      count: 6,
       after: EARLIER_DAY,
       before: null,
       through: '2026-09-30',
@@ -507,7 +545,7 @@ describe('the draft route counts a counted figure again, and keeps a typed one',
 
   it('works out a counted figure afresh, whatever count the request carried', async () => {
     const saved = await saveFollowUp({ count: 99, source: 'gathered' });
-    expect(saved.change.sessionsCompleted).toEqual({ count: 3, source: 'gathered' });
+    expect(saved.change.sessionsCompleted).toEqual({ count: 4, source: 'gathered' });
   });
 
   it('keeps a typed figure as typed', async () => {
@@ -523,7 +561,7 @@ describe('the draft route counts a counted figure again, and keeps a typed one',
       content: { ...sent(content), comparedWith: { reportId: signed.id } },
     });
     const first = (await created.json()) as QeegDraftResponse;
-    expect((first.content as QeegFollowUp).change.sessionsCompleted?.count).toBe(5);
+    expect((first.content as QeegFollowUp).change.sessionsCompleted?.count).toBe(6);
     const later = await steps.saveOver(
       { id: first.report.id, savedAt: first.savedAt },
       {
@@ -535,67 +573,74 @@ describe('the draft route counts a counted figure again, and keeps a typed one',
     );
     expect(later.status).toBe(200);
     const body = (await later.json()) as QeegDraftResponse;
-    expect((body.content as QeegFollowUp).change.sessionsCompleted?.count).toBe(3);
+    expect((body.content as QeegFollowUp).change.sessionsCompleted?.count).toBe(4);
   });
 });
+
+/** A follow-up begun from the prefill, her judgements typed in, its own maps uploaded, saved. */
+async function completedFollowUp(seeds: number[]) {
+  const start = await prefilled({ clientId, from: signed.id, recordedOn: LATER_DAY });
+  const begun = start.content as QeegFollowUp;
+  const created = await steps.saveAs(SEEDED.owner, {
+    locale: 'en',
+    content: { ...sent(begun), comparedWith: { reportId: signed.id } },
+  });
+  if (created.status !== 201) throw new Error(`Refused: ${created.status}`);
+  const draft = (await created.json()) as QeegDraftResponse;
+  let savedAt = draft.savedAt;
+  const own: FigureRef[] = [];
+  for (const seed of seeds) {
+    const filed = await steps.upload(draft.report.id, SEEDED.owner, seed);
+    own.push(filed.ref);
+    savedAt = filed.savedAt;
+  }
+  const [mapA, mapB, laterClosed, laterOpen] = own;
+  if (!mapA || !mapB || !laterClosed || !laterOpen) throw new Error('Uploads went missing.');
+  // Her judgements, typed now: the full follow-up's, over what the prefill began.
+  const full = fullFollowUp();
+  const content = {
+    ...sent(begun),
+    comparedWith: { reportId: signed.id },
+    recording: { ...begun.recording, eyes: 'closed_and_open' },
+    findings: full.findings,
+    focus: full.focus,
+    recommendations: full.recommendations,
+    benefits: full.benefits,
+    summary: full.summary,
+    bands: full.bands,
+    connectivity: full.connectivity,
+    plan: full.plan,
+    maps: completeReport([mapA, mapB]).maps,
+    dashboard: Object.fromEntries(
+      DIMENSION_IDS.map((d) => [d, { ...begun.dashboard[d], score: 6 }]),
+    ),
+    change: {
+      ...begun.change,
+      tiles: full.change.tiles,
+      table: full.change.table,
+      summary: full.change.summary,
+      pairs: {
+        eyes_closed: { ...begun.change.pairs.eyes_closed, later: laterClosed },
+        eyes_open: { ...begun.change.pairs.eyes_open, later: laterOpen },
+      },
+    },
+  };
+  const saved = await steps.saveAs(SEEDED.owner, { id: draft.report.id, savedAt, content });
+  if (saved.status !== 200) throw new Error(`Refused: ${saved.status} ${await saved.text()}`);
+  const body = (await saved.json()) as QeegDraftResponse;
+  const savedContent = body.content as QeegFollowUp;
+  return { id: draft.report.id, body, savedContent };
+}
 
 describe('a follow-up started from the prefill, to its signature and beyond', () => {
   let followUpId: string;
   let followUpContent: QeegFollowUp;
 
   it('saves, previews and signs', async () => {
-    const start = await prefilled({ clientId, from: signed.id, recordedOn: LATER_DAY });
-    const begun = start.content as QeegFollowUp;
-    const created = await steps.saveAs(SEEDED.owner, {
-      locale: 'en',
-      content: { ...sent(begun), comparedWith: { reportId: signed.id } },
-    });
-    expect(created.status).toBe(201);
-    const draft = (await created.json()) as QeegDraftResponse;
-    let savedAt = draft.savedAt;
-    const own: FigureRef[] = [];
-    for (const seed of [71, 72, 73, 74]) {
-      const filed = await steps.upload(draft.report.id, SEEDED.owner, seed);
-      own.push(filed.ref);
-      savedAt = filed.savedAt;
-    }
-    const [mapA, mapB, laterClosed, laterOpen] = own;
-    if (!mapA || !mapB || !laterClosed || !laterOpen) throw new Error('Uploads went missing.');
-    // Her judgements, typed now: the full follow-up's, over what the prefill began.
-    const full = fullFollowUp();
-    const content = {
-      ...sent(begun),
-      comparedWith: { reportId: signed.id },
-      recording: { ...begun.recording, eyes: 'closed_and_open' },
-      findings: full.findings,
-      focus: full.focus,
-      recommendations: full.recommendations,
-      benefits: full.benefits,
-      summary: full.summary,
-      bands: full.bands,
-      connectivity: full.connectivity,
-      plan: full.plan,
-      maps: completeReport([mapA, mapB]).maps,
-      dashboard: Object.fromEntries(
-        DIMENSION_IDS.map((d) => [d, { ...begun.dashboard[d], score: 6 }]),
-      ),
-      change: {
-        ...begun.change,
-        tiles: full.change.tiles,
-        table: full.change.table,
-        summary: full.change.summary,
-        pairs: {
-          eyes_closed: { ...begun.change.pairs.eyes_closed, later: laterClosed },
-          eyes_open: { ...begun.change.pairs.eyes_open, later: laterOpen },
-        },
-      },
-    };
-    const saved = await steps.saveAs(SEEDED.owner, { id: draft.report.id, savedAt, content });
-    if (saved.status !== 200) throw new Error(`Refused: ${saved.status} ${await saved.text()}`);
-    const body = (await saved.json()) as QeegDraftResponse;
-    const savedContent = body.content as QeegFollowUp;
+    const { id, body, savedContent } = await completedFollowUp([71, 72, 73, 74]);
+    const draft = { report: { id } };
     expect(missingForIssue(savedContent)).toEqual([]);
-    expect(savedContent.change.sessionsCompleted).toEqual({ count: 3, source: 'gathered' });
+    expect(savedContent.change.sessionsCompleted).toEqual({ count: 4, source: 'gathered' });
 
     const preview = await h.call(
       'GET',
@@ -627,7 +672,7 @@ describe('a follow-up started from the prefill, to its signature and beyond', ()
     const read = await readBack(correction.report.id);
     const content = read.content as QeegFollowUp;
     expect(content.comparedWith).toEqual(followUpContent.comparedWith);
-    expect(content.change.sessionsCompleted).toEqual({ count: 3, source: 'gathered' });
+    expect(content.change.sessionsCompleted).toEqual({ count: 4, source: 'gathered' });
   });
 
   it('keeps a typed count through a correction', async () => {
@@ -710,8 +755,44 @@ describe('a follow-up started from the prefill, to its signature and beyond', ()
     expect(saved.status).toBe(200);
     const body = (await saved.json()) as QeegDraftResponse;
     expect((body.content as QeegFollowUp).change.sessionsCompleted).toEqual({
-      count: 3,
+      count: 4,
       source: 'gathered',
     });
+  });
+});
+
+describe('signing counts a counted figure again', () => {
+  it('signs the count as it stands, not as the last save left it', async () => {
+    // A visit logged from the records, inside the window, counted at the save…
+    const logged = await visitAt(h, clientId, '2026-09-25T09:00:00+04:00', { fromRecords: true });
+    const { id, body, savedContent } = await completedFollowUp([81, 82, 83, 84]);
+    expect(savedContent.change.sessionsCompleted).toEqual({ count: 5, source: 'gathered' });
+    // …and voided before the signature.
+    await voidVisit(h, logged);
+    const issued = await sign({ id, savedAt: body.savedAt });
+    expect(issued.status).toBe(201);
+    const content = (await readBack(id)).content as QeegFollowUp;
+    expect(content.change.sessionsCompleted).toEqual({ count: 4, source: 'gathered' });
+  });
+
+  it('signs a typed count as she typed it', async () => {
+    const { id } = await completedFollowUp([85, 86, 87, 88]);
+    const read = await readBack(id);
+    const typed = await steps.saveOver(
+      { id, savedAt: read.savedAt ?? '' },
+      {
+        ...(read.content as QeegFollowUp),
+        comparedWith: { reportId: signed.id },
+        change: {
+          ...(read.content as QeegFollowUp).change,
+          sessionsCompleted: { count: 12, source: 'typed' },
+        },
+      },
+      SEEDED.owner,
+    );
+    const saved = (await typed.json()) as QeegDraftResponse;
+    expect((await sign({ id, savedAt: saved.savedAt })).status).toBe(201);
+    const content = (await readBack(id)).content as QeegFollowUp;
+    expect(content.change.sessionsCompleted).toEqual({ count: 12, source: 'typed' });
   });
 });

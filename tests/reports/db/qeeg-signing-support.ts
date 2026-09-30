@@ -206,13 +206,13 @@ export async function visitAt(
   h: Harness,
   client: string,
   at: string,
-  options: { status?: VisitStatus; by?: number } = {},
+  options: { status?: VisitStatus; by?: number; fromRecords?: boolean } = {},
 ): Promise<string> {
   const status = options.status ?? 'completed';
   const person = h.data.clients.find((c) => c.id === client);
   const service = h.data.serviceTypes[0];
   if (!person || !service) throw new Error('The seed is not what it was.');
-  const fromRecords = status === 'voided';
+  const fromRecords = status === 'voided' || options.fromRecords === true;
   const open = status === 'in_progress';
   await h.owner.query('begin');
   try {
@@ -251,6 +251,27 @@ export async function visitAt(
     }
     await h.owner.query('commit');
     return id;
+  } catch (error) {
+    await h.owner.query('rollback');
+    throw error;
+  }
+}
+
+/** A visit logged from the records, voided now as the office's void does it. */
+export async function voidVisit(h: Harness, sessionId: string): Promise<void> {
+  await h.owner.query('begin');
+  try {
+    await h.owner.query(
+      'insert into app.void_active (txid, session_id) values (txid_current(), $1)',
+      [sessionId],
+    );
+    await h.owner.query(
+      "update session set status = 'voided', voided_at = now(), voided_by = $2, " +
+        "void_reason = 'Logged in error' where id = $1",
+      [sessionId, h.data.users[0]?.id],
+    );
+    await h.owner.query('delete from app.void_active where txid = txid_current()');
+    await h.owner.query('commit');
   } catch (error) {
     await h.owner.query('rollback');
     throw error;

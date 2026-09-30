@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { Context } from 'hono';
 import { canIssue } from '../../../../domain/reports';
 import { missingForIssue } from '../../../../domain/reports/qeeg/complete';
+import { countedFigure } from '../../../../domain/reports/qeeg/sessionsCompleted';
 import { ownLinksNotNamed } from '../../../../domain/reports/qeeg/links';
 import { twinChangeIn } from '../../../../domain/reports/qeeg/twin';
 import { validateQeegContent } from '../../../../domain/reports/qeeg/shape';
@@ -17,6 +18,7 @@ import { IssueResponse, QeegIssueInput } from '../schema';
 import { asRow, readReport, type ReportRecord } from '../source';
 import { signerFor, signingCredentials } from '../signer';
 import { gatheredOnce, linksOf, pagesOf, picturesOf, signedFacts } from './pages';
+import { countedSessions } from './sessionsCounted';
 
 /**
  * `POST /api/reports/:id/issue` for a brain-map (qEEG) draft
@@ -45,7 +47,8 @@ import { gatheredOnce, linksOf, pagesOf, picturesOf, signedFacts } from './pages
  *
  * **Then one step, inside a savepoint.** The client's head is read from the
  * record once more and written onto the draft (section 14: "gathers the
- * client once more"); `app.issue_report` takes the number and writes the
+ * client once more"), with a number of sessions said to be counted counted
+ * once more beside it (section 10); `app.issue_report` takes the number and writes the
  * signer's and the practice's snapshots; the pages are laid from what the
  * row now says, exactly as the repair path will lay them; and the PDF is
  * filed as a `document` with its digest. A page that runs over is found only
@@ -161,7 +164,31 @@ export async function issueQeeg(
   }
   // The record was read, and its details are about to be written onto the report.
   await logRead(db, 'client', draft.client_id, draft.client_id);
-  const content = gathered.content;
+  const today = isoDateIn(now, await practiceTimeZone(db));
+
+  // A number of sessions said to be counted is counted once more, as the
+  // client is gathered once more: a visit logged or voided since the last
+  // save must not leave a stale figure on a signed page (brief S, fix round
+  // 1). A second language keeps the first report's figure, as every one of
+  // its saves does; a typed figure is hers.
+  let content = gathered.content;
+  if (
+    draft.twin_of_id === null &&
+    content.edition === 'follow-up' &&
+    content.change.sessionsCompleted?.source === 'gathered'
+  ) {
+    const counted = await countedSessions(db, {
+      clientId: draft.client_id,
+      earlierDay: content.comparedWith.recordedOn,
+      laterDay: content.recording.recordedOn,
+      today,
+    });
+    if (counted === null) return refuse(403, 'not_permitted');
+    content = {
+      ...content,
+      change: { ...content.change, sessionsCompleted: countedFigure(counted.count) },
+    };
+  }
 
   const missing = missingForIssue(content);
   if (missing.length > 0) return refuse(422, 'incomplete', { missing });
@@ -179,7 +206,6 @@ export async function issueQeeg(
   // The person doing it, and nobody else, on the credential they hold now:
   // asked here for the sentence, and again inside app.issue_report, which is
   // the answer that binds (issue.ts says why).
-  const today = isoDateIn(now, await practiceTimeZone(db));
   const own = await signerFor(db, actor.userId);
   if (!own) {
     return c.json({ error: 'forbidden', code: 'not_a_practitioner', requestId }, 403);

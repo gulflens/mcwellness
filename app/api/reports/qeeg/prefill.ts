@@ -31,8 +31,9 @@ import { countedSessions } from './sessionsCounted';
  * form's first save is what makes the draft.
  *
  * **The sessions completed are counted** from the client's visits between
- * the earlier recording and the new one (`countedSessions`), and answered in
- * the content as a counted figure, with the days the count ran between.
+ * the earlier recording and the new one, every visit of the practice whoever
+ * asks (`countedSessions`, migration 605), and answered in the content as a
+ * counted figure, with the days the count ran between.
  *
  * **Refused in the function's order, each by its own code and sentence.**
  * `other_client` comes first, so nothing about another client's report, not
@@ -144,14 +145,16 @@ export function mountReportPrefill(api: Hono<ApiEnv>, now: () => Date = () => ne
 
     // The count of her visits and the content are about to leave.
     await logRead(db, 'client', input.clientId, input.clientId);
-    const timeZone = await practiceTimeZone(db);
     const counted = await countedSessions(db, {
       clientId: input.clientId,
       earlierDay: prefill.content.comparedWith.recordedOn,
       laterDay: prefill.content.recording.recordedOn,
-      today: isoDateIn(now(), timeZone),
-      timeZone,
+      today: isoDateIn(now(), await practiceTimeZone(db)),
     });
+    if (counted === null) {
+      // The database's gate and the route's read a schedule differently at its edge.
+      return c.json({ error: 'forbidden', code: 'not_permitted', requestId }, 403);
+    }
     const content = {
       ...prefill.content,
       change: { ...prefill.content.change, sessionsCompleted: countedFigure(counted.count) },

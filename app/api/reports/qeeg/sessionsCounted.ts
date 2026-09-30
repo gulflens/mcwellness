@@ -1,33 +1,37 @@
 import {
-  countCompletedSessions,
   sessionWindow,
   type SessionWindow,
-  type VisitForCount,
 } from '../../../../domain/reports/qeeg/sessionsCompleted';
 import type { Db } from '../../_middleware/request-context';
 
 /**
  * How many sessions a follow-up says were completed since the report it is
- * compared with (docs/SPEC/reports-qeeg.md section 10, the last paragraph):
- * the client's visits, read here, and counted by the domain's rule
- * (`countCompletedSessions`), which alone decides which count.
+ * compared with (docs/SPEC/reports-qeeg.md section 10, the last paragraph).
  *
- * **Four columns and no fifth.** Whose visit, its status, whether it was
- * closed, and the practice's day of its check-in. Nothing that identifies
- * anybody leaves this query, and the answer is a single number.
+ * **The practice's count, whoever asks** (brief S, fix round 1). Session row
+ * security shows a practitioner only the visits on her own row, so a count
+ * read as the caller changed with who saved. The database counts on the
+ * practice's behalf instead (`app.completed_session_count`, migration 605),
+ * behind the same gate as drafting a report, reading the practice's time zone
+ * itself. The rule is `countCompletedSessions`'s, which a test holds the
+ * function to on one fixture.
  *
- * **Read as the caller, through row security**, as the progress report reads
- * the same table (`gather.ts`). The owner and the lead practitioner see every
- * visit of the client; a practitioner sees the visits on her own row, so her
- * count is of those. This is said in the brief's report as a concern.
+ * **The window.** `after` and `before` are left out. While the new recording
+ * has no day, the count runs to today, today included, which the function is
+ * asked as "before the day after today".
+ *
+ * **Refused, never 0.** The function raises `insufficient_privilege` for
+ * anyone the gate refuses. That is asked inside a savepoint and answered as
+ * `null`, so the caller refuses the request rather than printing a count of
+ * none, and the transaction stays usable. The callers have already asked who
+ * may draft, so this happens only where the route and the database read a
+ * schedule differently at its edge.
  *
  * The caller has already logged its read of the client, before the answer.
  */
 
-const VISITS_SQL =
-  'select client_id, status::text as status, closed_at is not null as closed, ' +
-  "to_char(checked_in_at at time zone $2, 'YYYY-MM-DD') as day " +
-  'from session where tenant_id = app.current_tenant_id() and client_id = $1';
+const COUNT_SQL =
+  'select app.completed_session_count($1::uuid, $2::date, coalesce($3::date, $4::date + 1)) as n';
 
 export type Counted = { readonly count: number; readonly window: SessionWindow };
 
@@ -37,20 +41,24 @@ export async function countedSessions(
     readonly clientId: string;
     readonly earlierDay: string;
     readonly laterDay: string | null;
+    /** Today in the practice's time zone. */
     readonly today: string;
-    readonly timeZone: string;
   },
-): Promise<Counted> {
+): Promise<Counted | null> {
   const window = sessionWindow(input.earlierDay, input.laterDay, input.today);
-  const found = await db.query<{ client_id: string; status: string; closed: boolean; day: string }>(
-    VISITS_SQL,
-    [input.clientId, input.timeZone],
-  );
-  const visits: VisitForCount[] = found.rows.map((row) => ({
-    clientId: row.client_id,
-    status: row.status,
-    closed: row.closed,
-    day: row.day,
-  }));
-  return { count: countCompletedSessions(visits, input.clientId, window), window };
+  await db.query('savepoint qeeg_session_count');
+  try {
+    const found = await db.query<{ n: number }>(COUNT_SQL, [
+      input.clientId,
+      window.after,
+      window.before,
+      window.through,
+    ]);
+    await db.query('release savepoint qeeg_session_count');
+    return { count: Number(found.rows[0]?.n ?? 0), window };
+  } catch (error) {
+    if ((error as { code?: unknown }).code !== '42501') throw error;
+    await db.query('rollback to savepoint qeeg_session_count');
+    return null;
+  }
 }

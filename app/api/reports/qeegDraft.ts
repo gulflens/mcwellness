@@ -405,15 +405,16 @@ export async function saveQeegDraft(
     followUp !== null &&
     own(own(own(sent, 'change'), 'sessionsCompleted'), 'source') === 'gathered'
   ) {
-    counted = (
-      await countedSessions(db, {
-        clientId: input.clientId,
-        earlierDay: followUp.comparedWith.recordedOn,
-        laterDay: typeof recordedOn === 'string' ? recordedOn : null,
-        today,
-        timeZone,
-      })
-    ).count;
+    const found = await countedSessions(db, {
+      clientId: input.clientId,
+      earlierDay: followUp.comparedWith.recordedOn,
+      laterDay: typeof recordedOn === 'string' ? recordedOn : null,
+      today,
+    });
+    if (found === null) {
+      return c.json({ error: 'forbidden', code: 'not_permitted', requestId }, 403);
+    }
+    counted = found.count;
   }
 
   const subject = subjectFrom(
