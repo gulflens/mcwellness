@@ -1,4 +1,4 @@
-import { inflateSync } from 'node:zlib';
+import { crc32, inflateSync } from 'node:zlib';
 import { readPng } from '../../../../domain/shared/document/png';
 import { MAX_FILE_BYTES, refuseSize } from '../../../../domain/reports/qeeg/image/limits';
 import type { FigureRefusalCode } from './figureSchema';
@@ -51,6 +51,7 @@ const DEPTH_AT = 24;
 const COLOUR_TYPE_AT = 25;
 const INTERLACE_AT = 28;
 const BYTES_PER_PIXEL = 3;
+const IHDR_LENGTH = 13;
 
 function isPng(bytes: Uint8Array): boolean {
   return PNG_SIGNATURE.every((byte, at) => bytes[at] === byte);
@@ -61,6 +62,10 @@ function headerRefusal(bytes: Uint8Array): FigureRefusalCode | null {
   if (bytes.length < IHDR_AT + 8 + 13) return 'damaged';
   const type = String.fromCharCode(...bytes.subarray(IHDR_AT + 4, IHDR_AT + 8));
   if (type !== 'IHDR') return 'damaged';
+  // Thirteen bytes and no other number, before any field is read at its
+  // offset: a shorter header would put its CRC where the fields should be.
+  const length = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(IHDR_AT);
+  if (length !== IHDR_LENGTH) return 'damaged';
   if (bytes[DEPTH_AT] !== 8) return 'not_8_bit';
   if (bytes[COLOUR_TYPE_AT] !== 2) return 'not_rgb';
   if (bytes[INTERLACE_AT] !== 0) return 'interlaced';
@@ -101,10 +106,18 @@ function chunkRefusal(bytes: Uint8Array): FigureRefusalCode | null {
     const end = at + 12 + length;
     if (end > bytes.length) return 'damaged';
     const type = String.fromCharCode(...bytes.subarray(at + 4, at + 8));
+    // Every chunk's CRC, over its type and data (fix round 2). `readPng` does
+    // not look, which suits a logo; a map is held to the file the browser
+    // wrote, and a CRC field that holds anything else is four free bytes.
+    if (crc32(bytes.subarray(at + 4, at + 8 + length)) !== view.getUint32(at + 8 + length)) {
+      return 'damaged';
+    }
     if (index === 0) {
       if (type !== 'IHDR') return 'damaged';
     } else if (type === 'IDAT') {
       if (data === 2) return 'split_data';
+      // An empty IDAT changes no pixel and is nothing the browser writes.
+      if (length === 0) return 'damaged';
       data = 1;
     } else if (type === 'IEND') {
       if (pending !== null) return pending;
@@ -149,7 +162,19 @@ export function verifyMap(bytes: Uint8Array): MapCheck {
   const expected = rowBytes * image.height;
   let raw: Buffer;
   try {
-    raw = inflateSync(image.data, { maxOutputLength: expected + 1 });
+    // `info` hands back the engine, whose `bytesWritten` is how much of the
+    // image data the inflate consumed. It stops at the end of the zlib stream
+    // and ignores what follows, and the writer embeds the whole run of IDAT
+    // data, so anything after the stream — words, or a second stream — would
+    // ride into the signed PDF unseen (fix round 2). Every byte is the stream.
+    const inflated = inflateSync(image.data, {
+      maxOutputLength: expected + 1,
+      info: true,
+    }) as unknown as { buffer: Buffer; engine: { bytesWritten: number } };
+    if (inflated.engine.bytesWritten !== image.data.length) {
+      return { ok: false, code: 'damaged' };
+    }
+    raw = inflated.buffer;
   } catch {
     // Not a zlib stream, or one that goes on past what the header promises.
     return { ok: false, code: 'damaged' };

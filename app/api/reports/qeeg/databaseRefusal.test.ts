@@ -31,11 +31,25 @@ describe('databaseRefusal', () => {
     });
   });
 
-  it('answers a rule the picture breaks with 422', () => {
-    expect(databaseRefusal(refusal('23514'))).toMatchObject({
+  it.each([
+    'report_figure_brain_map_only',
+    'report_figure_digest_matches',
+    'report_figure_is_a_map',
+  ])('answers the rule %s, which 604 raises by name, with 422', (constraint) => {
+    expect(databaseRefusal(Object.assign(refusal('23514'), { constraint }))).toMatchObject({
       status: 422,
       body: { code: 'not_accepted', sentence: FIGURE_SENTENCES.not_accepted },
     });
+  });
+
+  it('leaves any other broken rule to the error handler, which logs it as a fault', () => {
+    expect(databaseRefusal(refusal('23514'))).toBeNull();
+    expect(
+      databaseRefusal(Object.assign(refusal('23514'), { constraint: 'document_sha256_check' })),
+    ).toBeNull();
+    expect(
+      databaseRefusal(Object.assign(refusal('23514'), { constraint: 'report_figure_size' })),
+    ).toBeNull();
   });
 
   it('answers something that is not there with 404', () => {

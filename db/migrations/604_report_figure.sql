@@ -169,7 +169,10 @@ alter table public.report_figure enable always trigger audit_row;
 --    role: a link frozen against its author must be frozen against the
 --    owner's own console too, or it is not frozen.
 --
---    Statuses are compared as text, 603's way.
+--    Statuses are compared as text, 603's way. Each rule this file raises
+--    as a check violation names itself (`constraint = …`), so the doors
+--    answer those three with a sentence and any other check violation stays
+--    a fault the error handler logs (app/api/reports/qeeg/databaseRefusal.ts).
 ------------------------------------------------------------------------------
 create function app.guard_report_figure_write() returns trigger
 language plpgsql security definer
@@ -220,7 +223,7 @@ begin
    where r.tenant_id = new.tenant_id and r.id = new.report_id;
   if v_kind is distinct from 'qeeg' then
     raise exception 'only a brain-map report holds maps'
-      using errcode = 'check_violation';
+      using errcode = 'check_violation', constraint = 'report_figure_brain_map_only';
   end if;
   if v_status is distinct from 'draft' then
     raise exception 'report % has left draft and its maps are frozen with it', new.report_id
@@ -233,11 +236,11 @@ begin
    where d.tenant_id = new.tenant_id and d.id = new.document_id;
   if v_doc_sha is distinct from new.sha256 then
     raise exception 'the link''s digest is not the digest of the document it names'
-      using errcode = 'check_violation';
+      using errcode = 'check_violation', constraint = 'report_figure_digest_matches';
   end if;
   if v_doc_kind is distinct from 'report_figure' then
     raise exception 'a report prints a brain map filed as one, and that document is not'
-      using errcode = 'check_violation';
+      using errcode = 'check_violation', constraint = 'report_figure_is_a_map';
   end if;
 
   if new.borrowed_from_report_id is not null then
@@ -352,7 +355,8 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
   if v_report.kind <> 'qeeg' then
-    raise exception 'only a brain-map report holds maps' using errcode = 'check_violation';
+    raise exception 'only a brain-map report holds maps'
+      using errcode = 'check_violation', constraint = 'report_figure_brain_map_only';
   end if;
   if v_report.status <> 'draft' then
     raise exception 'report % has left draft and its maps are frozen with it', p_report_id
@@ -451,7 +455,8 @@ begin
       using errcode = 'insufficient_privilege';
   end if;
   if v_report.kind <> 'qeeg' then
-    raise exception 'only a brain-map report holds maps' using errcode = 'check_violation';
+    raise exception 'only a brain-map report holds maps'
+      using errcode = 'check_violation', constraint = 'report_figure_brain_map_only';
   end if;
   if v_report.status <> 'draft' then
     raise exception 'report % has left draft and its maps are frozen with it', p_report_id
