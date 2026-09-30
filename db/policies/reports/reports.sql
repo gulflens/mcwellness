@@ -105,6 +105,13 @@ create policy report_readers on public.report as restrictive for select to app_r
 --    that carries a source — a draft read from the old tool's file — is
 --    written, inserted or updated, by those two alone, so the rule is not only
 --    the route's. A practitioner drafts and edits the brain maps written here.
+--    The rule stands on both sides of an update: in USING, so a practitioner
+--    cannot reach a row that carries a source at all — not even to clear the
+--    source and turn the old file's content into an ordinary draft she could
+--    sign (section 11 forbids it) — and in WITH CHECK, so she cannot write a
+--    source onto a draft of her own. Row security answers the first by
+--    leaving the row out (the update touches nothing), the second by refusing
+--    at 42501.
 --
 --    **Never a past record in one step.** A row brought in from the old tool
 --    is saved as a draft, read over, and kept by `app.keep_imported_report`
@@ -136,7 +143,9 @@ create policy report_writers on public.report as restrictive for insert to app_r
 drop policy if exists report_amenders on public.report;
 create policy report_amenders on public.report as restrictive for update to app_role
   using (
-    app.client_erasure_gate(app.client_status_for(client_id)) and (
+    (imported_from is null or app.actor_has_role('owner')
+     or app.actor_has_role('lead_practitioner'))
+    and app.client_erasure_gate(app.client_status_for(client_id)) and (
       app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
       or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
     )

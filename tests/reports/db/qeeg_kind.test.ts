@@ -336,7 +336,7 @@ describe('bringing a file in is the owner’s and the lead practitioner’s', ()
     });
   });
 
-  it('refuses the same practitioner writing a source onto a draft, or editing an import', async () => {
+  it('refuses the same practitioner writing a source onto a draft, and lets her reach no import to edit', async () => {
     await asPractitioner(async () => {
       await rejectsWith(
         client,
@@ -344,12 +344,29 @@ describe('bringing a file in is the owner’s and the lead practitioner’s', ()
         'update report set imported_from = $2, source_sha256 = $3 where id = $1',
         [DRAFT, FORMAT, 'f'.repeat(64)],
       );
-      await rejectsWith(
-        client,
-        '42501',
+      // The import rule stands in the update's USING as well: the row is left
+      // out, so the edit touches nothing.
+      const { rowCount } = await client.query(
         'update report set content = \'{"note":"edited"}\'::jsonb where id = $1',
         [IMPORT_DRAFT],
       );
+      expect(rowCount).toBe(0);
+    });
+  });
+
+  it('never lets a practitioner turn a draft brought in from a file into an ordinary draft', async () => {
+    await asPractitioner(async () => {
+      const { rowCount } = await client.query(
+        'update report set imported_from = null, source_sha256 = null where id = $1',
+        [IMPORT_DRAFT],
+      );
+      expect(rowCount).toBe(0);
+      const { rows } = await client.query<{ imported_from: string | null; sha: string | null }>(
+        'select imported_from, source_sha256 as sha from report where id = $1',
+        [IMPORT_DRAFT],
+      );
+      expect(rows[0]?.imported_from).toBe(FORMAT);
+      expect(rows[0]?.sha).not.toBeNull();
     });
   });
 
