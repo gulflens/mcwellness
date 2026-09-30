@@ -5,6 +5,7 @@ import {
   DRAFT_REFUSALS,
   FIGURE_REFUSALS,
   figureRefusalSentence,
+  listRefusalSentence,
   refusalSentence,
 } from './refusals';
 
@@ -175,5 +176,44 @@ describe('the sentences fix round 1 asked for', () => {
     expect(FIGURE_REFUSALS['unknown_outcome']).not.toMatch(/not saved|could not be saved/);
     expect(FIGURE_REFUSALS['cannot_prepare']).toBeTruthy();
     expect(FIGURE_REFUSALS['file_too_large']).toMatch(/40 MB/);
+  });
+});
+
+describe('the sentences fix round 2 asked for', () => {
+  it('no longer has a sentence for a picture sent twice: the door files it once and says so', () => {
+    expect(FIGURE_REFUSALS['already_on_report']).toBeUndefined();
+  });
+
+  it('says how many uploaded pictures not on the report could make room', () => {
+    expect(figureRefusalSentence(422, { code: 'too_many_maps' }, { unplaced: 0 })).toBe(
+      FIGURE_REFUSALS['too_many_maps'],
+    );
+    expect(figureRefusalSentence(0, { code: 'too_many_maps' }, { unplaced: 1 })).toBe(
+      'A report holds eight maps. Remove one before adding another. 1 uploaded picture is not on the report; removing it makes room.',
+    );
+    expect(figureRefusalSentence(0, { code: 'too_many_maps' }, { unplaced: 2 })).toMatch(
+      /2 uploaded pictures are not on the report; removing them makes room\.$/,
+    );
+  });
+
+  it('has a sentence for every refusal of the list of a draft’s pictures', () => {
+    for (const [status, body] of [
+      [400, { error: 'bad_request', code: 'invalid_request' }],
+      [403, { error: 'forbidden' }],
+      [404, { error: 'not_found' }],
+      [422, { error: 'unprocessable', code: 'wrong_kind' }],
+    ] as const) {
+      expect(listRefusalSentence(status, body)).toMatch(/pictures/);
+    }
+    const all = [400, 403, 404, 422, 500].map((status) =>
+      listRefusalSentence(status, status === 422 ? { code: 'wrong_kind' } : {}),
+    );
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it('says what the list showed after an answer that never came', () => {
+    for (const code of ['kept_after_all', 'not_kept', 'removed_after_all', 'not_removed']) {
+      expect(FIGURE_REFUSALS[code], code).toBeTruthy();
+    }
   });
 });

@@ -173,12 +173,17 @@ export const FIGURE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   not_permitted: 'You are not allowed to change the maps of this report.',
   not_accepted: 'This report cannot take this picture.',
   no_such_map: 'That map is no longer on this report.',
-  already_on_report:
-    'This picture is already on the report. To give it another condition or place, change it in the list.',
   figure_in_use: 'This map is still used elsewhere in the report. Take it out there first.',
   // No answer, or one the form cannot read: the door may have finished.
   unknown_outcome:
     'The server’s answer did not arrive, so the form cannot tell whether the map was kept. It may have been filed with the report. Reload the draft, then choose the same file again: a picture already kept is never filed twice.',
+  // What the list of the draft's pictures showed after such an answer.
+  kept_after_all:
+    'The server’s answer did not arrive, but the map was kept, and it is now on the report.',
+  not_kept: 'The server’s answer did not arrive, and the map was not kept. Try adding it again.',
+  removed_after_all: 'The server’s answer did not arrive, but the map was removed.',
+  not_removed:
+    'The server’s answer did not arrive, and the map was not removed. It is back in the list; try again.',
   unknown_removal:
     'The server’s answer did not arrive, so the form cannot tell whether the map was removed. It may have been. It is off the draft; reload the draft to see where it stands.',
 });
@@ -205,8 +210,24 @@ export function whereWords(path: string): string {
   return 'another part of the report';
 }
 
-/** What the form says when a map was refused, before it was sent (status 0) or by a door. */
-export function figureRefusalSentence(status: number, body: unknown): string {
+/** The pictures uploaded and not on the report, as a clause that says they could make room. */
+function roomWords(unplaced: number): string {
+  if (unplaced <= 0) return '';
+  return unplaced === 1
+    ? ' 1 uploaded picture is not on the report; removing it makes room.'
+    : ` ${unplaced} uploaded pictures are not on the report; removing them makes room.`;
+}
+
+/**
+ * What the form says when a map was refused, before it was sent (status 0) or
+ * by a door. The eighth-map refusal also names how many pictures uploaded and
+ * not placed could be removed to make room, when the form knows.
+ */
+export function figureRefusalSentence(
+  status: number,
+  body: unknown,
+  { unplaced = 0 }: { unplaced?: number } = {},
+): string {
   const refusal = asRefusal(body);
   const code =
     typeof refusal.code === 'string'
@@ -217,8 +238,30 @@ export function figureRefusalSentence(status: number, body: unknown): string {
   if (code === 'figure_in_use' && typeof refusal.field === 'string') {
     return `This map is still used in ${whereWords(refusal.field)}. Take it out there first, then remove it.`;
   }
+  if (code === 'too_many_maps')
+    return `${FIGURE_REFUSALS[code] ?? MAPS_FALLBACK}${roomWords(unplaced)}`;
   if (Object.hasOwn(FIGURE_REFUSALS, code)) return FIGURE_REFUSALS[code] ?? MAPS_FALLBACK;
   if (status === 403) return MAPS_FORBIDDEN;
   if (status === 404) return MAPS_NOT_FOUND;
   return MAPS_FALLBACK;
+}
+
+/**
+ * What the form says when the list of a draft's pictures
+ * (`GET /api/reports/:id/figures`) could not be read, by what the route
+ * answered: a bad id, someone who may not change the pictures, a report that
+ * cannot be seen, or one that is not a brain map. The form goes on without
+ * the list: nothing is changed because it could not be read.
+ */
+export function listRefusalSentence(status: number, body: unknown): string {
+  const refusal = asRefusal(body);
+  const code = typeof refusal.code === 'string' ? refusal.code : '';
+  if (code === 'wrong_kind')
+    return 'This is not a brain-map report, so it has no pictures to list.';
+  if (status === 400)
+    return 'The form asked for the pictures in a way the server does not accept. Reload the page.';
+  if (status === 403) return 'You are not allowed to see the pictures uploaded to this draft.';
+  if (status === 404)
+    return 'The pictures uploaded to this draft could not be found. The draft may have been removed.';
+  return 'The pictures uploaded to this draft could not be listed. Check the connection and open the section again.';
 }
