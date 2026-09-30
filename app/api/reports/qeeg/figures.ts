@@ -136,6 +136,24 @@ async function openDoor(
   return { ok: true, report };
 }
 
+/**
+ * The other language of a signed report prints that report's maps, borrowed
+ * when it was made (docs/SPEC/reports-qeeg.md section 8): none is added to it
+ * or taken from it here.
+ */
+function twinMaps(c: Context<ApiEnv>): Response {
+  return c.json(
+    {
+      error: 'unprocessable',
+      code: 'twin_fixed',
+      sentence:
+        'The maps of a report in the other language are the maps of the report it was made from, so none is added or removed here.',
+      requestId: c.get('requestId'),
+    },
+    422,
+  );
+}
+
 function notADraft(c: Context<ApiEnv>): Response {
   return c.json(
     {
@@ -262,6 +280,7 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
     const door = await openDoor(c, reportId, now(), true);
     if (!door.ok) return door.response;
     if (door.report.status !== 'draft') return notADraft(c);
+    if (door.report.twin_of_id !== null) return twinMaps(c);
 
     const body = new Uint8Array(await c.req.arrayBuffer());
     if (body.byteLength === 0) {
@@ -367,6 +386,7 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
     // Drafts only. A withdrawn past record's maps are removed by the
     // withdraw's own door (section 11, point 7), not by this one.
     if (door.report.status !== 'draft') return notADraft(c);
+    if (door.report.twin_of_id !== null) return twinMaps(c);
 
     await db.query('savepoint report_figure_remove');
     let key: string | null;

@@ -9,7 +9,8 @@ import { figuresNamedIn } from '../../../domain/reports/qeeg/figuresNamed';
 import { prefillFollowUp, type EarlierReport } from '../../../domain/reports/qeeg/prefill';
 import { validateQeegContent } from '../../../domain/reports/qeeg/shape';
 import { isRecord } from '../../../domain/reports/qeeg/text';
-import type { QeegContent, QeegFollowUp } from '../../../domain/reports/qeeg/types';
+import type { Locale, QeegContent, QeegFollowUp } from '../../../domain/reports/qeeg/types';
+import { twinChangeIn } from '../../../domain/reports/qeeg/twin';
 import { isUuid } from '../billing/ids';
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -17,7 +18,7 @@ import { mayDraftReport } from './access';
 import { requiredReason } from './reason';
 import { practiceTimeZone } from './gather';
 import { QeegDraftInput, QeegDraftResponse } from './schema';
-import { asRow, readReport } from './source';
+import { asRow, readReport, type ReportRecord } from './source';
 
 /**
  * `POST /api/reports/draft` for a brain-map (qEEG) report: create or update a
@@ -298,6 +299,9 @@ export async function saveQeegDraft(
   }
 
   const db = c.get('db');
+  /** The signed report a second-language draft was made from, when this is one. */
+  let twinOf: ReportRecord | null = null;
+  let twinLocale: Locale = 'en';
   if (input.id) {
     const existing = await readReport(db, input.id);
     if (!existing || existing.client_id !== input.clientId) {
@@ -319,6 +323,11 @@ export async function saveQeegDraft(
     if (input.locale !== undefined && input.locale !== existing.locale) {
       return c.json({ error: 'unprocessable', code: 'locale_fixed', requestId }, 422);
     }
+    if (existing.twin_of_id !== null) {
+      twinOf = await readReport(db, existing.twin_of_id);
+      if (!twinOf) return c.json({ error: 'not_found', requestId }, 404);
+      twinLocale = existing.locale;
+    }
   }
 
   const found = await db.query<ClientRow>(CLIENT_SQL, [input.clientId]);
@@ -335,6 +344,10 @@ export async function saveQeegDraft(
   }
   // The record was read, and its details are about to leave in the answer.
   await logRead(db, 'client', input.clientId, input.clientId);
+
+  if (twinOf !== null) {
+    return saveTwin(c, input, sent, twinOf, twinLocale, raw);
+  }
 
   let followUp: QeegFollowUp | null = null;
   if (own(sent, 'edition') === 'follow-up') {
@@ -413,8 +426,27 @@ export async function saveQeegDraft(
       return unknown;
     }
   }
+  return writeDraft(c, input, checked.content, {
+    comparedWithId,
+    serviceTypeId: input.serviceTypeId,
+  });
+}
 
-  const body = JSON.stringify(checked.content);
+/**
+ * The write itself, for a first save or an update, and the answer. Shared by
+ * a report's own saves and a second-language draft's (`saveTwin`), which
+ * differ only in where the body and its links come from.
+ */
+async function writeDraft(
+  c: Context<ApiEnv>,
+  input: QeegDraftInput,
+  content: QeegContent,
+  row: { comparedWithId: string | null; serviceTypeId: string | null },
+): Promise<Response> {
+  const requestId = c.get('requestId');
+  const db = c.get('db');
+  const { comparedWithId } = row;
+  const body = JSON.stringify(content);
   // The write in a savepoint of its own. What a follow-up is compared with
   // was read above; if it was withdrawn since, the database refuses the link
   // (`report_compared_with_comparable`, 603). That refusal is an answer, not a
@@ -427,7 +459,7 @@ export async function saveQeegDraft(
     written = input.id
       ? await db.query<{ id: string }>(UPDATE_SQL, [
           input.id,
-          input.serviceTypeId,
+          row.serviceTypeId,
           comparedWithId,
           body,
           input.savedAt,
@@ -435,7 +467,7 @@ export async function saveQeegDraft(
       : await db.query<{ id: string }>(INSERT_SQL, [
           input.clientId,
           input.locale ?? 'en',
-          input.serviceTypeId,
+          row.serviceTypeId,
           comparedWithId,
           body,
         ]);
@@ -478,7 +510,7 @@ export async function saveQeegDraft(
   // after the write, inside its savepoint and under the row lock the write
   // took, so an upload or a removal on another tab waits for this answer
   // rather than slipping between the check and the commit.
-  const unowned = await figuresNotOwned(db, id, comparedWithId, checked.content);
+  const unowned = await figuresNotOwned(db, id, comparedWithId, content);
   if (unowned !== null) {
     await db.query('rollback to savepoint qeeg_draft_write');
     return c.json({ ...unowned.body, requestId }, unowned.status);
@@ -496,4 +528,88 @@ export async function saveQeegDraft(
     }),
     input.id ? 200 : 201,
   );
+}
+
+/**
+ * A save of a second-language draft (docs/SPEC/reports-qeeg.md section 8,
+ * point 3). **Only its own language's halves of typed text may differ from
+ * the report it was made from**; everything else is that report's, rebuilt
+ * from it on every save.
+ *
+ * **A save that tries to change anything else is refused by the field**
+ * (`twin_fixed`), never answered with a rebuild that quietly drops what she
+ * changed: a 200 that printed the first report's score where she set another
+ * would tell her it was taken. The edition, what a follow-up is compared with
+ * and the service are asked first, by name; the rest is the shape's to read
+ * and then `twinChangeIn`'s to compare with the rebuild. The client's head,
+ * the source, and a follow-up's earlier scores and pictures are written in
+ * from the first report, as every save writes the server's parts, so they
+ * cannot differ. What is written is the rebuild, which equals what was sent.
+ */
+async function saveTwin(
+  c: Context<ApiEnv>,
+  input: QeegDraftInput,
+  sent: Readonly<Record<string, unknown>>,
+  first: ReportRecord,
+  locale: Locale,
+  raw: unknown,
+): Promise<Response> {
+  const requestId = c.get('requestId');
+  const fixed = (field: string) =>
+    c.json({ error: 'unprocessable', code: 'twin_fixed', field, requestId }, 422);
+
+  const from = validateQeegContent(first.content);
+  if (!from.ok) {
+    // The signed report no longer reads as a report: nothing can be made from it.
+    return c.json(
+      {
+        error: 'unprocessable',
+        code: 'invalid_content',
+        field: from.refusals[0]?.path ?? '',
+        requestId,
+      },
+      422,
+    );
+  }
+  const firstContent = from.content;
+  if (own(sent, 'edition') !== firstContent.edition) return fixed('edition');
+  if (
+    firstContent.edition === 'follow-up' &&
+    own(own(sent, 'comparedWith'), 'reportId') !== firstContent.comparedWith.reportId
+  ) {
+    return fixed('comparedWith.reportId');
+  }
+  if (
+    isRecord(raw) &&
+    Object.hasOwn(raw, 'serviceTypeId') &&
+    raw['serviceTypeId'] !== first.service_type_id
+  ) {
+    return fixed('serviceTypeId');
+  }
+
+  const checked = validateQeegContent(
+    assembleDraft(sent, {
+      subject: firstContent.subject,
+      followUp: firstContent.edition === 'follow-up' ? firstContent : null,
+    }),
+  );
+  if (!checked.ok) {
+    return c.json(
+      {
+        error: 'bad_request',
+        code: 'invalid_content',
+        field: checked.refusals[0]?.path ?? '',
+        refusals: checked.refusals,
+        requestId,
+      },
+      400,
+    );
+  }
+  const changed = twinChangeIn(firstContent, checked.content, locale);
+  if (changed !== null) return fixed(changed);
+
+  return writeDraft(c, input, checked.content, {
+    comparedWithId: first.compared_with_id,
+    serviceTypeId: first.service_type_id,
+  });
 }

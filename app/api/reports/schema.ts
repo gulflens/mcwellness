@@ -52,6 +52,19 @@ export const ReportRow = z.object({
   /** How many times it has been handed to somebody. Never who, on a list. */
   deliveries: z.number().int().min(0),
   createdAt: z.string(),
+  /**
+   * A brain map's second-language report names the report it was made from
+   * (docs/SPEC/reports-qeeg.md section 8). Defaulted, so a screen written
+   * before it reads an answer as it did.
+   */
+  twinOfId: z.uuid().nullable().default(null),
+  /** The report made from this one in the other language, a draft or signed, if any. */
+  twinId: z.uuid().nullable().default(null),
+  /**
+   * The report this one was made from has been corrected since (section 8,
+   * point 5): worked out when it is read, from the two rows, never stored.
+   */
+  outOfStep: z.boolean().default(false),
 });
 export type ReportRow = z.infer<typeof ReportRow>;
 
@@ -309,6 +322,21 @@ export const QeegSupersedeInput = z
   })
   .strict();
 export type QeegSupersedeInput = z.infer<typeof QeegSupersedeInput>;
+
+/**
+ * Starting a brain-map report's second language from a signed one
+ * (`app/api/reports/qeeg/twin.ts`). Nothing is sent: the language is the one
+ * the report is not in, and the content, the maps and what it is compared
+ * with are the signed report's. The reason travels in `X-Reason`.
+ */
+export const TwinInput = z.object({}).strict();
+export type TwinInput = z.infer<typeof TwinInput>;
+
+export const TwinResponse = z.object({
+  /** The new draft in the other language, ready for its halves of typed text. */
+  report: ReportRow,
+});
+export type TwinResponse = z.infer<typeof TwinResponse>;
 
 export const SupersedeResponse = z.object({
   /** The new draft, ready to be read over and signed. */

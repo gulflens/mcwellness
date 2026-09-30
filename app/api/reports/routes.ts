@@ -3,6 +3,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { mountReportDeliver } from './deliver';
 import { mountReportDraft } from './draft';
 import { mountReportFigures } from './qeeg/figures';
+import { mountReportTwin } from './qeeg/twin';
 import { mountReportGet } from './get';
 import { mountReportIssue } from './issue';
 import { mountReportList } from './list';
@@ -34,5 +35,6 @@ export function mountReports(api: Hono<ApiEnv>, now: () => Date = () => new Date
   mountReportSupersede(api, now);
   mountReportDeliver(api, now);
   mountReportFigures(api, now);
+  mountReportTwin(api, now);
   mountReportGet(api, now);
 }

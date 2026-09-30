@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import { canIssue } from '../../../../domain/reports';
 import { missingForIssue } from '../../../../domain/reports/qeeg/complete';
 import { ownLinksNotNamed } from '../../../../domain/reports/qeeg/links';
+import { twinChangeIn } from '../../../../domain/reports/qeeg/twin';
 import { validateQeegContent } from '../../../../domain/reports/qeeg/shape';
 import { WORDING_STATUS } from '../../../../domain/reports/qeeg/wording';
 import { isoDateIn } from '../../../../domain/shared';
@@ -35,6 +36,12 @@ import { gatheredOnce, linksOf, pagesOf, picturesOf, signedFacts } from './pages
  * (`map_missing`, `map_differs`, section 9, point 6); and the signer's
  * certificate, as for every report. Each refusal is written to the trail
  * before it is answered.
+ *
+ * **The other language of a signed report** (`twin_of_id`, section 8) signs
+ * through this same door, with its own reference, and is refused while the
+ * report it was made from no longer stands (`twin_out_of_step`), or when it
+ * says anything that report does not beyond its own language's halves of
+ * typed text (`twin_differs`).
  *
  * **Then one step, inside a savepoint.** The client's head is read from the
  * record once more and written onto the draft (section 14: "gathers the
@@ -117,6 +124,21 @@ export async function issueQeeg(
   const checked = validateQeegContent(draft.content);
   if (!checked.ok) {
     return refuse(422, 'invalid_content', { field: checked.refusals[0]?.path ?? '' });
+  }
+
+  if (draft.twin_of_id !== null) {
+    // The other language of a signed report (section 8): signed only while
+    // that report stands. Corrected since, it says something this one does
+    // not, so this one is out of step and is not signed.
+    const first = await readReport(db, draft.twin_of_id);
+    if (!first || first.status !== 'issued') {
+      return refuse(409, 'twin_out_of_step', { twinOfId: draft.twin_of_id });
+    }
+    // Every save of it is held to the first report; asked once more here,
+    // so a row written some other way is never signed as its twin.
+    const from = validateQeegContent(first.content);
+    const differs = from.ok ? twinChangeIn(from.content, checked.content, draft.locale) : '';
+    if (differs !== null) return refuse(422, 'twin_differs', { field: differs });
   }
 
   const gathered = await gatheredOnce(db, draft.client_id, checked.content, now);

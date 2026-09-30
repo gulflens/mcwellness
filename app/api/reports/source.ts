@@ -45,7 +45,16 @@ export const REPORT_COLUMNS =
   // The stamp a save is made over (`savedAt`), to the microsecond the column
   // holds, so it compares equal to itself and to nothing later.
   'to_char(r.updated_at at time zone \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') as saved_at, ' +
-  'r.imported_from, r.withdrawn_at is not null as withdrawn, r.compared_with_id, r.twin_of_id';
+  'r.imported_from, r.withdrawn_at is not null as withdrawn, r.compared_with_id, r.twin_of_id, ' +
+  // A brain map's other language, both ways, read as the caller may read it
+  // (docs/SPEC/reports-qeeg.md section 8): the status of the report this one
+  // was made from, and the one made from this one that still counts, a draft
+  // or signed. Worked out here, never stored, so "out of step" can never
+  // disagree with the two rows.
+  '(select f.status::text from report f where f.tenant_id = r.tenant_id ' +
+  ' and f.id = r.twin_of_id) as twin_of_status, ' +
+  '(select t.id from report t where t.tenant_id = r.tenant_id and t.twin_of_id = r.id ' +
+  " and t.status in ('draft', 'issued') order by t.created_at desc, t.id limit 1) as twin_id";
 
 export type ReportRecord = {
   id: string;
@@ -87,6 +96,10 @@ export type ReportRecord = {
   compared_with_id: string | null;
   /** The same brain-map report in the other language, which this one was made from. */
   twin_of_id: string | null;
+  /** The status of the report this one was made from, as the caller may see it. */
+  twin_of_status: string | null;
+  /** The report made from this one in the other language, a draft or signed. */
+  twin_id: string | null;
   deliveries?: string | number;
 };
 
@@ -116,6 +129,23 @@ export async function readReports(db: Db, clientIds: readonly string[]): Promise
   return found.rows;
 }
 
+/**
+ * A second-language report whose first has been corrected since it was made
+ * (docs/SPEC/reports-qeeg.md section 8, point 5). A version that is itself
+ * superseded is history already, and says nothing more.
+ */
+export function isOutOfStep(record: {
+  status: string;
+  twin_of_id: string | null;
+  twin_of_status: string | null;
+}): boolean {
+  return (
+    record.twin_of_id !== null &&
+    record.twin_of_status === 'superseded' &&
+    record.status !== 'superseded'
+  );
+}
+
 /** The row as a screen reads it. Never the content, which is its own field. */
 export function asRow(record: ReportRecord): ReportRow {
   return {
@@ -135,6 +165,9 @@ export function asRow(record: ReportRecord): ReportRow {
     documentId: record.document_id,
     deliveries: Number(record.deliveries ?? 0),
     createdAt: record.created_at,
+    twinOfId: record.twin_of_id,
+    twinId: record.twin_id,
+    outOfStep: isOutOfStep(record),
   };
 }
 

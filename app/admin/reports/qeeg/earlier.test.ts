@@ -20,6 +20,9 @@ const row = {
   documentId: null,
   deliveries: 0,
   createdAt: '2026-06-02T08:00:00+04:00',
+  twinOfId: null,
+  twinId: null,
+  outOfStep: false,
 };
 
 describe('the stand-in comparison', () => {
