@@ -172,6 +172,7 @@ export function ReportsTab({
       <ReportView
         reportId={openId}
         reports={state.reports}
+        mayDraft={mayWrite}
         maySupersede={maySupersede}
         maySend={maySend}
         onTwinStarted={(id) => {

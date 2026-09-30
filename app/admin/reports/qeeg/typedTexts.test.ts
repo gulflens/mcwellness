@@ -76,3 +76,17 @@ describe('typedTextsOf', () => {
     expect(twinChangeIn(first, written, 'en')).toBeNull();
   });
 });
+
+describe('typedTextsOf, formatted text (fix round 1)', () => {
+  it('offers the summaries as formatted text, whose marks reach the half of its language', () => {
+    const first = fullReport();
+    const summary = typedTextsOf(first, 'ar').find((text) => text.of === 'the summary');
+    expect(summary?.rich).toBeTruthy();
+    const marked = { text: 'ملخص هادئ', marks: [{ from: 0, to: 4, bold: true as const }] };
+    const written = summary?.rich?.set(first, marked) ?? first;
+    expect(written.summary.ar).toEqual(marked);
+    expect(written.summary.en).toEqual(first.summary.en);
+    expect(twinChangeIn(first, written, 'ar')).toBeNull();
+    expect(summary?.rich?.set(written, null).summary.ar).toBeNull();
+  });
+});

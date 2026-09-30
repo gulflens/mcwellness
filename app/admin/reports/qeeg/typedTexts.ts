@@ -48,6 +48,14 @@ export type TypedText = {
   multiline: boolean;
   /** `content` with that half written, or cleared with null. */
   set: (content: QeegContent, text: string | null) => QeegContent;
+  /**
+   * Formatted text (the two summaries): the half as it stands with its marks,
+   * and a setter that writes it whole, bold and underline with it.
+   */
+  rich?: {
+    value: RichText | null;
+    set: (content: QeegContent, text: RichText | null) => QeegContent;
+  };
 };
 
 type Lists = 'findings' | 'focus' | 'recommendations' | 'benefits';
@@ -83,6 +91,11 @@ function withRichHalf(text: BilingualRich, locale: Locale, value: string | null)
   }
   if (value === null || value.trim() === '') return text;
   return { en: retype(text.en, value), ar: text.ar };
+}
+
+function withRichWhole(text: BilingualRich, locale: Locale, value: RichText | null): BilingualRich {
+  if (locale === 'ar') return { en: text.en, ar: value };
+  return value === null || value.text.trim() === '' ? text : { en: value, ar: text.ar };
 }
 
 function ordered<T extends { readonly position: number }>(
@@ -191,6 +204,10 @@ export function typedTextsOf(content: QeegContent, locale: Locale): TypedText[] 
     most: LIMITS.summaryTyped,
     multiline: true,
     set: (was, text) => ({ ...was, summary: withRichHalf(was.summary, locale, text) }),
+    rich: {
+      value: richHalf(content.summary, locale),
+      set: (was, text) => ({ ...was, summary: withRichWhole(was.summary, locale, text) }),
+    },
   });
 
   if (content.edition === 'follow-up') {
@@ -233,6 +250,19 @@ export function typedTextsOf(content: QeegContent, locale: Locale): TypedText[] 
               change: { ...was.change, summary: withRichHalf(was.change.summary, locale, text) },
             }
           : was,
+      rich: {
+        value: richHalf(content.change.summary, locale),
+        set: (was, text) =>
+          was.edition === 'follow-up'
+            ? {
+                ...was,
+                change: {
+                  ...was.change,
+                  summary: withRichWhole(was.change.summary, locale, text),
+                },
+              }
+            : was,
+      },
     });
   }
 

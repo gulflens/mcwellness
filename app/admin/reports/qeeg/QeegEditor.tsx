@@ -53,7 +53,7 @@ import { Button, Field, Note, Select } from '../../../shell/components/Controls'
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { DateField } from '../../../shell/components/DateField';
 import { Textarea } from '../../clients/FormAtoms';
-import { canSupersedeReports, mayOfferSigning } from '../reportsAccess';
+import { canDraftReports, canSupersedeReports, mayOfferSigning } from '../reportsAccess';
 import { comparableReports, comparedFromRow, earlierLabel } from './earlier';
 import {
   Choice,
@@ -174,6 +174,7 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
       <SignedReport
         signing={signing}
         mayCorrect={canSupersedeReports(actor, now, clientId)}
+        mayTwin={canDraftReports(actor, now, clientId)}
         onCorrected={(id) => (onCorrected ? onCorrected(id) : onDone())}
         onTwin={(id) => (onCorrected ? onCorrected(id) : onDone())}
         onDone={onDone}
@@ -1366,7 +1367,17 @@ function TwinPanel({
                 {text.of.charAt(0).toUpperCase() + text.of.slice(1)}, as typed in English:
               </p>
               <p className="qeeg-twin__english">{text.english}</p>
-              {locale === 'ar' ? (
+              {locale === 'ar' && text.rich ? (
+                <ArabicVersionField
+                  id={`qeeg-twin-${text.key}`}
+                  of={text.of}
+                  rich
+                  value={text.rich.value}
+                  most={text.most}
+                  startOpen
+                  onChange={(value) => edit((was) => text.rich?.set(was, value) ?? was)}
+                />
+              ) : locale === 'ar' ? (
                 <ArabicVersionField
                   id={`qeeg-twin-${text.key}`}
                   of={text.of}

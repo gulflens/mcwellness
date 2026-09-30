@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
@@ -8,10 +8,15 @@ import { ReportView } from '../../app/admin/reports/ReportView';
 import { ReportsTab } from '../../app/admin/reports/ReportsTab';
 import { TWIN_REFUSALS } from '../../app/admin/reports/qeeg/refusals';
 import { TWIN_REASON } from '../../app/admin/reports/qeeg/useQeegSigning';
-import { LEAD_PRACTITIONER, signedInProvider } from '../../app/admin/clients/testActors';
+import {
+  ADMIN,
+  LEAD_PRACTITIONER,
+  PRACTITIONER,
+  signedInProvider,
+} from '../../app/admin/clients/testActors';
 import { blankInitial } from '../../domain/reports/qeeg/blank';
 import { fullReport } from '../../domain/reports/qeeg/testing/reports';
-import type { QeegContent, QeegInitial } from '../../domain/reports/qeeg/types';
+import { LIMITS, type QeegContent, type QeegInitial } from '../../domain/reports/qeeg/types';
 
 /**
  * The Arabic version of what she typed, previewing either language, and the
@@ -370,6 +375,7 @@ describe('"Sign the other language"', () => {
         <ReportView
           reportId={FIRST}
           reports={[SIGNED_FIRST] as never}
+          mayDraft
           maySupersede
           maySend={false}
           onBack={vi.fn()}
@@ -462,6 +468,16 @@ describe('the other language’s draft', () => {
     expect(content.summary.en).toEqual(first.summary.en);
   });
 
+  it('formats the Arabic summary with the same bold and underline (fix round 1)', async () => {
+    mountTwin();
+    await screen.findByRole('heading', { name: 'The Arabic version of RPT-000001' });
+    const tools = screen.getByRole('toolbar', {
+      name: 'Formatting for Arabic version of the summary',
+    });
+    expect(within(tools).getByRole('button', { name: 'Bold' })).toBeTruthy();
+    expect(screen.getByLabelText('Arabic version of the summary').getAttribute('dir')).toBe('rtl');
+  });
+
   it('says when it is out of step with the report it was made from', async () => {
     mountTwin({ outOfStep: true });
     expect(
@@ -518,6 +534,7 @@ describe('out of step, in the list and on the report’s page', () => {
         <ReportView
           reportId={TWIN}
           reports={[late, replaced] as never}
+          mayDraft
           maySupersede
           maySend={false}
           onBack={vi.fn()}
@@ -529,5 +546,172 @@ describe('out of step, in the list and on the report’s page', () => {
     ).toBeTruthy();
     expect(screen.getByText('Arabic')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Sign the other language' })).toBeNull();
+  });
+});
+
+/** A signing certificate, given to whichever role a test signs as. */
+function signing<T extends object>(actor: T) {
+  return { ...actor, capabilities: SIGNER.capabilities };
+}
+
+describe('fix round 1: who is offered the other language (change request 6)', () => {
+  async function signIt(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('button', { name: 'Sign this report' }));
+    await user.click(screen.getByRole('button', { name: 'Sign and issue' }));
+    await screen.findByText('Brain-map report, signed');
+  }
+
+  it('offers it on the signed form to a practitioner who may draft but not correct', async () => {
+    const user = userEvent.setup();
+    mountEditor({ actor: signing(PRACTITIONER) });
+    await signIt(user);
+    expect(screen.getByRole('button', { name: 'Sign the other language' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Correct this report' })).toBeNull();
+  });
+
+  it('does not offer it on the signed form to a coordinator, who drafts nothing', async () => {
+    const user = userEvent.setup();
+    mountEditor({ actor: signing(ADMIN) });
+    await signIt(user);
+    expect(screen.queryByRole('button', { name: 'Sign the other language' })).toBeNull();
+  });
+
+  it('does not offer it on the signed form when the other language already exists', async () => {
+    const user = userEvent.setup();
+    mountEditor({
+      api: { issue: () => json({ report: { ...SIGNED_FIRST, id: DRAFT, twinId: TWIN } }, 201) },
+    });
+    await signIt(user);
+    expect(screen.queryByRole('button', { name: 'Sign the other language' })).toBeNull();
+  });
+
+  function openFromTheList(actor: object) {
+    const api = fakeApi(actor, {
+      list: [SIGNED_FIRST],
+      reads: {
+        [FIRST]: {
+          report: SIGNED_FIRST,
+          content: fullReport(),
+          deliveries: [],
+          url: null,
+          expiresInSeconds: null,
+        },
+      },
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={api.fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+  }
+
+  it('offers it on the report’s page to a practitioner who may draft but not correct', async () => {
+    const user = userEvent.setup();
+    openFromTheList(PRACTITIONER);
+    await user.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    expect(await screen.findByRole('button', { name: 'Sign the other language' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Correct this report' })).toBeNull();
+  });
+
+  it('does not offer it on the report’s page to a coordinator', async () => {
+    const user = userEvent.setup();
+    openFromTheList(ADMIN);
+    await user.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    await screen.findByText('English');
+    expect(screen.queryByRole('button', { name: 'Sign the other language' })).toBeNull();
+  });
+});
+
+describe('fix round 1: the Arabic box, for a keyboard and a screen reader', () => {
+  it('moves focus into the box when it opens, and names the box it opens', async () => {
+    const user = userEvent.setup();
+    mountEditor();
+    await openSection(user, 'Summary');
+    const toggle = screen.getByRole('button', { name: 'Add an Arabic version of the summary' });
+    const controlled = toggle.getAttribute('aria-controls') ?? '';
+    expect(controlled).not.toBe('');
+    await user.click(toggle);
+    const box = screen.getByLabelText('Arabic version of the summary');
+    expect(document.activeElement).toBe(box);
+    expect(document.getElementById(controlled)?.contains(box)).toBe(true);
+  });
+
+  it('ties the sentence beneath it to the box', async () => {
+    const user = userEvent.setup();
+    mountEditor();
+    await openSection(user, 'Key findings');
+    await user.type(screen.getByLabelText('Add your own item'), 'Restless evenings');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Add an Arabic version of your own item “Restless evenings”',
+      }),
+    );
+    const box = screen.getByLabelText('Arabic version of your own item “Restless evenings”');
+    const described = (box.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .map((id) => document.getElementById(id)?.textContent ?? '')
+      .join(' ');
+    expect(described).toMatch(/prints the English as it was typed/);
+  });
+
+  it('refuses an Arabic longer than it may hold, with a sentence, and never cuts it', async () => {
+    const user = userEvent.setup();
+    const { calls } = mountEditor();
+    await openSection(user, 'Key findings');
+    await user.type(screen.getByLabelText('Add your own item'), 'Restless evenings');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Add an Arabic version of your own item “Restless evenings”',
+      }),
+    );
+    const box = screen.getByLabelText('Arabic version of your own item “Restless evenings”');
+    expect(box.getAttribute('maxlength')).toBeNull();
+    box.focus();
+    await user.paste('ب'.repeat(LIMITS.label + 1));
+    expect(
+      screen.getByText(new RegExp(`longer than the ${LIMITS.label} characters it may hold`)),
+    ).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    const findings = sentContent(saves(calls)[0])['findings'] as {
+      custom: Record<string, { label: { ar: unknown } }>;
+    };
+    expect(findings.custom['c0']?.label.ar).toBeNull();
+  });
+});
+
+describe('fix round 1: bold and underline in the Arabic summary', () => {
+  it('sets them in the Arabic box, and they reach the Arabic half', async () => {
+    const user = userEvent.setup();
+    const { calls } = mountEditor();
+    await openSection(user, 'Summary');
+    await user.type(screen.getByLabelText('Summary', { selector: 'textarea' }), 'Calmer.');
+    await user.click(screen.getByRole('button', { name: 'Add an Arabic version of the summary' }));
+    const box = screen.getByLabelText('Arabic version of the summary') as HTMLTextAreaElement;
+    expect(box.getAttribute('lang')).toBe('ar');
+    await user.type(box, 'أمسيات أهدأ');
+    const tools = screen.getByRole('toolbar', {
+      name: 'Formatting for Arabic version of the summary',
+    });
+    box.setSelectionRange(0, 6);
+    fireEvent.select(box);
+    await user.click(within(tools).getByRole('button', { name: 'Bold' }));
+    box.setSelectionRange(7, 11);
+    fireEvent.select(box);
+    await user.click(within(tools).getByRole('button', { name: 'Underline' }));
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    const summary = sentContent(saves(calls)[0])['summary'] as {
+      en: unknown;
+      ar: { text: string; marks: unknown[] };
+    };
+    expect(summary.en).toEqual({ text: 'Calmer.', marks: [] });
+    expect(summary.ar.text).toBe('أمسيات أهدأ');
+    expect(summary.ar.marks).toEqual([
+      { from: 0, to: 6, bold: true },
+      { from: 7, to: 11, underline: true },
+    ]);
   });
 });

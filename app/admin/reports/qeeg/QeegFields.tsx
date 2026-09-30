@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useState } from 'react';
 import { REGION_IDS, type RegionId } from '../../../../domain/reports/qeeg/catalogue/ids';
 import type {
   ChangeFigure,
@@ -14,7 +14,7 @@ import { isBlank } from '../../../../domain/reports/qeeg/text';
 import { Button, Field, Select } from '../../../shell/components/Controls';
 import { Checkbox } from '../../clients/FormAtoms';
 import { ArabicVersionField } from './atoms/ArabicVersionField';
-import { retype, stylesAt, toggleMark, type Style } from './richEdit';
+import { RichTextBox } from './RichTextBox';
 
 /**
  * The pieces the brain-map form is made of: a list of ticks with her own
@@ -413,36 +413,6 @@ export function FigureField({
 // The summary, with bold and underline
 // ---------------------------------------------------------------------------
 
-/** The text as the page will set it: bold and underline, nothing else. */
-function Formatted({ rich }: { rich: RichText }) {
-  const pieces: { text: string; bold: boolean; underline: boolean }[] = [];
-  let at = 0;
-  for (const mark of rich.marks) {
-    if (mark.from > at)
-      pieces.push({ text: rich.text.slice(at, mark.from), bold: false, underline: false });
-    pieces.push({
-      text: rich.text.slice(mark.from, mark.to),
-      bold: mark.bold === true,
-      underline: mark.underline === true,
-    });
-    at = mark.to;
-  }
-  if (at < rich.text.length)
-    pieces.push({ text: rich.text.slice(at), bold: false, underline: false });
-  return (
-    <p className="qeeg-rich__formatted">
-      {pieces.map((piece, index) => {
-        const underlined = piece.underline ? <u>{piece.text}</u> : piece.text;
-        return piece.bold ? (
-          <strong key={index}>{underlined}</strong>
-        ) : (
-          <span key={index}>{underlined}</span>
-        );
-      })}
-    </p>
-  );
-}
-
 export function RichField({
   id,
   label,
@@ -458,90 +428,29 @@ export function RichField({
   onChange: (next: RichText) => void;
   /**
    * Its Arabic version beside it, when one may be given: the text as it
-   * stands, and where the new text goes. Bold and underline are set in the
-   * English box; the Arabic keeps the marks it has as its letters move.
+   * stands, and where the new text goes. Bold and underline are set there with
+   * the same tools as here (`RichTextBox`), in the one Arabic box.
    */
   arabic?: { of: string; value: RichText | null; onChange: (next: RichText | null) => void };
 }) {
-  const box = useRef<HTMLTextAreaElement>(null);
-  const hintId = useId();
-  const [selection, setSelection] = useState<{ from: number; to: number }>({ from: 0, to: 0 });
-  const styled = stylesAt(value, selection.from, selection.to);
-  const hasSelection = selection.from < selection.to;
-
-  const remember = () => {
-    const element = box.current;
-    if (element) setSelection({ from: element.selectionStart, to: element.selectionEnd });
-  };
-
-  const apply = (style: Style) => {
-    onChange(toggleMark(value, selection.from, selection.to, style));
-    // Back to the box, with the same stretch still chosen.
-    const element = box.current;
-    if (element) {
-      element.focus();
-      element.setSelectionRange(selection.from, selection.to);
-    }
-  };
-
   return (
     <div className="qeeg-rich">
-      <label className="field__label" htmlFor={id}>
-        {label}
-      </label>
-      <div className="qeeg-rich__tools" role="toolbar" aria-label={`Formatting for ${label}`}>
-        <Button
-          variant="quiet"
-          aria-pressed={hasSelection && styled.bold}
-          disabled={!hasSelection}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => apply('bold')}
-        >
-          Bold
-        </Button>
-        <Button
-          variant="quiet"
-          aria-pressed={hasSelection && styled.underline}
-          disabled={!hasSelection}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => apply('underline')}
-        >
-          Underline
-        </Button>
-      </div>
-      <textarea
-        ref={box}
+      <RichTextBox
         id={id}
-        className="report-editor__note"
-        aria-describedby={hintId}
-        value={value.text}
-        maxLength={most}
-        onChange={(event) => onChange(retype(value, event.currentTarget.value))}
-        onSelect={remember}
-        onKeyUp={remember}
-        onMouseUp={remember}
+        label={label}
+        value={value}
+        most={most}
+        onChange={onChange}
+        textProps={{ maxLength: most }}
       />
-      <p id={hintId} className="small muted">
-        {value.text.length} of {most} characters. Choose words, then Bold or Underline.
-      </p>
-      {value.marks.length > 0 ? (
-        <div className="qeeg-rich__as-set">
-          <span className="field__label">As it will be set</span>
-          <Formatted rich={value} />
-        </div>
-      ) : null}
       {arabic ? (
         <ArabicVersionField
           id={`${id}-ar`}
           of={arabic.of}
-          value={arabic.value?.text ?? null}
+          rich
+          value={arabic.value}
           most={most}
-          multiline
-          onChange={(text) =>
-            arabic.onChange(
-              text === null ? null : retype(arabic.value ?? { text: '', marks: [] }, text),
-            )
-          }
+          onChange={arabic.onChange}
         />
       ) : null}
     </div>

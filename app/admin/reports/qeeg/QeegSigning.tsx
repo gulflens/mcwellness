@@ -190,6 +190,7 @@ function PreviewNotes({
 export function SignedReport({
   signing,
   mayCorrect,
+  mayTwin,
   onCorrected,
   onTwin,
   onDone,
@@ -197,6 +198,11 @@ export function SignedReport({
   signing: Signing;
   /** The owner or the lead practitioner: the two who may replace a signed version. */
   mayCorrect: boolean;
+  /**
+   * Whoever may write a report for this client: the people who may start its
+   * other language (docs/CHANGE-REQUESTS/reports-02.md request 6).
+   */
+  mayTwin: boolean;
   onCorrected: (draftId: string) => void;
   /** The other language was started as a draft: open it. */
   onTwin: (draftId: string) => void;
@@ -209,6 +215,9 @@ export function SignedReport({
   useFocusOnToggle(signing.correcting, panelRef, openerRef);
   const row = signing.signed;
   if (row === null) return null;
+  // Not on a report that is itself the other language of one, nor on one
+  // whose other language already exists.
+  const offerTwin = mayTwin && row.twinOfId === null && row.twinId === null;
 
   async function startTwin(): Promise<void> {
     const id = await signing.startTwin();
@@ -245,7 +254,7 @@ export function SignedReport({
       </dl>
       {signing.openError ? <Note tone="critical">{signing.openError}</Note> : null}
       {signing.twinError ? <Note tone="critical">{signing.twinError}</Note> : null}
-      {mayCorrect && row.twinOfId === null ? (
+      {offerTwin ? (
         <p className="small muted">
           Signing the other language starts this report in{' '}
           {LANGUAGE_WORDS[row.locale === 'en' ? 'ar' : 'en']} as a draft of its own, made from this
@@ -269,7 +278,7 @@ export function SignedReport({
         >
           Open the signed report
         </Button>
-        {mayCorrect && row.twinOfId === null ? (
+        {offerTwin ? (
           <Button disabled={signing.twinning} onClick={() => void startTwin()}>
             {signing.twinning ? 'Starting the other language.' : 'Sign the other language'}
           </Button>

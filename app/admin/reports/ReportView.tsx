@@ -74,6 +74,7 @@ function correctionBody(kind: ReportKind, reason: string, content: unknown): obj
 export function ReportView({
   reportId,
   reports = [],
+  mayDraft = false,
   maySupersede,
   maySend,
   onBack,
@@ -83,6 +84,11 @@ export function ReportView({
   reportId: string;
   /** The client's reports, so a brain map's other language is named by its reference. */
   reports?: readonly ReportRow[];
+  /**
+   * Whether this person may write a report for this client: who may start a
+   * brain map's other language (docs/CHANGE-REQUESTS/reports-02.md request 6).
+   */
+  mayDraft?: boolean;
   maySupersede: boolean;
   maySend: boolean;
   onBack: () => void;
@@ -290,7 +296,7 @@ export function ReportView({
   const language = languageWord(row);
   const twinSaid = twinLines(row, reports);
   const mayTwin =
-    maySupersede &&
+    mayDraft &&
     row.kind === 'qeeg' &&
     row.status === 'issued' &&
     row.twinOfId === null &&
