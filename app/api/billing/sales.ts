@@ -11,7 +11,7 @@ import {
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
 import { maySell, mayDiscount } from './access';
-import { toDiscount } from './schema';
+import { toSaleDiscount } from './schema';
 import {
   IdempotencyKey,
   SellPackageInput,
@@ -306,10 +306,14 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     // have.
     let applied: AppliedDiscount;
     try {
+      const standing = {
+        discountFils: fils(price.discountFils),
+        basisPoints: price.discountBasisPoints,
+      };
       applied = combineDiscounts(
         fils(price.listPriceFils),
-        { discountFils: fils(price.discountFils), basisPoints: price.discountBasisPoints },
-        toDiscount(input.extraDiscount?.discount),
+        standing,
+        toSaleDiscount(input.extraDiscount?.discount, fils(price.listPriceFils), standing),
       );
     } catch {
       return c.json({ error: 'bad_request', code: 'discount_too_large', requestId }, 400);

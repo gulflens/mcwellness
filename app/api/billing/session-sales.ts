@@ -9,7 +9,7 @@ import {
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { maySell, mayDiscount } from './access';
-import { toDiscount } from './schema';
+import { toSaleDiscount } from './schema';
 import { IdempotencyKey, SellSessionInput, SellSessionResponse } from './ledger-schema';
 
 /**
@@ -216,10 +216,14 @@ export function mountSessionSales(api: Hono<ApiEnv>, now: () => Date = () => new
     }
     let applied: AppliedDiscount;
     try {
+      const standing = {
+        discountFils: fils(price.discount_fils),
+        basisPoints: price.discount_basis_points,
+      };
       applied = combineDiscounts(
         fils(price.list_price_fils),
-        { discountFils: fils(price.discount_fils), basisPoints: price.discount_basis_points },
-        toDiscount(input.extraDiscount?.discount),
+        standing,
+        toSaleDiscount(input.extraDiscount?.discount, fils(price.list_price_fils), standing),
       );
     } catch {
       return c.json({ error: 'bad_request', code: 'discount_too_large', requestId }, 400);

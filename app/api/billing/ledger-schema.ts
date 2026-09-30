@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { cleanText } from '../_middleware/text';
-import { DiscountInput, IsoDate, isRealText, MINIMUM_REASON, Term } from './schema';
+import {
+  DiscountInput,
+  IsoDate,
+  isRealText,
+  MINIMUM_REASON,
+  SaleDiscountInput,
+  Term,
+} from './schema';
 
 /**
  * The shapes the packages, sales, payments, balance, invoice and refund
@@ -225,7 +232,7 @@ export const SellPackageInput = z.object({
    * written, and this one has none until somebody gives it — and only the
    * owner, an admin or finance may give one.
    */
-  extraDiscount: z.object({ discount: DiscountInput, reason: Reason }).optional(),
+  extraDiscount: z.object({ discount: SaleDiscountInput, reason: Reason }).optional(),
 });
 export type SellPackageInput = z.infer<typeof SellPackageInput>;
 
