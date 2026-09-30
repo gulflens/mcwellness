@@ -150,7 +150,7 @@ describe('routeOwnedIn', () => {
     ]);
   });
 
-  it('names a calculated figure, and a count of sessions said to be gathered', () => {
+  it('names a calculated figure', () => {
     const body = sentFollowUp();
     const change = body['change'] as Record<string, unknown>;
     const calculated = {
@@ -168,14 +168,23 @@ describe('routeOwnedIn', () => {
       ...body,
       change: {
         ...change,
-        sessionsCompleted: { count: 20, source: 'gathered' },
         table: { delta: { position: 0, eyesOpen: typed, eyesClosed: calculated } },
       },
     };
-    expect(routeOwnedIn(withFigures)).toEqual([
-      'change.table.delta.eyesClosed.source',
-      'change.sessionsCompleted.source',
-    ]);
+    expect(routeOwnedIn(withFigures)).toEqual(['change.table.delta.eyesClosed.source']);
+  });
+
+  it('leaves a count of sessions said to be counted to be counted again, not refused', () => {
+    // Brief S: the form sends the counted figure back as it got it, and the
+    // route works it out afresh (`assembleDraft`, `sessionsCompletedOnSave`).
+    const body = sentFollowUp();
+    const change = body['change'] as Record<string, unknown>;
+    expect(
+      routeOwnedIn({
+        ...body,
+        change: { ...change, sessionsCompleted: { count: 20, source: 'gathered' } },
+      }),
+    ).toEqual([]);
   });
 
   it('leaves a typed count of sessions and a typed figure to her', () => {
@@ -232,6 +241,54 @@ describe('assembleDraft', () => {
     }
     expect(checked.content.change.pairs.eyes_open.earlier?.figureId).toBe(ID(9));
     expect(checked.content.change.pairs.eyes_closed.earlier).toBeNull();
+  });
+
+  it('counts the sessions completed afresh when the figure says counted, whatever it carried', () => {
+    const subject = subjectFrom(FACTS, { recordedOn: null, today: '2026-09-30' });
+    const sent = sentFollowUp();
+    const change = sent['change'] as Record<string, unknown>;
+    const forged = {
+      ...sent,
+      change: { ...change, sessionsCompleted: { count: 99, source: 'gathered' } },
+    };
+    const body = assembleDraft(forged, { subject, followUp: broughtForward(), counted: 14 });
+    const checked = validateQeegContent(body);
+    if (!checked.ok) throw new Error(JSON.stringify(checked.refusals));
+    if (checked.content.edition !== 'follow-up') throw new Error('not a follow-up');
+    expect(checked.content.change.sessionsCompleted).toEqual({ count: 14, source: 'gathered' });
+
+    const none = assembleDraft(forged, { subject, followUp: broughtForward(), counted: 0 });
+    expect((none['change'] as { sessionsCompleted: unknown }).sessionsCompleted).toBeNull();
+  });
+
+  it('keeps a typed count of sessions as she typed it', () => {
+    const subject = subjectFrom(FACTS, { recordedOn: null, today: '2026-09-30' });
+    const sent = sentFollowUp();
+    const change = sent['change'] as Record<string, unknown>;
+    const typed = {
+      ...sent,
+      change: { ...change, sessionsCompleted: { count: 30, source: 'typed' } },
+    };
+    const body = assembleDraft(typed, { subject, followUp: broughtForward(), counted: 14 });
+    expect((body['change'] as { sessionsCompleted: unknown }).sessionsCompleted).toEqual({
+      count: 30,
+      source: 'typed',
+    });
+  });
+
+  it('leaves the sessions as they were sent when no count is handed in (a second-language draft)', () => {
+    const subject = subjectFrom(FACTS, { recordedOn: null, today: '2026-09-30' });
+    const sent = sentFollowUp();
+    const change = sent['change'] as Record<string, unknown>;
+    const gathered = {
+      ...sent,
+      change: { ...change, sessionsCompleted: { count: 20, source: 'gathered' } },
+    };
+    const body = assembleDraft(gathered, { subject, followUp: broughtForward() });
+    expect((body['change'] as { sessionsCompleted: unknown }).sessionsCompleted).toEqual({
+      count: 20,
+      source: 'gathered',
+    });
   });
 
   it('keeps what she typed exactly as it was sent, for the shape to judge', () => {

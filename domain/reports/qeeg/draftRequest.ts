@@ -10,10 +10,12 @@
  * that carries one of the parts it may not set is REFUSED, by name
  * (`routeOwnedIn`), rather than quietly overwritten: a caller who sent a
  * client's age believes it was taken, and a refusal is the only answer that
- * tells them it was not. The earlier scores and maps are the one exception:
- * the form shows them and sends them back as it got them, so the route writes
- * them afresh from the earlier report (`assembleDraft`) and a figure typed
- * over one never reaches the page.
+ * tells them it was not. The earlier scores and maps, and a count of
+ * sessions said to be counted from the visits, are the exceptions: the form
+ * shows them and sends them back as it got them, so the route writes them
+ * afresh (`assembleDraft`), from the earlier report and from the client's
+ * visits (`sessionsCompletedOnSave`, brief S), and a figure typed over one
+ * never reaches the page. Only a count marked typed is hers.
  *
  * **What she typed goes to the shape as it was sent** (RC4 note N2). Nothing
  * here reads, cleans or drops a typed part: `assembleDraft` copies every key
@@ -30,6 +32,7 @@
 
 import { ageOn } from '../../shared/dates';
 import { DIMENSION_IDS } from './catalogue/ids';
+import { sessionsCompletedOnSave } from './sessionsCompleted';
 import { isBlank, isRealDay, isRecord } from './text';
 import { CONDITIONS, type QeegFollowUp, type Sex, type Subject } from './types';
 
@@ -78,8 +81,9 @@ const COMPARED_WITH_OWN = new Set(['reportId']);
 /**
  * Every part of `sent` the route owns, as dotted paths, in a fixed order: the
  * client, where the report came from, what it is compared with beyond its id,
- * each calculated figure, and a count of sessions said to be gathered. Empty
- * when the request may be taken. It never throws.
+ * and each calculated figure. Empty when the request may be taken. It never
+ * throws. A count of sessions said to be counted is not among them: it is
+ * counted again (`assembleDraft`), as the earlier scores are written again.
  */
 export function routeOwnedIn(sent: unknown): string[] {
   if (!isRecord(sent)) return [];
@@ -104,9 +108,6 @@ export function routeOwnedIn(sent: unknown): string[] {
       }
     }
   }
-  if (own(own(change, 'sessionsCompleted'), 'source') === 'gathered') {
-    found.push('change.sessionsCompleted.source');
-  }
   return found;
 }
 
@@ -116,10 +117,20 @@ export function routeOwnedIn(sent: unknown): string[] {
  * written from `followUp` (the earlier report, brought forward by
  * `prefillFollowUp`). A part of `sent` that is not the shape it should be is
  * left as it was sent, for the shape to refuse by name.
+ *
+ * `counted` is the number of sessions the server counted from the client's
+ * visits (`countCompletedSessions`). When it is handed in, a figure said to be
+ * counted is written from it; when it is not (a second-language draft, whose
+ * every part but its own language is the first report's), the figure goes on
+ * as it was sent.
  */
 export function assembleDraft(
   sent: Readonly<Record<string, unknown>>,
-  from: { readonly subject: Subject; readonly followUp: QeegFollowUp | null },
+  from: {
+    readonly subject: Subject;
+    readonly followUp: QeegFollowUp | null;
+    readonly counted?: number | null;
+  },
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     ...structuredClone(sent),
@@ -155,6 +166,18 @@ export function assembleDraft(
       }
     }
     body['change'] = { ...change, pairs: next };
+  }
+
+  const changed = body['change'];
+  if (
+    from.counted !== undefined &&
+    isRecord(changed) &&
+    Object.hasOwn(changed, 'sessionsCompleted')
+  ) {
+    body['change'] = {
+      ...changed,
+      sessionsCompleted: sessionsCompletedOnSave(changed['sessionsCompleted'], from.counted),
+    };
   }
   return body;
 }
