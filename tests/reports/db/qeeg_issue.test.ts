@@ -407,6 +407,32 @@ describe('a complete draft, signed', () => {
     expect(back && Buffer.from(back).equals(Buffer.from(stored))).toBe(true);
   });
 
+  it('refuses to repair, by the field, when a map it prints is gone, and hands out no link', async () => {
+    const first = draft.maps[0];
+    if (!first) throw new Error('No map.');
+    const mapKey = clientDocumentKey(h.data.tenant.id, clientId, first.figureId);
+    const mapBytes = await h.storage.get(mapKey);
+    if (!mapBytes) throw new Error('The map is not in the store.');
+    await h.storage.delete(documentRow.storage_key);
+    await h.storage.delete(mapKey);
+    try {
+      const res = await h.call('GET', `/api/reports/${draft.id}`, SEEDED.owner);
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        code: 'map_missing',
+        field: 'maps.map-0.figureId',
+        figureId: first.figureId,
+      });
+      expect(typeof body['sentence']).toBe('string');
+      expect(body['url']).toBeUndefined();
+      expect(await h.storage.exists(documentRow.storage_key)).toBe(false);
+    } finally {
+      await h.storage.put(mapKey, mapBytes, 'image/png', { overwrite: true });
+      await h.storage.put(documentRow.storage_key, stored, 'application/pdf', { overwrite: true });
+    }
+  });
+
   it('refuses to repair with bytes that differ from what was filed', async () => {
     await h.storage.delete(documentRow.storage_key);
     await h.owner.query(

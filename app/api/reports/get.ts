@@ -11,7 +11,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { mayReadReport } from './access';
 import { contactClientIds } from './household';
 import { ReportResponse } from './schema';
-import { renderSigned } from './qeeg/pages';
+import { renderSigned, type PictureRefusal } from './qeeg/pages';
 import { asRow, documentFrom, readReport, type ReportRecord } from './source';
 
 /**
@@ -56,28 +56,63 @@ const DOCUMENT_SQL =
   'where d.tenant_id = app.current_tenant_id() and d.id = $1';
 
 /**
- * A signed report's file, rendered again from its row, or null where it
- * cannot be. Each kind by its own renderer: a brain map by its own pages, its
- * frozen pictures and its row's snapshots (`qeeg/pages.ts`), which read the
+ * A signed report's file, rendered again from its row, or why it cannot be.
+ * Each kind by its own renderer: a brain map by its own pages, its frozen
+ * pictures and its row's snapshots (`qeeg/pages.ts`), which read the
  * practice's logo and its footer's telephone, email and website as they
  * stand, as billing reads an invoice's logo; a report whose practice has
  * changed either since is then refused below, as any other whose source has
  * moved is.
+ *
+ * **A map that is gone, or not what was filed, is refused by name**
+ * (docs/SPEC/reports-qeeg.md section 9, point 6): the answer names the field
+ * that places it, and no link to a missing file is handed out.
  */
+type Remade =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; refusal: PictureRefusal }
+  | { ok: false; refusal: null };
+
+/** What a person reads when a signed brain map cannot be made again for want of a map. */
+export const REPAIR_SENTENCES: Readonly<Record<PictureRefusal['code'], string>> = Object.freeze({
+  unlinked_figure:
+    'The signed report names a map it does not hold, so its file cannot be made again.',
+  map_missing:
+    'The file of this signed report is missing, and a map it prints can no longer be found in the store, so the file cannot be made again.',
+  map_differs:
+    'The file of this signed report is missing, and a map it prints is not the picture that was filed, so the file cannot be made again.',
+});
+
 async function remade(
   db: Parameters<typeof renderSigned>[0],
   storage: Parameters<typeof renderSigned>[1],
   record: ReportRecord,
-): Promise<Uint8Array | null> {
+): Promise<Remade> {
   switch (record.kind) {
     case 'session':
     case 'progress': {
       const document_ = documentFrom(record);
-      return document_ ? renderReport(document_, documentFonts()) : null;
+      return document_
+        ? { ok: true, bytes: renderReport(document_, documentFonts()) }
+        : { ok: false, refusal: null };
     }
     case 'qeeg': {
       const filed = await renderSigned(db, storage, record);
-      return filed.ok ? filed.bytes : null;
+      if (filed.ok) return { ok: true, bytes: filed.bytes };
+      switch (filed.code) {
+        case 'unlinked_figure':
+        case 'map_missing':
+        case 'map_differs':
+          return { ok: false, refusal: filed.refusal };
+        case 'overrun':
+        case 'not_signed':
+        case 'invalid_content':
+          return { ok: false, refusal: null };
+        default: {
+          const unknown: never = filed;
+          return unknown;
+        }
+      }
     }
     default: {
       const unknown: never = record.kind;
@@ -136,8 +171,24 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
           // From the row and nothing else, which is what makes the repair
           // path sound: the bytes it re-renders are the bytes that were filed,
           // whatever has been corrected on the client record since.
-          const bytes = await remade(db, storage, record);
-          if (bytes) {
+          const again = await remade(db, storage, record);
+          if (!again.ok && again.refusal !== null) {
+            // Ids and a path, never a key or a digest: both name a client's document.
+            console.error(
+              JSON.stringify({ requestId, name: 'ReportMapMissing', documentId: row.id }),
+            );
+            return c.json(
+              {
+                error: 'conflict',
+                ...again.refusal,
+                sentence: REPAIR_SENTENCES[again.refusal.code],
+                requestId,
+              },
+              409,
+            );
+          }
+          if (again.ok) {
+            const { bytes } = again;
             if (createHash('sha256').update(bytes).digest('hex') !== row.sha256.toString('hex')) {
               console.error(
                 JSON.stringify({
