@@ -184,6 +184,11 @@ export const FIGURE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   removed_after_all: 'The server’s answer did not arrive, but the map was removed.',
   not_removed:
     'The server’s answer did not arrive, and the map was not removed. It is back in the list; try again.',
+  // A fault inside the form itself while a door was on its way.
+  unexpected:
+    'Something went wrong in the form while the map was being sent, so it cannot tell whether the map was kept. Reload the draft and look at its maps before adding it again.',
+  unexpected_removal:
+    'Something went wrong in the form while the map was being removed, so it cannot tell whether it went. Reload the draft and look at its maps.',
   unknown_removal:
     'The server’s answer did not arrive, so the form cannot tell whether the map was removed. It may have been. It is off the draft; reload the draft to see where it stands.',
 });

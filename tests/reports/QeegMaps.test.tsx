@@ -1060,3 +1060,177 @@ describe('an answer that never came, settled by the list (fix round 2)', () => {
     }
   });
 });
+
+describe('fix round 3', () => {
+  const UNPLACED = '0000000d-0000-4000-8000-000000000004';
+  const lostUpload = () => {
+    throw new TypeError('Failed to fetch');
+  };
+
+  it('settles a lost answer on her own upload, never on a borrowed picture with the same bytes', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({
+      upload: lostUpload,
+      list: () => {
+        const sent = api.uploads()[0]?.headers.get('x-sha256');
+        if (!sent) return json({ figures: [] });
+        const same = { sha256: sent, widthPx: 40, heightPx: 30 };
+        return json({
+          figures: [
+            { figureId: EARLIER_FIGURE, ...same, borrowed: true, named: true },
+            { figureId: FIGURE, ...same, borrowed: false, named: false },
+          ],
+        });
+      },
+    });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await choose(user, picture('40x30'));
+    expect(await screen.findByText(FIGURE_REFUSALS['kept_after_all'] as string)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }));
+    const placed = Object.values(sentContent(api.saves().at(-1))['maps'] as object).map(
+      (entry: { figureId: string }) => entry.figureId,
+    );
+    expect(placed).toEqual([FIGURE]);
+  });
+
+  it('does not let a slow earlier read of the list bring back a picture removed since', async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const unplacedLink = {
+      figureId: UNPLACED,
+      sha256: 'c'.repeat(64),
+      widthPx: 60,
+      heightPx: 40,
+      borrowed: false,
+      named: false,
+    };
+    let reads = 0;
+    const api = mountApi({
+      list: () => {
+        reads += 1;
+        return reads <= 2 ? json({ figures: [unplacedLink] }) : json({ figures: [] });
+      },
+    });
+    const slowFetch = api.fetchImpl.getMockImplementation();
+    let listCalls = 0;
+    api.fetchImpl.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === `/api/reports/${DRAFT}/figures` && (init?.method ?? 'GET') === 'GET') {
+        listCalls += 1;
+        // The second read, made when the section is opened again, is slow.
+        if (listCalls === 2) await held;
+      }
+      return (slowFetch as NonNullable<typeof slowFetch>)(input, init);
+    });
+    mountEditor(null, api, { reportId: DRAFT });
+    const toggle = await openSection(user, 'Brain maps');
+    await screen.findByRole('table', { name: 'Uploaded, not on the report' });
+    await user.click(toggle);
+    await openSection(user, 'Brain maps');
+    await waitFor(() => expect(listCalls).toBe(2));
+
+    const unplaced = screen.getByRole('table', { name: 'Uploaded, not on the report' });
+    await user.click(within(unplaced).getByRole('button', { name: 'Remove uploaded picture 1' }));
+    await user.click(screen.getByRole('button', { name: 'Remove the map' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('table', { name: 'Uploaded, not on the report' })).toBeNull(),
+    );
+    release();
+    await waitFor(() => expect(reads).toBe(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole('table', { name: 'Uploaded, not on the report' })).toBeNull();
+  });
+
+  it('says a lost answer’s picture is already on the report when the draft already places it', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({
+      stored: withOwnMap(blankInitial()),
+      upload: lostUpload,
+      list: () => {
+        const sent = api.uploads()[0]?.headers.get('x-sha256');
+        return json({
+          figures: [
+            {
+              ...OWN,
+              sha256: sent ?? OWN.sha256,
+              borrowed: false,
+              named: true,
+            },
+          ],
+        });
+      },
+    });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await choose(user, picture('40x30'));
+    expect(await screen.findByText('This picture is already on the report.')).toBeTruthy();
+    expect(screen.queryByText(FIGURE_REFUSALS['kept_after_all'] as string)).toBeNull();
+    const listed = screen.getByRole('table', { name: 'Brain maps on this report' });
+    expect(within(listed).getAllByRole('row')).toHaveLength(2);
+  });
+
+  it('reads the list again after the door’s eighth-map refusal, and names what could make room', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({
+      upload: () => json({ error: 'unprocessable', code: 'too_many_maps', sentence: 'x' }, 422),
+      list: () =>
+        json({
+          figures:
+            api.uploads().length === 0
+              ? []
+              : [
+                  {
+                    figureId: UNPLACED,
+                    sha256: 'c'.repeat(64),
+                    widthPx: 60,
+                    heightPx: 40,
+                    borrowed: false,
+                    named: false,
+                  },
+                ],
+        }),
+    });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await choose(user, picture('40x30'));
+    expect(
+      await screen.findByText(
+        'A report holds eight maps. Remove one before adding another. 1 uploaded picture is not on the report; removing it makes room.',
+      ),
+    ).toBeTruthy();
+    expect(await screen.findByRole('table', { name: 'Uploaded, not on the report' })).toBeTruthy();
+  });
+
+  /** An answer whose reading throws inside the form, as nothing the door sends should. */
+  const broken = () =>
+    ({
+      ok: true,
+      status: 201,
+      json: () => {
+        throw new Error('unreadable');
+      },
+    }) as unknown as Response;
+
+  it('gives an unexpected fault inside an upload a sentence of its own', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({ upload: broken });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await choose(user, picture('40x30'));
+    expect(await screen.findByText(FIGURE_REFUSALS['unexpected'] as string)).toBeTruthy();
+  });
+
+  it('gives an unexpected fault inside a removal a sentence of its own', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({ stored: withOwnMap(blankInitial()), remove: broken });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await user.click(screen.getByRole('button', { name: 'Remove map 1' }));
+    await user.click(screen.getByRole('button', { name: 'Remove the map' }));
+    expect(await screen.findByText(FIGURE_REFUSALS['unexpected_removal'] as string)).toBeTruthy();
+  });
+});

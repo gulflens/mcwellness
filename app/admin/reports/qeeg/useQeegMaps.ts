@@ -131,6 +131,12 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const madeRef = useRef<string[]>([]);
   const aliveRef = useRef(true);
+  /**
+   * Counts the list reads and the changes made to the list here. Only the
+   * newest is applied: a slow read that set out before a removal must not
+   * bring the removed picture back.
+   */
+  const listSeqRef = useRef(0);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -165,21 +171,29 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
     [apiFetch],
   );
 
-  /** Takes a list read as what is shown. */
-  const took = useCallback((listed: Listed) => {
-    if (!aliveRef.current) return;
-    if (listed.ok) {
-      setLinks(listed.figures);
-      setListError(null);
-    } else {
-      setListError(listed.said);
-    }
-  }, []);
+  /** Reads the list, and shows it unless a newer read or change came after it set out. */
+  const readList = useCallback(
+    async (id: string): Promise<Listed> => {
+      listSeqRef.current += 1;
+      const mine = listSeqRef.current;
+      const listed = await listOf(id);
+      if (aliveRef.current && mine === listSeqRef.current) {
+        if (listed.ok) {
+          setLinks(listed.figures);
+          setListError(null);
+        } else {
+          setListError(listed.said);
+        }
+      }
+      return listed;
+    },
+    [listOf],
+  );
 
   const refresh = useCallback(async () => {
     if (reportId === null) return;
-    took(await listOf(reportId));
-  }, [listOf, reportId, took]);
+    await readList(reportId);
+  }, [readList, reportId]);
 
   /**
    * The draft's stamp as the server holds it now, after a door whose answer
@@ -236,80 +250,91 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
 
         /** After an answer that never came: the list says whether it was filed. */
         const settle = async (id: string): Promise<string | null> => {
-          const listed = await listOf(id);
-          took(listed);
+          const listed = await readList(id);
           if (!listed.ok) {
             outcome.said = figureRefusalSentence(0, { code: 'unknown_outcome' });
           } else {
-            const link = listed.figures.find((each) => each.sha256 === sha256);
+            // Her own upload: a borrowed picture with the same bytes is the
+            // earlier report's, and placing it would leave hers behind.
+            const link = listed.figures.find((each) => each.sha256 === sha256 && !each.borrowed);
             if (link === undefined) {
               outcome.said = figureRefusalSentence(0, { code: 'not_kept' });
             } else {
               const ref = refOf(link);
               outcome.filed = ref;
-              outcome.told = figureRefusalSentence(0, { code: 'kept_after_all' });
-              edit((was) => addMap(was, ref, condition));
+              outcome.again = named(ref.figureId);
+              // "Kept, and now on the report" only when this places it.
+              if (!outcome.again) {
+                outcome.told = figureRefusalSentence(0, { code: 'kept_after_all' });
+                edit((was) => addMap(was, ref, condition));
+              }
             }
           }
           return stampOf(id);
         };
 
         const ran = await withSaved('upload', async (id) => {
-          let res: Response;
           try {
-            // The picture only: where it sits and what it shows are the draft's.
-            res = await apiFetch(`/api/reports/${id}/figures`, {
-              method: 'PUT',
-              headers: {
-                'content-type': 'image/png',
-                'x-sha256': sha256,
-                'x-reason': MAP_REASONS.add,
-              },
-              body: png as Uint8Array<ArrayBuffer>,
-            });
-          } catch {
-            return settle(id);
-          }
-          const body: unknown = await res.json().catch(() => undefined);
-          if (!res.ok) {
-            const storeDown =
-              (body as { error?: unknown } | undefined)?.error === 'storage_unavailable';
-            if (res.status >= 500 && !storeDown) {
-              // A gateway's timeout, or a fault after the commit: it may be filed.
+            let res: Response;
+            try {
+              // The picture only: where it sits and what it shows are the draft's.
+              res = await apiFetch(`/api/reports/${id}/figures`, {
+                method: 'PUT',
+                headers: {
+                  'content-type': 'image/png',
+                  'x-sha256': sha256,
+                  'x-reason': MAP_REASONS.add,
+                },
+                body: png as Uint8Array<ArrayBuffer>,
+              });
+            } catch {
               return settle(id);
             }
-            const code = (body as { code?: unknown } | undefined)?.code;
-            if (code === 'too_many_maps') {
-              // Another tab, or pictures this form had not seen: the list says which.
-              const listed = await listOf(id);
-              took(listed);
-              const more = listed.ok
-                ? listed.figures.filter(
-                    (link) => !link.named && !link.borrowed && !named(link.figureId),
-                  ).length
-                : 0;
-              outcome.said = figureRefusalSentence(res.status, body, { unplaced: more });
+            const body: unknown = await res.json().catch(() => undefined);
+            if (!res.ok) {
+              const storeDown =
+                (body as { error?: unknown } | undefined)?.error === 'storage_unavailable';
+              if (res.status >= 500 && !storeDown) {
+                // A gateway's timeout, or a fault after the commit: it may be filed.
+                return settle(id);
+              }
+              const code = (body as { code?: unknown } | undefined)?.code;
+              if (code === 'too_many_maps') {
+                // Another tab, or pictures this form had not seen: the list says which.
+                const listed = await readList(id);
+                const more = listed.ok
+                  ? listed.figures.filter(
+                      (link) => !link.named && !link.borrowed && !named(link.figureId),
+                    ).length
+                  : 0;
+                outcome.said = figureRefusalSentence(res.status, body, { unplaced: more });
+                return null;
+              }
+              outcome.said = figureRefusalSentence(res.status, body);
               return null;
             }
-            outcome.said = figureRefusalSentence(res.status, body);
-            return null;
+            const parsed = FigureFiledResponse.safeParse(body);
+            if (!parsed.success) return settle(id);
+            const figure: FigureRef = {
+              figureId: parsed.data.figure.figureId,
+              sha256: parsed.data.figure.sha256,
+              widthPx: parsed.data.figure.widthPx,
+              heightPx: parsed.data.figure.heightPx,
+            };
+            // A 200 is a picture the report already held: placed, unless the
+            // draft already places it.
+            outcome.again = named(figure.figureId);
+            outcome.filed = figure;
+            // Named in the draft before any save waiting behind the door runs,
+            // so leaving now still saves it.
+            edit((was) => addMap(was, figure, condition));
+            return parsed.data.savedAt;
+          } catch {
+            // A fault of the form's own, not an answer: said as such, and the
+            // stamp read again, since the door may have run.
+            outcome.said = figureRefusalSentence(0, { code: 'unexpected' });
+            return stampOf(id);
           }
-          const parsed = FigureFiledResponse.safeParse(body);
-          if (!parsed.success) return settle(id);
-          const figure: FigureRef = {
-            figureId: parsed.data.figure.figureId,
-            sha256: parsed.data.figure.sha256,
-            widthPx: parsed.data.figure.widthPx,
-            heightPx: parsed.data.figure.heightPx,
-          };
-          // A 200 is a picture the report already held: placed, unless the
-          // draft already places it.
-          outcome.again = named(figure.figureId);
-          outcome.filed = figure;
-          // Named in the draft before any save waiting behind the door runs,
-          // so leaving now still saves it.
-          edit((was) => addMap(was, figure, condition));
-          return parsed.data.savedAt;
         });
         if (!ran) {
           setError(
@@ -338,7 +363,7 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
         setBusy(null);
       }
     },
-    [apiFetch, content, edit, listOf, stampOf, took, unplaced.length, withSaved],
+    [apiFetch, content, edit, readList, stampOf, unplaced.length, withSaved],
   );
 
   const place = useCallback(
@@ -378,8 +403,7 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
 
       /** After an answer that never came: the list says whether it went. */
       const settle = async (id: string): Promise<string | null> => {
-        const listed = await listOf(id);
-        took(listed);
+        const listed = await readList(id);
         if (!listed.ok) {
           outcome.said = figureRefusalSentence(0, { code: 'unknown_removal' });
         } else if (listed.figures.some((link) => link.figureId === figureId)) {
@@ -394,34 +418,41 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
 
       try {
         const ran = await withSaved('remove', async (id) => {
-          let res: Response;
           try {
-            res = await apiFetch(`/api/reports/${id}/figures/${figureId}`, {
-              method: 'DELETE',
-              headers: { 'x-reason': MAP_REASONS.remove },
-            });
-          } catch {
-            return settle(id);
-          }
-          const body: unknown = await res.json().catch(() => undefined);
-          if (!res.ok) {
-            const storeDown =
-              (body as { error?: unknown } | undefined)?.error === 'storage_unavailable';
-            if (res.status >= 500 && !storeDown) return settle(id);
-            outcome.said = figureRefusalSentence(res.status, body);
-            // Already gone from the report: the draft is right without it.
-            // Otherwise only this map goes back; one added meanwhile stays.
-            if ((body as { code?: unknown } | undefined)?.code === 'no_such_map') {
-              outcome.gone = true;
-            } else {
-              back();
+            let res: Response;
+            try {
+              res = await apiFetch(`/api/reports/${id}/figures/${figureId}`, {
+                method: 'DELETE',
+                headers: { 'x-reason': MAP_REASONS.remove },
+              });
+            } catch {
+              return settle(id);
             }
-            return null;
+            const body: unknown = await res.json().catch(() => undefined);
+            if (!res.ok) {
+              const storeDown =
+                (body as { error?: unknown } | undefined)?.error === 'storage_unavailable';
+              if (res.status >= 500 && !storeDown) return settle(id);
+              outcome.said = figureRefusalSentence(res.status, body);
+              // Already gone from the report: the draft is right without it.
+              // Otherwise only this map goes back; one added meanwhile stays.
+              if ((body as { code?: unknown } | undefined)?.code === 'no_such_map') {
+                outcome.gone = true;
+              } else {
+                back();
+              }
+              return null;
+            }
+            const parsed = FigureRemovedResponse.safeParse(body);
+            if (!parsed.success) return settle(id);
+            outcome.gone = true;
+            return parsed.data.savedAt;
+          } catch {
+            // A fault of the form's own, not an answer: said as such, and the
+            // stamp read again, since the door may have run.
+            outcome.said = figureRefusalSentence(0, { code: 'unexpected_removal' });
+            return stampOf(id);
           }
-          const parsed = FigureRemovedResponse.safeParse(body);
-          if (!parsed.success) return settle(id);
-          outcome.gone = true;
-          return parsed.data.savedAt;
         });
         if (!ran) {
           back();
@@ -431,6 +462,8 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
           return;
         }
         if (outcome.gone) {
+          // Newer than any read still on its way.
+          listSeqRef.current += 1;
           setLinks((was) => was.filter((link) => link.figureId !== figureId));
           setThumbnails((was) =>
             Object.fromEntries(Object.entries(was).filter(([id]) => id !== figureId)),
@@ -442,7 +475,7 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
         setBusy(null);
       }
     },
-    [apiFetch, content, edit, listOf, stampOf, took, withSaved],
+    [apiFetch, content, edit, readList, stampOf, withSaved],
   );
 
   return {
