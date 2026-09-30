@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { displayFromIso } from '@domain/shared';
 import type { QeegContent } from '../../../../domain/reports/qeeg/types';
 import { Button, Note } from '../../../shell/components/Controls';
@@ -18,7 +18,9 @@ import type { Signing } from './useQeegSigning';
  * next preview, so she can read it while she works.
  *
  * **Signing is a step inside the form**, never the browser's own dialog: a
- * panel that says what signing means, with the Preview button beside the
+ * region, headed, that takes focus when it opens and gives it back to the
+ * button that opened it when it closes (as does the correction's panel). It
+ * says what signing means, with the Preview button beside the
  * signature, as the older report editor has it. A refusal is shown in that
  * panel, with the list of what is left to fill when that is why.
  *
@@ -26,6 +28,24 @@ import type { Signing } from './useQeegSigning';
  * reason in the form and starts a new version as a draft, which the form then
  * opens.
  */
+
+/**
+ * Focus into a panel when it opens, and back to the button that opened it
+ * when it closes, so a keyboard or a screen reader follows the step. Only a
+ * change moves focus: the first render moves nothing.
+ */
+function useFocusOnToggle(
+  open: boolean,
+  panel: RefObject<HTMLElement | null>,
+  opener: RefObject<HTMLElement | null>,
+): void {
+  const was = useRef(open);
+  useEffect(() => {
+    if (was.current === open) return;
+    was.current = open;
+    (open ? panel.current : opener.current)?.focus();
+  }, [open, panel, opener]);
+}
 
 export function SigningActions({
   signing,
@@ -41,6 +61,9 @@ export function SigningActions({
   busy: boolean;
 }) {
   const lines = signing.notes === null ? [] : layoutLines(signing.notes, content);
+  const openerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusOnToggle(signing.confirming, panelRef, openerRef);
   const idle = !busy && !signing.previewing && !signing.signing;
   return (
     <div className="qeeg-signing">
@@ -49,7 +72,7 @@ export function SigningActions({
           {signing.previewing ? 'Making the preview.' : 'Preview'}
         </Button>
         {mayOffer ? (
-          <Button variant="primary" disabled={!idle} onClick={signing.askToSign}>
+          <Button ref={openerRef} variant="primary" disabled={!idle} onClick={signing.askToSign}>
             Sign this report
           </Button>
         ) : null}
@@ -65,9 +88,9 @@ export function SigningActions({
         {signing.previewError ? <Note tone="critical">{signing.previewError}</Note> : null}
         {signing.previewUrl !== null && signing.previewError === null ? (
           <p className="small">
-            The preview opened in a new tab.{' '}
+            The preview is ready. If no tab opened, open it here:{' '}
             <a href={signing.previewUrl} target="_blank" rel="noopener noreferrer">
-              Open the preview again
+              Open the preview
             </a>
           </p>
         ) : null}
@@ -81,7 +104,16 @@ export function SigningActions({
       </div>
 
       {signing.confirming ? (
-        <div className="report-editor__sign" tabIndex={-1} aria-label="Sign this report">
+        <div
+          ref={panelRef}
+          className="report-editor__sign"
+          role="region"
+          aria-labelledby="qeeg-sign-title"
+          tabIndex={-1}
+        >
+          <h4 id="qeeg-sign-title" className="report-editor__heading">
+            Sign this report
+          </h4>
           <p>
             Signing this puts your name on it. It becomes a document the household can keep, and it
             cannot be edited afterwards. A mistake is corrected by starting a new version, and both
@@ -126,6 +158,9 @@ export function SignedReport({
 }) {
   const [reason, setReason] = useState('');
   const [sending, setSending] = useState(false);
+  const openerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusOnToggle(signing.correcting, panelRef, openerRef);
   const row = signing.signed;
   if (row === null) return null;
 
@@ -158,6 +193,14 @@ export function SignedReport({
         <dd className="numeric">{row.version}</dd>
       </dl>
       {signing.openError ? <Note tone="critical">{signing.openError}</Note> : null}
+      {signing.signedUrl !== null && signing.openError === null ? (
+        <p className="small" role="status">
+          The signed report is ready. If no tab opened, open it here:{' '}
+          <a href={signing.signedUrl} target="_blank" rel="noopener noreferrer">
+            Open the signed file
+          </a>
+        </p>
+      ) : null}
       <div className="report-editor__actions">
         <Button
           variant="primary"
@@ -166,15 +209,26 @@ export function SignedReport({
         >
           Open the signed report
         </Button>
-        {mayCorrect && !signing.correcting ? (
-          <Button onClick={signing.askToCorrect}>Correct this report</Button>
+        {mayCorrect ? (
+          <Button ref={openerRef} disabled={signing.correcting} onClick={signing.askToCorrect}>
+            Correct this report
+          </Button>
         ) : null}
         <Button variant="quiet" onClick={onDone}>
           Back
         </Button>
       </div>
       {signing.correcting ? (
-        <div className="report-editor__sign" aria-label="Correct this report">
+        <div
+          ref={panelRef}
+          className="report-editor__sign"
+          role="region"
+          aria-labelledby="qeeg-correct-title"
+          tabIndex={-1}
+        >
+          <h4 id="qeeg-correct-title" className="report-editor__heading">
+            Correct this report
+          </h4>
           <p>
             A correction starts a new version as a draft, from what was signed, with its maps. This
             version stays as it is, marked as replaced, and both are kept.

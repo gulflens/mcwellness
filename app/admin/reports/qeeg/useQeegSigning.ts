@@ -23,10 +23,10 @@ import type { QeegDraft } from './useQeegDraft';
  * **The preview opens in a new tab** (section 12, "Rendered on the server";
  * the security policy refuses a document inside a frame). The file is fetched
  * with her credentials, held as an object URL and opened. `window.open` with
- * `noopener` answers null whether or not a tab opened, so null is not read as
- * "blocked" (the older editor's fault, plan N12): the form says the preview
- * was opened and keeps a link to open it again, which a person's click always
- * opens. What the pages told the editor comes back on the same answer, in its
+ * `noopener` answers null whether or not a tab opened, and a browser may hold
+ * back a tab opened after the awaits before it, so the form claims neither:
+ * it says the preview is ready and offers a link, which a person's click
+ * always opens (plan N12; review of brief P, finding 5). What the pages told the editor comes back on the same answer, in its
  * `x-report-layout` header, and on a refusal in its body.
  *
  * **Signing names the save it is made over**, so a version saved since in
@@ -59,6 +59,8 @@ export type Signing = {
   correctError: string | null;
   opening: boolean;
   openError: string | null;
+  /** The signed file's short-lived link, once asked for, to open by a click. */
+  signedUrl: string | null;
   preview: () => Promise<void>;
   askToSign: () => void;
   notYet: () => void;
@@ -99,6 +101,7 @@ export function useQeegSigning(draft: QeegDraft): Signing {
   const [correctError, setCorrectError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
 
   // A preview carries a household's own figures: its object URL lives until
   // the next preview or until the form closes, and no longer.
@@ -199,7 +202,18 @@ export function useQeegSigning(draft: QeegDraft): Signing {
     try {
       const res = await apiFetch(`/api/reports/${signed.id}`);
       if (!res.ok) {
-        setOpenError('The signed report could not be opened. Try again.');
+        // The repair path names a map that is gone in a sentence of its own
+        // (app/api/reports/get.ts, spec 9.6); anything else is the plain one.
+        const body = await bodyOf(res);
+        const sentence =
+          typeof body === 'object' && body !== null
+            ? (body as { sentence?: unknown }).sentence
+            : null;
+        setOpenError(
+          typeof sentence === 'string'
+            ? sentence
+            : 'The signed report could not be opened. Try again.',
+        );
         return;
       }
       const body = ReportResponse.parse(await res.json());
@@ -207,6 +221,9 @@ export function useQeegSigning(draft: QeegDraft): Signing {
         setOpenError('The signed report’s file is not ready yet. Try again in a moment.');
         return;
       }
+      setSignedUrl(body.url);
+      // Null with `noopener` whether or not a tab opened, and a browser may
+      // hold back a tab opened after an await: the link below is the sure way.
       window.open(body.url, '_blank', 'noopener,noreferrer');
     } catch {
       setOpenError('The signed report could not be opened. Try again.');
@@ -254,6 +271,7 @@ export function useQeegSigning(draft: QeegDraft): Signing {
     correctError,
     opening,
     openError,
+    signedUrl,
     preview,
     askToSign: () => {
       setSignError(null);

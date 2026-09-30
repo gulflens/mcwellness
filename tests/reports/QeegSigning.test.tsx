@@ -110,6 +110,8 @@ function withServerParts(sent: Record<string, unknown>): QeegContent {
 }
 
 type Answers = {
+  /** `GET /api/reports/:id` once signed. */
+  read?: () => Response;
   preview?: () => Response;
   issue?: () => Response;
   supersede?: () => Response;
@@ -151,6 +153,8 @@ function mountApi(actor: object, answers: Answers = {}) {
       );
     }
     if (url === `/api/reports/${DRAFT}`) {
+      const read = answers.read?.();
+      if (read) return read;
       return json({
         report: SIGNED_ROW,
         content: withServerParts({ ...blankInitial() }),
@@ -220,15 +224,16 @@ describe('Preview', () => {
     expect(opened).toHaveBeenCalledWith('blob:preview-file', '_blank', 'noopener,noreferrer');
   });
 
-  it('never says the tab was blocked because the browser answered null', async () => {
+  it('says the preview is ready and offers a link, never claiming a tab opened or was blocked', async () => {
     const user = userEvent.setup();
     mountEditor();
     await user.click(await screen.findByRole('button', { name: 'Preview' }));
-    await screen.findByText(/The preview opened in a new tab\./);
+    await screen.findByText(/The preview is ready\. If no tab opened, open it here:/);
     expect(screen.queryByText(/blocked/i)).toBeNull();
-    const again = screen.getByRole('link', { name: 'Open the preview again' });
-    expect(again.getAttribute('href')).toBe('blob:preview-file');
-    expect(again.getAttribute('target')).toBe('_blank');
+    expect(screen.queryByText(/opened in a new tab/i)).toBeNull();
+    const link = screen.getByRole('link', { name: 'Open the preview' });
+    expect(link.getAttribute('href')).toBe('blob:preview-file');
+    expect(link.getAttribute('target')).toBe('_blank');
   });
 
   it('shows what the pages found beside the button', async () => {
@@ -267,7 +272,7 @@ describe('Preview', () => {
     expect(screen.getByText('Runs past the foot of its page: Summary.')).toBeTruthy();
     expect(screen.queryByText(/summary\.1/)).toBeNull();
     expect(opened).not.toHaveBeenCalled();
-    expect(screen.queryByRole('link', { name: 'Open the preview again' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open the preview' })).toBeNull();
   });
 });
 
@@ -277,13 +282,26 @@ describe('Sign', () => {
     const asked = vi.spyOn(window, 'confirm');
     const { calls } = mountEditor();
     await user.click(await screen.findByRole('button', { name: 'Sign this report' }));
-    expect(screen.getByLabelText('Sign this report')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Sign this report' })).toBeTruthy();
     expect(screen.getByText(/Signing this puts your name on it\./)).toBeTruthy();
     expect(asked).not.toHaveBeenCalled();
     // Nothing is signed until she says so.
     expect(calls.some((call) => call.url.endsWith('/issue'))).toBe(false);
     await user.click(screen.getByRole('button', { name: 'Not yet' }));
-    expect(screen.queryByLabelText('Sign this report')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Sign this report' })).toBeNull();
+  });
+
+  it('moves focus into the signing panel when it opens, and back to Sign when it closes', async () => {
+    const user = userEvent.setup();
+    mountEditor();
+    const opener = await screen.findByRole('button', { name: 'Sign this report' });
+    await user.click(opener);
+    const panel = screen.getByRole('region', { name: 'Sign this report' });
+    await waitFor(() => expect(document.activeElement).toBe(panel));
+    await user.click(screen.getByRole('button', { name: 'Not yet' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Sign this report' })),
+    );
   });
 
   it('saves first, then signs naming the save and saying why', async () => {
@@ -365,13 +383,54 @@ describe('the signed report', () => {
     expect(calls.filter((call) => call.url === '/api/reports/draft').length).toBe(saves);
   });
 
-  it('opens the signed file through its own short-lived link', async () => {
+  it('opens the signed file through its own short-lived link, and offers the link', async () => {
     const user = userEvent.setup();
     mountEditor();
     await signIt(user);
     await user.click(screen.getByRole('button', { name: 'Open the signed report' }));
     await waitFor(() =>
       expect(opened).toHaveBeenCalledWith(FILE_URL, '_blank', 'noopener,noreferrer'),
+    );
+    await screen.findByText(/The signed report is ready\. If no tab opened, open it here:/);
+    expect(screen.getByRole('link', { name: 'Open the signed file' }).getAttribute('href')).toBe(
+      FILE_URL,
+    );
+  });
+
+  it('says why the signed file cannot be made again when a map it prints is gone', async () => {
+    const user = userEvent.setup();
+    const sentence = 'A map it prints can no longer be found in the store.';
+    mountEditor(SIGNER, {
+      read: () =>
+        json(
+          {
+            error: 'conflict',
+            code: 'map_missing',
+            field: 'maps.map-0.figureId',
+            figureId: MAP,
+            sentence,
+          },
+          409,
+        ),
+    });
+    await signIt(user);
+    await user.click(screen.getByRole('button', { name: 'Open the signed report' }));
+    expect(await screen.findByText(sentence)).toBeTruthy();
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it('moves focus into the correction panel when it opens, and back when it closes', async () => {
+    const user = userEvent.setup();
+    mountEditor();
+    await signIt(user);
+    await user.click(screen.getByRole('button', { name: 'Correct this report' }));
+    const panel = screen.getByRole('region', { name: 'Correct this report' });
+    await waitFor(() => expect(document.activeElement).toBe(panel));
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Correct this report' }),
+      ),
     );
   });
 
