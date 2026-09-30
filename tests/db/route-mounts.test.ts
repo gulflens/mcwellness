@@ -147,8 +147,36 @@ describe('GET /api/reports', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { kinds: string[] };
     // The brain-map report is a kind like the others (docs/CHANGE-REQUESTS/reports-02.md,
-    // request 4); no route of its own is mounted yet.
+    // request 4).
     expect(body.kinds).toEqual(['session', 'progress', 'qeeg']);
+  });
+});
+
+describe('PUT and DELETE /api/reports/:id/figures', () => {
+  // A brain-map draft's pictures (docs/CHANGE-REQUESTS/reports-02.md, requests 3
+  // and 4). The PUT's body is a PNG, so an answer from the route's own check of
+  // its address — not `jsonOnly`'s 415, and not the unmounted-route 404 —
+  // proves both the mount and the raw-body exemption.
+  async function raw(method: 'PUT' | 'DELETE', path: string): Promise<Response> {
+    const headers: Record<string, string> = { authorization: `Bearer ${await mint(authIdOf(0))}` };
+    const init: RequestInit = { method, headers };
+    if (method === 'PUT') {
+      headers['content-type'] = 'image/png';
+      init.body = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    }
+    return api.request(path, init);
+  }
+
+  it('mounts the upload door and lets a PNG body through to it', async () => {
+    const res = await raw('PUT', '/api/reports/not-a-report/figures');
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
+  });
+
+  it('mounts the remove door', async () => {
+    const res = await raw('DELETE', '/api/reports/not-a-report/figures/not-a-figure');
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
   });
 });
 

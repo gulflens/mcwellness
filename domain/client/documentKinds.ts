@@ -55,6 +55,10 @@ export const SYSTEM_WRITTEN_KINDS = [
   // app writes it, files it against the erasure request rather than against
   // the client who has just been erased, and nobody uploads one by hand.
   'erasure_letter',
+  // A brain map uploaded to a brain-map report draft, through the report's own
+  // door and nowhere else (app/api/reports/qeeg/figures.ts, migration 604;
+  // docs/CHANGE-REQUESTS/reports-02.md, request 11).
+  'report_figure',
 ] as const;
 
 /** The kind the consent route files a signature PNG under. */

@@ -42,6 +42,11 @@ describe('documentUploadRefusal', () => {
     expect(documentUploadRefusal(CONSENT_SCAN_KIND)).toBe('system_written');
   });
 
+  it('files a brain-map report’s picture among the ones nobody uploads by hand', () => {
+    // Filed by the report's own door (docs/CHANGE-REQUESTS/reports-02.md, request 11).
+    expect(documentUploadRefusal('report_figure')).toBe('system_written');
+  });
+
   it('keeps the three lists disjoint', () => {
     const all = [...CLIENT_UPLOAD_KINDS, ...IDENTITY_DOCUMENT_KINDS, ...SYSTEM_WRITTEN_KINDS];
     expect(new Set(all).size).toBe(all.length);

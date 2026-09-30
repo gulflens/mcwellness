@@ -109,9 +109,11 @@ beforeAll(async () => {
       "values ($1, $2, $3, 'qeeg', '{}'::jsonb)",
     [DRAFT, IDS.tenantA, IDS.clientA],
   );
+  // Read from a file, so it says something: an import with nothing in it is
+  // never kept (migration 972).
   await client.query(
     'insert into report (id, tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
-      "values ($1, $2, $3, 'qeeg', '{}'::jsonb, $4, $5)",
+      'values ($1, $2, $3, \'qeeg\', \'{"edition":"initial"}\'::jsonb, $4, $5)',
     [IMPORT_DRAFT, IDS.tenantA, IDS.clientA, FORMAT, OTHER_SHA],
   );
   await client.query(
@@ -425,14 +427,18 @@ describe('where the new columns may be used', () => {
     });
   });
 
-  it('refuses half a source, or a fingerprint that is not one', async () => {
+  it('refuses a fingerprint without its format, or a fingerprint that is not one', async () => {
+    // The other half — a format whose fingerprint has gone — is what an
+    // erasure leaves (migration 972, restating 602's report_source_together),
+    // and a past record may be without it only once it says nothing
+    // (tests/reports/db/qeeg_erasure.test.ts).
     await rolledBack(client, async () => {
       await rejectsWith(
         client,
         '23514',
-        'insert into report (tenant_id, client_id, kind, content, imported_from) ' +
+        'insert into report (tenant_id, client_id, kind, content, source_sha256) ' +
           "values ($1, $2, 'qeeg', '{}'::jsonb, $3)",
-        [IDS.tenantA, IDS.clientA, FORMAT],
+        [IDS.tenantA, IDS.clientA, 'c'.repeat(64)],
       );
       await rejectsWith(
         client,

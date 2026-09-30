@@ -5,6 +5,7 @@ import {
   routeOwnedIn,
   subjectFrom,
 } from '../../../domain/reports/qeeg/draftRequest';
+import { figuresNamedIn } from '../../../domain/reports/qeeg/figuresNamed';
 import { prefillFollowUp, type EarlierReport } from '../../../domain/reports/qeeg/prefill';
 import { validateQeegContent } from '../../../domain/reports/qeeg/shape';
 import { isRecord } from '../../../domain/reports/qeeg/text';
@@ -13,6 +14,7 @@ import { isUuid } from '../billing/ids';
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
+import { requiredReason } from './reason';
 import { practiceTimeZone } from './gather';
 import { QeegDraftInput, QeegDraftResponse } from './schema';
 import { asRow, readReport } from './source';
@@ -54,6 +56,15 @@ import { asRow, readReport } from './source';
  * report a follow-up is compared with. The screen saves at rest points, not on
  * every keystroke, because each save is a row on the trail (section 15).
  *
+ * **The maps it names are its own** (brief L, "For PR 7"; migration 604). A
+ * picture named in `maps` or on the later side of a follow-up's pair must be
+ * linked to this report in `report_figure` — uploaded through its door — with
+ * the digest and the size the link holds, or the save is refused naming the
+ * field. The earlier side of a pair is the earlier report's picture, written
+ * here from that report, and is linked by borrowing it in the same write. So a
+ * saved draft names only pictures it holds, and the preview and the signing
+ * resolve each through that link.
+ *
  * **No idempotency key.** Neither of the older kinds' saves has one. A repeated
  * create makes a second draft, as theirs does; a repeated update is refused
  * as stale, which is harmless.
@@ -89,10 +100,11 @@ type ClientRow = {
   status: string;
 };
 
-/** The request's reason, when it gives one worth recording. */
-function reasonOf(c: Context<ApiEnv>): string | null {
-  const reason = (c.req.header('x-reason') ?? '').trim();
-  return reason.length > 0 ? reason : null;
+/** The database refusing a link to a report that can no longer be compared with. */
+function isComparisonRefused(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { code, constraint } = error as { code?: unknown; constraint?: unknown };
+  return code === '23503' && constraint === 'report_compared_with_comparable';
 }
 
 /** A key's own value, never one its prototype answers to. */
@@ -150,6 +162,102 @@ async function comparedFrom(
   return prefill.ok ? { ok: true, followUp: prefill.content } : prefill;
 }
 
+type LinkedFigure = { document_id: string; sha256: string; width_px: number; height_px: number };
+
+type Unowned = {
+  status: 400 | 403 | 422;
+  body: { error: string; code: string; field: string; reason?: string };
+};
+
+/**
+ * Whether every picture the content names is linked to this report in
+ * `report_figure` (migration 604), with the digest and the size the link
+ * holds; the first that is not, by the path of the field that names it.
+ *
+ * The earlier picture of a follow-up's pair is the earlier report's, written
+ * here from that report and never from the request, so it is linked by
+ * BORROWING it (docs/SPEC/reports-qeeg.md section 9, point 7): the borrow is
+ * what makes it this report's own. A picture the earlier report does not hold
+ * cannot be borrowed, and the comparison is refused, as prefill's own reasons
+ * are. Every other picture was uploaded to this report through its door, or
+ * the save is refused naming it.
+ */
+async function figuresNotOwned(
+  db: Db,
+  reportId: string,
+  comparedWithId: string | null,
+  content: QeegContent,
+): Promise<Unowned | null> {
+  const named = figuresNamedIn(content);
+  if (named.length === 0) return null;
+
+  for (const figure of named) {
+    if (!figure.borrowed || comparedWithId === null) continue;
+    await db.query('savepoint qeeg_draft_borrow');
+    try {
+      await db.query('select app.borrow_report_figure($1, $2, $3)', [
+        reportId,
+        comparedWithId,
+        figure.ref.figureId,
+      ]);
+      await db.query('release savepoint qeeg_draft_borrow');
+    } catch (error) {
+      const code = (error as { code?: unknown }).code;
+      if (code === '42501') {
+        // The route and the database read who may touch a report's maps
+        // differently at the edge of a schedule: an answer, not a 500.
+        await db.query('rollback to savepoint qeeg_draft_borrow');
+        return {
+          status: 403,
+          body: { error: 'forbidden', code: 'not_permitted', field: `${figure.path}.figureId` },
+        };
+      }
+      if (code !== '23503' && code !== '23001') throw error;
+      await db.query('rollback to savepoint qeeg_draft_borrow');
+      return {
+        status: 422,
+        body: {
+          error: 'unprocessable',
+          code: 'cannot_compare',
+          reason: 'map_not_held',
+          field: `${figure.path}.figureId`,
+        },
+      };
+    }
+  }
+
+  const found = await db.query<LinkedFigure>(
+    "select document_id, encode(sha256, 'hex') as sha256, width_px, height_px " +
+      'from report_figure where tenant_id = app.current_tenant_id() and report_id = $1',
+    [reportId],
+  );
+  const links = new Map(found.rows.map((row) => [row.document_id, row]));
+  for (const figure of named) {
+    const link = links.get(figure.ref.figureId);
+    if (!link) {
+      return {
+        status: 400,
+        body: { error: 'bad_request', code: 'unlinked_figure', field: `${figure.path}.figureId` },
+      };
+    }
+    const differs =
+      link.sha256 !== figure.ref.sha256
+        ? 'sha256'
+        : link.width_px !== figure.ref.widthPx
+          ? 'widthPx'
+          : link.height_px !== figure.ref.heightPx
+            ? 'heightPx'
+            : null;
+    if (differs !== null) {
+      return {
+        status: 400,
+        body: { error: 'bad_request', code: 'figure_mismatch', field: `${figure.path}.${differs}` },
+      };
+    }
+  }
+  return null;
+}
+
 export async function saveQeegDraft(
   c: Context<ApiEnv>,
   raw: unknown,
@@ -164,7 +272,7 @@ export async function saveQeegDraft(
   if (!mayDraftReport(c.get('actor'), input.clientId, now())) {
     return c.json({ error: 'forbidden', requestId }, 403);
   }
-  if (reasonOf(c) === null) {
+  if ((await requiredReason(c.get('db'))) === null) {
     return c.json({ error: 'reason_required', requestId }, 400);
   }
 
@@ -219,6 +327,12 @@ export async function saveQeegDraft(
     // A client this person cannot reach is not there at all.
     return c.json({ error: 'not_found', requestId }, 404);
   }
+  if (client.status === 'erased') {
+    // Only the owner and the lead practitioner can see an erased record at
+    // all, and a report about a person who asked to be erased is not one to
+    // begin or go on writing, whoever asks.
+    return c.json({ error: 'unprocessable', code: 'client_erased', requestId }, 422);
+  }
   // The record was read, and its details are about to leave in the answer.
   await logRead(db, 'client', input.clientId, input.clientId);
 
@@ -242,7 +356,7 @@ export async function saveQeegDraft(
     const compared = await comparedFrom(db, reportId, {
       clientId: input.clientId,
       draftId: input.id ?? null,
-      erased: client.status === 'erased',
+      erased: false,
     });
     if (!compared.ok) {
       return c.json(
@@ -301,28 +415,73 @@ export async function saveQeegDraft(
   }
 
   const body = JSON.stringify(checked.content);
-  const written = input.id
-    ? await db.query<{ id: string }>(UPDATE_SQL, [
-        input.id,
-        input.serviceTypeId,
-        comparedWithId,
-        body,
-        input.savedAt,
-      ])
-    : await db.query<{ id: string }>(INSERT_SQL, [
-        input.clientId,
-        input.locale ?? 'en',
-        input.serviceTypeId,
-        comparedWithId,
-        body,
-      ]);
+  // The write in a savepoint of its own. What a follow-up is compared with
+  // was read above; if it was withdrawn since, the database refuses the link
+  // (`report_compared_with_comparable`, 603). That refusal is an answer, not a
+  // fault, so it is rolled back to here and the request goes on to say so: a
+  // caught error left standing would abort the transaction, and the fence
+  // would turn the answer into a 500.
+  await db.query('savepoint qeeg_draft_write');
+  let written: { rows: { id: string }[] };
+  try {
+    written = input.id
+      ? await db.query<{ id: string }>(UPDATE_SQL, [
+          input.id,
+          input.serviceTypeId,
+          comparedWithId,
+          body,
+          input.savedAt,
+        ])
+      : await db.query<{ id: string }>(INSERT_SQL, [
+          input.clientId,
+          input.locale ?? 'en',
+          input.serviceTypeId,
+          comparedWithId,
+          body,
+        ]);
+  } catch (error) {
+    if (!isComparisonRefused(error) || comparedWithId === null) throw error;
+    await db.query('rollback to savepoint qeeg_draft_write');
+    const current = await comparedFrom(db, comparedWithId, {
+      clientId: input.clientId,
+      draftId: input.id ?? null,
+      erased: false,
+    });
+    return c.json(
+      {
+        error: 'conflict',
+        code: 'cannot_compare',
+        // What the report is now. A withdraw is the one change the key
+        // refuses that the read above could not have seen coming.
+        reason: current.ok ? 'withdrawn' : current.reason,
+        field: 'comparedWith.reportId',
+        requestId,
+      },
+      409,
+    );
+  }
   const id = written.rows[0]?.id;
   if (!id) {
-    if (input.id && (await readReport(db, input.id))) {
-      // It is there and it is a draft, so what moved is the save itself.
+    const current = input.id ? await readReport(db, input.id) : null;
+    if (current && current.status !== 'draft') {
+      // Signed, or kept, since it was read: no longer a draft to save over.
+      return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
+    }
+    if (current) {
+      // Still a draft, so what moved is the save itself: a newer one stands.
       return c.json({ error: 'conflict', code: 'stale_draft', requestId }, 409);
     }
     return c.json({ error: 'not_found', requestId }, 404);
+  }
+
+  // The maps it names are this report's own (brief L, "For PR 7"). Asked
+  // after the write, inside its savepoint and under the row lock the write
+  // took, so an upload or a removal on another tab waits for this answer
+  // rather than slipping between the check and the commit.
+  const unowned = await figuresNotOwned(db, id, comparedWithId, checked.content);
+  if (unowned !== null) {
+    await db.query('rollback to savepoint qeeg_draft_write');
+    return c.json({ ...unowned.body, requestId }, unowned.status);
   }
 
   const record = await readReport(db, id);

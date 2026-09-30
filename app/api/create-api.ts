@@ -46,6 +46,13 @@ import { mountPractice } from './practice/routes';
 import { mountPractitioners } from './practitioners/routes';
 import { mountTeam } from './team/routes';
 import { mountReports } from './reports/routes';
+import { REPORT_DRAFT_BODY_LIMIT_BYTES, REPORT_DRAFT_PATH } from './reports/schema';
+import {
+  FIGURE_BODY_LIMIT_BYTES,
+  FIGURE_PATH,
+  FIGURE_SENTENCES,
+  FIGURE_TIMEOUT_MS,
+} from './reports/qeeg/figureSchema';
 import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
 import { mountKit } from './kit/routes';
 import { mountRouting } from './routing/day';
@@ -119,12 +126,29 @@ function isEquipmentExportUpload(method: string, path: string): boolean {
   return isAssessmentFileUpload(method, path) || isSessionExportUpload(method, path);
 }
 /**
- * The paths exempt from `jsonOnly`: the two raw-body doors, and the website's
+ * The third raw-body door, from 2026-09-30: a brain-map draft's picture
+ * (app/api/reports/qeeg/figures.ts, docs/SPEC/reports-qeeg.md section 9,
+ * docs/CHANGE-REQUESTS/reports-02.md request 3). Its body is one PNG the
+ * browser has already prepared, so it has a cap and a clock of its own, sized
+ * to that picture and not to the equipment's recordings: 5 MiB, the picture's
+ * own limit, and sixty seconds (`FIGURE_BODY_LIMIT_BYTES`,
+ * `FIGURE_TIMEOUT_MS`). Matched by method and path together, as the others
+ * are, so the DELETE on the same address keeps the ordinary envelope.
+ */
+function isFigureUpload(method: string, path: string): boolean {
+  return method === 'PUT' && FIGURE_PATH.test(path);
+}
+/**
+ * The paths exempt from `jsonOnly`: the three raw-body doors, and the website's
  * enquiry door, which arrives form-encoded by `sendBeacon` because that is the
  * one shape a browser sends without a preflight (app/api/enquiries/door.ts).
  */
 function isRawUpload(method: string, path: string): boolean {
-  return isEquipmentExportUpload(method, path) || (method === 'POST' && path === ENQUIRY_DOOR_PATH);
+  return (
+    isEquipmentExportUpload(method, path) ||
+    isFigureUpload(method, path) ||
+    (method === 'POST' && path === ENQUIRY_DOOR_PATH)
+  );
 }
 export const REQUEST_TIMEOUT_MS = 10_000;
 /**
@@ -161,7 +185,9 @@ export const REQUEST_TIMEOUT_MS = 10_000;
 export const ASSESSMENT_FILE_TIMEOUT_MS = 420_000;
 /** The budget for one request, and the only place either number is chosen. */
 export function requestTimeoutMs(method: string, path: string): number {
-  return isEquipmentExportUpload(method, path) ? ASSESSMENT_FILE_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+  if (isEquipmentExportUpload(method, path)) return ASSESSMENT_FILE_TIMEOUT_MS;
+  if (isFigureUpload(method, path)) return FIGURE_TIMEOUT_MS;
+  return REQUEST_TIMEOUT_MS;
 }
 const MINUTE = 60_000;
 
@@ -298,13 +324,38 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // path, one method's worth of bytes, and not a raised floor for everything.
   const defaultBodyLimit = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge });
   const logoBodyLimit = bodyLimit({ maxSize: LOGO_BODY_LIMIT_BYTES, onError: payloadTooLarge });
+  // And a brain-map draft, whose typed text in two languages outgrows the
+  // ordinary envelope (app/api/reports/schema.ts REPORT_DRAFT_BODY_LIMIT_BYTES).
+  const reportDraftBodyLimit = bodyLimit({
+    maxSize: REPORT_DRAFT_BODY_LIMIT_BYTES,
+    onError: payloadTooLarge,
+  });
   const assessmentFileLimit = bodyLimit({
     maxSize: ASSESSMENT_FILE_LIMIT_BYTES,
     onError: payloadTooLarge,
   });
+  // A picture over its cap is refused with the sentence the form shows, as
+  // every other refusal of a picture is (section 9, point 3: never shrunk).
+  const figureBodyLimit = bodyLimit({
+    maxSize: FIGURE_BODY_LIMIT_BYTES,
+    onError: (c) =>
+      c.json(
+        {
+          error: 'payload_too_large',
+          code: 'too_many_bytes',
+          sentence: FIGURE_SENTENCES.too_many_bytes,
+          requestId: null,
+        },
+        413,
+      ),
+  });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
+    if (c.req.method === 'POST' && c.req.path === REPORT_DRAFT_PATH) {
+      return reportDraftBodyLimit(c, next);
+    }
     if (isEquipmentExportUpload(c.req.method, c.req.path)) return assessmentFileLimit(c, next);
+    if (isFigureUpload(c.req.method, c.req.path)) return figureBodyLimit(c, next);
     return defaultBodyLimit(c, next);
   });
   // The clock, chosen the same way the cap above it is: one door carries
@@ -312,18 +363,25 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // path keeps the ordinary budget (see `requestTimeoutMs`).
   const ordinaryTimeout = timeout(REQUEST_TIMEOUT_MS, timedOut);
   const assessmentFileTimeout = timeout(ASSESSMENT_FILE_TIMEOUT_MS, timedOut);
-  api.use('/api/*', async (c, next) =>
-    requestTimeoutMs(c.req.method, c.req.path) === ASSESSMENT_FILE_TIMEOUT_MS
-      ? assessmentFileTimeout(c, next)
-      : ordinaryTimeout(c, next),
-  );
-  // Two paths carry a file rather than JSON, and they are the only two: the
+  const figureTimeout = timeout(FIGURE_TIMEOUT_MS, timedOut);
+  api.use('/api/*', async (c, next) => {
+    switch (requestTimeoutMs(c.req.method, c.req.path)) {
+      case ASSESSMENT_FILE_TIMEOUT_MS:
+        return assessmentFileTimeout(c, next);
+      case FIGURE_TIMEOUT_MS:
+        return figureTimeout(c, next);
+      default:
+        return ordinaryTimeout(c, next);
+    }
+  });
+  // Three paths carry a file rather than JSON, and they are the only three: the
   // equipment's own export, against a measurement (app/api/assessments/file.ts)
-  // and against the visit it was produced at (app/api/sessions/export.ts).
+  // and against the visit it was produced at (app/api/sessions/export.ts), and
+  // a brain-map draft's picture (app/api/reports/qeeg/figures.ts).
   // Each refuses any media type but the ones it names, checks the bytes
   // against the type, and verifies the digest the caller declared. The setup
-  // photograph was a third until 2026-09-09; the practice takes none, so its
-  // door is gone with it.
+  // photograph had a door of this kind until 2026-09-09; the practice takes
+  // none, so its door is gone with it.
   api.use('/api/*', async (c, next) =>
     isRawUpload(c.req.method, c.req.path) ? next() : jsonOnly(c, next),
   );
@@ -506,9 +564,10 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // is answered to somebody with no session.
   mountAssessments(api, deps.now);
   mountRouting(api, deps.now);
-  // After the fence and with no raw body: a report is rendered by the server,
-  // so nothing in this group ever reads bytes a caller uploaded
-  // (docs/CHANGE-REQUESTS/reports-01.md item 2).
+  // After the fence. A report is rendered by the server, so this group reads
+  // no bytes a caller uploaded (docs/CHANGE-REQUESTS/reports-01.md item 2)
+  // but one: a brain-map draft's picture, the raw-body door above
+  // (reports-02 request 3).
   mountReports(api, deps.now);
   mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
   mountEnquiries(api, deps.now ?? (() => new Date()));

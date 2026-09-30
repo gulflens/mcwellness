@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PortalReportsResponse } from '../../../app/api/portal/schema';
 import type {
   DraftResponse,
@@ -6,9 +6,12 @@ import type {
   ReportListResponse,
   ReportResponse,
 } from '../../../app/api/reports/schema';
+import type * as Source from '../../../app/api/reports/source';
 import { ageOn } from '../../../domain/shared/dates';
+import { MEASURE_IDS } from '../../../domain/reports/qeeg/catalogue/ids';
 import { blankFollowUp, blankInitial } from '../../../domain/reports/qeeg/blank';
 import type { ComparedWith, QeegInitial } from '../../../domain/reports/qeeg/types';
+import { linkFigureAsOwner } from './figures-support';
 import { progressBody, sessionBody, SEEDED, startHarness, type Harness } from './support';
 
 /**
@@ -27,6 +30,38 @@ import { progressBody, sessionBody, SEEDED, startHarness, type Harness } from '.
  * built from the domain's blanks.
  */
 
+/**
+ * A step run once, right after the route reads a given report: the moment a
+ * race between two people happens. Null for every test but the two races.
+ *
+ * It runs on the request's own connection. Another person's commit cannot be
+ * made from a second connection while the request waits here: the request
+ * already holds the audit chain (every read it logged), and the other
+ * connection's audit row would wait for it for ever. A change made inside the
+ * request before its write is, to that write, exactly a change committed by
+ * someone else a moment before.
+ */
+type Query = (text: string, params?: unknown[]) => Promise<unknown>;
+const race = vi.hoisted(() => ({
+  after: null as null | { id: string; run: (query: Query) => Promise<void> },
+}));
+
+vi.mock('../../../app/api/reports/source', async (importOriginal) => {
+  const actual = await importOriginal<typeof Source>();
+  return {
+    ...actual,
+    readReport: async (db: Parameters<typeof actual.readReport>[0], id: string) => {
+      const found = await actual.readReport(db, id);
+      const step = race.after;
+      if (step !== null && step.id === id) {
+        race.after = null;
+        await step.run((text, params) => db.query(text, params));
+      }
+      return found;
+    },
+  };
+});
+
 const NOW = () => new Date('2026-09-30T08:00:00.000Z');
 const REASON = 'Saving the brain-map draft';
 const WITH_REASON = { 'x-reason': REASON };
@@ -34,6 +69,8 @@ const WITH_REASON = { 'x-reason': REASON };
 const EARLIER_DAY = '2026-03-14';
 const ISSUED_NUMBER = 901;
 const SHA = 'c'.repeat(64);
+/** The earlier report's one map, a document linked to it (migration 604). */
+const EARLIER_MAP = '0000000d-0000-4000-8000-000000000091';
 
 let h: Harness;
 /** The client every save below is about: one with an Arabic name, a birth date and a sex on file. */
@@ -123,7 +160,7 @@ function earlierContent(): QeegInitial {
     dashboard: { ...blank.dashboard, mental_energy: { score: 7, evidence: null } },
     maps: {
       'map-0': {
-        figureId: '0000000d-0000-4000-8000-000000000091',
+        figureId: EARLIER_MAP,
         sha256: SHA,
         widthPx: 800,
         heightPx: 600,
@@ -157,31 +194,42 @@ beforeAll(async () => {
   if (!stranger) throw new Error('The practitioner reaches every client.');
   strangerId = stranger.id;
 
-  // A signed first report, written as the table owner with the snapshots
-  // signing leaves on a row.
+  // A signed first report, written as the table owner: drafted, its map
+  // linked while it is a draft (migration 604 freezes the links when it
+  // leaves draft), then signed with the snapshots signing leaves on a row.
   const issued = await h.owner.query<{ id: string }>(
-    'insert into report (tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
-      'signed_by_practitioner_id, signed_by_name, signed_by_certification, recipient_name, ' +
-      'recipient_record_number, practice_legal_name, content) values ' +
-      "($1, $2, 'qeeg', 'issued', $3, current_date, now(), $4, 'Rowan Ridge', 'bcia_bcn', " +
-      "'Cedar Meadow', 'MW-000001', 'Synthetic Studio', $5::jsonb) returning id",
-    [
-      h.data.tenant.id,
-      clientId,
-      ISSUED_NUMBER,
-      h.practitionerIdOf(SEEDED.owner),
-      JSON.stringify(earlierContent()),
-    ],
+    "insert into report (tenant_id, client_id, kind, content) values ($1, $2, 'qeeg', $3::jsonb) " +
+      'returning id',
+    [h.data.tenant.id, clientId, JSON.stringify(earlierContent())],
   );
   issuedId = issued.rows[0]?.id ?? '';
+  const where = { tenantId: h.data.tenant.id, clientId };
+  await linkFigureAsOwner(
+    h.owner,
+    { ...where, reportId: issuedId },
+    { documentId: EARLIER_MAP, sha256: SHA, widthPx: 800, heightPx: 600, condition: 'eyes_open' },
+  );
+  await h.owner.query(
+    "update report set status = 'issued', number = $2, issued_on = current_date, " +
+      "signed_at = now(), signed_by_practitioner_id = $3, signed_by_name = 'Rowan Ridge', " +
+      "signed_by_certification = 'bcia_bcn', recipient_name = 'Cedar Meadow', " +
+      "recipient_record_number = 'MW-000001', practice_legal_name = 'Synthetic Studio' " +
+      'where id = $1',
+    [issuedId, ISSUED_NUMBER, h.practitionerIdOf(SEEDED.owner)],
+  );
 
-  // A past record: drafted with its source, then kept.
+  // A past record: drafted with its source and its map, then kept.
   const imported = await h.owner.query<{ id: string }>(
     'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
       "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
     [h.data.tenant.id, clientId, JSON.stringify(earlierContent()), SHA],
   );
   importedId = imported.rows[0]?.id ?? '';
+  await linkFigureAsOwner(
+    h.owner,
+    { ...where, reportId: importedId },
+    { documentId: EARLIER_MAP, sha256: SHA, widthPx: 800, heightPx: 600, condition: 'eyes_open' },
+  );
   await h.owner.query("update report set status = 'imported' where id = $1", [importedId]);
 
   // A legal guardian of the client with a portal login of their own, made
@@ -730,5 +778,332 @@ describe('the two older kinds beside it', () => {
       [brainMap.report.id],
     );
     expect(rows[0]?.kind).toBe('qeeg');
+  });
+});
+
+/** A past record of `clientId`, kept, as the table owner writes one. */
+async function keptRecord(sha: string): Promise<string> {
+  const { rows } = await h.owner.query<{ id: string }>(
+    'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
+      "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
+    [h.data.tenant.id, clientId, JSON.stringify(earlierContent()), sha],
+  );
+  const id = rows[0]?.id ?? '';
+  await h.owner.query("update report set status = 'imported' where id = $1", [id]);
+  return id;
+}
+
+/** Withdrawn as kept against the wrong client: the stamp set, the content cleared. */
+async function withdraw(id: string, query: Query = (t, p) => h.owner.query(t, p)): Promise<void> {
+  await query(
+    "update report set withdrawn_at = now(), withdraw_reason = 'Kept against the wrong client', " +
+      "content = '{}'::jsonb where id = $1",
+    [id],
+  );
+}
+
+/** The snapshots signing leaves on a row, written onto a draft as the table owner. */
+async function signAsOwner(id: string, number: number, query: Query): Promise<void> {
+  await query(
+    "update report set status = 'issued', number = $2, issued_on = current_date, " +
+      "signed_at = now(), signed_by_practitioner_id = $3, signed_by_name = 'Rowan Ridge', " +
+      "signed_by_certification = 'bcia_bcn', recipient_name = 'Cedar Meadow', " +
+      "recipient_record_number = 'MW-000001', practice_legal_name = 'Synthetic Studio' " +
+      'where id = $1',
+    [id, number, h.practitionerIdOf(SEEDED.owner)],
+  );
+}
+
+describe('fix round 1: races between two people', () => {
+  it('answers a comparison withdrawn between the read and the write with 409, and writes nothing', async () => {
+    const kept = await keptRecord('d'.repeat(64));
+    const before = await reportCount();
+    // The owner saves, since withdrawing is the owner's or the lead's.
+    race.after = { id: kept, run: (query) => withdraw(kept, query) };
+    const res = await save({ clientId, kind: 'qeeg', content: sentFollowUp(kept) }, SEEDED.owner);
+    expect(race.after).toBeNull();
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { code: string; reason: string; field: string }).toMatchObject({
+      code: 'cannot_compare',
+      reason: 'withdrawn',
+      field: 'comparedWith.reportId',
+    });
+    expect(await reportCount()).toBe(before);
+  });
+
+  it('answers already issued, not stale, when the draft was signed between the read and the write', async () => {
+    const first = await created(sentInitial(), SEEDED.owner);
+    race.after = { id: first.report.id, run: (query) => signAsOwner(first.report.id, 950, query) };
+    const res = await save(
+      {
+        id: first.report.id,
+        clientId,
+        kind: 'qeeg',
+        savedAt: first.savedAt,
+        content: sentInitial({ summary: { en: { text: 'Late.', marks: [] }, ar: null } }),
+      },
+      SEEDED.owner,
+    );
+    expect(race.after).toBeNull();
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { code: string }).code).toBe('already_issued');
+  });
+});
+
+describe('fix round 1: what the review found untested', () => {
+  it('refuses to save over a draft read from the old tool’s file', async () => {
+    const { rows } = await h.owner.query<{ id: string }>(
+      'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
+        "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
+      [h.data.tenant.id, clientId, JSON.stringify(earlierContent()), 'f'.repeat(64)],
+    );
+    const res = await save(
+      {
+        id: rows[0]?.id,
+        clientId,
+        kind: 'qeeg',
+        savedAt: '2026-09-30T08:00:00.000000Z',
+        content: sentInitial(),
+      },
+      SEEDED.owner,
+    );
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { code: string }).code).toBe('imported_draft');
+  });
+
+  it('lets a lead practitioner who is nothing else save one', async () => {
+    const userId = '0000000d-0000-4000-8000-0000000000e3';
+    const authId = '0000000d-0000-4000-8000-0000000000e4';
+    await h.owner.query(
+      'insert into app_user (id, tenant_id, auth_id, display_name) values ($1, $2, $3, $4)',
+      [userId, h.data.tenant.id, authId, 'Lead only'],
+    );
+    await h.owner.query(
+      "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'lead_practitioner')",
+      [h.data.tenant.id, userId],
+    );
+    const res = await h.callAs(
+      'POST',
+      '/api/reports/draft',
+      authId,
+      { clientId, kind: 'qeeg', content: sentFollowUp(issuedId) },
+      WITH_REASON,
+    );
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as QeegDraftResponse).report.kind).toBe('qeeg');
+  });
+
+  it('refuses a comparison with a withdrawn past record and with a superseded report', async () => {
+    const withdrawn = await keptRecord('e'.repeat(64));
+    await withdraw(withdrawn);
+    const superseded = await h.owner.query<{ id: string }>(
+      'insert into report (tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
+        'signed_by_practitioner_id, signed_by_name, signed_by_certification, recipient_name, ' +
+        'recipient_record_number, practice_legal_name, content) values ' +
+        "($1, $2, 'qeeg', 'issued', $3, current_date, now(), $4, 'Rowan Ridge', 'bcia_bcn', " +
+        "'Cedar Meadow', 'MW-000001', 'Synthetic Studio', $5::jsonb) returning id",
+      [
+        h.data.tenant.id,
+        clientId,
+        ISSUED_NUMBER + 2,
+        h.practitionerIdOf(SEEDED.owner),
+        JSON.stringify(earlierContent()),
+      ],
+    );
+    const supersededId = superseded.rows[0]?.id ?? '';
+    await h.owner.query("update report set status = 'superseded' where id = $1", [supersededId]);
+
+    for (const [reportId, reason] of [
+      [withdrawn, 'withdrawn'],
+      [supersededId, 'superseded'],
+    ] as const) {
+      const res = await save({ clientId, kind: 'qeeg', content: sentFollowUp(reportId) });
+      expect(res.status, reason).toBe(422);
+      expect((await res.json()) as { code: string; reason: string }, reason).toMatchObject({
+        code: 'cannot_compare',
+        reason,
+      });
+    }
+  });
+
+  it('refuses any save for a client whose record was erased, whoever asks', async () => {
+    const index = h.data.clients.findIndex(
+      (c, i) => c.status === 'active' && i !== clientIndex && c.id !== strangerId,
+    );
+    const erasedId = h.clientId(index);
+    await h.owner.query("update client set status = 'erased' where id = $1", [erasedId]);
+    const before = await reportCount();
+    const res = await save(
+      { clientId: erasedId, kind: 'qeeg', content: sentInitial() },
+      SEEDED.owner,
+    );
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { code: string }).code).toBe('client_erased');
+    expect(await reportCount()).toBe(before);
+  });
+
+  it('refuses a reason that cleans to nothing, or is no reason worth reading', async () => {
+    const before = await reportCount();
+    // A header carries bytes, not every character: a no-break space and a
+    // control character, each of which the fence's cleaning removes whole.
+    const cleansToNothing = [
+      String.fromCharCode(0xa0).repeat(12),
+      String.fromCharCode(1).repeat(12),
+    ];
+    for (const reason of [...cleansToNothing, 'aaaaaaaa', 'ok']) {
+      const res = await save({ clientId, kind: 'qeeg', content: sentInitial() }, undefined, {
+        'x-reason': reason,
+      });
+      expect(res.status, JSON.stringify(reason)).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toBe('reason_required');
+    }
+    expect(await reportCount()).toBe(before);
+  });
+
+  it('never hands a household the stamp a draft’s next save names', async () => {
+    const theirs = await h.callAs('GET', `/api/reports/${issuedId}`, household.authId);
+    expect(theirs.status).toBe(200);
+    expect(Object.keys((await theirs.json()) as object)).not.toContain('savedAt');
+    const staff = await h.call('GET', `/api/reports/${issuedId}`, SEEDED.owner);
+    expect(((await staff.json()) as ReportResponse).savedAt).toMatch(/Z$/);
+  });
+});
+
+/** Arabic letters, `length` UTF-16 units of them, with a space now and then. */
+function arabic(length: number): string {
+  return 'بحر سهل '.repeat(Math.ceil(length / 8)).slice(0, length);
+}
+
+/** English of `length` characters. */
+function english(length: number): string {
+  return 'Calm and steady. '.repeat(Math.ceil(length / 17)).slice(0, length);
+}
+
+/** Formatted text at its limit, with the most marks the shape keeps. */
+function richAtLimit(text: string) {
+  return {
+    text,
+    marks: Array.from({ length: 200 }, (_, i) => ({
+      from: i * 20,
+      to: i * 20 + 10,
+      bold: true as const,
+      underline: true as const,
+    })),
+  };
+}
+
+function customAtLimit() {
+  return Object.fromEntries(
+    Array.from({ length: 12 }, (_, i) => [
+      `c${i}`,
+      {
+        label: { en: english(160), ar: arabic(160) },
+        note: { en: english(400), ar: arabic(400) },
+        chosen: true,
+        position: i,
+      },
+    ]),
+  );
+}
+
+/** The largest brain-map body the shape accepts, near enough: every typed thing at its limit. */
+function maximalFollowUp(mapIds: readonly string[]): Record<string, unknown> {
+  const base = sentFollowUp(issuedId);
+  const change = base['change'] as Record<string, unknown>;
+  const dashboard = base['dashboard'] as Record<string, Record<string, unknown>>;
+  const figure = {
+    kind: 'percent',
+    direction: 'increase',
+    low: 25,
+    high: 30,
+    source: 'typed',
+    basis: null,
+  };
+  const rich = { en: richAtLimit(english(4000)), ar: richAtLimit(arabic(4000)) };
+  const picked = { chosen: [], custom: customAtLimit() };
+  return {
+    ...base,
+    findings: picked,
+    focus: picked,
+    recommendations: picked,
+    benefits: picked,
+    summary: rich,
+    maps: Object.fromEntries(
+      Array.from({ length: 8 }, (_, i) => [
+        `map-${i}`,
+        {
+          figureId: mapIds[i],
+          sha256: SHA,
+          widthPx: 1600,
+          heightPx: 1200,
+          condition: 'eyes_open',
+          caption: { en: english(120), ar: arabic(120) },
+          position: i,
+        },
+      ]),
+    ),
+    dashboard: Object.fromEntries(
+      Object.entries(dashboard).map(([key, score]) => [
+        key,
+        { ...score, score: 5, evidence: { en: english(400), ar: arabic(400) } },
+      ]),
+    ),
+    change: {
+      ...change,
+      tiles: Object.fromEntries(
+        Array.from({ length: 2 }, (_, i) => [
+          `t${i}`,
+          { figure, caption: { en: english(120), ar: arabic(120) }, position: i },
+        ]),
+      ),
+      sessionsCompleted: { count: 200, source: 'typed' },
+      table: Object.fromEntries(
+        MEASURE_IDS.map((measure, i) => [
+          measure,
+          { position: i, eyesOpen: figure, eyesClosed: figure },
+        ]),
+      ),
+      summary: rich,
+    },
+  };
+}
+
+describe('fix round 1: the size of a brain-map body', () => {
+  it('saves the largest body the shape accepts, well over the ordinary 64 KiB', async () => {
+    // Eight maps, each linked to the draft first, as the door links them.
+    const draft = await created(sentFollowUp(issuedId));
+    const mapIds = Array.from(
+      { length: 8 },
+      (_, i) => `0000000d-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+    );
+    for (const documentId of mapIds) {
+      await linkFigureAsOwner(
+        h.owner,
+        { tenantId: h.data.tenant.id, clientId, reportId: draft.report.id },
+        { documentId, sha256: SHA, widthPx: 1600, heightPx: 1200 },
+      );
+    }
+    const content = maximalFollowUp(mapIds);
+    const request = {
+      id: draft.report.id,
+      savedAt: draft.savedAt,
+      clientId,
+      kind: 'qeeg',
+      content,
+    };
+    const bytes = Buffer.byteLength(JSON.stringify(request));
+    expect(bytes).toBeGreaterThan(64 * 1024);
+    expect(bytes).toBeLessThan(512 * 1024);
+    const res = await save(request);
+    expect(res.status, await res.clone().text()).toBe(200);
+  });
+
+  it('refuses a body over its own limit with 413', async () => {
+    const res = await save({
+      clientId,
+      kind: 'qeeg',
+      content: sentInitial({ padding: 'x'.repeat(512 * 1024) }),
+    });
+    expect(res.status).toBe(413);
   });
 });
