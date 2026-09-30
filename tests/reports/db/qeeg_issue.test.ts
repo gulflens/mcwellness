@@ -191,6 +191,49 @@ describe('what the issue refuses, each by its own code', () => {
     expect((await statusOf(draft.id)).status).toBe('draft');
   });
 
+  it('refuses a map whose stored bytes are not the picture that was filed', async () => {
+    const draft = await steps.completeDraft(SEEDED.owner, { seed: 12 });
+    const changed = draft.maps[1];
+    if (!changed) throw new Error('No map.');
+    await h.storage.put(
+      clientDocumentKey(h.data.tenant.id, clientId, changed.figureId),
+      await goodPng(MAP_SIZE.width, MAP_SIZE.height, 98),
+      'image/png',
+      { overwrite: true },
+    );
+    const res = await issue(draft);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({
+      code: 'map_differs',
+      field: 'maps.map-1.figureId',
+      figureId: changed.figureId,
+    });
+    expect((await statusOf(draft.id)).status).toBe('draft');
+  });
+
+  it('refuses a map the draft names but no longer holds', async () => {
+    const draft = await steps.completeDraft(SEEDED.owner, { seed: 13 });
+    const loose = draft.maps[0];
+    if (!loose) throw new Error('No map.');
+    // Written by hand: the draft door refuses to save this (`unlinked_figure`).
+    await h.owner.query('delete from report_figure where report_id = $1 and document_id = $2', [
+      draft.id,
+      loose.figureId,
+    ]);
+    const { rows } = await h.owner.query<{ saved_at: string }>(
+      'select to_char(updated_at at time zone \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') as saved_at ' +
+        'from report where id = $1',
+      [draft.id],
+    );
+    const res = await issue({ id: draft.id, savedAt: rows[0]?.saved_at ?? '' });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({
+      code: 'unlinked_figure',
+      field: 'maps.map-0.figureId',
+      figureId: loose.figureId,
+    });
+  });
+
   it('refuses pages that run over, and takes no number and leaves it a draft', async () => {
     const draft = await steps.completeDraft(SEEDED.owner, { seed: 6 });
     overrun.parts = ['recommendation.2'];
