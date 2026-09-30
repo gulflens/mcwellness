@@ -9,6 +9,7 @@ import { documentFonts } from '../billing/fonts';
 import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
+import { issueQeeg } from './qeeg/issue';
 import { practiceTimeZone } from './gather';
 import { IssueInput, IssueResponse } from './schema';
 import { asRow, documentFrom, readReport } from './source';
@@ -66,7 +67,8 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
       // as a 500 on a path a stranger can call.
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
-    const body = IssueInput.safeParse(await c.req.json().catch(() => null));
+    const raw: unknown = await c.req.json().catch(() => null);
+    const body = IssueInput.safeParse(raw);
     if (!body.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
@@ -94,10 +96,9 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
       case 'qeeg':
         // A brain-map report is signed through its own door, which asks what
         // this one cannot: its wording approved in that language, its maps
-        // present (docs/SPEC/reports-qeeg.md section 14). Refused before a
-        // number is taken, rather than after, when the render it cannot do
-        // would roll the signature back as a server error.
-        return c.json({ error: 'unprocessable', code: 'wrong_kind', requestId }, 422);
+        // present and placed, its pages not running over
+        // (docs/SPEC/reports-qeeg.md section 14).
+        return issueQeeg(c, draft, raw, now());
       default: {
         const unknown: never = draft.kind;
         return unknown;

@@ -11,7 +11,8 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { mayReadReport } from './access';
 import { contactClientIds } from './household';
 import { ReportResponse } from './schema';
-import { asRow, documentFrom, readReport } from './source';
+import { renderSigned } from './qeeg/pages';
+import { asRow, documentFrom, readReport, type ReportRecord } from './source';
 
 /**
  * `GET /api/reports/:id` — one report, its delivery history, and a short-lived
@@ -53,6 +54,37 @@ const DELIVERIES_SQL =
 const DOCUMENT_SQL =
   'select d.id, d.storage_key, d.sha256 from document d ' +
   'where d.tenant_id = app.current_tenant_id() and d.id = $1';
+
+/**
+ * A signed report's file, rendered again from its row, or null where it
+ * cannot be. Each kind by its own renderer: a brain map by its own pages, its
+ * frozen pictures and its row's snapshots (`qeeg/pages.ts`), which read the
+ * practice's logo and its footer's telephone, email and website as they
+ * stand, as billing reads an invoice's logo; a report whose practice has
+ * changed either since is then refused below, as any other whose source has
+ * moved is.
+ */
+async function remade(
+  db: Parameters<typeof renderSigned>[0],
+  storage: Parameters<typeof renderSigned>[1],
+  record: ReportRecord,
+): Promise<Uint8Array | null> {
+  switch (record.kind) {
+    case 'session':
+    case 'progress': {
+      const document_ = documentFrom(record);
+      return document_ ? renderReport(document_, documentFonts()) : null;
+    }
+    case 'qeeg': {
+      const filed = await renderSigned(db, storage, record);
+      return filed.ok ? filed.bytes : null;
+    }
+    default: {
+      const unknown: never = record.kind;
+      return unknown;
+    }
+  }
+}
 
 export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.get('/api/reports/:id', async (c) => {
@@ -104,9 +136,8 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
           // From the row and nothing else, which is what makes the repair
           // path sound: the bytes it re-renders are the bytes that were filed,
           // whatever has been corrected on the client record since.
-          const remade = documentFrom(record);
-          if (remade) {
-            const bytes = renderReport(remade, documentFonts());
+          const bytes = await remade(db, storage, record);
+          if (bytes) {
             if (createHash('sha256').update(bytes).digest('hex') !== row.sha256.toString('hex')) {
               console.error(
                 JSON.stringify({
