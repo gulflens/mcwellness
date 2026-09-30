@@ -330,6 +330,115 @@ describe('what a correction carries, and what it refuses', () => {
       [bare],
     );
     expect(left.rows[0]?.status).toBe('issued');
+    expect(await refusedFor(bare)).toContain('map_not_held');
+  });
+
+  it('refuses, and writes to the trail, a signed report whose body no longer reads', async () => {
+    const standing = await signed(8);
+    // Past the guard, for this test alone and put back after: no route writes a signed body.
+    await h.owner.query('alter table report disable trigger guard_report_write');
+    try {
+      await h.owner.query(
+        'update report set content = content || \'{"plan": 7}\'::jsonb where id = $1',
+        [standing.id],
+      );
+    } finally {
+      await h.owner.query('alter table report enable always trigger guard_report_write');
+    }
+    const res = await supersede(standing.id);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ code: 'invalid_content', field: 'plan' });
+    expect(await refusedFor(standing.id)).toContain('invalid_content');
+  });
+
+  it('refuses, and writes to the trail, a follow-up whose past record was withdrawn since', async () => {
+    const first = await signed(9);
+    // A past record of the same client, holding the first report's maps, kept.
+    const { rows } = await h.owner.query<{ id: string }>(
+      'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
+        "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
+      [h.data.tenant.id, clientId, JSON.stringify(first.content), 'e'.repeat(64)],
+    );
+    const pastId = rows[0]?.id ?? '';
+    await h.owner.query(
+      'insert into report_figure (tenant_id, client_id, report_id, document_id, ' +
+        'borrowed_from_report_id, sha256, width_px, height_px) ' +
+        'select tenant_id, client_id, $1, document_id, report_id, sha256, width_px, height_px ' +
+        'from report_figure where report_id = $2',
+      [pastId, first.id],
+    );
+    await h.owner.query("update report set status = 'imported' where id = $1", [pastId]);
+
+    const res = await steps.saveAs(SEEDED.owner, {
+      locale: 'en',
+      content: {
+        ...sent(
+          blankFollowUp(
+            {
+              reportId: pastId,
+              recordedOn: '2026-09-14',
+              relation: 'initial',
+              origin: 'imported',
+              reference: null,
+            },
+            'follow_up',
+          ),
+        ),
+        comparedWith: { reportId: pastId },
+      },
+    });
+    expect(res.status).toBe(201);
+    const followUp = (await res.json()) as QeegDraftResponse;
+    await signAsOwner(followUp.report.id);
+
+    // Withdrawn with its key checks set aside, as a withdraw the key forgot
+    // would leave it: the follow-up still names a record nothing may compare with.
+    await h.owner.query("set session_replication_role = 'replica'");
+    try {
+      await h.owner.query(
+        "update report set withdrawn_at = now(), withdraw_reason = 'Kept against the wrong client', " +
+          "content = '{}'::jsonb where id = $1",
+        [pastId],
+      );
+    } finally {
+      await h.owner.query("set session_replication_role = 'origin'");
+    }
+
+    const corrected = await supersede(followUp.report.id);
+    expect(corrected.status).toBe(409);
+    expect(await corrected.json()).toMatchObject({ code: 'cannot_compare', reason: 'withdrawn' });
+    expect(await refusedFor(followUp.report.id)).toContain('cannot_compare');
+  });
+
+  it('refuses, and writes to the trail, a correction whose maps may no longer be touched', async () => {
+    const index = h.data.clients.findIndex(
+      (c) =>
+        c.status === 'active' &&
+        c.givenNameAr !== null &&
+        h.clientId(h.data.clients.indexOf(c)) !== clientId,
+    );
+    const otherId = h.clientId(index);
+    const other = qeegSteps(h, otherId);
+    const draft = await other.completeDraft(SEEDED.owner, { seed: 60 });
+    const issued = await h.call(
+      'POST',
+      `/api/reports/${draft.id}/issue`,
+      SEEDED.owner,
+      { savedAt: draft.savedAt },
+      { 'x-reason': 'Signing the brain-map report' },
+    );
+    expect(issued.status).toBe(201);
+    // The record erased since, its signed body left as it was.
+    await h.owner.query("update client set status = 'erased' where id = $1", [otherId]);
+    const res = await supersede(draft.id);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'not_permitted' });
+    expect(await refusedFor(draft.id)).toContain('not_permitted');
+    const { rows } = await h.owner.query<{ status: string }>(
+      'select status::text as status from report where id = $1',
+      [draft.id],
+    );
+    expect(rows[0]?.status).toBe('issued');
   });
 
   it('refuses a draft, which is corrected by saving it', async () => {
