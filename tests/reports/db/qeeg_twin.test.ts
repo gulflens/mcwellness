@@ -567,7 +567,7 @@ describe('a signature racing a correction of the first report', () => {
     // the row, so the two never cross; the test holds the row alone to prove
     // the row's lock by itself.
     await h.owner.query('alter table report disable trigger audit_row');
-    let answeredWhileHeld = true;
+    let answeredWhileHeld: boolean;
     let blocked = false;
     let signing: Promise<Response>;
     try {
