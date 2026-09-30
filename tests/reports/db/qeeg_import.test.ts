@@ -605,6 +605,26 @@ describe('the maps of a past record, and keeping it', () => {
     expect((await rowOf(draft.report.id)).status).toBe('draft');
   });
 
+  it('refuses a map named at a size its link does not hold, on the trail before the answer', async () => {
+    const draft = await brought();
+    const map = await upload(draft.report.id, 415);
+    const wider = { ...map.ref, widthPx: map.ref.widthPx + 1 };
+    const res = await keep(draft.report.id, {
+      savedAt: map.savedAt,
+      maps: placed([wider]),
+      leftOut: [],
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: 'figure_mismatch',
+      field: 'maps.map-0.widthPx',
+    });
+    expect(
+      await refusalsOnTrail(h.owner, 'report.import_refused', { entityId: draft.report.id }),
+    ).toEqual(['figure_mismatch']);
+    expect((await rowOf(draft.report.id)).status).toBe('draft');
+  });
+
   it('refuses a place the file never had, and a keep made over an older stamp', async () => {
     const draft = await brought();
     const map = await upload(draft.report.id, 420);
