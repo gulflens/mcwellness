@@ -39,7 +39,11 @@
 -- (app.erasure_active) steps round it. One removal is admitted after a
 -- report leaves draft: a past record withdrawn because it was kept against
 -- the wrong client has its maps removed (section 11, point 7), which 603's
--- guard leaves to this file's functions.
+-- guard leaves to this file's functions. Removed means gone: the link, and
+-- the picture itself, frozen or not, when the record was its only holder.
+-- That is the one removal of a frozen picture besides an erasure, and it goes
+-- through the erasure's own marker (section 6), so 903 is not edited: the
+-- withdraw is a second user of that marker, for one statement.
 --
 -- **Nothing inserts or deletes here directly.** app_role holds select alone.
 -- A picture arrives through `app.file_report_figure` (the upload door), a
@@ -65,7 +69,8 @@
 --
 -- Needs: 010 (tenant), 020 (app_user), 060 (client, document), 080
 -- (app.audit_row, app.set_updated_at), 095 (app.actor_has_role,
--- app.current_actor_id), 098 (app.erasure_active), 099 (client's
+-- app.current_actor_id), 098 (app.erasure_active, app.begin_erasure and
+-- app.end_erasure), 099 (client's
 -- (tenant_id, id) key), 100 (app.current_tenant_id), 201
 -- (app.client_visible_to_practitioner), 502 (document's (tenant_id, id,
 -- client_id) key, which 911 also makes), 600 (report and its (tenant_id, id,
@@ -515,8 +520,25 @@ grant execute on function app.borrow_report_figure(uuid, uuid, uuid) to app_role
 --    A picture that was uploaded to this report, and that nothing else now
 --    links, goes with it — row now, bytes after the commit: the function
 --    answers the storage key the route removes, or null when the document
---    stays (borrowed, or frozen). While the report is a draft, `updated_at`
---    moves as it does for an upload.
+--    stays (borrowed from another report, or still linked by one).
+--
+--    **A withdrawn past record's own pictures go although they are frozen.**
+--    Keeping it froze them (section 7), and 903 refuses to delete an
+--    immutable document outside an erasure. But a record withdrawn was kept
+--    against the WRONG client: its pictures are another person's brain maps,
+--    filed under this client, where the Documents tab would list them and
+--    sign links to them for as long as the record lasts. Point 7 says maps
+--    removed, and that must mean the pictures, not only the links. So, for
+--    that branch alone, the delete runs inside `app.begin_erasure()` /
+--    `app.end_erasure()` (098), for one statement, limited to a document of
+--    kind `report_figure` that no link holds. The marker is what 903 and the
+--    document's own guards already step aside for, and it makes the delete's
+--    audit row read `[withheld: erasure]`, which is right for a picture of
+--    another person. The marker is set only when no erasure is already under
+--    way in this transaction, and cleared only if this function set it.
+--    Every other branch keeps `not d.is_immutable`: a draft's pictures are
+--    mutable, and nothing frozen on a signed or kept report is ever deleted.
+--    While the report is a draft, `updated_at` moves as it does for an upload.
 ------------------------------------------------------------------------------
 create function app.remove_report_figure(p_report_id uuid, p_document_id uuid) returns text
 language plpgsql security definer
@@ -527,6 +549,7 @@ declare
   v_report    record;
   v_link      public.report_figure;
   v_key       text;
+  v_marked    boolean;
 begin
   if v_tenant_id is null then
     raise exception 'No practice in context; a map cannot be removed.'
@@ -562,9 +585,24 @@ begin
   if v_link.borrowed_from_report_id is null
      and not exists (select 1 from public.report_figure f
                       where f.tenant_id = v_tenant_id and f.document_id = p_document_id) then
-    delete from public.document d
-     where d.tenant_id = v_tenant_id and d.id = p_document_id and not d.is_immutable
-    returning d.storage_key into v_key;
+    if v_report.status = 'imported' and v_report.withdrawn then
+      -- Point 7: a withdrawn record's own picture goes, frozen as it is.
+      v_marked := not exists (select 1 from app.erasure_active where txid = txid_current());
+      if v_marked then
+        perform app.begin_erasure();
+      end if;
+      delete from public.document d
+       where d.tenant_id = v_tenant_id and d.id = p_document_id
+         and d.kind::text = 'report_figure'
+      returning d.storage_key into v_key;
+      if v_marked then
+        perform app.end_erasure();
+      end if;
+    else
+      delete from public.document d
+       where d.tenant_id = v_tenant_id and d.id = p_document_id and not d.is_immutable
+      returning d.storage_key into v_key;
+    end if;
   end if;
 
   if v_report.status = 'draft' then

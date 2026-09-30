@@ -205,6 +205,50 @@ async function trailOf(id: string, action: string) {
   return rows;
 }
 
+/** A kept past record with two of its pictures brought in, and none left out. */
+async function keptWithTwo(forClient: string = clientId) {
+  const draft = await brought(newFile(), forClient);
+  const first = await upload(draft.report.id, 600 + fileCount);
+  const second = await upload(draft.report.id, 700 + fileCount);
+  const res = await keep(draft.report.id, {
+    savedAt: second.savedAt,
+    maps: placed([first.ref, second.ref]),
+    leftOut: [],
+  });
+  if (res.status !== 200) throw new Error(`Keep refused: ${res.status} ${await res.text()}`);
+  return { id: draft.report.id, maps: [first.ref, second.ref] };
+}
+
+async function documentsOf(ids: readonly string[]) {
+  const { rows } = await h.owner.query<{ id: string; storage_key: string }>(
+    'select id, storage_key from document where id = any($1::uuid[]) order by id',
+    [ids],
+  );
+  return rows;
+}
+
+/** The client's Documents tab as a person reads it: the ids and kinds it lists. */
+async function listedAs(as: { seeded: number } | { authId: string }, forClient: string) {
+  const path = `/api/clients/${forClient}/documents`;
+  const headers = { 'x-reason': 'Reading the client’s documents'.replace('’', "'") };
+  const res =
+    'seeded' in as
+      ? await h.call('GET', path, as.seeded, undefined, headers)
+      : await h.callAs('GET', path, as.authId, undefined, headers);
+  if (res.status !== 200) throw new Error(`List refused: ${res.status} ${await res.text()}`);
+  return ((await res.json()) as { documents: { id: string; kind: string }[] }).documents;
+}
+
+/** The database's own answer to a statement, as a code, or null when it runs. */
+async function sqlState(run: () => Promise<unknown>): Promise<string | null> {
+  try {
+    await run();
+    return null;
+  } catch (error) {
+    return String((error as { code?: unknown }).code ?? 'thrown');
+  }
+}
+
 beforeAll(async () => {
   h = await startHarness(NOW);
   clientId = clientToWriteAbout(h).id;
@@ -337,27 +381,30 @@ describe('bringing a past record in', () => {
   });
 
   it('never stores the name, age or sex the file typed, in any column of any table', async () => {
-    const needles = [LEGACY_NAME.en, LEGACY_NAME.ar, TYPED_AGE];
-    const count = async (): Promise<number> => {
+    const count = async (needle: string): Promise<number> => {
       const tables = await h.owner.query<{ name: string }>(
         'select c.relname as name from pg_class c join pg_namespace n on n.oid = c.relnamespace ' +
           "where n.nspname = 'public' and c.relkind = 'r' order by 1",
       );
       let found = 0;
       for (const { name } of tables.rows) {
-        for (const needle of needles) {
-          const { rows } = await h.owner.query<{ n: string }>(
-            `select count(*)::text as n from public.${name} as x where x::text like $1`,
-            [`%${needle}%`],
-          );
-          found += Number(rows[0]?.n ?? 0);
-        }
+        const { rows } = await h.owner.query<{ n: string }>(
+          `select count(*)::text as n from public.${name} as x where x::text like $1`,
+          [`%${needle}%`],
+        );
+        found += Number(rows[0]?.n ?? 0);
       }
       return found;
     };
-    const before = await count();
+    // The English name is made from the seed's lists, so a seeded client may
+    // share it: that one is measured as a change. The Arabic name as the file
+    // joins it, and the age as it typed it, are held by nothing at all, after
+    // every request this file has sent, the refused ones included.
+    const before = await count(LEGACY_NAME.en);
     const record = await kept(clientId, newFile({ age: TYPED_AGE }));
-    expect(await count()).toBe(before);
+    expect(await count(LEGACY_NAME.en)).toBe(before);
+    expect(await count(LEGACY_NAME.ar)).toBe(0);
+    expect(await count(TYPED_AGE)).toBe(0);
     expect((await rowOf(record.id)).subject).toEqual({ nameAr: null, ageYears: null, sex: null });
   });
 });
@@ -488,6 +535,131 @@ describe('withdrawing a past record kept against the wrong client', () => {
     expect(trail[0]?.reason).toBe(WITHDRAW_REASON);
   });
 
+  it('removes the pictures themselves, rows and bytes, one delete from the store for each', async () => {
+    const record = await keptWithTwo();
+    const ids = record.maps.map((map) => map.figureId);
+    const before = await documentsOf(ids);
+    expect(before).toHaveLength(2);
+    const deleted = vi.spyOn(h.storage, 'delete');
+    try {
+      const res = await withdraw(record.id);
+      expect(res.status).toBe(200);
+      await vi.waitFor(() => expect(deleted).toHaveBeenCalledTimes(2));
+      expect(deleted.mock.calls.map(([key]) => key).sort()).toEqual(
+        before.map((row) => row.storage_key).sort(),
+      );
+    } finally {
+      deleted.mockRestore();
+    }
+    expect(await documentsOf(ids)).toHaveLength(0);
+    for (const row of before) expect(await h.storage.exists(row.storage_key)).toBe(false);
+  });
+
+  it('leaves the wrong client’s Documents tab without them, for staff and for the household', async () => {
+    const record = await keptWithTwo();
+    const ids = record.maps.map((map) => map.figureId);
+    expect((await withdraw(record.id)).status).toBe(200);
+    const staff = await listedAs({ seeded: SEEDED.owner }, clientId);
+    const home = await listedAs({ authId: household }, clientId);
+    for (const listed of [staff, home]) {
+      expect(listed.filter((doc) => ids.includes(doc.id))).toEqual([]);
+    }
+  });
+
+  it('still refuses to remove the pictures of a kept record not withdrawn, and of a signed report', async () => {
+    const record = await keptWithTwo();
+    const map = record.maps[0];
+    if (!map) throw new Error('No map.');
+    expect(
+      await sqlState(() =>
+        h.asPerson(SEEDED.owner, (db) =>
+          db.query('select app.remove_report_figure($1, $2)', [record.id, map.figureId]),
+        ),
+      ),
+    ).toBe('23001');
+    // Frozen: not even the table owner deletes the picture outside an erasure (903).
+    expect(
+      await sqlState(() => h.owner.query('delete from document where id = $1', [map.figureId])),
+    ).not.toBeNull();
+
+    const steps = qeegSteps(h, clientId);
+    const draft = await steps.completeDraft(SEEDED.owner, { seed: 90 });
+    const signed = await h.call(
+      'POST',
+      `/api/reports/${draft.id}/issue`,
+      SEEDED.owner,
+      { savedAt: draft.savedAt },
+      { 'x-reason': 'Signing the brain-map report' },
+    );
+    expect(signed.status).toBe(201);
+    const own = draft.maps[0];
+    if (!own) throw new Error('No map.');
+    expect(
+      await sqlState(() =>
+        h.asPerson(SEEDED.owner, (db) =>
+          db.query('select app.remove_report_figure($1, $2)', [draft.id, own.figureId]),
+        ),
+      ),
+    ).toBe('23001');
+    expect(await documentsOf([own.figureId, map.figureId])).toHaveLength(2);
+  });
+
+  it('keeps a picture another report still links, and removes only the record’s own link', async () => {
+    const record = await keptWithTwo();
+    const [shared, alone] = record.maps;
+    if (!shared || !alone) throw new Error('No maps.');
+    // A draft of the same client that borrows the first picture, linked as
+    // the borrow function links one.
+    const other = await qeegSteps(h, clientId).newDraft(SEEDED.owner);
+    await h.owner.query(
+      'insert into report_figure (tenant_id, client_id, report_id, document_id, ' +
+        'borrowed_from_report_id, sha256, width_px, height_px) ' +
+        "values ($1, $2, $3, $4, $5, decode($6, 'hex'), $7, $8)",
+      [
+        h.data.tenant.id,
+        clientId,
+        other.id,
+        shared.figureId,
+        record.id,
+        shared.sha256,
+        shared.widthPx,
+        shared.heightPx,
+      ],
+    );
+    expect((await withdraw(record.id)).status).toBe(200);
+    expect((await documentsOf([shared.figureId])).map((row) => row.id)).toEqual([shared.figureId]);
+    expect(await documentsOf([alone.figureId])).toHaveLength(0);
+    const links = await h.owner.query<{ report_id: string }>(
+      'select report_id from report_figure where document_id = $1',
+      [shared.figureId],
+    );
+    expect(links.rows.map((row) => row.report_id)).toEqual([other.id]);
+  });
+
+  it('withdraws an unfinished import draft too, removing its pictures, with the reason', async () => {
+    const draft = await brought();
+    const map = await upload(draft.report.id, 800);
+    const [row] = await documentsOf([map.ref.figureId]);
+    if (!row) throw new Error('The picture was not filed.');
+    for (const as of [SEEDED.practitioner, SEEDED.admin]) {
+      expect((await withdraw(draft.report.id, as)).status, String(as)).toBe(403);
+    }
+    const res = await withdraw(draft.report.id, LEAD);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as PastRecordResponse).report).toMatchObject({
+      status: 'imported',
+      withdrawn: true,
+    });
+    const after = await rowOf(draft.report.id);
+    expect(after.content).toEqual({});
+    expect(after.withdraw_reason).toBe(WITHDRAW_REASON);
+    expect(after.source_sha256).not.toBeNull();
+    expect(await documentsOf([map.ref.figureId])).toHaveLength(0);
+    await vi.waitFor(async () => expect(await h.storage.exists(row.storage_key)).toBe(false));
+    const trail = await trailOf(draft.report.id, 'report.import_withdrawn');
+    expect(trail[0]?.reason).toBe(WITHDRAW_REASON);
+  });
+
   it('refuses a practitioner and a coordinator, and a withdraw with no reason', async () => {
     const record = await kept();
     for (const as of [SEEDED.practitioner, SEEDED.admin]) {
@@ -510,12 +682,10 @@ describe('withdrawing a past record kept against the wrong client', () => {
     expect(await codeOf(res)).toBe('reason_too_long');
   });
 
-  it('refuses a second withdraw, a draft not yet kept, and a report signed in the app', async () => {
+  it('refuses a second withdraw, and a report signed in the app', async () => {
     const record = await kept();
     expect((await withdraw(record.id)).status).toBe(200);
     expect(await codeOf(await withdraw(record.id))).toBe('already_withdrawn');
-    const draft = await brought();
-    expect(await codeOf(await withdraw(draft.report.id))).toBe('not_kept');
     const ours = await qeegSteps(h, clientId).newDraft(SEEDED.owner);
     expect(await codeOf(await withdraw(ours.id))).toBe('not_a_past_record');
   });
@@ -688,6 +858,87 @@ describe('every other door refuses a past record by its code', () => {
     const ids = ((await list.json()) as ReportListResponse).reports.map((row) => row.id);
     expect(ids).not.toContain(keptId);
     expect(ids).not.toContain(draftId);
+  });
+});
+
+describe('a household never sees a brain-map picture (change request 11a)', () => {
+  it('lists none and opens none, while staff see them and the household’s other documents stay', async () => {
+    const record = await keptWithTwo();
+    const draft = await brought();
+    const draftMap = await upload(draft.report.id, 900);
+    const pictures = [...record.maps.map((map) => map.figureId), draftMap.ref.figureId];
+    const filed = await h.call(
+      'POST',
+      `/api/clients/${clientId}/documents`,
+      SEEDED.owner,
+      {
+        kind: 'referral',
+        file: {
+          mimeType: 'application/pdf',
+          bytesBase64: Buffer.from('%PDF-1.7\n% synthetic\n').toString('base64'),
+        },
+      },
+      { 'x-reason': 'Filing a referral letter' },
+    );
+    expect(filed.status).toBe(201);
+    const referral = ((await filed.json()) as { id: string }).id;
+
+    const staff = await listedAs({ seeded: SEEDED.owner }, clientId);
+    const home = await listedAs({ authId: household }, clientId);
+    expect(staff.map((doc) => doc.id)).toEqual(expect.arrayContaining(pictures));
+    expect(home.filter((doc) => doc.kind === 'report_figure')).toEqual([]);
+    expect(home.map((doc) => doc.id)).toContain(referral);
+    // Every other document the staff see, the household sees as before.
+    expect(home.map((doc) => doc.id).sort()).toEqual(
+      staff
+        .filter((doc) => doc.kind !== 'report_figure')
+        .map((doc) => doc.id)
+        .sort(),
+    );
+
+    for (const id of pictures) {
+      const path = `/api/clients/${clientId}/documents/${id}/link`;
+      expect((await h.callAs('GET', path, household)).status, id).toBe(404);
+      expect(
+        (await h.call('GET', path, SEEDED.owner, undefined, { 'x-reason': 'Opening a map' }))
+          .status,
+      ).toBe(200);
+    }
+    expect(
+      (await h.callAs('GET', `/api/clients/${clientId}/documents/${referral}/link`, household))
+        .status,
+    ).toBe(200);
+  });
+});
+
+describe('the row policy on a picture (change request 11a)', () => {
+  it('gives a household contact no report_figure row under row security, and staff every one', async () => {
+    const record = await keptWithTwo();
+    const ids = record.maps.map((map) => map.figureId);
+    // The household login householdOf(…, 7) made, reading as the API does.
+    const householdUser = '0000000d-0000-4000-8000-000000000107';
+    const read = async (actorId: string, roles: string): Promise<string[]> => {
+      await h.owner.query('begin');
+      try {
+        await h.owner.query(
+          "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+            "set_config('app.actor_roles', $3, true)",
+          [h.data.tenant.id, actorId, roles],
+        );
+        await h.owner.query('set local role app_role');
+        const { rows } = await h.owner.query<{ id: string }>(
+          'select id from document where id = any($1::uuid[])',
+          [ids],
+        );
+        return rows.map((row) => row.id);
+      } finally {
+        await h.owner.query('rollback');
+      }
+    };
+    expect(await read(householdUser, 'client_contact')).toEqual([]);
+    const owner = h.data.users[SEEDED.owner];
+    if (!owner) throw new Error('No owner.');
+    expect((await read(owner.id, 'owner')).sort()).toEqual([...ids].sort());
   });
 });
 

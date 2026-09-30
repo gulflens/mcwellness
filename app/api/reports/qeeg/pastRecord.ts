@@ -63,11 +63,16 @@ import { linksOf, picturesOf } from './pages';
  *
  * **Withdrawn, never deleted** (point 7). The content is cleared and the
  * stamp set in one update, which 603's guard admits once; the maps are then
- * removed through `app.remove_report_figure`, one call for each, as 604
- * leaves to this door; the source stays. 603's key refuses the update while a
- * follow-up is compared with the record (`report_compared_with_comparable`:
- * the record's `comparable_id` would go, and a follow-up references it), and
- * the route answers that by code, naming the follow-ups to re-point first.
+ * removed through `app.remove_report_figure`, one call for each, and a
+ * picture the record alone held goes with its link, row now and bytes after
+ * the commit, frozen as it is (604, section 6): it is another person's brain
+ * map, filed under the wrong client. The source stays. 603's key refuses the
+ * update while a follow-up is compared with the record
+ * (`report_compared_with_comparable`: the record's `comparable_id` would go,
+ * and a follow-up references it), and the route answers that by code, naming
+ * the follow-ups to re-point first. A record brought in and never kept is
+ * withdrawn the same way: its still-mutable pictures removed first, then kept
+ * and withdrawn in one step, so it ends as every withdrawn record does.
  *
  * **Who.** `report.import`: the owner and the lead practitioner (reports-02
  * request 6), asked here, by the row policy on insert and update, and by the
@@ -491,10 +496,10 @@ async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> 
 
   switch (record.status) {
     case 'imported':
-      break;
     case 'draft':
-      // Not kept yet: nothing is frozen, and a draft is not withdrawn.
-      return refuse(422, 'not_kept');
+      // A kept record, or one brought in and never kept: either may have
+      // been brought in against the wrong client.
+      break;
     case 'issued':
     case 'superseded':
       return refuse(422, 'not_a_past_record');
@@ -506,7 +511,35 @@ async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> 
   if (record.withdrawn) return refuse(422, 'already_withdrawn');
 
   const links = await linksOf(db, record.id);
+  const gone: string[] = [];
+  const removeMaps = async (): Promise<void> => {
+    for (const link of links) {
+      const removed = await db.query<{ key: string | null }>(
+        'select app.remove_report_figure($1, $2) as key',
+        [record.id, link.figureId],
+      );
+      const key = removed.rows[0]?.key ?? null;
+      if (key !== null) gone.push(key);
+    }
+  };
+
   await db.query('savepoint qeeg_withdraw');
+  if (record.status === 'draft') {
+    // Brought in and never kept. Its pictures are still mutable, so they are
+    // removed first, as a draft's are; then it is kept and withdrawn in the
+    // same step, so it ends as every withdrawn record does: stamped, cleared,
+    // its source kept, and nothing left behind under this client.
+    await removeMaps();
+    try {
+      await db.query('select app.keep_imported_report($1)', [record.id]);
+    } catch (error) {
+      const { code } = pgError(error);
+      await db.query('rollback to savepoint qeeg_withdraw');
+      if (code === '23514') return refuse(422, 'nothing_to_keep');
+      if (code === '42501') return refuse(403, 'not_permitted');
+      throw error;
+    }
+  }
   let written: { rows: { id: string }[] };
   try {
     written = await db.query<{ id: string }>(WITHDRAW_SQL, [record.id, reason]);
@@ -524,21 +557,28 @@ async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> 
     await db.query('rollback to savepoint qeeg_withdraw');
     return refuse(422, 'already_withdrawn');
   }
-  const gone: string[] = [];
-  for (const link of links) {
-    const removed = await db.query<{ key: string | null }>(
-      'select app.remove_report_figure($1, $2) as key',
-      [record.id, link.figureId],
-    );
-    const key = removed.rows[0]?.key ?? null;
-    if (key !== null) gone.push(key);
-  }
+  // A kept record's pictures are removed once it is withdrawn: 604 admits
+  // their removal, frozen as they are, only then.
+  if (record.status === 'imported') await removeMaps();
   await db.query('release savepoint qeeg_withdraw');
   if (gone.length > 0) {
-    // A picture the record was the only holder of, and still mutable: its
-    // bytes follow its row, after the commit (604). Frozen ones stay.
+    // Each picture the record was the only holder of: its row went above,
+    // and its bytes follow after the commit (604, section 6). Best effort: a
+    // failed delete leaves bytes no row names, as a draft's removed map can.
+    // Logged by request and count, never by key: a key names a client's file.
+    const requestId = c.get('requestId');
     c.get('afterCommit')(async () => {
-      for (const key of gone) await storage.delete(key);
+      let failed = 0;
+      for (const key of gone) {
+        try {
+          await storage.delete(key);
+        } catch {
+          failed += 1;
+        }
+      }
+      if (failed > 0) {
+        console.error(JSON.stringify({ requestId, name: 'PastRecordBytesLeft', failed }));
+      }
     });
   }
 
@@ -546,7 +586,7 @@ async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> 
     db,
     'report.import_withdrawn',
     { type: 'report', id: record.id, clientId: record.client_id },
-    { maps: String(links.length) },
+    { maps: String(links.length), kept: record.status === 'imported' ? 'yes' : 'no' },
   );
   const withdrawn = await readReport(db, record.id);
   if (!withdrawn) return answer(c, 404, 'not_found');

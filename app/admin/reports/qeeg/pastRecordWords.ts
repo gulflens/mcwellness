@@ -38,7 +38,6 @@ export const PAST_RECORD_CODES = Object.freeze([
   'stale_draft',
   'nothing_to_keep',
   'already_kept',
-  'not_kept',
   'already_withdrawn',
   'in_comparison',
   'reason_too_long',
@@ -77,7 +76,6 @@ export const IMPORT_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
     'The record changed after this screen read it, perhaps in another tab, so it was not kept. Choose the file again to finish.',
   nothing_to_keep: 'This record holds nothing to keep.',
   already_kept: 'This record has already been kept.',
-  not_kept: 'This record has not been kept yet, so there is nothing to withdraw.',
   already_withdrawn: 'This record has already been withdrawn.',
   in_comparison:
     'A follow-up report is compared with this record, so it cannot be withdrawn. Compare that report with another first.',
