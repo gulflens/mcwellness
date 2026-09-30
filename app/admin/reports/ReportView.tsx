@@ -36,6 +36,25 @@ const REFUSALS: Record<string, string> = {
 
 type Contact = { id: string; label: string };
 
+/**
+ * What a correction sends, by kind. The older kinds send the body the new
+ * version starts from; a brain map starts from what was signed, and its door
+ * refuses a body that sends one (app/api/reports/qeeg/supersede.ts).
+ */
+function correctionBody(kind: ReportKind, reason: string, content: unknown): object {
+  switch (kind) {
+    case 'session':
+    case 'progress':
+      return { reason, content };
+    case 'qeeg':
+      return { reason };
+    default: {
+      const unknown: never = kind;
+      return unknown;
+    }
+  }
+}
+
 export function ReportView({
   reportId,
   maySupersede,
@@ -170,7 +189,10 @@ export function ReportView({
       const res = await apiFetch(`/api/reports/${reportId}/supersede`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ reason, content: report.content }),
+        // A brain map is corrected from what was signed, and its door takes
+        // the reason alone (app/api/reports/qeeg/supersede.ts); the older
+        // kinds send the body the new version starts from.
+        body: JSON.stringify(correctionBody(report.report.kind, reason, report.content)),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { code?: string } | null;

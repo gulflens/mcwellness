@@ -49,8 +49,10 @@ import {
 import { fill, phrase } from '../../../../domain/reports/qeeg/wording';
 import type { ReportRow } from '../../../api/reports/schema';
 import { Button, Field, Note, Select } from '../../../shell/components/Controls';
+import { useAuth } from '../../../shell/auth/AuthContext';
 import { DateField } from '../../../shell/components/DateField';
 import { Textarea } from '../../clients/FormAtoms';
+import { canSupersedeReports, mayOfferSigning } from '../reportsAccess';
 import { comparableReports, comparedFromRow, earlierLabel } from './earlier';
 import {
   Choice,
@@ -69,8 +71,10 @@ import {
   setAsideWords,
   type SectionId,
 } from './sections';
+import { SignedReport, SigningActions } from './QeegSigning';
 import { useQeegDraft } from './useQeegDraft';
 import { useQeegMaps } from './useQeegMaps';
+import { useQeegSigning } from './useQeegSigning';
 import './qeeg.css';
 
 /**
@@ -102,10 +106,16 @@ import './qeeg.css';
  * (`QeegMaps.tsx`, `useQeegMaps.ts`): a picture goes through the report's own
  * door, and the draft is saved before it does.
  *
+ * **Preview and Sign** sit at its foot (`QeegSigning.tsx`,
+ * `useQeegSigning.ts`): each saves first, the preview opens the server's own
+ * PDF in a new tab and says what the pages found beside the button, and the
+ * signature is a step inside the form. Once signed, the form gives way to the
+ * signed report, read only, with its file and a way to correct it.
+ *
  * **Not here yet**, each with its own piece of work: the Arabic version of
  * what she typed (the one component allowed to show Arabic on a staff screen),
- * preview and signing, bringing in a past record, and filling a follow-up
- * from the report before it.
+ * bringing in a past record, and filling a follow-up from the report before
+ * it.
  */
 
 type Props = {
@@ -116,6 +126,8 @@ type Props = {
   /** The client's reports, for what a follow-up may be compared with. */
   reports: readonly ReportRow[];
   onDone: () => void;
+  /** A corrected version was started from the report signed here: open it. */
+  onCorrected?: (draftId: string) => void;
 };
 
 type Switching = { to: 'follow-up'; earlierId: string } | { to: 'initial' };
@@ -127,9 +139,13 @@ function leftWords(count: number): string {
   return count === 0 ? 'Nothing left to fill' : `${count} left to fill`;
 }
 
-export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props) {
+export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorrected }: Props) {
   const draft = useQeegDraft({ clientId, reportId, start });
   const maps = useQeegMaps(draft);
+  const signing = useQeegSigning(draft);
+  const { session } = useAuth();
+  const actor = session.status === 'signed-in' ? session.actor : null;
+  const now = new Date();
   const [open, setOpen] = useState<SectionId | null>(null);
   const [all, setAll] = useState(false);
   const [entered, setEntered] = useState<SectionId | null>(null);
@@ -141,6 +157,16 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props
   const candidates = comparableReports(reports);
   const { content } = draft;
 
+  if (signing.signed !== null) {
+    return (
+      <SignedReport
+        signing={signing}
+        mayCorrect={canSupersedeReports(actor, now, clientId)}
+        onCorrected={(id) => (onCorrected ? onCorrected(id) : onDone())}
+        onDone={onDone}
+      />
+    );
+  }
   if (draft.loading) return <Note>Loading.</Note>;
   if (content === null) {
     return (
@@ -367,6 +393,15 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props
       ) : draft.error ? (
         <Note tone="critical">{draft.error}</Note>
       ) : null}
+
+      {draft.stale ? null : (
+        <SigningActions
+          signing={signing}
+          content={content}
+          mayOffer={mayOfferSigning(actor, now.toISOString().slice(0, 10))}
+          busy={draft.saving}
+        />
+      )}
 
       <div className="report-editor__actions">
         <Button

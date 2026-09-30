@@ -84,6 +84,12 @@ export type QeegDraft = {
     point: RestPoint,
     door: (reportId: string) => Promise<string | null>,
   ) => Promise<boolean>;
+  /**
+   * The stamp of the save the draft on the server was last made at, which a
+   * signature names so that what is signed is this version and not one saved
+   * since elsewhere. Read inside a door, after the save before it.
+   */
+  stamp: () => string | null;
 };
 
 type Loaded = { content: QeegContent; savedAt: string | null } | null;
@@ -334,6 +340,8 @@ export function useQeegDraft({
     setDirty(false);
   }, []);
 
+  const stamp = useCallback(() => savedAtRef.current, []);
+
   // Closing the browser tab with unsaved changes asks first; the browser
   // cannot wait for a save while it closes. `returnValue` is what older
   // Safari reads.
@@ -377,5 +385,6 @@ export function useQeegDraft({
     reload,
     discard,
     withSaved,
+    stamp,
   };
 }

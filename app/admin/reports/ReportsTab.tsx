@@ -125,12 +125,18 @@ export function ReportsTab({
   if (qeeg !== null) {
     return (
       <QeegEditor
+        // A corrected version is another draft: the form starts afresh on it.
+        key={qeeg.reportId ?? 'new'}
         clientId={clientId}
         reportId={qeeg.reportId}
         start={qeeg.start}
         reports={state.reports}
         onDone={() => {
           setQeeg(null);
+          void refetch();
+        }}
+        onCorrected={(id) => {
+          setQeeg({ reportId: id, start: null });
           void refetch();
         }}
       />
@@ -164,13 +170,21 @@ export function ReportsTab({
           // practitioner cannot then read over and sign is a correction that
           // only the API can finish.
           setOpenId(null);
-          const editor = editorKindFor(superseded);
-          if (editor === null) {
-            setOpenId(id);
-            return;
+          switch (superseded) {
+            case 'qeeg':
+              // A brain map's corrected draft opens in its own form.
+              setQeeg({ reportId: id, start: null });
+              return;
+            case 'session':
+            case 'progress':
+              setDraftId(id);
+              setWriting(superseded);
+              return;
+            default: {
+              const unknown: never = superseded;
+              return unknown;
+            }
           }
-          setDraftId(id);
-          setWriting(editor);
         }}
       />
     );
