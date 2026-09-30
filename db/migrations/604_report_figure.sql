@@ -61,11 +61,13 @@
 -- `client_contact` a read of this table (section 13;
 -- db/policies/reports/figures.sql). The picture's own `document` row is
 -- another matter: it is read under client-record's policy on `document`
--- (db/policies/client/readers.sql), which today admits a contact to every
--- document of their client, this kind included — its storage key and digest,
--- never its bytes, which no portal route serves. It stays visible that way
--- until the change request to client-record that leaves `report_figure` out
--- of the household's arm lands; this stream does not edit that policy.
+-- (db/policies/client/readers.sql), whose contact arm admitted a household to
+-- every document of their client, this kind included, and the Documents
+-- route lists and signs links to every row that policy admits. This branch
+-- narrows that arm, under docs/CHANGE-REQUESTS/reports-02.md request 11a:
+-- a client contact reads no document of kind `report_figure`, and every other
+-- document of their own client as before. So the household reads neither the
+-- link nor the picture.
 --
 -- Needs: 010 (tenant), 020 (app_user), 060 (client, document), 080
 -- (app.audit_row, app.set_updated_at), 095 (app.actor_has_role,
