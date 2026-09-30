@@ -11,8 +11,8 @@
  * encoded again before it is stored: 12 million pixels is about 48 MB of
  * RGBA, which a phone or an older laptop can still hold, and a 4096 pixel edge
  * printed across an A4 page is well past 300 dpi, so nothing a print needs is
- * turned away. Eight maps covers every montage the practice exports with room
- * to spare, and bounds the size of one report's file.
+ * turned away. How many maps a report holds is not this file's: `LIMITS.maps`
+ * (`../types.ts`) is the one cap, read by the shape, the form and the reader.
  *
  * **Why this answers and never throws.** Everywhere else on the report's
  * pages a number that is not finite is a programming error and is refused
@@ -25,7 +25,6 @@
 export const MAX_LONG_EDGE_PX = 4096;
 export const MAX_PIXELS = 12_000_000;
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
-export const MAX_MAPS_PER_REPORT = 8;
 
 /**
  * The largest FILE she may choose, checked before the browser decodes it.

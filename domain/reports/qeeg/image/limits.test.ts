@@ -8,7 +8,6 @@ import {
   MAX_FILE_BYTES,
   MAX_INPUT_BYTES,
   MAX_LONG_EDGE_PX,
-  MAX_MAPS_PER_REPORT,
   MAX_PIXELS,
   refuseInputBytes,
   refuseSize,
@@ -33,7 +32,6 @@ describe('the size a brain map may be', () => {
     expect(MAX_LONG_EDGE_PX).toBe(4096);
     expect(MAX_PIXELS).toBe(12_000_000);
     expect(MAX_FILE_BYTES).toBe(5 * 1024 * 1024);
-    expect(MAX_MAPS_PER_REPORT).toBe(8);
   });
 
   it('accepts a map inside every cap, up to the edge itself', () => {
