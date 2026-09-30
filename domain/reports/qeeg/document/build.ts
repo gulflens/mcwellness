@@ -49,7 +49,7 @@
  */
 
 import type { DocumentImage } from '@domain/shared/document';
-import { STANDING_SENTENCES, WORDS } from '../../document/strings';
+import { DRAFT_WORDING, STANDING_SENTENCES, WORDS } from '../../document/strings';
 import type { SignerSnapshot } from '../../types';
 import {
   BAND_IDS,
@@ -135,6 +135,14 @@ export type ReportFacts = {
   readonly calculatedFrom: { readonly earlierOn: string; readonly laterOn: string } | null;
   /** Each brain map's picture, by the figure id the content records. */
   readonly pictures: Readonly<Record<string, DocumentImage>>;
+  /**
+   * Whether the words are still a draft in this language, so the page carries
+   * the draft-wording line beneath the agreement's sentences
+   * (docs/SPEC/reports-qeeg.md sections 6 and 14). Only a preview can say
+   * so: the issue route refuses to sign in a language still in draft, so a
+   * signed report never carries it. Absent is no line.
+   */
+  readonly draftWording?: boolean;
   // A follow-up's pairs name the earlier report's maps as well as its own:
   // each is looked up here by its figure id, as the report's own maps are.
 };
@@ -744,6 +752,17 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
       { marginBottom: GAP.afterParagraph, keep: true },
     ),
   );
+  if (facts.draftWording === true) {
+    // The one draft line a household meets on every text it is handed, in
+    // its own words (`strings.ts`), kept with the signature as the sentences
+    // above it are.
+    parts.push(
+      part('final.draft', 'final', words('note', DRAFT_WORDING[locale]), {
+        marginBottom: GAP.afterParagraph,
+        keep: true,
+      }),
+    );
+  }
   const { signer } = facts;
   const signed: Words[] =
     signer === null

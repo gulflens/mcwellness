@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { COMPARISON_SENTENCE, STANDING_SENTENCES, WORDS } from '../../document/strings';
+import {
+  COMPARISON_SENTENCE,
+  DRAFT_WORDING,
+  STANDING_SENTENCES,
+  WORDS,
+} from '../../document/strings';
 import { BAND_IDS, CONNECTIVITY_IDS } from '../catalogue/ids';
 import { sessionLabel } from '../sentences';
 import { classifyScoreChange } from '../scoreChange';
@@ -474,6 +479,35 @@ describe('a brain map with no programme after it', () => {
       expect(words).toContain(say('heading.approach', locale));
       expect(words).toContain(openingOf('text.approach', locale));
     }
+  });
+});
+
+describe('the draft-wording line', () => {
+  const unsigned = (content: QeegContent, draftWording: boolean): ReportInput => ({
+    content,
+    locale: 'en',
+    facts: { ...factsFor(content, { signed: false }), draftWording },
+  });
+
+  it('follows the standing sentences, kept with the signature, while the wording is a draft', () => {
+    for (const locale of LOCALES) {
+      const input = { ...unsigned(fullReport(), true), locale };
+      const parts = buildQeegReport(input, drawingOf(locale), BODY_HEIGHT);
+      expect(idsOf(parts).slice(-3)).toEqual(['final.standing', 'final.draft', 'signature']);
+      const line = partOf(parts, 'final.draft');
+      expect(line.keep).toBe(true);
+      const squeezed = (text: string) => text.replace(/\s+/g, '');
+      expect(squeezed(wordsDrawn([line], drawingOf(locale))).length).toBe(
+        squeezed(DRAFT_WORDING[locale]).length,
+      );
+    }
+  });
+
+  it('is not printed when the facts do not say the wording is a draft', () => {
+    expect(
+      idsOf(buildQeegReport(unsigned(fullReport(), false), ENGLISH, BODY_HEIGHT)),
+    ).not.toContain('final.draft');
+    expect(idsOf(build(fullReport()))).not.toContain('final.draft');
   });
 });
 
