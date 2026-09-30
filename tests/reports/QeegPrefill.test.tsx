@@ -304,19 +304,16 @@ describe('starting a follow-up from the report it is compared with', () => {
     expect(screen.getByText('Earlier report: was 4')).toBeTruthy();
   });
 
-  it('shows the earlier maps as the before side of the pairs', async () => {
+  it('shows the earlier maps as the before side of the pairs, read-only', async () => {
     const user = userEvent.setup();
     mountTab();
     await startFollowUp(user);
     await openSection(user, 'What has changed');
-    await waitFor(() =>
-      expect((screen.getByLabelText('Eyes open, before') as HTMLSelectElement).value).toBe(
-        MAP_OPEN,
-      ),
-    );
-    expect((screen.getByLabelText('Eyes closed, before') as HTMLSelectElement).value).toBe(
-      MAP_CLOSED,
-    );
+    const open = screen.getByLabelText('Eyes open, before, the earlier report’s map');
+    const closed = screen.getByLabelText('Eyes closed, before, the earlier report’s map');
+    await waitFor(() => expect(open.textContent).toBe('Map 1, eyes open, 800 × 600 pixels'));
+    expect(closed.textContent).toBe('Map 2, eyes closed, 800 × 600 pixels');
+    expect(screen.queryByRole('combobox', { name: /before/ })).toBeNull();
   });
 });
 

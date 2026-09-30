@@ -657,37 +657,62 @@ describe('removing a picture', () => {
 });
 
 describe('a follow-up’s before-and-after pairs', () => {
-  it('offer the earlier report’s maps before and this report’s own after', async () => {
-    const user = userEvent.setup();
-    const api = mountApi({
-      stored: asSaved({ ...addMap(blankFollowUp(COMPARED, 'follow_up'), OWN, 'eyes_closed') }),
-      earlier: asSaved({ ...addMap(blankInitial(), THEIRS, 'eyes_closed') }),
+  // The before side is the earlier report's own map, written by the server
+  // on every save (`assembleDraft`, domain/reports/qeeg/draftRequest.ts): the
+  // form shows it and offers no choice the save would throw away.
+  const SECOND_EARLIER: FigureRef = {
+    figureId: '0000000d-0000-4000-8000-000000000003',
+    sha256: 'c'.repeat(64),
+    widthPx: 60,
+    heightPx: 30,
+  };
+
+  function followUpAsStored(): QeegContent {
+    const draft = addMap(blankFollowUp(COMPARED, 'follow_up'), OWN, 'eyes_closed');
+    // What the server stored for the before side: the earlier report's second map.
+    return asSaved({ ...choosePair(draft, 'eyes_closed', 'earlier', SECOND_EARLIER) });
+  }
+
+  function earlierWithTwoMaps(): QeegContent {
+    return asSaved({
+      ...addMap(addMap(blankInitial(), THEIRS, 'eyes_closed'), SECOND_EARLIER, 'eyes_closed'),
     });
+  }
+
+  it('show the before picture the server stores, as the earlier report’s, with nothing to pick', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({ stored: followUpAsStored(), earlier: earlierWithTwoMaps() });
     mountEditor(null, api, { reportId: DRAFT });
     await openSection(user, 'What has changed');
-    const before = (await screen.findByLabelText('Eyes closed, before')) as HTMLSelectElement;
-    const after = screen.getByLabelText('Eyes closed, after') as HTMLSelectElement;
-    await waitFor(() => expect(within(before).getAllByRole('option')).toHaveLength(2));
-    expect(
-      within(before)
-        .getAllByRole('option')
-        .map((o) => o.getAttribute('value')),
-    ).toEqual(['', EARLIER_FIGURE]);
+    const before = await screen.findByLabelText('Eyes closed, before, the earlier report’s map');
+    expect(before.tagName).not.toBe('SELECT');
+    await waitFor(() => expect(before.textContent).toBe('Map 2, eyes closed, 60 × 30 pixels'));
+    expect(screen.queryByRole('combobox', { name: /before/ })).toBeNull();
+    expect(screen.getByLabelText('Eyes open, before, the earlier report’s map').textContent).toBe(
+      'None: the earlier report has no map of this condition.',
+    );
+    // No Arabic on a staff screen.
+    expect(document.body.textContent).not.toMatch(/[؀-ۿ]/);
+  });
+
+  it('offer this report’s own maps after, and save the before side as it stands', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({ stored: followUpAsStored(), earlier: earlierWithTwoMaps() });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'What has changed');
+    const after = (await screen.findByLabelText('Eyes closed, after')) as HTMLSelectElement;
     expect(
       within(after)
         .getAllByRole('option')
         .map((o) => o.getAttribute('value')),
     ).toEqual(['', FIGURE]);
-    await user.selectOptions(before, EARLIER_FIGURE);
     await user.selectOptions(after, FIGURE);
     await user.click(screen.getByRole('button', { name: 'Save the draft' }));
     const change = sentContent(api.saves().at(-1))['change'] as {
       pairs: Record<string, unknown>;
     };
-    expect(change.pairs['eyes_closed']).toEqual({ earlier: THEIRS, later: OWN });
+    expect(change.pairs['eyes_closed']).toEqual({ earlier: SECOND_EARLIER, later: OWN });
     expect(change.pairs['eyes_open']).toEqual({ earlier: null, later: null });
-    // No Arabic on a staff screen.
-    expect(document.body.textContent).not.toMatch(/[؀-ۿ]/);
   });
 });
 

@@ -43,11 +43,13 @@ import type { QeegMaps } from './useQeegMaps';
  * **Removing asks first, in the form**, never with the browser's own dialog:
  * the row says what will happen and offers to keep it.
  *
- * **The pairs name pictures and nothing else.** The before side offers the
- * maps of the report this one is compared with, read from that report; the
- * route borrows the one chosen when the draft is saved. The after side offers
- * this report's own. No figure is typed here, and none is read from a picture
- * (section 10, point 3).
+ * **The pairs name pictures and nothing else.** The before side is the
+ * earlier report's own map of each condition, the one it printed: the server
+ * writes it on every save from the report this one is compared with
+ * (`assembleDraft`, domain/reports/qeeg/draftRequest.ts) and borrows it, so
+ * the form shows it, read-only, as the earlier report's, and offers no choice
+ * a save would throw away. The after side offers this report's own maps. No
+ * figure is typed here, and none is read from a picture (section 10, point 3).
  */
 
 type Edit = (change: (content: QeegContent) => QeegContent) => void;
@@ -552,23 +554,45 @@ export function PairsField({ content, edit }: { content: QeegFollowUp; edit: Edi
   const own = mapsInOrder(content);
   const earlierMaps = earlier.state === 'ready' ? earlier.maps : [];
 
-  const side = (
-    condition: Condition,
-    which: 'earlier' | 'later',
-    options: readonly ListedMap[],
-  ) => {
-    const chosen = content.change.pairs[condition][which];
+  /** The before side as the server stores it: the earlier report's map, shown, never chosen. */
+  const before = (condition: Condition) => {
+    const shown = content.change.pairs[condition].earlier;
+    const listed =
+      shown === null
+        ? undefined
+        : earlierMaps.find(({ entry }) => entry.figureId === shown.figureId);
+    const words =
+      shown === null
+        ? 'None: the earlier report has no map of this condition.'
+        : listed !== undefined
+          ? mapWords(listed)
+          : `A map of the earlier report, ${sizeWords(shown.widthPx, shown.heightPx)}`;
+    const labelId = `qeeg-pair-${condition}-earlier-label`;
+    return (
+      <div className="field">
+        <span id={labelId} className="field__label">
+          {CONDITION_LABELS[condition]}, before, the earlier report’s map
+        </span>
+        <p id={`qeeg-pair-${condition}-earlier`} aria-labelledby={labelId}>
+          {words}
+        </p>
+      </div>
+    );
+  };
+
+  const after = (condition: Condition, options: readonly ListedMap[]) => {
+    const chosen = content.change.pairs[condition].later;
     const known =
       chosen === null || options.some(({ entry }) => entry.figureId === chosen.figureId);
     return (
       <Select
-        id={`qeeg-pair-${condition}-${which}`}
-        label={`${CONDITION_LABELS[condition]}, ${which === 'earlier' ? 'before' : 'after'}`}
+        id={`qeeg-pair-${condition}-later`}
+        label={`${CONDITION_LABELS[condition]}, after`}
         value={chosen?.figureId ?? ''}
         onChange={(event) => {
           const id = event.currentTarget.value;
           const picked = options.find(({ entry }) => entry.figureId === id);
-          edit((was) => choosePair(was, condition, which, picked ? refOf(picked) : null));
+          edit((was) => choosePair(was, condition, 'later', picked ? refOf(picked) : null));
         }}
       >
         <option value="">None</option>
@@ -590,8 +614,9 @@ export function PairsField({ content, edit }: { content: QeegFollowUp; edit: Edi
     <fieldset className="qeeg-item">
       <legend className="qeeg-item__title">Before and after</legend>
       <p className="small muted">
-        Before is a map of the report this one is compared with. After is one of this report’s own
-        maps, added under Brain maps. Either may be left empty.
+        Before is the map the report this one is compared with printed, brought forward from it and
+        not chosen here. After is one of this report’s own maps, added under Brain maps, and may be
+        left empty.
       </p>
       {earlier.state === 'loading' ? (
         <p className="small muted">Reading the earlier maps.</p>
@@ -604,8 +629,8 @@ export function PairsField({ content, edit }: { content: QeegFollowUp; edit: Edi
       ) : null}
       {CONDITION_ORDER.map((condition) => (
         <div key={condition} className="qeeg-measure__figures">
-          {side(condition, 'earlier', earlierMaps)}
-          {side(condition, 'later', own)}
+          {before(condition)}
+          {after(condition, own)}
         </div>
       ))}
     </fieldset>
