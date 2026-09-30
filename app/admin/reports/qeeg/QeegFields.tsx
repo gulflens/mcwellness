@@ -13,6 +13,7 @@ import { typedFigure } from '../../../../domain/reports/qeeg/choices';
 import { isBlank } from '../../../../domain/reports/qeeg/text';
 import { Button, Field, Select } from '../../../shell/components/Controls';
 import { Checkbox } from '../../clients/FormAtoms';
+import { ArabicVersionField } from './atoms/ArabicVersionField';
 import { retype, stylesAt, toggleMark, type Style } from './richEdit';
 
 /**
@@ -164,6 +165,13 @@ export function PickedList<Id extends string>({
             label={item.label.en}
             onChange={(en) => setOwn(key, { ...item, label: { ...item.label, en } })}
           />
+          <ArabicVersionField
+            id={`${id}-own-${key}-label-ar`}
+            of={`your own item “${item.label.en}”`}
+            value={item.label.ar}
+            most={LIMITS.label}
+            onChange={(ar) => setOwn(key, { ...item, label: { ...item.label, ar } })}
+          />
           {withNote ? (
             <Field
               id={`${id}-own-${key}-note`}
@@ -176,6 +184,16 @@ export function PickedList<Id extends string>({
                   note: { en: event.currentTarget.value, ar: item.note?.ar ?? null },
                 })
               }
+            />
+          ) : null}
+          {withNote && item.note !== null ? (
+            <ArabicVersionField
+              id={`${id}-own-${key}-note-ar`}
+              of={`what “${item.label.en}” advises`}
+              value={item.note.ar}
+              most={LIMITS.note}
+              multiline
+              onChange={(ar) => setOwn(key, { ...item, note: { en: item.note?.en ?? '', ar } })}
             />
           ) : null}
           <Button variant="quiet" onClick={() => removeOwn(key)}>
@@ -431,12 +449,19 @@ export function RichField({
   value,
   most,
   onChange,
+  arabic,
 }: {
   id: string;
   label: string;
   value: RichText;
   most: number;
   onChange: (next: RichText) => void;
+  /**
+   * Its Arabic version beside it, when one may be given: the text as it
+   * stands, and where the new text goes. Bold and underline are set in the
+   * English box; the Arabic keeps the marks it has as its letters move.
+   */
+  arabic?: { of: string; value: RichText | null; onChange: (next: RichText | null) => void };
 }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const hintId = useId();
@@ -504,6 +529,20 @@ export function RichField({
           <span className="field__label">As it will be set</span>
           <Formatted rich={value} />
         </div>
+      ) : null}
+      {arabic ? (
+        <ArabicVersionField
+          id={`${id}-ar`}
+          of={arabic.of}
+          value={arabic.value?.text ?? null}
+          most={most}
+          multiline
+          onChange={(text) =>
+            arabic.onChange(
+              text === null ? null : retype(arabic.value ?? { text: '', marks: [] }, text),
+            )
+          }
+        />
       ) : null}
     </div>
   );

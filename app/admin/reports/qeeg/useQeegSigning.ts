@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Edition, Missing } from '../../../../domain/reports/qeeg/types';
+import type { Edition, Locale, Missing } from '../../../../domain/reports/qeeg/types';
 import {
   IssueResponse,
   QeegLayoutNotes,
   ReportResponse,
   SupersedeResponse,
+  TwinResponse,
   type ReportRow,
 } from '../../../api/reports/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
-import { issueRefusalSentence, previewRefusalSentence, supersedeRefusalSentence } from './refusals';
+import {
+  issueRefusalSentence,
+  previewRefusalSentence,
+  supersedeRefusalSentence,
+  twinRefusalSentence,
+} from './refusals';
 import type { QeegDraft } from './useQeegDraft';
 
 /**
@@ -36,18 +42,38 @@ import type { QeegDraft } from './useQeegDraft';
  *
  * **Correcting starts a new draft from what was signed**, with a reason, and
  * hands its id back so the form opens on it.
+ *
+ * **Either language is previewed** (section 12, "in either language"), each
+ * from its own button, and what each preview found is kept apart, so the
+ * English pages' notes are never read as the Arabic's.
+ *
+ * **"Sign the other language"** starts the second-language report of a signed
+ * one as a draft (`POST /api/reports/:id/twin`, section 8) and hands its id
+ * back, as a correction does, so the form opens on it.
  */
 
 /** The reason the trail records beside the signature. */
 export const SIGN_REASON = 'Brain-map report signed from the form';
 
+/** The reason the trail records beside the start of the other language. */
+export const TWIN_REASON = 'Other language of a signed brain-map report started from the form';
+
+export const LOCALES: readonly Locale[] = Object.freeze(['en', 'ar']);
+
+type ByLocale<T> = Readonly<Record<Locale, T>>;
+
+function both<T>(value: T): ByLocale<T> {
+  return { en: value, ar: value };
+}
+
 export type Signing = {
-  previewing: boolean;
-  /** What the pages told the editor, from the last preview or its refusal. */
-  notes: QeegLayoutNotes | null;
-  /** The last preview, to open again; null before one or after a refusal. */
-  previewUrl: string | null;
-  previewError: string | null;
+  /** The language a preview is being made in, or null. */
+  previewing: Locale | null;
+  /** What the pages told the editor, per language, from its last preview or its refusal. */
+  notes: ByLocale<QeegLayoutNotes | null>;
+  /** Each language's last preview, to open again; null before one or after a refusal. */
+  previewUrl: ByLocale<string | null>;
+  previewError: ByLocale<string | null>;
   confirming: boolean;
   signing: boolean;
   signError: string | null;
@@ -61,7 +87,9 @@ export type Signing = {
   openError: string | null;
   /** The signed file's short-lived link, once asked for, to open by a click. */
   signedUrl: string | null;
-  preview: () => Promise<void>;
+  twinning: boolean;
+  twinError: string | null;
+  preview: (locale: Locale) => Promise<void>;
   askToSign: () => void;
   notYet: () => void;
   sign: () => Promise<void>;
@@ -69,6 +97,8 @@ export type Signing = {
   askToCorrect: () => void;
   notNow: () => void;
   correct: (reason: string) => Promise<string | null>;
+  /** Start the other language of the signed report; its draft's id, or null when refused. */
+  startTwin: () => Promise<string | null>;
 };
 
 async function bodyOf(res: Response): Promise<unknown> {
@@ -88,10 +118,12 @@ function editionOf(draft: QeegDraft): Edition {
 
 export function useQeegSigning(draft: QeegDraft): Signing {
   const { apiFetch } = useAuth();
-  const [previewing, setPreviewing] = useState(false);
-  const [notes, setNotes] = useState<QeegLayoutNotes | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState<Locale | null>(null);
+  const [notes, setNotes] = useState<ByLocale<QeegLayoutNotes | null>>(both(null));
+  const [previewUrl, setPreviewUrl] = useState<ByLocale<string | null>>(both(null));
+  const [previewError, setPreviewError] = useState<ByLocale<string | null>>(both(null));
+  const [twinning, setTwinning] = useState(false);
+  const [twinError, setTwinError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [signing, setSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
@@ -105,54 +137,66 @@ export function useQeegSigning(draft: QeegDraft): Signing {
 
   // A preview carries a household's own figures: its object URL lives until
   // the next preview or until the form closes, and no longer.
-  const urlRef = useRef<string | null>(null);
-  const forget = useCallback(() => {
-    if (urlRef.current !== null) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = null;
+  const urlRef = useRef<Record<Locale, string | null>>({ en: null, ar: null });
+  const forget = useCallback((locale: Locale) => {
+    const url = urlRef.current[locale];
+    if (url !== null) URL.revokeObjectURL(url);
+    urlRef.current[locale] = null;
   }, []);
-  useEffect(() => forget, [forget]);
+  useEffect(
+    () => () => {
+      for (const locale of LOCALES) forget(locale);
+    },
+    [forget],
+  );
 
-  const preview = useCallback(async () => {
-    setPreviewing(true);
-    setPreviewError(null);
-    try {
-      const saved = await draft.withSaved('preview', async (reportId) => {
-        try {
-          const res = await apiFetch(`/api/reports/${reportId}/preview?locale=en`);
-          if (!res.ok) {
-            const body = await bodyOf(res);
-            const layout = QeegLayoutNotes.safeParse(
-              typeof body === 'object' && body !== null
-                ? (body as { layout?: unknown }).layout
-                : null,
-            );
-            setNotes(layout.success ? layout.data : null);
-            forget();
-            setPreviewUrl(null);
-            setPreviewError(
-              previewRefusalSentence(res.status, body, { edition: editionOf(draft) }),
-            );
-            return null;
+  const preview = useCallback(
+    async (locale: Locale) => {
+      const put = <T>(set: (fn: (was: ByLocale<T>) => ByLocale<T>) => void, value: T) =>
+        set((was) => ({ ...was, [locale]: value }));
+      setPreviewing(locale);
+      put(setPreviewError, null);
+      try {
+        const saved = await draft.withSaved('preview', async (reportId) => {
+          try {
+            const res = await apiFetch(`/api/reports/${reportId}/preview?locale=${locale}`);
+            if (!res.ok) {
+              const body = await bodyOf(res);
+              const layout = QeegLayoutNotes.safeParse(
+                typeof body === 'object' && body !== null
+                  ? (body as { layout?: unknown }).layout
+                  : null,
+              );
+              put(setNotes, layout.success ? layout.data : null);
+              forget(locale);
+              put(setPreviewUrl, null);
+              put(
+                setPreviewError,
+                previewRefusalSentence(res.status, body, { edition: editionOf(draft) }),
+              );
+              return null;
+            }
+            const header = res.headers.get('x-report-layout');
+            const parsed = header === null ? null : QeegLayoutNotes.safeParse(JSON.parse(header));
+            put(setNotes, parsed?.success ? parsed.data : null);
+            forget(locale);
+            const url = URL.createObjectURL(await res.blob());
+            urlRef.current[locale] = url;
+            put(setPreviewUrl, url);
+            // Null with `noopener` whether or not a tab opened: not a refusal.
+            window.open(url, '_blank', 'noopener,noreferrer');
+          } catch {
+            put(setPreviewError, previewRefusalSentence(0, null));
           }
-          const header = res.headers.get('x-report-layout');
-          const parsed = header === null ? null : QeegLayoutNotes.safeParse(JSON.parse(header));
-          setNotes(parsed?.success ? parsed.data : null);
-          forget();
-          const url = URL.createObjectURL(await res.blob());
-          urlRef.current = url;
-          setPreviewUrl(url);
-          // Null with `noopener` whether or not a tab opened: not a refusal.
-          window.open(url, '_blank', 'noopener,noreferrer');
-        } catch {
-          setPreviewError(previewRefusalSentence(0, null));
-        }
-        return null;
-      });
-      if (!saved) setPreviewError('The draft could not be saved, so no preview was made.');
-    } finally {
-      setPreviewing(false);
-    }
-  }, [apiFetch, draft, forget]);
+          return null;
+        });
+        if (!saved) put(setPreviewError, 'The draft could not be saved, so no preview was made.');
+      } finally {
+        setPreviewing(null);
+      }
+    },
+    [apiFetch, draft, forget],
+  );
 
   const sign = useCallback(async () => {
     setSigning(true);
@@ -174,7 +218,8 @@ export function useQeegSigning(draft: QeegDraft): Signing {
             }
             if (codeOf(body) === 'overrun') {
               const layout = QeegLayoutNotes.safeParse((body as { layout?: unknown }).layout);
-              if (layout.success) setNotes(layout.data);
+              const own = draft.row?.locale ?? 'en';
+              if (layout.success) setNotes((was) => ({ ...was, [own]: layout.data }));
             }
             setSignError(issueRefusalSentence(res.status, body, { edition: editionOf(draft) }));
             return null;
@@ -257,6 +302,29 @@ export function useQeegSigning(draft: QeegDraft): Signing {
     [apiFetch, signed],
   );
 
+  const startTwin = useCallback(async (): Promise<string | null> => {
+    if (signed === null) return null;
+    setTwinning(true);
+    setTwinError(null);
+    try {
+      const res = await apiFetch(`/api/reports/${signed.id}/twin`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-reason': TWIN_REASON },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        setTwinError(twinRefusalSentence(res.status, await bodyOf(res)));
+        return null;
+      }
+      return TwinResponse.parse(await res.json()).report.id;
+    } catch {
+      setTwinError(twinRefusalSentence(0, null));
+      return null;
+    } finally {
+      setTwinning(false);
+    }
+  }, [apiFetch, signed]);
+
   return {
     previewing,
     notes,
@@ -272,6 +340,8 @@ export function useQeegSigning(draft: QeegDraft): Signing {
     opening,
     openError,
     signedUrl,
+    twinning,
+    twinError,
     preview,
     askToSign: () => {
       setSignError(null);
@@ -287,5 +357,6 @@ export function useQeegSigning(draft: QeegDraft): Signing {
     },
     notNow: () => setCorrecting(false),
     correct,
+    startTwin,
   };
 }

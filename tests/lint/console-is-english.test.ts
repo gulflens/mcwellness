@@ -42,10 +42,17 @@ const WALKED_DIRECTORIES = ['app/admin', 'app/therapist'] as const;
  * shown one purpose at a time (`RecordConsentForm.tsx`) or stacked for every
  * purpose a client needs, signed once (`SignAllForm.tsx`, trunk round 43,
  * part four).
+ *
+ * And the one box in which the practitioner types the Arabic version of what
+ * she typed for a brain-map report, which the Arabic report prints
+ * (`ArabicVersionField.tsx`; docs/CHANGE-REQUESTS/reports-02.md, request 5).
+ * A box for Arabic must say it is Arabic for a screen reader to read it so;
+ * every label around it stays English.
  */
 const ALLOWED = new Set([
   'app/admin/clients/RecordConsentForm.tsx',
   'app/admin/clients/SignAllForm.tsx',
+  'app/admin/reports/qeeg/atoms/ArabicVersionField.tsx',
 ]);
 
 const CODE_EXTENSIONS = new Set(['.ts', '.tsx']);

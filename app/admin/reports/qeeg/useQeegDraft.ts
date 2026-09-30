@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { validateQeegContent } from '../../../../domain/reports/qeeg/shape';
 import type { QeegContent } from '../../../../domain/reports/qeeg/types';
-import { QeegDraftResponse, ReportResponse } from '../../../api/reports/schema';
+import { QeegDraftResponse, ReportResponse, type ReportRow } from '../../../api/reports/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { requestBody, withServerParts } from './draftBody';
 import { refusalSentence } from './refusals';
@@ -64,6 +64,12 @@ export type QeegDraft = {
   /** A newer version was saved elsewhere: the form no longer saves until it is reloaded. */
   stale: boolean;
   error: string | null;
+  /**
+   * The saved row as the server last answered it, or null before the first
+   * save: its language, and, for the other language of a signed report, the
+   * report it was made from and whether that one still stands.
+   */
+  row: ReportRow | null;
   /** Change the draft on screen. Starts the thirty seconds again. */
   edit: (change: (content: QeegContent) => QeegContent) => void;
   /** Save now, at a rest point. True when what is on screen is saved. */
@@ -92,7 +98,7 @@ export type QeegDraft = {
   stamp: () => string | null;
 };
 
-type Loaded = { content: QeegContent; savedAt: string | null } | null;
+type Loaded = { content: QeegContent; savedAt: string | null; row: ReportRow } | null;
 
 export function useQeegDraft({
   clientId,
@@ -113,6 +119,7 @@ export function useQeegDraft({
   const [dirty, setDirty] = useState(false);
   const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [row, setRow] = useState<ReportRow | null>(null);
 
   // What the saves read. Written only in handlers and callbacks, never while
   // rendering: a save runs after the render that scheduled it.
@@ -138,7 +145,7 @@ export function useQeegDraft({
         const body = ReportResponse.parse(await res.json());
         const checked = validateQeegContent(body.content);
         if (!checked.ok) return null;
-        return { content: checked.content, savedAt: body.savedAt ?? null };
+        return { content: checked.content, savedAt: body.savedAt ?? null, row: body.report };
       } catch {
         return null;
       }
@@ -152,6 +159,7 @@ export function useQeegDraft({
     savedAtRef.current = loaded.savedAt;
     savedVersionRef.current = versionRef.current;
     staleRef.current = false;
+    setRow(loaded.row);
     setContent(loaded.content);
     setDirty(false);
     setStale(false);
@@ -216,6 +224,7 @@ export function useQeegDraft({
         savedAtRef.current = saved.savedAt;
         savedVersionRef.current = version;
         setSavedId(saved.report.id);
+        setRow(saved.report);
         const checked = validateQeegContent(saved.content);
         const current = contentRef.current;
         if (checked.ok && current !== null) {
@@ -383,6 +392,7 @@ export function useQeegDraft({
     dirty,
     stale,
     error,
+    row,
     edit,
     save,
     reload,

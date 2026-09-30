@@ -9,6 +9,7 @@ import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
 import { QeegEditor } from './qeeg/QeegEditor';
 import { QeegStart } from './qeeg/QeegStart';
+import { languageWord, twinLines } from './qeeg/twinWords';
 import { canDeliverReports, canDraftReports, canSupersedeReports } from './reportsAccess';
 import { inChains, useReports } from './useReports';
 import './reports.css';
@@ -30,7 +31,9 @@ import './reports.css';
  * nothing else. A brain-map report has a form of its own
  * (`qeeg/QeegEditor.tsx`), started as a first report or a follow-up, and a
  * brain-map draft row opens there. Signing, superseding and sending all live inside those two,
- * beside the thing they act on.
+ * beside the thing they act on. A brain map says which language it is in,
+ * and names its other language and whether it is out of step
+ * (`qeeg/twinWords.ts`), beneath its reference.
  *
  * **A draft opens in the editor, not the viewer.** Every row used to open in
  * `ReportView`, which offers a draft no edit, no preview and no signature — so
@@ -49,13 +52,17 @@ function coverageOf(report: ReportRow): string {
 
 function Row({
   report,
+  reports,
   beneath = false,
   onOpen,
 }: {
   report: ReportRow;
+  /** Every row, so a brain map's other language is named by its reference. */
+  reports: readonly ReportRow[];
   beneath?: boolean;
   onOpen: (report: ReportRow) => void;
 }) {
+  const language = languageWord(report);
   return (
     <tr className={beneath ? 'reports__row--superseded' : undefined}>
       <td>
@@ -65,8 +72,13 @@ function Row({
         {beneath && report.amendmentReason ? (
           <span className="reports__reason small">Replaced: {report.amendmentReason}</span>
         ) : null}
+        {twinLines(report, reports).map((line) => (
+          <span key={line} className="reports__reason small">
+            {line}
+          </span>
+        ))}
       </td>
-      <td>{kindWord(report.kind)}</td>
+      <td>{language === null ? kindWord(report.kind) : `${kindWord(report.kind)}, ${language}`}</td>
       <td className="numeric">{coverageOf(report)}</td>
       <td>
         <StatusChip label={statusWord(report.status)} tone={statusTone(report.status)} />
@@ -159,8 +171,14 @@ export function ReportsTab({
     return (
       <ReportView
         reportId={openId}
+        reports={state.reports}
         maySupersede={maySupersede}
         maySend={maySend}
+        onTwinStarted={(id) => {
+          // The other language of a signed brain map opens in its own form.
+          setOpenId(null);
+          setQeeg({ reportId: id, start: null });
+        }}
         onBack={() => {
           setOpenId(null);
           void refetch();
@@ -260,9 +278,15 @@ export function ReportsTab({
             <tbody>
               {chains.map(({ head, superseded }) => (
                 <Fragment key={head.id}>
-                  <Row report={head} onOpen={open} />
+                  <Row report={head} reports={state.reports} onOpen={open} />
                   {superseded.map((older) => (
-                    <Row key={older.id} report={older} beneath onOpen={open} />
+                    <Row
+                      key={older.id}
+                      report={older}
+                      reports={state.reports}
+                      beneath
+                      onOpen={open}
+                    />
                   ))}
                 </Fragment>
               ))}

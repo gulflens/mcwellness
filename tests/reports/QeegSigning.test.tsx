@@ -211,7 +211,7 @@ describe('Preview', () => {
   it('saves the draft first, then opens the server’s own file in a new tab', async () => {
     const user = userEvent.setup();
     const { calls } = mountEditor();
-    await user.click(await screen.findByRole('button', { name: 'Preview' }));
+    await user.click(await screen.findByRole('button', { name: 'Preview in English' }));
     await waitFor(() => expect(opened).toHaveBeenCalled());
     const order = urls(calls).filter((call) => call.includes('/api/reports/'));
     const saved = order.indexOf('POST /api/reports/draft');
@@ -227,11 +227,11 @@ describe('Preview', () => {
   it('says the preview is ready and offers a link, never claiming a tab opened or was blocked', async () => {
     const user = userEvent.setup();
     mountEditor();
-    await user.click(await screen.findByRole('button', { name: 'Preview' }));
-    await screen.findByText(/The preview is ready\. If no tab opened, open it here:/);
+    await user.click(await screen.findByRole('button', { name: 'Preview in English' }));
+    await screen.findByText(/The English preview is ready\. If no tab opened, open it here:/);
     expect(screen.queryByText(/blocked/i)).toBeNull();
     expect(screen.queryByText(/opened in a new tab/i)).toBeNull();
-    const link = screen.getByRole('link', { name: 'Open the preview' });
+    const link = screen.getByRole('link', { name: 'Open the English preview' });
     expect(link.getAttribute('href')).toBe('blob:preview-file');
     expect(link.getAttribute('target')).toBe('_blank');
   });
@@ -239,8 +239,8 @@ describe('Preview', () => {
   it('shows what the pages found beside the button', async () => {
     const user = userEvent.setup();
     mountEditor();
-    await user.click(await screen.findByRole('button', { name: 'Preview' }));
-    const found = await screen.findByRole('list', { name: 'What the preview found' });
+    await user.click(await screen.findByRole('button', { name: 'Preview in English' }));
+    const found = await screen.findByRole('list', { name: 'What the English preview found' });
     const lines = within(found)
       .getAllByRole('listitem')
       .map((item) => item.textContent);
@@ -265,14 +265,16 @@ describe('Preview', () => {
           422,
         ),
     });
-    await user.click(await screen.findByRole('button', { name: 'Preview' }));
+    await user.click(await screen.findByRole('button', { name: 'Preview in English' }));
     expect(
-      await screen.findByText(`${PREVIEW_REFUSALS['overrun']} It ran over under: Summary.`),
+      await screen.findByText(
+        `The English preview: ${PREVIEW_REFUSALS['overrun']} It ran over under: Summary.`,
+      ),
     ).toBeTruthy();
     expect(screen.getByText('Runs past the foot of its page: Summary.')).toBeTruthy();
     expect(screen.queryByText(/summary\.1/)).toBeNull();
     expect(opened).not.toHaveBeenCalled();
-    expect(screen.queryByRole('link', { name: 'Open the preview' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open the English preview' })).toBeNull();
   });
 });
 
@@ -357,7 +359,7 @@ describe('Sign', () => {
 
   it('is not offered to someone whose certificate does not let them sign', async () => {
     mountEditor(LEAD_PRACTITIONER);
-    await screen.findByRole('button', { name: 'Preview' });
+    await screen.findByRole('button', { name: 'Preview in English' });
     expect(screen.queryByRole('button', { name: 'Sign this report' })).toBeNull();
     expect(screen.getByText(/stays a draft for somebody who can sign it/)).toBeTruthy();
   });

@@ -44,6 +44,7 @@ import {
   type QeegContent,
   type QeegFollowUp,
   type QeegInitial,
+  type Locale,
   type TypedFigure,
 } from '../../../../domain/reports/qeeg/types';
 import { fill, phrase } from '../../../../domain/reports/qeeg/wording';
@@ -71,7 +72,9 @@ import {
   setAsideWords,
   type SectionId,
 } from './sections';
-import { SignedReport, SigningActions } from './QeegSigning';
+import { ArabicBoxes, ArabicVersionField } from './atoms/ArabicVersionField';
+import { LANGUAGE_WORDS, SignedReport, SigningActions } from './QeegSigning';
+import { typedTextsOf } from './typedTexts';
 import { useQeegDraft } from './useQeegDraft';
 import { useQeegMaps } from './useQeegMaps';
 import { useQeegSigning } from './useQeegSigning';
@@ -112,10 +115,19 @@ import './qeeg.css';
  * signature is a step inside the form. Once signed, the form gives way to the
  * signed report, read only, with its file and a way to correct it.
  *
- * **Not here yet**, each with its own piece of work: the Arabic version of
- * what she typed (the one component allowed to show Arabic on a staff screen),
- * bringing in a past record, and filling a follow-up from the report before
- * it.
+ * **The Arabic version of what she typed** sits beside each box she types in
+ * (`atoms/ArabicVersionField.tsx`, the one component allowed to show Arabic on
+ * a staff screen), collapsed until she asks for it; the Arabic report prints
+ * it, and the English where she gave none (section 8).
+ *
+ * **The other language of a signed report** (a draft with `twinOfId`) opens
+ * here too, but only its own language's versions of what was typed can be
+ * written: those are listed at its head (`TwinPanel`), and every section
+ * beneath is shown read only, because the server rebuilds everything else from
+ * the signed report and refuses a save that changes it.
+ *
+ * **Not here yet**, each with its own piece of work: bringing in a past
+ * record, and filling a follow-up from the report before it.
  */
 
 type Props = {
@@ -163,6 +175,7 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
         signing={signing}
         mayCorrect={canSupersedeReports(actor, now, clientId)}
         onCorrected={(id) => (onCorrected ? onCorrected(id) : onDone())}
+        onTwin={(id) => (onCorrected ? onCorrected(id) : onDone())}
         onDone={onDone}
       />
     );
@@ -182,6 +195,11 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
   const edition = content.edition;
   const left = leftBySection(content);
   const sections = sectionsFor(edition);
+  const ownLocale = draft.row?.locale ?? 'en';
+  /** The signed report this draft is the other language of, when it is one (section 8). */
+  const twinOfId = draft.row?.twinOfId ?? null;
+  const twin = twinOfId !== null;
+  const firstRow = twin ? (reports.find((row) => row.id === twinOfId) ?? null) : null;
 
   /** A section entered is a rest point for the one left. */
   function enter(section: SectionId): void {
@@ -267,6 +285,11 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
         onChange={(text) =>
           draft.edit((was) => ({ ...was, summary: { ...was.summary, en: text } }))
         }
+        arabic={{
+          of: 'the summary',
+          value: content.summary.ar,
+          onChange: (ar) => draft.edit((was) => ({ ...was, summary: { ...was.summary, ar } })),
+        }}
       />
     ),
     benefits: () => (
@@ -290,6 +313,7 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
       <header className="qeeg-editor__head">
         <h3 className="report-editor__heading">
           Brain-map report, {edition === 'initial' ? 'first report' : 'follow-up'}
+          {twin ? `, in ${LANGUAGE_WORDS[ownLocale]}` : ''}
         </h3>
         <p className="small muted" role="status">
           {draft.saving
@@ -302,24 +326,36 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
                   ? 'Not saved yet.'
                   : 'Saved.'}
         </p>
-        <div className="report-editor__actions">
-          <Button
-            variant="quiet"
-            onClick={() =>
-              setSwitching(
-                edition === 'initial'
-                  ? { to: 'follow-up', earlierId: candidates[0]?.id ?? '' }
-                  : { to: 'initial' },
-              )
-            }
-          >
-            {edition === 'initial' ? 'Make this a follow-up' : 'Make this a first report'}
-          </Button>
-          <Button variant="quiet" onClick={() => setAll((was) => !was)}>
-            {all ? 'Show one section at a time' : 'Open every section'}
-          </Button>
-        </div>
+        {twin ? null : (
+          <div className="report-editor__actions">
+            <Button
+              variant="quiet"
+              onClick={() =>
+                setSwitching(
+                  edition === 'initial'
+                    ? { to: 'follow-up', earlierId: candidates[0]?.id ?? '' }
+                    : { to: 'initial' },
+                )
+              }
+            >
+              {edition === 'initial' ? 'Make this a follow-up' : 'Make this a first report'}
+            </Button>
+            <Button variant="quiet" onClick={() => setAll((was) => !was)}>
+              {all ? 'Show one section at a time' : 'Open every section'}
+            </Button>
+          </div>
+        )}
       </header>
+
+      {twin ? (
+        <TwinPanel
+          content={content}
+          locale={ownLocale}
+          firstReference={firstRow?.reference ?? null}
+          outOfStep={draft.row?.outOfStep ?? false}
+          edit={draft.edit}
+        />
+      ) : null}
 
       {switching !== null ? (
         <SwitchPanel
@@ -332,44 +368,52 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
         />
       ) : null}
 
-      <div className="qeeg-sections">
-        {sections.map((section) => {
-          const expanded = all || open === section;
-          const missing = left[section];
-          return (
-            <section
-              key={section}
-              className="qeeg-section"
-              aria-labelledby={`qeeg-${section}-title`}
-              onFocus={() => enter(section)}
-            >
-              <h4 className="qeeg-section__heading">
-                <button
-                  type="button"
-                  id={`qeeg-${section}-title`}
-                  className="qeeg-section__toggle"
-                  aria-expanded={expanded}
-                  aria-controls={expanded ? `qeeg-${section}-body` : undefined}
-                  onClick={() => toggle(section)}
-                >
-                  <span>{SECTION_TITLES[section]}</span>
-                  <span className="qeeg-section__left small">{leftWords(missing.length)}</span>
-                </button>
-              </h4>
-              {expanded ? (
-                <div id={`qeeg-${section}-body`} className="qeeg-section__body">
-                  {missing.length > 0 ? (
-                    <p className="small muted">
-                      Still needed: {missing.map((each) => missingWords(each, edition)).join(', ')}.
-                    </p>
-                  ) : null}
-                  {body[section]()}
-                </div>
-              ) : null}
-            </section>
-          );
-        })}
-      </div>
+      <ArabicBoxes.Provider value={!twin}>
+        <fieldset className="qeeg-sections" disabled={twin}>
+          {twin ? (
+            <legend className="report-editor__heading">
+              Carried from the signed report, read only
+            </legend>
+          ) : null}
+          {sections.map((section) => {
+            const expanded = twin || all || open === section;
+            const missing = left[section];
+            return (
+              <section
+                key={section}
+                className="qeeg-section"
+                aria-labelledby={`qeeg-${section}-title`}
+                onFocus={() => enter(section)}
+              >
+                <h4 className="qeeg-section__heading">
+                  <button
+                    type="button"
+                    id={`qeeg-${section}-title`}
+                    className="qeeg-section__toggle"
+                    aria-expanded={expanded}
+                    aria-controls={expanded ? `qeeg-${section}-body` : undefined}
+                    onClick={() => toggle(section)}
+                  >
+                    <span>{SECTION_TITLES[section]}</span>
+                    <span className="qeeg-section__left small">{leftWords(missing.length)}</span>
+                  </button>
+                </h4>
+                {expanded ? (
+                  <div id={`qeeg-${section}-body`} className="qeeg-section__body">
+                    {missing.length > 0 ? (
+                      <p className="small muted">
+                        Still needed:{' '}
+                        {missing.map((each) => missingWords(each, edition)).join(', ')}.
+                      </p>
+                    ) : null}
+                    {body[section]()}
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
+        </fieldset>
+      </ArabicBoxes.Provider>
 
       {/* Beside the Save button, where she looks when a save is refused. */}
       {draft.stale ? (
@@ -398,6 +442,7 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone, onCorre
         <SigningActions
           signing={signing}
           content={content}
+          ownLocale={ownLocale}
           mayOffer={mayOfferSigning(actor, now.toISOString().slice(0, 10))}
           busy={draft.saving}
         />
@@ -876,6 +921,28 @@ function DashboardSection({ content, edit }: { content: QeegContent; edit: Edit 
                 );
               }}
             />
+            {entry.evidence !== null ? (
+              <ArabicVersionField
+                id={`qeeg-evidence-${dimension}-ar`}
+                of={`the evidence for ${en(`dimension.${dimension}.title`, content.edition)}`}
+                value={entry.evidence.ar}
+                most={LIMITS.evidence}
+                multiline
+                onChange={(ar) =>
+                  edit((was) => {
+                    const evidence = was.dashboard[dimension].evidence;
+                    if (evidence === null) return was;
+                    return {
+                      ...was,
+                      dashboard: {
+                        ...was.dashboard,
+                        [dimension]: { ...was.dashboard[dimension], evidence: { ...evidence, ar } },
+                      },
+                    } as QeegContent;
+                  })
+                }
+              />
+            ) : null}
           </fieldset>
         );
       })}
@@ -1049,6 +1116,22 @@ function ChangeSection({ content, edit }: { content: QeegFollowUp; edit: Edit })
             <p>
               {tile.caption.en}: {figureText(tile.figure, 'en')}
             </p>
+            <ArabicVersionField
+              id={`qeeg-headline-${key}-ar`}
+              of={`the headline “${tile.caption.en}”`}
+              value={tile.caption.ar}
+              most={LIMITS.caption}
+              onChange={(ar) =>
+                setChange((was) => {
+                  const at = was.tiles[key];
+                  if (!at) return was;
+                  return {
+                    ...was,
+                    tiles: { ...was.tiles, [key]: { ...at, caption: { ...at.caption, ar } } },
+                  };
+                })
+              }
+            />
             <Button
               variant="quiet"
               onClick={() =>
@@ -1174,6 +1257,11 @@ function ChangeSection({ content, edit }: { content: QeegFollowUp; edit: Edit })
         value={change.summary.en}
         most={LIMITS.summaryTyped}
         onChange={(text) => setChange((was) => ({ ...was, summary: { ...was.summary, en: text } }))}
+        arabic={{
+          of: 'what has changed',
+          value: change.summary.ar,
+          onChange: (ar) => setChange((was) => ({ ...was, summary: { ...was.summary, ar } })),
+        }}
       />
     </>
   );
@@ -1216,5 +1304,105 @@ function NewHeadline({
         Add this headline
       </Button>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The other language of a signed report
+// ---------------------------------------------------------------------------
+
+/**
+ * The head of a second-language draft: what it is, plainly, and the one thing
+ * that can be written in it, the report's own language's version of each
+ * thing she typed. In Arabic, each is the one Arabic box; in English (a report
+ * made from an Arabic one), a plain English box.
+ */
+function TwinPanel({
+  content,
+  locale,
+  firstReference,
+  outOfStep,
+  edit,
+}: {
+  content: QeegContent;
+  locale: Locale;
+  firstReference: string | null;
+  outOfStep: boolean;
+  edit: Edit;
+}) {
+  const language = LANGUAGE_WORDS[locale];
+  const other = LANGUAGE_WORDS[locale === 'ar' ? 'en' : 'ar'];
+  const texts = typedTextsOf(content, locale);
+  return (
+    <section className="report-editor__sign qeeg-twin" aria-labelledby="qeeg-twin-title">
+      <h4 id="qeeg-twin-title" className="report-editor__heading">
+        The {language} version of {firstReference ?? `the signed ${other} report`}
+      </h4>
+      <p>
+        This report is made from the signed {other} report. Its findings, scores, regions, maps and
+        every other choice are that report’s, and cannot be changed here. Only the {language}{' '}
+        version of what was typed can be written.
+        {locale === 'ar'
+          ? ' Where none is given, the Arabic report prints the English as it was typed.'
+          : ''}{' '}
+        It is signed as a report of its own, with its own reference.
+      </p>
+      {outOfStep ? (
+        <Note tone="critical">
+          The report this one was made from has been corrected since, so this one is out of step and
+          cannot be signed. Start the {language} version again from the corrected report once it is
+          signed.
+        </Note>
+      ) : null}
+      {texts.length === 0 ? (
+        <p className="small muted">
+          Nothing was typed in the report that needs a version of its own.
+        </p>
+      ) : (
+        <ul className="qeeg-twin__texts">
+          {texts.map((text) => (
+            <li key={text.key} className="qeeg-item">
+              <p className="small muted">
+                {text.of.charAt(0).toUpperCase() + text.of.slice(1)}, as typed in English:
+              </p>
+              <p className="qeeg-twin__english">{text.english}</p>
+              {locale === 'ar' ? (
+                <ArabicVersionField
+                  id={`qeeg-twin-${text.key}`}
+                  of={text.of}
+                  value={text.value}
+                  most={text.most}
+                  multiline={text.multiline}
+                  startOpen
+                  onChange={(value) => edit((was) => text.set(was, value))}
+                />
+              ) : text.multiline ? (
+                <Textarea
+                  id={`qeeg-twin-${text.key}`}
+                  label={`English version of ${text.of}`}
+                  maxLength={text.most}
+                  value={text.value ?? ''}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    edit((was) => text.set(was, value));
+                  }}
+                />
+              ) : (
+                <Field
+                  id={`qeeg-twin-${text.key}`}
+                  label={`English version of ${text.of}`}
+                  maxLength={text.most}
+                  value={text.value ?? ''}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    edit((was) => text.set(was, value));
+                  }}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -18,6 +18,7 @@ import {
 } from '../../../../domain/reports/qeeg/types';
 import { ReportResponse } from '../../../api/reports/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
+import { ArabicVersionField } from './atoms/ArabicVersionField';
 import { Button, Note, Select } from '../../../shell/components/Controls';
 import { DocumentLink } from '../../clients/DocumentLink';
 import type { QeegMaps } from './useQeegMaps';
@@ -243,6 +244,26 @@ export function MapsSection({
                             const text = event.currentTarget.value;
                             edit((was) => labelMap(was, entry.figureId, text));
                           }}
+                        />
+                      ) : null}
+                      {entry.condition === null && entry.caption !== null ? (
+                        <ArabicVersionField
+                          id={`qeeg-map-${entry.figureId}-label-ar`}
+                          of={`the label of map ${n}`}
+                          value={entry.caption.ar}
+                          most={LIMITS.caption}
+                          onChange={(ar) =>
+                            edit((was) => {
+                              const at = Object.values(was.maps).find(
+                                (each) => each.figureId === entry.figureId,
+                              );
+                              if (!at || at.caption === null) return was;
+                              return placeMap(was, entry.figureId, at.condition, {
+                                ...at.caption,
+                                ar,
+                              });
+                            })
+                          }
                         />
                       ) : null}
                     </td>
