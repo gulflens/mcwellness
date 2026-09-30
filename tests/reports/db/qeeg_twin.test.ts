@@ -7,11 +7,23 @@ import type {
   TwinResponse,
 } from '../../../app/api/reports/schema';
 import { twinChangeIn } from '../../../domain/reports/qeeg/twin';
-import type { QeegContent, QeegInitial } from '../../../domain/reports/qeeg/types';
+import { fullFollowUp, sparseFollowUp } from '../../../domain/reports/qeeg/testing/reports';
+import type {
+  FigureRef,
+  QeegContent,
+  QeegFollowUp,
+  QeegInitial,
+} from '../../../domain/reports/qeeg/types';
 import { phrase } from '../../../domain/reports/qeeg/wording';
 import type * as Wording from '../../../domain/reports/qeeg/wording';
 import { extractAll } from '../../../domain/shared/document';
-import { clientToWriteAbout, householdOf, qeegSteps } from './qeeg-signing-support';
+import {
+  clientToWriteAbout,
+  completeReport,
+  householdOf,
+  qeegSteps,
+  sent,
+} from './qeeg-signing-support';
 import { SEEDED, startHarness, type Harness } from './support';
 
 /**
@@ -251,12 +263,17 @@ describe('what "Sign the other language" refuses, each by its own code', () => {
     expect(rows[0]?.n).toBe('0');
   });
 
-  it('refuses a practitioner, as a correction does, and writes it on the trail', async () => {
+  it('answers a practitioner off her schedule as not there', async () => {
     const first = await signedReport(6);
-    // On her schedule, so the report is hers to read and the refusal is the rule's.
-    await h.onSchedule(clientIndex, SEEDED.practitioner);
-    const res = await twin(first.id, SEEDED.practitioner);
+    const res = await twin(first.id, SEEDED.otherPractitioner);
+    expect(res.status).toBe(404);
+  });
+
+  it('refuses a coordinator, who drafts no reports, and writes it on the trail', async () => {
+    const first = await signedReport(61);
+    const res = await twin(first.id, SEEDED.admin);
     expect(res.status).toBe(403);
+    expect(await codeOf(res)).toMatchObject({ code: 'not_permitted' });
     expect(await refusedFor(first.id)).toContain('not_permitted');
   });
 
@@ -291,6 +308,29 @@ describe('what "Sign the other language" refuses, each by its own code', () => {
       },
     );
     expect([403, 404]).toContain(asHousehold.status);
+  });
+});
+
+describe('who may start it (change request 6: report.draft)', () => {
+  it('lets a practitioner on her schedule start it, with the maps borrowed and the reason kept', async () => {
+    const first = await signedReport(62);
+    // On her schedule, so the client is hers to draft for.
+    await h.onSchedule(clientIndex, SEEDED.practitioner);
+    const reason = 'The household asked for the report in Arabic';
+    const res = await twin(first.id, SEEDED.practitioner, { 'x-reason': reason });
+    expect(res.status).toBe(201);
+    const made = ((await res.json()) as TwinResponse).report;
+    expect(made).toMatchObject({ status: 'draft', locale: 'ar', twinOfId: first.id });
+    const links = await h.owner.query<{ document_id: string; borrowed_from_report_id: string }>(
+      'select document_id, borrowed_from_report_id from report_figure where report_id = $1',
+      [made.id],
+    );
+    expect(links.rows.map((row) => row.document_id).sort()).toEqual([...first.maps].sort());
+    const started = await h.owner.query<{ reason: string }>(
+      "select reason from audit_log where action = 'report.twin_started' and entity_id = $1",
+      [first.id],
+    );
+    expect(started.rows).toEqual([{ reason }]);
   });
 });
 
@@ -506,6 +546,132 @@ describe('a second-language draft whose first report was corrected meanwhile', (
     const res = await sign({ id: made.id, savedAt: (await read(made.id)).savedAt ?? '' });
     expect(res.status).toBe(422);
     expect(await codeOf(res)).toMatchObject({ code: 'twin_differs' });
+  });
+});
+
+describe('a signature racing a correction of the first report', () => {
+  it('waits for the correction, then refuses the other language as out of step', async () => {
+    const first = await signedReport(32);
+    const made = await twinOf(first);
+    const saved = await steps.saved(
+      { id: made.id, savedAt: (await read(made.id)).savedAt ?? '' },
+      withArabic(first.content),
+      SEEDED.owner,
+    );
+    // A second connection marks the first superseded and holds its row, as a
+    // correction does before it commits.
+    await h.owner.query('begin');
+    await h.owner.query("update report set status = 'superseded' where id = $1", [first.id]);
+    const signing = sign(saved);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await h.owner.query('commit');
+    const res = await signing;
+    expect(res.status).toBe(409);
+    expect(await codeOf(res)).toMatchObject({ code: 'twin_out_of_step' });
+    const { rows } = await h.owner.query<{ status: string }>(
+      'select status::text as status from report where id = $1',
+      [made.id],
+    );
+    expect(rows[0]?.status).toBe('draft');
+  });
+});
+
+describe('a twin whose row names another service or comparison than its first', () => {
+  it('is refused at signing, by the column', async () => {
+    const first = await signedReport(33);
+    const made = await twinOf(first);
+    const other = h.data.serviceTypes.find((service) => service.id !== null)?.id ?? '';
+    await h.owner.query('update report set service_type_id = $2 where id = $1', [made.id, other]);
+    const res = await sign({ id: made.id, savedAt: (await read(made.id)).savedAt ?? '' });
+    expect(res.status).toBe(422);
+    expect(await codeOf(res)).toMatchObject({ code: 'twin_differs', field: 'serviceTypeId' });
+  });
+});
+
+describe('the other language of a signed follow-up', () => {
+  it('borrows the earlier pictures from the first, then saves and signs', async () => {
+    const earlier = await steps.completeDraft(SEEDED.owner, { seed: 70 });
+    expect((await sign(earlier)).status).toBe(201);
+
+    const draft = await steps.saveAs(SEEDED.owner, {
+      locale: 'en',
+      content: { ...sent(sparseFollowUp()), comparedWith: { reportId: earlier.id } },
+    });
+    expect(draft.status).toBe(201);
+    const blank = (await draft.json()) as QeegDraftResponse;
+    let savedAt = blank.savedAt;
+    const own: FigureRef[] = [];
+    for (const seed of [71, 72, 73, 74]) {
+      const filed = await steps.upload(blank.report.id, SEEDED.owner, seed);
+      own.push(filed.ref);
+      savedAt = filed.savedAt;
+    }
+    const [mapA, mapB, laterClosed, laterOpen] = own;
+    if (!mapA || !mapB || !laterClosed || !laterOpen) throw new Error('Uploads went missing.');
+    const full = fullFollowUp();
+    const saved = await steps.saveAs(SEEDED.owner, {
+      id: blank.report.id,
+      savedAt,
+      content: {
+        ...sent(full),
+        comparedWith: { reportId: earlier.id },
+        recording: { ...full.recording, recordedOn: '2026-09-28' },
+        maps: completeReport([mapA, mapB]).maps,
+        change: {
+          ...full.change,
+          sessionsCompleted: { count: 20, source: 'typed' },
+          pairs: {
+            eyes_closed: { earlier: null, later: laterClosed },
+            eyes_open: { earlier: null, later: laterOpen },
+          },
+        },
+      },
+    });
+    if (saved.status !== 200) throw new Error(`Refused: ${saved.status} ${await saved.text()}`);
+    const followUp = (await saved.json()) as QeegDraftResponse;
+    expect((await sign({ id: followUp.report.id, savedAt: followUp.savedAt })).status).toBe(201);
+
+    const res = await twin(followUp.report.id);
+    expect(res.status).toBe(201);
+    const made = ((await res.json()) as TwinResponse).report;
+    const content = (await read(made.id)).content as QeegFollowUp;
+    const earlierSides = [
+      content.change.pairs.eyes_closed.earlier,
+      content.change.pairs.eyes_open.earlier,
+    ]
+      .filter((figure): figure is FigureRef => figure !== null)
+      .map((figure) => figure.figureId);
+    expect(earlierSides.length).toBe(2);
+    const links = await h.owner.query<{ document_id: string; borrowed_from_report_id: string }>(
+      'select document_id, borrowed_from_report_id from report_figure where report_id = $1',
+      [made.id],
+    );
+    for (const id of earlierSides) {
+      expect(links.rows.find((row) => row.document_id === id)?.borrowed_from_report_id).toBe(
+        followUp.report.id,
+      );
+    }
+
+    const given: QeegFollowUp = {
+      ...content,
+      change: {
+        ...content.change,
+        summary: { ...content.change.summary, ar: { text: 'نوم أعمق', marks: [] } },
+      },
+    };
+    const twinSaved = await steps.saved(
+      { id: made.id, savedAt: (await read(made.id)).savedAt ?? '' },
+      { ...given, comparedWith: { reportId: earlier.id } },
+      SEEDED.owner,
+    );
+    const signed = await sign(twinSaved);
+    expect(signed.status).toBe(201);
+    const answer = (await signed.json()) as IssueResponse;
+    expect(answer.report).toMatchObject({
+      status: 'issued',
+      locale: 'ar',
+      twinOfId: followUp.report.id,
+    });
   });
 });
 

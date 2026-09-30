@@ -4,7 +4,7 @@ import { validateQeegContent } from '../../../../domain/reports/qeeg/shape';
 import { logAction } from '../../_middleware/audit';
 import type { ApiEnv, Db } from '../../_middleware/request-context';
 import { isUuid } from '../../billing/ids';
-import { maySupersedeReport } from '../access';
+import { mayDraftReport } from '../access';
 import { requiredReason } from '../reason';
 import { TwinInput, TwinResponse } from '../schema';
 import { asRow, readReport } from '../source';
@@ -29,8 +29,12 @@ import { asRow, readReport } from '../source';
  * names this one, or this one is itself the other language of a report, the
  * request is answered with where that report is, never a second one beside it.
  *
- * **The same people as a correction** (brief Q): the owner and the lead
- * practitioner, because it begins a document a household will hold. Audited
+ * **The same people as a draft** (`report.draft`, docs/CHANGE-REQUESTS/
+ * reports-02.md request 6): whoever may write a report for this client, a
+ * practitioner on her schedule included. It begins a draft, not a change to
+ * anything signed; the first report is left exactly as it was, and the draft
+ * is signed through the ordinary door by a person whose certificate allows it.
+ * A coordinator, who drafts nothing, is refused. Audited
  * with its reason (`X-Reason`, stamped by the fence on the transaction), on
  * the new row by the trigger and as `report.twin_started` beside it; every
  * refusal after the report is found is written as `report.twin_refused`
@@ -109,7 +113,7 @@ export function mountReportTwin(api: Hono<ApiEnv>, now: () => Date = () => new D
       );
     };
 
-    if (!maySupersedeReport(actor, first.client_id, now())) {
+    if (!mayDraftReport(actor, first.client_id, now())) {
       return refuse(403, 'not_permitted');
     }
     if ((await requiredReason(db)) === null) {

@@ -66,6 +66,11 @@ const WRITE_HEAD_SQL =
   "and status = 'draft' and imported_from is null and updated_at = $3::timestamptz " +
   'returning id';
 
+/** The report a second language was made from, held until the signature commits. */
+const FIRST_FOR_SHARE_SQL =
+  'select status::text as status from report ' +
+  'where tenant_id = app.current_tenant_id() and id = $1 for share';
+
 /** The refusal a person reads, per reason the credential failed. */
 const SIGNING_REFUSALS: Record<string, string> = {
   no_credential: 'no_signing_credential',
@@ -136,6 +141,14 @@ export async function issueQeeg(
     }
     // Every save of it is held to the first report; asked once more here,
     // so a row written some other way is never signed as its twin.
+    // The row's own links are the first's too: what it is compared with, and
+    // the service a certificate is asked about.
+    if (draft.compared_with_id !== first.compared_with_id) {
+      return refuse(422, 'twin_differs', { field: 'comparedWith.reportId' });
+    }
+    if (draft.service_type_id !== first.service_type_id) {
+      return refuse(422, 'twin_differs', { field: 'serviceTypeId' });
+    }
     const from = validateQeegContent(first.content);
     const differs = from.ok ? twinChangeIn(from.content, checked.content, draft.locale) : '';
     if (differs !== null) return refuse(422, 'twin_differs', { field: differs });
@@ -179,6 +192,17 @@ export async function issueQeeg(
   if (!answer.ok) return refuse(403, SIGNING_REFUSALS[answer.code] ?? answer.code);
 
   await db.query('savepoint qeeg_issue');
+  if (draft.twin_of_id !== null) {
+    // The first report held as it stands until this signature commits: a
+    // correction of it waits, or has already committed and is seen here. The
+    // first is always locked before the twin, so no two doors wait on each
+    // other.
+    const held = await db.query<{ status: string }>(FIRST_FOR_SHARE_SQL, [draft.twin_of_id]);
+    if (held.rows[0]?.status !== 'issued') {
+      await db.query('rollback to savepoint qeeg_issue');
+      return refuse(409, 'twin_out_of_step', { twinOfId: draft.twin_of_id });
+    }
+  }
   const headed = await db.query<{ id: string }>(WRITE_HEAD_SQL, [
     draft.id,
     JSON.stringify(content),
