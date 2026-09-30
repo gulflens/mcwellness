@@ -7,7 +7,11 @@ import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import { QeegEditor } from '../../app/admin/reports/qeeg/QeegEditor';
 import { FIGURE_REFUSALS } from '../../app/admin/reports/qeeg/refusals';
 import { SAVE_REASONS } from '../../app/admin/reports/qeeg/useQeegDraft';
+import { databaseRefusal } from '../../app/api/reports/qeeg/databaseRefusal';
 import { FIGURE_SENTENCES } from '../../app/api/reports/qeeg/figureSchema';
+import { openPicture } from '../../app/admin/reports/qeeg/decodePicture';
+import { IDLE_MS } from '../../app/admin/reports/qeeg/useQeegDraft';
+import { MAX_INPUT_BYTES } from '../../domain/reports/qeeg/image/limits';
 import { LEAD_PRACTITIONER, signedInProvider } from '../../app/admin/clients/testActors';
 import { blankFollowUp, blankInitial } from '../../domain/reports/qeeg/blank';
 import { addMap, choosePair } from '../../domain/reports/qeeg/maps';
@@ -38,6 +42,16 @@ vi.mock('../../app/admin/reports/qeeg/decodePicture', () => ({
   openPicture: vi.fn(async (file: Blob) => {
     const [size, kind] = (await file.text()).split(' ');
     if (size === 'unreadable') return null;
+    if (size === 'unpreparable') {
+      return {
+        width: 40,
+        height: 30,
+        pixels: () => {
+          throw new Error('This browser gave no canvas to read a picture with.');
+        },
+        close: () => undefined,
+      };
+    }
     const [width, height] = (size ?? '').split('x').map(Number) as [number, number];
     return {
       width,
@@ -251,7 +265,7 @@ function mountEditor(
   api = mountApi(),
   { reportId = null }: { reportId?: string | null } = {},
 ) {
-  render(
+  const { unmount } = render(
     <AuthProviderBoundary provider={signedInProvider} fetchImpl={api.fetchImpl}>
       <QeegEditor
         clientId={CLIENT}
@@ -262,7 +276,7 @@ function mountEditor(
       />
     </AuthProviderBoundary>,
   );
-  return api;
+  return { ...api, unmount };
 }
 
 async function openSection(user: ReturnType<typeof userEvent.setup>, title: string) {
@@ -329,7 +343,8 @@ describe('adding a picture', () => {
     const [put] = api.uploads();
     expect(save?.reason).toBe(SAVE_REASONS.upload);
     expect(api.calls.indexOf(save as Call)).toBeLessThan(api.calls.indexOf(put as Call));
-    expect(put?.url).toBe(`/api/reports/${DRAFT}/figures?condition=eyes_closed&position=0`);
+    // The draft says where a map is and what it shows; the door is sent only the picture.
+    expect(put?.url).toBe(`/api/reports/${DRAFT}/figures`);
     expect(put?.headers.get('content-type')).toBe('image/png');
     expect(put?.reason).toBeTruthy();
     const bytes = put?.bytes as Uint8Array;
@@ -371,7 +386,7 @@ describe('adding a picture', () => {
     await choose(user, picture('40x30'));
     await waitFor(() => expect(api.uploads()).toHaveLength(1));
     expect(api.saves()).toHaveLength(0);
-    expect(api.uploads()[0]?.url).toBe(`/api/reports/${DRAFT}/figures?position=0`);
+    expect(api.uploads()[0]?.url).toBe(`/api/reports/${DRAFT}/figures`);
 
     // The draft now names the map, and its condition is changed: unsaved changes.
     await user.selectOptions(screen.getByLabelText('Recorded with, map 1'), 'eyes_open');
@@ -434,11 +449,31 @@ describe('every refusal of the upload door has its sentence', () => {
     ['storage_unavailable', 503, { error: 'storage_unavailable' }],
     ['wrong_kind', 422, { error: 'unprocessable', code: 'wrong_kind' }],
   ];
+  // The statuses of the database's refusals are the door's own (`databaseRefusal`).
+  // Those of the picture checks are chosen inside `figures.ts` and not exported:
+  // 413 for the byte cap, 415 for a file that is not a PNG, 422 for the rest.
+  const DATABASE_ERRORS: Readonly<Record<string, Record<string, string>>> = {
+    not_permitted: { code: '42501' },
+    not_a_draft: { code: '23001' },
+    too_many_maps: { code: '54000' },
+    not_accepted: { code: '23514', constraint: 'report_figure_is_a_map' },
+    no_such_map: { code: 'P0002' },
+  };
+  const statusOf = (code: string): number => {
+    const error = DATABASE_ERRORS[code];
+    if (error) {
+      const answer = databaseRefusal(error);
+      if (answer === null || answer.body.code !== code)
+        throw new Error(`${code} is not the door's`);
+      return answer.status;
+    }
+    return code === 'too_many_bytes' ? 413 : code === 'not_a_png' ? 415 : 422;
+  };
   const picture422 = (Object.keys(FIGURE_SENTENCES) as string[])
     .filter((code) => code !== 'already_on_report')
     .map((code): [string, number, Record<string, unknown>] => [
       code,
-      code === 'too_many_bytes' ? 413 : code === 'not_permitted' ? 403 : 422,
+      statusOf(code),
       { error: 'unprocessable', code, sentence: 'The door’s own words.' },
     ]);
 
@@ -653,5 +688,200 @@ describe('a follow-up’s before-and-after pairs', () => {
     expect(change.pairs['eyes_open']).toEqual({ earlier: null, later: null });
     // No Arabic on a staff screen.
     expect(document.body.textContent).not.toMatch(/[؀-ۿ]/);
+  });
+});
+
+describe('what happens when an upload cannot finish as asked (fix round 1)', () => {
+  it('lets an upload finishing after the form closed change nothing and arm no timer', async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const api = mountApi({
+      upload: async () => {
+        await held;
+        return null;
+      },
+    });
+    const { unmount } = mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await choose(user, picture('40x30'));
+    await waitFor(() => expect(api.uploads()).toHaveLength(1));
+
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    unmount();
+    release();
+    // The leave save waits for the door, then names the map it filed: nothing is left behind.
+    await waitFor(() => expect(api.saves()).toHaveLength(1));
+    const [leave] = api.saves();
+    expect(leave?.reason).toBe(SAVE_REASONS.leave);
+    expect((leave?.body as { savedAt: string }).savedAt).toBe(FILED_STAMP);
+    expect(Object.values(sentContent(leave)['maps'] as object)).toHaveLength(1);
+    expect(timers.mock.calls.filter(([, ms]) => ms === IDLE_MS)).toEqual([]);
+    timers.mockRestore();
+  });
+
+  it('says the picture may have been kept when the connection fails, and reads the draft’s stamp again', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({
+      upload: () => {
+        throw new TypeError('Failed to fetch');
+      },
+    });
+    mountEditor(blankInitial(), api);
+    const maps = await openSection(user, 'Brain maps');
+    await choose(user, picture('40x30'));
+    expect(await screen.findByText(FIGURE_REFUSALS['unknown_outcome'] as string)).toBeTruthy();
+    expect(screen.queryByText(/could not be saved/)).toBeNull();
+    const put = api.uploads()[0] as Call;
+    const reread = api.calls.findIndex(
+      (call, at) => at > api.calls.indexOf(put) && call.url === `/api/reports/${DRAFT}`,
+    );
+    expect(reread).toBeGreaterThan(0);
+    expect(maps.textContent).toMatch(/1 left to fill$/);
+
+    await openSection(user, 'Key findings');
+    await user.click(screen.getByLabelText('Mental Fatigue'));
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }));
+    expect((api.saves().at(-1)?.body as { savedAt: string }).savedAt).toBe(LOADED_STAMP);
+  });
+
+  it('says the same when the door’s answer cannot be read', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({ upload: () => json({ filed: 'perhaps' }, 201) });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await choose(user, picture('40x30'));
+    expect(await screen.findByText(FIGURE_REFUSALS['unknown_outcome'] as string)).toBeTruthy();
+    expect(screen.queryByRole('table', { name: 'Brain maps on this report' })).toBeNull();
+  });
+
+  it('says so when this browser cannot prepare the picture', async () => {
+    const user = userEvent.setup();
+    const api = mountEditor(blankInitial());
+    await openSection(user, 'Brain maps');
+    await choose(user, picture('unpreparable'));
+    expect(await screen.findByText(FIGURE_REFUSALS['cannot_prepare'] as string)).toBeTruthy();
+    expect(api.sent()).toEqual([]);
+  });
+
+  it('refuses a file over the byte cap before it is decoded', async () => {
+    const user = userEvent.setup();
+    const api = mountEditor(blankInitial());
+    await openSection(user, 'Brain maps');
+    const decoded = vi.mocked(openPicture).mock.calls.length;
+    const file = picture('40x30');
+    Object.defineProperty(file, 'size', { value: MAX_INPUT_BYTES + 1 });
+    await choose(user, file);
+    expect(await screen.findByText(FIGURE_REFUSALS['file_too_large'] as string)).toBeTruthy();
+    expect(vi.mocked(openPicture).mock.calls.length).toBe(decoded);
+    expect(api.sent()).toEqual([]);
+  });
+
+  it('offers only what the sentence names', async () => {
+    const user = userEvent.setup();
+    mountEditor(blankInitial());
+    await openSection(user, 'Brain maps');
+    expect(screen.getByLabelText('Choose a brain map').getAttribute('accept')).toBe(
+      'image/png,image/jpeg,image/bmp',
+    );
+    expect(FIGURE_REFUSALS['undecodable']).toMatch(/PNG, JPEG or BMP\.$/);
+  });
+});
+
+describe('removing while an upload is on its way (fix round 1)', () => {
+  it('cannot be confirmed until the upload is done', async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const api = mountApi({
+      stored: withOwnMap(blankInitial()),
+      upload: async () => {
+        await held;
+        return null;
+      },
+    });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await user.click(screen.getByRole('button', { name: 'Remove map 1' }));
+    await choose(user, picture('41x30'));
+    await waitFor(() => expect(api.uploads()).toHaveLength(1));
+    expect(
+      (screen.getByRole('button', { name: 'Remove the map' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    release();
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Remove the map' }) as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+    expect(api.removals()).toEqual([]);
+  });
+});
+
+describe('focus and what is announced (fix round 1)', () => {
+  it('keeps one status line mounted, and returns focus to the file control after an upload', async () => {
+    const user = userEvent.setup();
+    mountEditor(blankInitial());
+    await openSection(user, 'Brain maps');
+    const status = document.getElementById('qeeg-maps-status');
+    expect(status?.getAttribute('role')).toBe('status');
+    await choose(user, picture('40x30'));
+    await screen.findByRole('table', { name: 'Brain maps on this report' });
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByLabelText('Choose a brain map')),
+    );
+    expect(document.getElementById('qeeg-maps-status')).toBe(status);
+  });
+
+  it('moves focus into the confirmation, back on keeping, and on to the file control after removing the last map', async () => {
+    const user = userEvent.setup();
+    mountEditor(null, mountApi({ stored: withOwnMap(blankInitial()) }), { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await user.click(screen.getByRole('button', { name: 'Remove map 1' }));
+    expect(document.activeElement).toBe(screen.getByRole('group', { name: 'Remove a map' }));
+    await user.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove map 1' }));
+    await user.click(screen.getByRole('button', { name: 'Remove map 1' }));
+    await user.click(screen.getByRole('button', { name: 'Remove the map' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('table', { name: 'Brain maps on this report' })).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByLabelText('Choose a brain map')),
+    );
+  });
+
+  it('keeps focus on the map it moved when its own button is disabled', async () => {
+    const user = userEvent.setup();
+    const second = { ...OWN, figureId: '0000000d-0000-4000-8000-000000000003' };
+    mountEditor(
+      null,
+      mountApi({ stored: asSaved({ ...addMap(addMap(blankInitial(), OWN, null), second, null) }) }),
+      { reportId: DRAFT },
+    );
+    await openSection(user, 'Brain maps');
+    await user.click(screen.getByRole('button', { name: 'Move map 2 earlier' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Move map 1 later' }));
+  });
+});
+
+describe('a map with no name on the page (fix round 1)', () => {
+  it('is left to fill until it has a condition or a label, and says the same thing either way', async () => {
+    const user = userEvent.setup();
+    mountEditor(blankInitial());
+    const maps = await openSection(user, 'Brain maps');
+    const adding = screen.getByLabelText('Recorded with') as HTMLSelectElement;
+    expect(adding.selectedOptions[0]?.textContent).toBe('Another view, with a label');
+    await choose(user, picture('40x30'));
+    const listed = await screen.findByRole('table', { name: 'Brain maps on this report' });
+    const row = within(listed).getByLabelText('Recorded with, map 1') as HTMLSelectElement;
+    expect(row.selectedOptions[0]?.textContent).toBe('Another view, with a label');
+    expect(maps.textContent).toMatch(/1 left to fill$/);
+    await user.type(within(listed).getByLabelText('Label, map 1'), 'Coherence');
+    expect(maps.textContent).toMatch(/Nothing left to fill$/);
   });
 });

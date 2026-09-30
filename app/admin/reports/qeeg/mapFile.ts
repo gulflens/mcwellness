@@ -1,4 +1,4 @@
-import { refuseSize } from '../../../../domain/reports/qeeg/image/limits';
+import { refuseInputBytes, refuseSize } from '../../../../domain/reports/qeeg/image/limits';
 import { prepareMap, type MapRefusal } from '../../../../domain/reports/qeeg/image/prepare';
 import { openPicture } from './decodePicture';
 
@@ -12,10 +12,17 @@ import { openPicture } from './decodePicture';
  * flattening and the encoding are `domain/reports/qeeg/image/`, composed in
  * `prepareMap`. This file supplies what a pure function cannot: the browser's
  * decoder (`decodePicture.ts`), its compressor (`CompressionStream`, which
- * writes the zlib stream a PNG holds), and its digest (`crypto.subtle`). The
- * size is asked once more before the pixels are drawn, with the domain's own
- * `refuseSize`, so a picture over the caps is refused before it costs its
- * pixels' memory.
+ * writes the zlib stream a PNG holds), and its digest (`crypto.subtle`).
+ *
+ * **Refused as early as each fact is known.** The file's bytes are known
+ * first, and a file over `MAX_INPUT_BYTES` is refused before the browser
+ * decodes it (`refuseInputBytes`). The size in pixels is known once it is
+ * decoded, and is asked with the domain's `refuseSize` before the pixels are
+ * laid out. The stored file's bytes are known last, and `prepareMap` holds
+ * them to `MAX_FILE_BYTES`.
+ *
+ * **What the browser itself cannot do throws**, and the caller says so: no
+ * `CompressionStream` in an older browser, no canvas, no memory left.
  *
  * **The digest is of the bytes sent.** The door computes it again over what
  * arrived and refuses a mismatch, so a picture changed on its way is never
@@ -32,7 +39,10 @@ export type PreparedFile =
       /** SHA-256 of `png`, 64 small hexadecimal characters, as `X-Sha256` carries it. */
       readonly sha256: string;
     }
-  | { readonly ok: false; readonly refusal: MapRefusal | 'undecodable' };
+  | {
+      readonly ok: false;
+      readonly refusal: MapRefusal | 'undecodable' | 'file_too_large' | 'empty';
+    };
 
 /** Deflate with the zlib wrapper, as a PNG's image data is written. */
 export async function deflateInBrowser(bytes: Uint8Array): Promise<Uint8Array> {
@@ -48,6 +58,8 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
 }
 
 export async function prepareFile(file: Blob): Promise<PreparedFile> {
+  const tooLarge = refuseInputBytes(file.size);
+  if (tooLarge !== null) return { ok: false, refusal: tooLarge };
   const opened = await openPicture(file);
   if (opened === null) return { ok: false, refusal: 'undecodable' };
   try {

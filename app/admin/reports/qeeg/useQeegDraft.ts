@@ -75,8 +75,10 @@ export type QeegDraft = {
   /**
    * Save at `point` when there is anything to save (or no draft yet), then
    * run `door` on the saved draft with no save beside it. `door` answers the
-   * draft's new stamp, which the next save is made over, or null when it was
-   * refused. True when both went through.
+   * draft's new stamp, which the next save is made over, or null to keep the
+   * one held; a change it makes to the draft (`edit`) is made before any save
+   * waiting behind it runs. False only when the save before it failed and the
+   * door never ran; what the door itself did, it tells its caller.
    */
   withSaved: (
     point: RestPoint,
@@ -117,6 +119,10 @@ export function useQeegDraft({
   const inFlightRef = useRef<Promise<boolean> | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveRef = useRef<(point: RestPoint) => Promise<boolean>>(async () => false);
+  /** The form is on screen. Once it is gone, a change arms no timer. */
+  const aliveRef = useRef(true);
+  /** She chose to leave without saving: nothing more is sent for this form. */
+  const discardedRef = useRef(false);
 
   const read = useCallback(
     async (id: string): Promise<Loaded> => {
@@ -228,7 +234,7 @@ export function useQeegDraft({
     async (point: RestPoint): Promise<boolean> => {
       // One at a time: wait for the save on its way, then ask again.
       while (inFlightRef.current !== null) await inFlightRef.current;
-      if (staleRef.current) return false;
+      if (staleRef.current || discardedRef.current) return false;
       const changed = versionRef.current !== savedVersionRef.current;
       // Nothing changed: nothing to write. The Save button still creates a
       // draft nobody has touched, because pressing it asks for one.
@@ -269,11 +275,10 @@ export function useQeegDraft({
       if (id === null) return false;
       const running = door(id)
         .then((stamp) => {
-          if (stamp === null) return false;
-          savedAtRef.current = stamp;
+          if (stamp !== null) savedAtRef.current = stamp;
           return true;
         })
-        .catch(() => false);
+        .catch(() => true);
       inFlightRef.current = running;
       try {
         return await running;
@@ -292,12 +297,17 @@ export function useQeegDraft({
     const was = contentRef.current;
     if (was === null) return;
     const next = change(was);
+    // A change that changes nothing is not one: no version, no timer.
+    if (next === was) return;
     contentRef.current = next;
     versionRef.current += 1;
     setContent(next);
     setDirty(true);
     clearTimer();
-    if (!staleRef.current) {
+    // A form that is gone saves once on leaving, or not at all, never on a
+    // timer: a change landing after it closed (a door's answer) is picked up
+    // by that leave save, which waits for the door.
+    if (!staleRef.current && aliveRef.current) {
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
         void saveRef.current('idle');
@@ -318,6 +328,7 @@ export function useQeegDraft({
   }, [read, settle]);
 
   const discard = useCallback(() => {
+    discardedRef.current = true;
     clearTimer();
     savedVersionRef.current = versionRef.current;
     setDirty(false);
@@ -338,15 +349,20 @@ export function useQeegDraft({
 
   // Leaving the form by any other way (the drawer closed, the tab changed)
   // is a rest point too.
-  useEffect(
-    () => () => {
+  // A door on its way when the form closes may still change the draft (the
+  // map it filed is named in it), so the leave save is asked for then too; it
+  // waits for the door and sends only if something changed.
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
       clearTimer();
-      if (versionRef.current !== savedVersionRef.current && !staleRef.current) {
+      const changed = versionRef.current !== savedVersionRef.current;
+      if ((changed || inFlightRef.current !== null) && !staleRef.current && !discardedRef.current) {
         void saveRef.current('leave');
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   return {
     content,

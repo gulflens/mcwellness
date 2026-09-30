@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   addMap,
   mapRefusal,
+  mapsInOrder,
+  putBack,
   removeMap,
   whereStillNamed,
 } from '../../../../domain/reports/qeeg/maps';
@@ -11,6 +13,7 @@ import {
   FigureOut,
   FigureRemovedResponse,
 } from '../../../api/reports/qeeg/figureSchema';
+import { ReportResponse } from '../../../api/reports/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { prepareFile } from './mapFile';
 import { figureRefusalSentence } from './refusals';
@@ -22,20 +25,29 @@ import type { QeegDraft } from './useQeegDraft';
  * app/api/reports/qeeg/figures.ts).
  *
  * **Adding.** The file is made ready in the browser first (`prepareFile`:
- * decoded, checked against the caps, trimmed, laid onto white, written as a
- * PNG, fingerprinted), so a picture over a cap, or a ninth, is refused before
- * anything is sent, with the domain's reason in the form's words. Only then
- * is the draft saved, if it has changed or was never saved (section 15: "before
- * an upload"), and the picture sent against it. The draft then names it, at
- * the end of the list, with the condition the door filed it under (a picture
- * the door already held is answered with the first filing's values, and the
- * form takes those, never its own guess).
+ * its bytes capped, decoded, checked against the caps, trimmed, laid onto
+ * white, written as a PNG, fingerprinted), so a picture over a cap, or a
+ * ninth, is refused before anything is sent, with the domain's reason in the
+ * form's words. Only then is the draft saved, if it has changed or was never
+ * saved (section 15: "before an upload"), and the picture alone sent against
+ * it: where a map sits and what it shows are the draft's, never the link's
+ * (review O, concern 5). The draft names the picture, at the end of the list
+ * with the condition she chose, inside the door's own turn, so a save waiting
+ * behind the door (leaving the form, say) already includes it.
  *
  * **Taking away.** She confirms inside the form. A map the page of what has
  * changed still shows is not taken out: the form says where it is used. The
  * draft is saved without the map first, because the door refuses to remove a
  * picture the saved draft still prints, and then the door removes it. If the
- * door refuses, the map goes back where it was and the form says why.
+ * door refuses, that one map goes back where it was (`putBack`) and the form
+ * says why.
+ *
+ * **Saying exactly what happened.** A refusal is its sentence and changes
+ * nothing else. An answer that never came, or one the form cannot read, is
+ * not a refusal: the door may have finished, so the form says so and reads
+ * the draft's stamp again rather than guess it. A browser that cannot prepare
+ * a picture at all is told apart from a picture that is refused. And "the
+ * draft could not be saved" is said only when that is what happened.
  *
  * **A refusal changes nothing on screen** except the sentence. Both doors move
  * the draft's stamp; `withSaved` makes each answer's stamp the one the next
@@ -83,15 +95,36 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
   const [notice, setNotice] = useState<string | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const madeRef = useRef<string[]>([]);
+  const aliveRef = useRef(true);
 
-  useEffect(
-    () => () => {
-      for (const url of madeRef.current) URL.revokeObjectURL(url);
-    },
-    [],
-  );
+  useEffect(() => {
+    aliveRef.current = true;
+    const made = madeRef.current;
+    return () => {
+      aliveRef.current = false;
+      for (const url of made) URL.revokeObjectURL(url);
+    };
+  }, []);
 
   const { content, edit, withSaved } = draft;
+
+  /**
+   * The draft's stamp as the server holds it now, after a door whose answer
+   * never came: the door may have moved it, and guessing either way would
+   * make her next save refused as stale, or made over a stamp that is not.
+   */
+  const stampOf = useCallback(
+    async (reportId: string): Promise<string | null> => {
+      try {
+        const res = await apiFetch(`/api/reports/${reportId}`);
+        if (!res.ok) return null;
+        return ReportResponse.parse(await res.json()).savedAt ?? null;
+      } catch {
+        return null;
+      }
+    },
+    [apiFetch],
+  );
 
   const add = useCallback(
     async (file: File, condition: Condition | null) => {
@@ -105,73 +138,105 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
       }
       setBusy('preparing');
       try {
-        const prepared = await prepareFile(file);
+        let prepared: Awaited<ReturnType<typeof prepareFile>>;
+        try {
+          prepared = await prepareFile(file);
+        } catch {
+          setError(figureRefusalSentence(0, { code: 'cannot_prepare' }));
+          return;
+        }
         if (!prepared.ok) {
           setError(figureRefusalSentence(0, { code: prepared.refusal }));
           return;
         }
+        const png = prepared.png;
         setBusy('uploading');
-        // What the door answered, written by its callback.
-        const outcome: {
-          filed: FigureFiledResponse | null;
-          refused: string | null;
-          handedBack: FigureOut | null;
-        } = { filed: null, refused: null, handedBack: null };
-        const query = new URLSearchParams();
-        if (condition !== null) query.set('condition', condition);
-        query.set('position', String(Object.keys(content.maps).length));
-        const done = await withSaved('upload', async (reportId) => {
-          const res = await apiFetch(`/api/reports/${reportId}/figures?${query.toString()}`, {
-            method: 'PUT',
-            headers: {
-              'content-type': 'image/png',
-              'x-sha256': prepared.sha256,
-              'x-reason': MAP_REASONS.add,
-            },
-            body: prepared.png as Uint8Array<ArrayBuffer>,
-          });
-          const body: unknown = await res.json().catch(() => null);
+        const named = (figureId: string) =>
+          Object.values(content.maps).some((entry) => entry.figureId === figureId);
+        // What the door did, written by its callback.
+        const outcome: { said: string | null; filed: FigureOut | null; again: boolean } = {
+          said: null,
+          filed: null,
+          again: false,
+        };
+        const ran = await withSaved('upload', async (reportId) => {
+          let res: Response;
+          try {
+            // The picture only: where it sits and what it shows are the draft's.
+            res = await apiFetch(`/api/reports/${reportId}/figures`, {
+              method: 'PUT',
+              headers: {
+                'content-type': 'image/png',
+                'x-sha256': prepared.sha256,
+                'x-reason': MAP_REASONS.add,
+              },
+              body: png as Uint8Array<ArrayBuffer>,
+            });
+          } catch {
+            outcome.said = figureRefusalSentence(0, { code: 'unknown_outcome' });
+            return stampOf(reportId);
+          }
+          const body: unknown = await res.json().catch(() => undefined);
           if (!res.ok) {
-            outcome.refused = figureRefusalSentence(res.status, body);
-            const figure = FigureOut.safeParse((body as { figure?: unknown } | null)?.figure);
-            if (res.status === 409 && figure.success) outcome.handedBack = figure.data;
+            const code = (body as { code?: unknown; error?: unknown } | undefined)?.code;
+            const storeDown =
+              (body as { error?: unknown } | undefined)?.error === 'storage_unavailable';
+            if (res.status >= 500 && !storeDown) {
+              // A gateway's timeout, or a fault after the commit: it may be filed.
+              outcome.said = figureRefusalSentence(0, { code: 'unknown_outcome' });
+              return stampOf(reportId);
+            }
+            outcome.said = figureRefusalSentence(res.status, body);
+            // A picture the report already holds and the draft does not
+            // name (the form closed before its last save, say) is named now,
+            // so it can be seen and removed.
+            const figure = FigureOut.safeParse((body as { figure?: unknown } | undefined)?.figure);
+            if (res.status === 409 && code === 'already_on_report' && figure.success) {
+              const held = figure.data;
+              edit((was) => addMap(was, held, held.condition ?? condition));
+            }
             return null;
           }
-          outcome.filed = FigureFiledResponse.parse(body);
-          return outcome.filed.savedAt;
-        });
-        const answer = outcome.filed;
-        const sameAgain = outcome.handedBack;
-        if (!done || answer === null) {
-          // A picture the report already holds, which this draft does not
-          // name (the form closed before its last save, say), is named now,
-          // as it was filed, so it can be seen and removed.
-          if (sameAgain !== null) {
-            const figure: FigureOut = sameAgain;
-            edit((was) => addMap(was, figure, figure.condition));
+          const parsed = FigureFiledResponse.safeParse(body);
+          if (!parsed.success) {
+            outcome.said = figureRefusalSentence(0, { code: 'unknown_outcome' });
+            return stampOf(reportId);
           }
+          const { figure } = parsed.data;
+          outcome.again = named(figure.figureId);
+          outcome.filed = figure;
+          // Named in the draft before any save waiting behind the door runs,
+          // so leaving now still saves it.
+          edit((was) => addMap(was, figure, condition));
+          return parsed.data.savedAt;
+        });
+        if (!ran) {
           setError(
-            outcome.refused ??
-              'The draft could not be saved, so the map was not sent. The reason is beneath the form.',
+            'The draft could not be saved, so the map was not sent. The reason is beneath the form.',
           );
           return;
         }
-        const { figure } = answer;
-        if (Object.values(content.maps).some((entry) => entry.figureId === figure.figureId)) {
+        if (outcome.said !== null) {
+          setError(outcome.said);
+          return;
+        }
+        const filed = outcome.filed;
+        if (filed === null) return;
+        if (outcome.again) {
           setNotice('This picture is already on the report.');
           return;
         }
-        edit((was) => addMap(was, figure, figure.condition));
-        const url = thumbnailOf(prepared.png);
+        if (!aliveRef.current) return;
+        const url = thumbnailOf(png);
         if (url !== null) {
           madeRef.current.push(url);
-          setThumbnails((was) => ({ ...was, [figure.figureId]: url }));
+          setThumbnails((was) => ({ ...was, [filed.figureId]: url }));
         }
       } finally {
         setBusy(null);
       }
     },
-    [apiFetch, content, edit, withSaved],
+    [apiFetch, content, edit, stampOf, withSaved],
   );
 
   const remove = useCallback(
@@ -184,37 +249,55 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
         setError(figureRefusalSentence(409, { code: 'figure_in_use', field: where[0] }));
         return;
       }
-      const kept = content.maps;
+      const taken = mapsInOrder(content).find(({ entry }) => entry.figureId === figureId);
+      if (taken === undefined) return;
       edit((was) => removeMap(was, figureId));
       setBusy('removing');
-      const outcome: { refused: string | null; gone: boolean } = { refused: null, gone: false };
+      const outcome: { said: string | null } = { said: null };
       try {
-        const done = await withSaved('remove', async (reportId) => {
-          const res = await apiFetch(`/api/reports/${reportId}/figures/${figureId}`, {
-            method: 'DELETE',
-            headers: { 'x-reason': MAP_REASONS.remove },
-          });
-          const body: unknown = await res.json().catch(() => null);
+        const ran = await withSaved('remove', async (reportId) => {
+          let res: Response;
+          try {
+            res = await apiFetch(`/api/reports/${reportId}/figures/${figureId}`, {
+              method: 'DELETE',
+              headers: { 'x-reason': MAP_REASONS.remove },
+            });
+          } catch {
+            // It may be gone. The draft, already saved without it, stays so.
+            outcome.said = figureRefusalSentence(0, { code: 'unknown_removal' });
+            return stampOf(reportId);
+          }
+          const body: unknown = await res.json().catch(() => undefined);
           if (!res.ok) {
-            outcome.refused = figureRefusalSentence(res.status, body);
+            const code = (body as { code?: unknown } | undefined)?.code;
+            const storeDown =
+              (body as { error?: unknown } | undefined)?.error === 'storage_unavailable';
+            if (res.status >= 500 && !storeDown) {
+              outcome.said = figureRefusalSentence(0, { code: 'unknown_removal' });
+              return stampOf(reportId);
+            }
+            outcome.said = figureRefusalSentence(res.status, body);
             // Already gone from the report: the draft is right without it.
-            outcome.gone = (body as { code?: unknown } | null)?.code === 'no_such_map';
+            // Otherwise only this map goes back; one added meanwhile stays.
+            if (code !== 'no_such_map') edit((was) => putBack(was, taken));
             return null;
           }
-          return FigureRemovedResponse.parse(body).savedAt;
-        });
-        if (!done) {
-          if (!outcome.gone) {
-            edit((was) =>
-              Object.values(was.maps).some((entry) => entry.figureId === figureId)
-                ? was
-                : { ...was, maps: kept },
-            );
+          const parsed = FigureRemovedResponse.safeParse(body);
+          if (!parsed.success) {
+            outcome.said = figureRefusalSentence(0, { code: 'unknown_removal' });
+            return stampOf(reportId);
           }
+          return parsed.data.savedAt;
+        });
+        if (!ran) {
+          edit((was) => putBack(was, taken));
           setError(
-            outcome.refused ??
-              'The draft could not be saved, so the map was not removed. The reason is beneath the form.',
+            'The draft could not be saved, so the map was not removed. The reason is beneath the form.',
           );
+          return;
+        }
+        if (outcome.said !== null) {
+          setError(outcome.said);
           return;
         }
         setThumbnails((was) =>
@@ -224,7 +307,7 @@ export function useQeegMaps(draft: QeegDraft): QeegMaps {
         setBusy(null);
       }
     },
-    [apiFetch, content, edit, withSaved],
+    [apiFetch, content, edit, stampOf, withSaved],
   );
 
   return { busy, error, notice, thumbnails, add, remove };

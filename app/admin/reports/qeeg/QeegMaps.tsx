@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   choosePair,
+  labelMap,
   mapsInOrder,
   moveMap,
   placeMap,
@@ -72,9 +73,50 @@ function mapWords({ entry }: ListedMap): string {
   const shows =
     entry.condition !== null
       ? CONDITION_LABELS[entry.condition].toLowerCase()
-      : (entry.caption?.en ?? 'no condition');
+      : (entry.caption?.en ?? 'another view with no label yet');
   return `Map ${entry.position + 1}, ${shows}, ${sizeWords(entry.widthPx, entry.heightPx)}`;
 }
+
+/** Where focus goes once the form has drawn what a press changed. */
+type FocusNext =
+  | { to: 'file' }
+  | { to: 'panel' }
+  | { to: 'remove'; figureId: string }
+  | { to: 'removed'; index: number }
+  | { to: 'moved'; figureId: string; by: -1 | 1 };
+
+/** The control that should hold focus after `next`, found in the section's own area. */
+function focusTarget(
+  next: FocusNext,
+  area: HTMLElement | null,
+  file: HTMLElement | null,
+): HTMLElement | null {
+  const find = (selector: string) => area?.querySelector<HTMLElement>(selector) ?? null;
+  switch (next.to) {
+    case 'file':
+      return file;
+    case 'panel':
+      return find('[data-confirm]');
+    case 'remove':
+      return find(`[data-remove="${next.figureId}"]`);
+    case 'removed': {
+      const buttons = area ? Array.from(area.querySelectorAll<HTMLElement>('[data-remove]')) : [];
+      return buttons[Math.min(next.index, buttons.length - 1)] ?? file;
+    }
+    case 'moved': {
+      const same = find(`[data-move="${next.figureId}:${next.by}"]`);
+      const other = find(`[data-move="${next.figureId}:${-next.by}"]`);
+      return same instanceof HTMLButtonElement && !same.disabled ? same : other;
+    }
+    default: {
+      const unknown: never = next;
+      return unknown;
+    }
+  }
+}
+
+/** The console's words for a map with no condition: her label names it instead. */
+const ANOTHER_VIEW = 'Another view, with a label';
 
 export function MapsSection({
   clientId,
@@ -90,15 +132,43 @@ export function MapsSection({
   const listed = mapsInOrder(content);
   const [condition, setCondition] = useState<Condition | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [round, setRound] = useState(0);
+  // Where focus goes next, and a count that asks the effect below to move it.
+  const focusNextRef = useRef<FocusNext | null>(null);
+  const [focusAsked, setFocusAsked] = useState(0);
+  const areaRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const busy = maps.busy !== null;
+  const setFocusNext = (next: FocusNext) => {
+    focusNextRef.current = next;
+    setFocusAsked((was) => was + 1);
+  };
+
+  // Focus is moved once the change is drawn and the control is enabled
+  // again: a button that has just gone, or just been disabled, drops focus to
+  // the page, and she would have to find her place again.
+  useEffect(() => {
+    const next = focusNextRef.current;
+    if (next === null || busy) return;
+    focusNextRef.current = null;
+    focusTarget(next, areaRef.current, fileRef.current)?.focus();
+  }, [focusAsked, busy]);
+
+  const status =
+    maps.busy === 'preparing'
+      ? 'Preparing the map.'
+      : maps.busy === 'uploading'
+        ? 'Uploading the map.'
+        : maps.busy === 'removing'
+          ? 'Removing the map.'
+          : '';
 
   return (
-    <>
+    <div ref={areaRef}>
       <p className="small muted">
         Each map is prepared here before it is sent: a plain white border is trimmed and it is saved
         as a PNG without transparency. A map is never shrunk: one wider or taller than 4,096 pixels,
-        over 12 million pixels or over 5 MB is refused. A report holds up to {LIMITS.maps}.
+        over 12 million pixels or over 5 MB is refused. A report holds up to {LIMITS.maps}. A map is
+        named on the page by the condition it was recorded under, or by your own label.
       </p>
 
       {listed.length > 0 ? (
@@ -154,22 +224,18 @@ export function MapsSection({
                             {CONDITION_LABELS[value]}
                           </option>
                         ))}
-                        <option value="">Another view, labelled</option>
+                        <option value="">{ANOTHER_VIEW}</option>
                       </select>
                       {entry.condition === null ? (
-                        <CaptionField
-                          n={n}
+                        <input
+                          className="field__input"
+                          aria-label={`Label, map ${n}`}
+                          maxLength={LIMITS.caption}
                           value={entry.caption?.en ?? ''}
-                          onChange={(text) =>
-                            edit((was) =>
-                              placeMap(
-                                was,
-                                entry.figureId,
-                                null,
-                                text.trim() === '' ? null : { en: text, ar: null },
-                              ),
-                            )
-                          }
+                          onChange={(event) => {
+                            const text = event.currentTarget.value;
+                            edit((was) => labelMap(was, entry.figureId, text));
+                          }}
                         />
                       ) : null}
                     </td>
@@ -180,7 +246,11 @@ export function MapsSection({
                           variant="quiet"
                           disabled={busy || index === 0}
                           aria-label={`Move map ${n} earlier`}
-                          onClick={() => edit((was) => moveMap(was, entry.figureId, -1))}
+                          data-move={`${entry.figureId}:-1`}
+                          onClick={() => {
+                            edit((was) => moveMap(was, entry.figureId, -1));
+                            setFocusNext({ to: 'moved', figureId: entry.figureId, by: -1 });
+                          }}
                         >
                           Earlier
                         </Button>
@@ -188,7 +258,11 @@ export function MapsSection({
                           variant="quiet"
                           disabled={busy || index === listed.length - 1}
                           aria-label={`Move map ${n} later`}
-                          onClick={() => edit((was) => moveMap(was, entry.figureId, 1))}
+                          data-move={`${entry.figureId}:1`}
+                          onClick={() => {
+                            edit((was) => moveMap(was, entry.figureId, 1));
+                            setFocusNext({ to: 'moved', figureId: entry.figureId, by: 1 });
+                          }}
                         >
                           Later
                         </Button>
@@ -196,13 +270,23 @@ export function MapsSection({
                           variant="quiet"
                           disabled={busy}
                           aria-label={`Remove map ${n}`}
-                          onClick={() => setConfirming(entry.figureId)}
+                          data-remove={entry.figureId}
+                          onClick={() => {
+                            setConfirming(entry.figureId);
+                            setFocusNext({ to: 'panel' });
+                          }}
                         >
                           Remove
                         </Button>
                       </div>
                       {confirming === entry.figureId ? (
-                        <div className="qeeg-maps__confirm" role="group" aria-label="Remove a map">
+                        <div
+                          className="qeeg-maps__confirm"
+                          role="group"
+                          aria-label="Remove a map"
+                          tabIndex={-1}
+                          data-confirm
+                        >
                           <p>
                             Remove map {n} from the report? The draft is saved without it, and the
                             picture is deleted.
@@ -210,14 +294,23 @@ export function MapsSection({
                           <div className="report-editor__actions">
                             <Button
                               variant="primary"
+                              disabled={busy}
                               onClick={() => {
                                 setConfirming(null);
-                                void maps.remove(entry.figureId);
+                                void maps
+                                  .remove(entry.figureId)
+                                  .then(() => setFocusNext({ to: 'removed', index }));
                               }}
                             >
                               Remove the map
                             </Button>
-                            <Button variant="quiet" onClick={() => setConfirming(null)}>
+                            <Button
+                              variant="quiet"
+                              onClick={() => {
+                                setConfirming(null);
+                                setFocusNext({ to: 'remove', figureId: entry.figureId });
+                              }}
+                            >
                               Keep it
                             </Button>
                           </div>
@@ -241,73 +334,51 @@ export function MapsSection({
           disabled={busy}
           onChange={(event) => setCondition(conditionOf(event.currentTarget.value))}
         >
-          <option value="">Not said yet</option>
           {CONDITION_ORDER.map((value) => (
             <option key={value} value={value}>
               {CONDITION_LABELS[value]}
             </option>
           ))}
+          <option value="">{ANOTHER_VIEW}</option>
         </Select>
         <div className="field">
           <label className="field__label" htmlFor="qeeg-map-file">
             Choose a brain map
           </label>
           <input
-            key={round}
+            ref={fileRef}
             id="qeeg-map-file"
             className="field__input"
             type="file"
-            accept="image/png,image/jpeg,image/bmp,image/webp"
+            accept={MAP_FILE_TYPES}
             disabled={busy}
             onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
-              // A new input each time, so the same file can be chosen again.
-              setRound((was) => was + 1);
-              if (file) void maps.add(file, condition);
+              const input = event.currentTarget;
+              const file = input.files?.[0];
+              // Emptied, so the same file can be chosen again.
+              input.value = '';
+              if (file) void maps.add(file, condition).then(() => setFocusNext({ to: 'file' }));
             }}
           />
         </div>
       </fieldset>
 
-      {maps.busy !== null ? (
-        <p className="small" role="status">
-          {maps.busy === 'preparing'
-            ? 'Preparing the map.'
-            : maps.busy === 'uploading'
-              ? 'Uploading the map.'
-              : 'Removing the map.'}
-        </p>
-      ) : null}
+      {/* Always here, so what it says is announced when it changes. */}
+      <p id="qeeg-maps-status" className="small" role="status">
+        {status}
+      </p>
       {maps.error ? (
         <div role="alert">
           <Note tone="critical">{maps.error}</Note>
         </div>
       ) : null}
       {maps.notice ? <p className="small">{maps.notice}</p> : null}
-    </>
+    </div>
   );
 }
 
-/** Her own label for a map of another view. Held as typed; the content takes it trimmed of nothing. */
-function CaptionField({
-  n,
-  value,
-  onChange,
-}: {
-  n: number;
-  value: string;
-  onChange: (text: string) => void;
-}) {
-  return (
-    <input
-      className="field__input"
-      aria-label={`Label, map ${n}`}
-      maxLength={LIMITS.caption}
-      value={value}
-      onChange={(event) => onChange(event.currentTarget.value)}
-    />
-  );
-}
+/** What the file control offers: the kinds the `undecodable` sentence names. */
+const MAP_FILE_TYPES = 'image/png,image/jpeg,image/bmp';
 
 // ---------------------------------------------------------------------------
 // A follow-up's pairs
