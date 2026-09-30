@@ -237,3 +237,96 @@ describe('a rectangle, which the engine draws for the practice’s invoice', () 
     expect(copy.stroke).not.toBe(rect.stroke);
   });
 });
+
+describe('what the review of the rectangle found the tests did not hold', () => {
+  const rect: LayoutOp = {
+    kind: 'rect',
+    x: 120,
+    y: 140,
+    width: 60,
+    height: 20,
+    fill: { rgb: [0.9, 0.8, 1] },
+    stroke: { rgb: [0.2, 0.4, 0.6] },
+  };
+
+  it('scales up and down about the origin’s own height, and keeps a line’s colour', () => {
+    // An origin whose two numbers differ, so that one taken for the other shows.
+    expect(scaleOps([rect], 0.5, { x: 100, y: 40 })).toEqual([
+      {
+        kind: 'rect',
+        x: 110,
+        y: 90,
+        width: 30,
+        height: 10,
+        fill: { rgb: [0.9, 0.8, 1] },
+        stroke: { rgb: [0.2, 0.4, 0.6], thickness: 0.25 },
+      },
+    ]);
+  });
+
+  /** Every colour triple an op carries. */
+  function coloursOf(op: LayoutOp): (readonly number[])[] {
+    switch (op.kind) {
+      case 'text':
+        return op.style.rgb ? [op.style.rgb] : [];
+      case 'rule':
+        return op.rgb ? [op.rgb] : [];
+      case 'image':
+        return [];
+      case 'path':
+        return [op.fill?.rgb, op.stroke?.rgb].filter((rgb) => rgb !== undefined);
+      case 'rect':
+        return [op.fill && 'rgb' in op.fill ? op.fill.rgb : undefined, op.stroke?.rgb].filter(
+          (rgb) => rgb !== undefined,
+        );
+      default: {
+        const unknown: never = op;
+        throw new Error(`unknown op ${String(unknown)}`);
+      }
+    }
+  }
+
+  const coloured: LayoutOp[] = [
+    {
+      kind: 'text',
+      x: 0,
+      y: 0,
+      text: 'a',
+      style: { font: 'regular', size: 10, rgb: [0.1, 0.2, 0.3] },
+    },
+    { kind: 'rule', x: 0, y: 0, width: 10, rgb: [0.1, 0.2, 0.3] },
+    {
+      kind: 'path',
+      segments: [
+        ['M', 0, 0],
+        ['L', 10, 10],
+      ],
+      fill: { rgb: [0.1, 0.2, 0.3] },
+      stroke: { rgb: [0.3, 0.2, 0.1], width: 1 },
+    },
+    rect,
+  ];
+
+  it('copies every colour at a scale of one: the copy shares none with what it was made from', () => {
+    const made = scaleOps(coloured, 1, { x: 0, y: 0 });
+    expect(made).toEqual(coloured);
+    coloured.forEach((op, index) => {
+      const before = coloursOf(op);
+      const after = coloursOf(made[index] ?? op);
+      expect(before.length).toBeGreaterThan(0);
+      expect(after).toEqual(before);
+      after.forEach((colour, at) => expect(colour, `${op.kind} ${at}`).not.toBe(before[at]));
+    });
+  });
+
+  it.each([
+    ['scaled', (ops: LayoutOp[]) => scaleOps(ops, 0.5, { x: 0, y: 0 })],
+    ['moved', (ops: LayoutOp[]) => translateOps(ops, 3, 4)],
+  ])('keeps every colour when %s, and changes nothing it was given', (_name, change) => {
+    const before = coloured.map(coloursOf);
+    const made = change(coloured);
+    expect(made.map(coloursOf)).toEqual(before);
+    expect(coloured.map(coloursOf)).toEqual(before);
+    expect(coloured[3]).toEqual(rect);
+  });
+});

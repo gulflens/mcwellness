@@ -1,0 +1,195 @@
+import { describe, expect, it } from 'vitest';
+import type { Op } from '@domain/shared/document';
+import { CARD, RING } from '../geometry';
+import { INK, MUTED, RING_TRACK, TIER_PAINT } from '../palette';
+import type { LayoutOp } from '../scale';
+import { boundsOf } from '../shapes';
+import type { PathOp } from '../shapes';
+import { ARABIC, ENGLISH, measure, outside } from './checks';
+import { scoreRing } from './scoreRing';
+import type { ScoreRingInput } from './scoreRing';
+
+const SIZE = CARD.ring;
+const UNIT = SIZE / RING.box;
+const CENTRE = { x: (RING.box / 2) * UNIT, y: -(RING.box / 2) * UNIT };
+const R = RING.radius * UNIT;
+
+const texts = (ops: readonly LayoutOp[]) =>
+  ops.filter((op): op is Extract<Op, { kind: 'text' }> => op.kind === 'text');
+const paths = (ops: readonly LayoutOp[]) => ops.filter((op): op is PathOp => op.kind === 'path');
+
+const ring = (score: number | null, tier: ScoreRingInput['tier']): ScoreRingInput => ({
+  score,
+  tier,
+  outOf: '/10',
+});
+
+describe('scoreRing', () => {
+  it('is a square block as wide as it is told', () => {
+    const block = scoreRing(ring(7, 'high'), SIZE, ENGLISH);
+    expect(block.width).toBe(SIZE);
+    expect(block.height).toBe(SIZE);
+    expect(block.overhang).toBe(0);
+  });
+
+  it('keeps every part inside its box, in either language, at every score', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      for (let score = 0; score <= 10; score += 1) {
+        expect(outside(scoreRing(ring(score, 'middle'), SIZE, drawing), measure)).toEqual([]);
+      }
+      expect(outside(scoreRing(ring(null, null), SIZE, drawing), measure)).toEqual([]);
+    }
+  });
+
+  it('is the same in both languages: a figure is not mirrored', () => {
+    expect(scoreRing(ring(4, 'low'), SIZE, ARABIC)).toEqual(
+      scoreRing(ring(4, 'low'), SIZE, ENGLISH),
+    );
+  });
+
+  it('draws the whole ring in the track colour, at the radius and line of its grid', () => {
+    const [track] = paths(scoreRing(ring(5, 'middle'), SIZE, ENGLISH).ops);
+    expect(track?.fill).toBeUndefined();
+    expect(track?.stroke).toEqual({ ...RING_TRACK, width: RING.line * UNIT });
+    const bounds = boundsOf(track?.segments ?? []);
+    expect(bounds.left).toBeCloseTo(CENTRE.x - R, 9);
+    expect(bounds.right).toBeCloseTo(CENTRE.x + R, 9);
+    expect(bounds.top).toBeCloseTo(CENTRE.y + R, 9);
+    expect(bounds.bottom).toBeCloseTo(CENTRE.y - R, 9);
+  });
+
+  it('draws an arc of the score’s share of a turn from the top, clockwise, round-ended', () => {
+    const [, arc] = paths(scoreRing(ring(3, 'low'), SIZE, ENGLISH).ops);
+    expect(arc?.stroke).toEqual({ rgb: TIER_PAINT.low, width: RING.line * UNIT, cap: 'round' });
+    const segments = arc?.segments ?? [];
+    const [start] = segments;
+    expect(start?.[0]).toBe('M');
+    if (start?.[0] === 'M') {
+      expect(start[1]).toBeCloseTo(CENTRE.x, 9);
+      expect(start[2]).toBeCloseTo(CENTRE.y + R, 9);
+    }
+    const end = segments[segments.length - 1];
+    const angle = Math.PI / 2 - 2 * Math.PI * 0.3;
+    expect(end?.[0]).toBe('C');
+    if (end?.[0] === 'C') {
+      expect(end[5]).toBeCloseTo(CENTRE.x + R * Math.cos(angle), 9);
+      expect(end[6]).toBeCloseTo(CENTRE.y + R * Math.sin(angle), 9);
+    }
+  });
+
+  it('draws no arc for a score of 0, and the whole turn for a score of 10', () => {
+    expect(paths(scoreRing(ring(0, 'low'), SIZE, ENGLISH).ops)).toHaveLength(1);
+    const [, whole] = paths(scoreRing(ring(10, 'high'), SIZE, ENGLISH).ops);
+    const segments = whole?.segments ?? [];
+    const [start] = segments;
+    const end = segments[segments.length - 1];
+    if (start?.[0] === 'M' && end?.[0] === 'C') {
+      expect(end[5]).toBeCloseTo(start[1], 9);
+      expect(end[6]).toBeCloseTo(start[2], 9);
+    } else {
+      expect.unreachable('a whole turn is a move and curves');
+    }
+  });
+
+  it('centres the score, heavier and in ink, and the words under it in the muted grey', () => {
+    const [score, outOf, ...rest] = texts(scoreRing(ring(7, 'high'), SIZE, ENGLISH).ops);
+    expect(rest).toEqual([]);
+    expect(score).toEqual({
+      kind: 'text',
+      x: CENTRE.x,
+      y: -RING.scoreBaseline * UNIT,
+      text: '7',
+      style: { font: 'bold', size: RING.scoreSize * UNIT, ...INK },
+      align: 'centre',
+    });
+    expect(outOf).toEqual({
+      kind: 'text',
+      x: CENTRE.x,
+      y: -RING.outOfBaseline * UNIT,
+      text: '/10',
+      style: { font: 'regular', size: RING.outOfSize * UNIT, ...MUTED },
+      align: 'centre',
+    });
+  });
+
+  it('draws its figures left to right in an Arabic report too', () => {
+    for (const op of texts(scoreRing(ring(10, 'high'), SIZE, ARABIC).ops)) {
+      expect(op.rtl).toBeUndefined();
+    }
+  });
+
+  it('draws the track, then the arc, then the figures', () => {
+    const kinds = scoreRing(ring(6, 'middle'), SIZE, ENGLISH).ops.map((op) => op.kind);
+    expect(kinds).toEqual(['path', 'path', 'text', 'text']);
+  });
+
+  it('marks a score not yet given with a short grey bar across its middle, and nothing else', () => {
+    for (const drawing of [ENGLISH, ARABIC]) {
+      const block = scoreRing(ring(null, null), SIZE, drawing);
+      expect(texts(block.ops)).toEqual([]);
+      const [track, mark, ...rest] = paths(block.ops);
+      expect(rest).toEqual([]);
+      expect(track?.stroke).toEqual({ ...RING_TRACK, width: RING.line * UNIT });
+      expect(mark?.fill).toEqual(MUTED);
+      expect(mark?.stroke).toBeUndefined();
+      const bounds = boundsOf(mark?.segments ?? []);
+      expect(bounds.right - bounds.left).toBeCloseTo(RING.unsetDash * UNIT, 9);
+      expect(bounds.top - bounds.bottom).toBeCloseTo(RING.unsetLine * UNIT, 9);
+      expect((bounds.left + bounds.right) / 2).toBeCloseTo(CENTRE.x, 9);
+      expect((bounds.top + bounds.bottom) / 2).toBeCloseTo(CENTRE.y, 9);
+    }
+  });
+
+  it('draws an arc for a score of 1, a tenth of a turn', () => {
+    const [, arc, ...rest] = paths(scoreRing(ring(1, 'low'), SIZE, ENGLISH).ops);
+    expect(rest).toEqual([]);
+    const segments = arc?.segments ?? [];
+    const end = segments[segments.length - 1];
+    const angle = Math.PI / 2 - 2 * Math.PI * 0.1;
+    if (end?.[0] === 'C') {
+      expect(end[5]).toBeCloseTo(CENTRE.x + R * Math.cos(angle), 9);
+      expect(end[6]).toBeCloseTo(CENTRE.y + R * Math.sin(angle), 9);
+    } else {
+      expect.unreachable('an arc ends in a curve');
+    }
+  });
+
+  it('draws the arc in the hue of its own tier', () => {
+    for (const tier of ['low', 'middle', 'high'] as const) {
+      const [, arc] = paths(scoreRing(ring(5, tier), SIZE, ENGLISH).ops);
+      expect(arc?.stroke?.rgb).toEqual(TIER_PAINT[tier]);
+    }
+  });
+
+  it('refuses a score that is not a whole number from 0 to 10, by name', () => {
+    for (const score of [-1, 11, 2.5, Number.NaN]) {
+      expect(() => scoreRing(ring(score, 'low'), SIZE, ENGLISH)).toThrow(
+        /scoreRing needs a score that is a whole number from 0 to 10, or none/,
+      );
+    }
+  });
+
+  it('refuses a score with no tier, and a tier with no score, by name', () => {
+    expect(() => scoreRing(ring(5, null), SIZE, ENGLISH)).toThrow(
+      /scoreRing needs a tier for a score of 5/,
+    );
+    expect(() => scoreRing(ring(null, 'high'), SIZE, ENGLISH)).toThrow(
+      /scoreRing needs a score for a tier of high/,
+    );
+  });
+
+  it('refuses a size that is not a number, or is below nothing, by name', () => {
+    expect(() => scoreRing(ring(5, 'low'), Number.NaN, ENGLISH)).toThrow(
+      /scoreRing needs a finite size/,
+    );
+    expect(() => scoreRing(ring(5, 'low'), -1, ENGLISH)).toThrow(
+      /scoreRing needs a size of zero or more/,
+    );
+  });
+
+  it('changes nothing it was given', () => {
+    const input = Object.freeze(ring(8, 'high'));
+    expect(() => scoreRing(input, SIZE, ENGLISH)).not.toThrow();
+    expect(input).toEqual(ring(8, 'high'));
+  });
+});

@@ -300,10 +300,39 @@ export function sineWave(
 }
 
 /**
- * The box around every number a path names, control points included. A
- * cubic never leaves the hull of its controls, so this is a box nothing
- * escapes; for a curve it may be slightly generous, which is what a layout
- * check wants.
+ * Where along a cubic, between its ends, one of its coordinates turns: the
+ * roots between 0 and 1 of the slope, which is a quadratic in `t`.
+ */
+function turnsOf(p0: number, p1: number, p2: number, p3: number): number[] {
+  const a = -p0 + 3 * p1 - 3 * p2 + p3;
+  const b = 2 * (p0 - 2 * p1 + p2);
+  const c = p1 - p0;
+  const roots: number[] = [];
+  if (Math.abs(a) < 1e-12) {
+    if (Math.abs(b) > 1e-12) roots.push(-c / b);
+  } else {
+    const under = b * b - 4 * a * c;
+    if (under >= 0) {
+      const root = Math.sqrt(under);
+      roots.push((-b + root) / (2 * a), (-b - root) / (2 * a));
+    }
+  }
+  return roots.filter((t) => t > 0 && t < 1);
+}
+
+function cubicAt(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+}
+
+/**
+ * The box round a path's ink: every point it names, and for a curve the
+ * points where it turns, NOT the points that steer it. A cubic's controls
+ * stand outside the curve they shape, by a tenth of the radius for an
+ * eighth of a circle each side of its top, so a box round them called a
+ * ring that fits its square too large for it. A curve's furthest reach
+ * is at an end or where its slope is nothing, and the slope of a cubic is a
+ * quadratic, so the reach is found and not estimated.
  */
 export function boundsOf(segments: readonly PathSegment[]): {
   left: number;
@@ -321,18 +350,35 @@ export function boundsOf(segments: readonly PathSegment[]): {
     bottom = Math.min(bottom, y);
     top = Math.max(top, y);
   };
+  let here: readonly [number, number] | null = null;
+  let began: readonly [number, number] | null = null;
   for (const segment of segments) {
     switch (segment[0]) {
       case 'M':
+        here = [segment[1], segment[2]];
+        began = here;
+        take(segment[1], segment[2]);
+        break;
       case 'L':
+        here = [segment[1], segment[2]];
         take(segment[1], segment[2]);
         break;
-      case 'C':
-        take(segment[1], segment[2]);
-        take(segment[3], segment[4]);
-        take(segment[5], segment[6]);
+      case 'C': {
+        if (!here) throw new RangeError('boundsOf needs a point before a curve.');
+        const [x0, y0] = here;
+        const [, x1, y1, x2, y2, x3, y3] = segment;
+        take(x3, y3);
+        for (const t of turnsOf(x0, x1, x2, x3)) {
+          take(cubicAt(x0, x1, x2, x3, t), cubicAt(y0, y1, y2, y3, t));
+        }
+        for (const t of turnsOf(y0, y1, y2, y3)) {
+          take(cubicAt(x0, x1, x2, x3, t), cubicAt(y0, y1, y2, y3, t));
+        }
+        here = [x3, y3];
         break;
+      }
       case 'Z':
+        here = began;
         break;
       default: {
         const unknown: never = segment;

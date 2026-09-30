@@ -74,6 +74,20 @@ export function phrase(key: string, edition: Edition, locale: Locale): string {
 }
 
 /**
+ * A sentence both editions share, in the language asked for. Asked of what
+ * no edition owns (a joiner, a region's name, the words for a count), so it
+ * names no edition, and refuses by name a sentence that is one edition's own.
+ */
+export function sharedPhrase(key: string, locale: Locale): string {
+  const entry = WORDING[key];
+  if (!entry) throw new Error(`The wording holds no sentence named ${key}.`);
+  if (!('both' in entry)) {
+    throw new Error(`The sentence ${key} is not one both editions share.`);
+  }
+  return entry.both[locale];
+}
+
+/**
  * Fills the gaps in a sentence. A gap nobody filled is refused: a brace on a
  * household's page is worse than an error at the practitioner's desk.
  */

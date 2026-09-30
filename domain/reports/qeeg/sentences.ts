@@ -30,16 +30,17 @@ import {
   type ConnectivityId,
 } from './catalogue/ids';
 import type { Edition, Locale, QeegContent, QeegFollowUp, Regions } from './types';
-import { fill, phrase } from './wording';
+import { fill, phrase, sharedPhrase } from './wording';
 
 /** What a sentence reads as before anything is chosen. A mark, not a word. */
 const NOTHING_YET = '—';
 
 /**
- * A sentence both editions share. The edition only chooses between entries
- * that differ, so either one reads a shared entry the same.
+ * A sentence both editions share, asked for as shared: it names no edition,
+ * and one that is an edition's own is refused rather than read as a first
+ * report's.
  */
-const shared = (key: string, locale: Locale) => phrase(key, 'initial', locale);
+const shared = sharedPhrase;
 
 export function regionPhrase(regions: Regions, locale: Locale): string {
   const names = REGION_IDS.filter((id) => regions.includes(id)).map((id) =>
