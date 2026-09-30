@@ -366,7 +366,110 @@ describe('an extra discount at the sale', () => {
       target: { value: 'A discount larger than the price.' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
-    expect(await screen.findByText('The discount is larger than the list price.')).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'The price list already takes AED 1,825.00 off, so the most you can add is AED 10,325.00. To give it away, choose Free (100%).',
+      ),
+    ).toBeTruthy();
+    expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(false);
+  });
+});
+
+describe('giving a package away free', () => {
+  const PERCENT_SILVER = {
+    ...SILVER,
+    currentPrice: { ...SILVER.currentPrice, discountFils: 182_250, discountBasisPoints: 1500 },
+  };
+
+  it('offers Free beside the other choices and shows nothing to pay', async () => {
+    mount();
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'free' },
+    });
+    expect(screen.queryByLabelText('Discount (AED)')).toBeNull();
+    expect(screen.queryByLabelText('Discount (%)')).toBeNull();
+    // The price after the discount and the total both come to nothing.
+    expect(screen.getAllByText('0.00').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('sends the rest of the list as the extra discount, with its reason', async () => {
+    const { requests } = mount();
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'free' },
+    });
+    fireEvent.change(screen.getByLabelText('Why'), {
+      target: { value: 'Given away to promote the practice.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    await waitFor(() => {
+      expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(true);
+    });
+    const sent = requests.find((r) => r.url === '/api/billing/package-purchases')?.body as {
+      extraDiscount: { discount: unknown; reason: string };
+    };
+    // AED 12,150 less the list's own AED 1,825: the AED 10,325 left.
+    expect(sent.extraDiscount).toEqual({
+      discount: { kind: 'amount', fils: 1_032_500 },
+      reason: 'Given away to promote the practice.',
+    });
+  });
+
+  it('sends the rest as a percentage when the list discount is one, so the invoice reads 100%', async () => {
+    const { requests } = mount(() => undefined, PERCENT_SILVER);
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'free' },
+    });
+    fireEvent.change(screen.getByLabelText('Why'), {
+      target: { value: 'Given away to promote the practice.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    await waitFor(() => {
+      expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(true);
+    });
+    const sent = requests.find((r) => r.url === '/api/billing/package-purchases')?.body as {
+      extraDiscount: { discount: unknown };
+    };
+    expect(sent.extraDiscount.discount).toEqual({ kind: 'percent', basisPoints: 8500 });
+  });
+
+  it('still asks why before a free sale is sent', async () => {
+    const { requests } = mount();
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'free' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    expect(await screen.findByText('Say why in at least 8 characters.')).toBeTruthy();
+    expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(false);
+  });
+
+  it('says how much more can be given, and that this makes it free', () => {
+    mount(() => undefined, PERCENT_SILVER);
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'percent' },
+    });
+    expect(screen.getByText('Up to 85% more. That makes it free.')).toBeTruthy();
+  });
+
+  it('refuses a percentage above what is left, naming the most and pointing to Free', async () => {
+    const { requests } = mount(() => undefined, PERCENT_SILVER);
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'percent' },
+    });
+    fireEvent.change(screen.getByLabelText('Discount (%)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Why'), {
+      target: { value: 'Given away to promote the practice.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    expect(
+      await screen.findByText(
+        'The price list already takes 15% off, so the most you can add is 85%. To give it away, choose Free (100%).',
+      ),
+    ).toBeTruthy();
     expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(false);
   });
 });

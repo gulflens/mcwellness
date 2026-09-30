@@ -22,11 +22,13 @@ import { DiscountFields } from './DiscountFields';
 import { useAttemptKey } from './attempt';
 import { useDrawer } from './useDrawer';
 import {
-  discountBody,
   formatFils,
   previewSaleDiscount,
+  saleDiscountTooLargeWords,
+  saleExtraDiscount,
+  saleRoomWords,
   previewVat,
-  type DiscountKind,
+  type SaleDiscountKind,
 } from './money';
 
 /**
@@ -100,7 +102,7 @@ export function SellSessionDrawer({
   const [takingPayment, setTakingPayment] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>('transfer');
   const [reference, setReference] = useState('');
-  const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
+  const [discountKind, setDiscountKind] = useState<SaleDiscountKind>('none');
   const [discountValue, setDiscountValue] = useState('');
   const [discountReason, setDiscountReason] = useState('');
   const [discountError, setDiscountError] = useState<string | undefined>();
@@ -182,9 +184,15 @@ export function SellSessionDrawer({
     setServiceError(undefined);
     if (discountKind !== 'none' && applied === null) {
       setDiscountError(
-        discountKind === 'percent'
-          ? 'Enter a percentage between 0 and 100, such as 5.'
-          : DISCOUNT_TOO_LARGE_MESSAGE,
+        saleDiscountTooLargeWords(
+          price.listPriceFils,
+          { discountFils: price.discountFils, basisPoints: price.discountBasisPoints },
+          discountKind,
+          discountValue,
+        ) ??
+          (discountKind === 'percent'
+            ? 'Enter a percentage between 0 and 100, such as 5.'
+            : DISCOUNT_TOO_LARGE_MESSAGE),
       );
       return;
     }
@@ -195,7 +203,12 @@ export function SellSessionDrawer({
       return;
     }
     setReasonError(undefined);
-    const extra = discountBody(discountKind, discountValue);
+    const extra = saleExtraDiscount(
+      price.listPriceFils,
+      { discountFils: price.discountFils, basisPoints: price.discountBasisPoints },
+      discountKind,
+      discountValue,
+    );
 
     setBusy(true);
     try {
@@ -384,6 +397,15 @@ export function SellSessionDrawer({
             kind={discountKind}
             value={discountValue}
             error={discountError}
+            offerFree
+            hint={
+              price
+                ? saleRoomWords(price.listPriceFils, {
+                    discountFils: price.discountFils,
+                    basisPoints: price.discountBasisPoints,
+                  })
+                : null
+            }
             onChange={(next) => {
               setDiscountKind(next.kind);
               setDiscountValue(next.value);
