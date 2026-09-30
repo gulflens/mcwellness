@@ -3,13 +3,14 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type {
   IssueResponse,
   QeegDraftResponse,
+  QeegPrefillResponse,
   ReportResponse,
 } from '../../../app/api/reports/schema';
 import { WORDS } from '../../../domain/reports/document/strings';
 import { missingForIssue } from '../../../domain/reports/qeeg/complete';
 import type * as Pages from '../../../domain/reports/qeeg/document';
 import { fullFollowUp, sparseFollowUp } from '../../../domain/reports/qeeg/testing/reports';
-import type { FigureRef, QeegInitial } from '../../../domain/reports/qeeg/types';
+import type { FigureRef, QeegFollowUp, QeegInitial } from '../../../domain/reports/qeeg/types';
 import type * as Wording from '../../../domain/reports/qeeg/wording';
 import { extractAll } from '../../../domain/shared/document';
 import { clientDocumentKey } from '../../../domain/shared/storage';
@@ -63,6 +64,8 @@ vi.mock('../../../domain/reports/qeeg/document', async (importOriginal) => {
     },
   };
 });
+
+type QeegFollowUpPairs = QeegFollowUp['change']['pairs'];
 
 const NOW = () => new Date('2026-09-30T08:00:00.000Z');
 const SIGN_REASON = 'Signing the brain-map report';
@@ -702,6 +705,109 @@ describe('a follow-up, signed', () => {
     // Its own two maps and both sides of both pairs: six pictures drawn.
     const raw = Buffer.from(await pdf.arrayBuffer()).toString('latin1');
     expect(raw.match(/\/Interpolate true/g)?.length).toBe(6);
+  });
+
+  /**
+   * A follow-up of `earlierId`, begun from `start`, with two maps of its own
+   * and a later picture of each condition uploaded and placed, saved; and
+   * then signed. Answers the report and its two later pictures.
+   */
+  async function signedFollowUp(
+    earlierId: string,
+    start: Record<string, unknown>,
+    recordedOn: string,
+    seeds: readonly [number, number, number, number],
+  ) {
+    const draft = await steps.saveAs(SEEDED.owner, {
+      locale: 'en',
+      content: { ...start, comparedWith: { reportId: earlierId } },
+    });
+    if (draft.status !== 201) throw new Error(`Refused: ${draft.status} ${await draft.text()}`);
+    const blank = (await draft.json()) as QeegDraftResponse;
+    let savedAt = blank.savedAt;
+    const own: FigureRef[] = [];
+    for (const seed of seeds) {
+      const filed = await steps.upload(blank.report.id, SEEDED.owner, seed);
+      own.push(filed.ref);
+      savedAt = filed.savedAt;
+    }
+    const [mapA, mapB, laterClosed, laterOpen] = own;
+    if (!mapA || !mapB || !laterClosed || !laterOpen) throw new Error('Uploads went missing.');
+    const full = fullFollowUp();
+    const began = start as { change: { pairs: unknown } };
+    const content = {
+      ...sent(full),
+      comparedWith: { reportId: earlierId },
+      recording: { ...full.recording, recordedOn },
+      maps: completeReport([mapA, mapB]).maps,
+      change: {
+        ...full.change,
+        sessionsCompleted: { count: 20, source: 'typed' },
+        pairs: {
+          eyes_closed: {
+            earlier: (began.change.pairs as QeegFollowUpPairs).eyes_closed.earlier,
+            later: laterClosed,
+          },
+          eyes_open: {
+            earlier: (began.change.pairs as QeegFollowUpPairs).eyes_open.earlier,
+            later: laterOpen,
+          },
+        },
+      },
+    };
+    const saved = await steps.saveAs(SEEDED.owner, { id: blank.report.id, savedAt, content });
+    if (saved.status !== 200)
+      throw new Error(`Save refused: ${saved.status} ${await saved.text()}`);
+    const body = (await saved.json()) as QeegDraftResponse;
+    const signed = await issue({ id: blank.report.id, savedAt: body.savedAt });
+    return { id: blank.report.id, saved: body, signed, laterClosed, laterOpen };
+  }
+
+  it('signs a follow-up of a follow-up, its before side borrowing the map that report printed after', async () => {
+    const first = await steps.completeDraft(SEEDED.owner, { seed: 51 });
+    expect((await issue(first)).status).toBe(201);
+    const middle = await signedFollowUp(
+      first.id,
+      sent(sparseFollowUp()),
+      '2026-09-20',
+      [52, 53, 54, 55],
+    );
+    expect(middle.signed.status).toBe(201);
+
+    // Begun from the signed follow-up through the prefill, as the form begins one.
+    const asked = await h.call(
+      'GET',
+      `/api/reports/qeeg/prefill?clientId=${clientId}&from=${middle.id}&recordedOn=2026-09-29`,
+      SEEDED.owner,
+    );
+    expect(asked.status).toBe(200);
+    const prefill = (await asked.json()) as QeegPrefillResponse;
+    const prefilledPairs = (prefill.content as { change: { pairs: QeegFollowUpPairs } }).change
+      .pairs;
+    expect(prefilledPairs.eyes_closed.earlier?.figureId).toBe(middle.laterClosed.figureId);
+    expect(prefilledPairs.eyes_open.earlier?.figureId).toBe(middle.laterOpen.figureId);
+
+    const last = await signedFollowUp(
+      middle.id,
+      sent(prefill.content as object),
+      '2026-09-29',
+      [56, 57, 58, 59],
+    );
+    // The save kept the earlier report's "after" maps as this one's before side.
+    const stored = last.saved.content as { change: { pairs: QeegFollowUpPairs } };
+    expect(stored.change.pairs.eyes_closed.earlier).toEqual(middle.laterClosed);
+    expect(stored.change.pairs.eyes_open.earlier).toEqual(middle.laterOpen);
+    // Borrowed from the report that printed them, not uploaded again.
+    const { rows } = await h.owner.query<{ document_id: string; borrowed_from: string | null }>(
+      'select document_id, borrowed_from_report_id as borrowed_from from report_figure ' +
+        'where report_id = $1 and document_id = any($2::uuid[]) order by document_id',
+      [last.id, [middle.laterClosed.figureId, middle.laterOpen.figureId]],
+    );
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.borrowed_from).toBe(middle.id);
+
+    expect(last.signed.status).toBe(201);
+    expect((await statusOf(last.id)).status).toBe('issued');
   });
 });
 
