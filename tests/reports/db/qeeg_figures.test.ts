@@ -571,7 +571,8 @@ describe('frozen when the report leaves draft', () => {
     );
 
     // Withdrawn, kept against the wrong client: its maps are removed
-    // (section 11, point 7), and the picture, frozen, stays for the erasure.
+    // (section 11, point 7), and the picture with them, frozen as it is: it
+    // is another person's, filed under this client (604, section 6).
     await h.owner.query(
       "update report set withdrawn_at = now(), withdraw_reason = 'Kept against the wrong client', " +
         "content = '{}'::jsonb where id = $1",
@@ -586,9 +587,21 @@ describe('frozen when the report leaves draft', () => {
         'select count(*)::text as n from report_figure where report_id = $1',
         [reportId],
       );
-      return { key: out[0]?.key, left: Number(left.rows[0]?.n) };
+      const document = await h.owner.query<{ n: string }>(
+        'select count(*)::text as n from document where id = $1',
+        [figure.figureId],
+      );
+      return {
+        key: out[0]?.key,
+        left: Number(left.rows[0]?.n),
+        document: Number(document.rows[0]?.n),
+      };
     });
-    expect(removed).toEqual({ key: null, left: 0 });
+    expect(removed).toEqual({
+      key: clientDocumentKey(h.data.tenant.id, clientId, figure.figureId),
+      left: 0,
+      document: 0,
+    });
   });
 });
 
