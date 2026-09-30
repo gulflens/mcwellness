@@ -47,8 +47,10 @@ export const WORDING: Readonly<Record<string, Entry>> = V1;
  * approval, and the test is there so that it is never done in passing.
  */
 export const WORDING_STATUS: Readonly<Record<Locale, 'draft' | 'approved'>> = Object.freeze({
-  en: 'draft',
-  ar: 'draft',
+  // Approved by the practice on 30 September 2026, both languages, from the
+  // two wording sheets of that day (384 keys).
+  en: 'approved',
+  ar: 'approved',
 });
 
 /** Every key, in the order the file holds them. */

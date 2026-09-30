@@ -336,10 +336,11 @@ describe('how many sessions, in Arabic', () => {
 });
 
 describe('who has approved it', () => {
-  it('is a draft in both languages until a person approves it', () => {
-    // This test is a tripwire, and changing it is the act of approval: the pull
-    // request that turns it over names who approved the words, and when.
-    expect(WORDING_STATUS).toEqual({ en: 'draft', ar: 'draft' });
+  it('is approved in both languages, by the practice on 30 September 2026', () => {
+    // This test is a tripwire, and changing it is the act of approval: the
+    // practice approved both wording sheets of 30 September 2026 (384 keys),
+    // English and Arabic, and this change records it.
+    expect(WORDING_STATUS).toEqual({ en: 'approved', ar: 'approved' });
   });
 });
 
