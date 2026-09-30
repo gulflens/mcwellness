@@ -46,7 +46,11 @@ import { mountPractice } from './practice/routes';
 import { mountPractitioners } from './practitioners/routes';
 import { mountTeam } from './team/routes';
 import { mountReports } from './reports/routes';
-import { REPORT_DRAFT_BODY_LIMIT_BYTES, REPORT_DRAFT_PATH } from './reports/schema';
+import {
+  REPORT_DRAFT_BODY_LIMIT_BYTES,
+  REPORT_DRAFT_PATH,
+  REPORT_IMPORT_PATH,
+} from './reports/schema';
 import {
   FIGURE_BODY_LIMIT_BYTES,
   FIGURE_PATH,
@@ -351,7 +355,12 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
-    if (c.req.method === 'POST' && c.req.path === REPORT_DRAFT_PATH) {
+    // A past record brought in carries the same body a draft does: a whole
+    // brain map, in both languages (app/api/reports/qeeg/pastRecord.ts).
+    if (
+      c.req.method === 'POST' &&
+      (c.req.path === REPORT_DRAFT_PATH || c.req.path === REPORT_IMPORT_PATH)
+    ) {
       return reportDraftBodyLimit(c, next);
     }
     if (isEquipmentExportUpload(c.req.method, c.req.path)) return assessmentFileLimit(c, next);

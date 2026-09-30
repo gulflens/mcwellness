@@ -86,6 +86,13 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
     if (!mayDraftReport(actor, draft.client_id, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
+    if (draft.status === 'imported') {
+      // A past record is kept, never signed: its fixed wording would be
+      // today's and not what the household received (docs/SPEC/reports-qeeg.md
+      // section 11, point 4). A draft being brought in is refused by the
+      // brain map's own door, below.
+      return c.json({ error: 'unprocessable', code: 'imported_record', requestId }, 422);
+    }
     if (draft.status !== 'draft') {
       return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
     }

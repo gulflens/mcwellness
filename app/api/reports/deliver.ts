@@ -14,6 +14,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { isUuid } from '../billing/ids';
 import { mayDeliverReport } from './access';
 import { practiceTimeZone } from './gather';
+import { importedRefusal } from './qeeg/imported';
 import { DeliverInput, DeliverResponse } from './schema';
 import { readReport } from './source';
 
@@ -100,6 +101,18 @@ export function mountReportDeliver(
     const record = await readReport(db, reportId);
     if (!record) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    const imported = importedRefusal(record);
+    if (imported !== null) {
+      // A past record is never put in front of a household: it was printed
+      // once, by the old tool (docs/SPEC/reports-qeeg.md section 11, point 4).
+      await logAction(
+        db,
+        'report.deliver_refused',
+        { type: 'report', id: reportId, clientId: record.client_id },
+        { reason: imported },
+      );
+      return c.json({ error: 'unprocessable', code: imported, requestId }, 422);
     }
 
     const contacts = await db.query<{

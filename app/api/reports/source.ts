@@ -46,6 +46,10 @@ export const REPORT_COLUMNS =
   // holds, so it compares equal to itself and to nothing later.
   'to_char(r.updated_at at time zone \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') as saved_at, ' +
   'r.imported_from, r.withdrawn_at is not null as withdrawn, r.compared_with_id, r.twin_of_id, ' +
+  // A brain map's day of recording, read from its content, for a follow-up's
+  // list of what it may be compared with (brief R, item 8). Nothing else of
+  // the content is read here.
+  "case when r.kind = 'qeeg' then r.content #>> '{recording,recordedOn}' end as recorded_on, " +
   // A brain map's other language, both ways, read as the caller may read it
   // (docs/SPEC/reports-qeeg.md section 8): the status of the report this one
   // was made from, and the one made from this one that still counts, a draft
@@ -100,6 +104,8 @@ export type ReportRecord = {
   twin_of_status: string | null;
   /** The report made from this one in the other language, a draft or signed. */
   twin_id: string | null;
+  /** A brain map's day of recording, as its content says. */
+  recorded_on: string | null;
   deliveries?: string | number;
 };
 
@@ -168,6 +174,12 @@ export function asRow(record: ReportRecord): ReportRow {
     twinOfId: record.twin_of_id,
     twinId: record.twin_id,
     outOfStep: isOutOfStep(record),
+    pastRecord: record.imported_from !== null,
+    withdrawn: record.withdrawn,
+    recordedOn:
+      record.recorded_on !== null && /^\d{4}-\d{2}-\d{2}$/.test(record.recorded_on)
+        ? record.recorded_on
+        : null,
   };
 }
 

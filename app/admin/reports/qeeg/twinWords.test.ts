@@ -31,6 +31,9 @@ function row(over: Partial<ReportRow> = {}): ReportRow {
     twinOfId: null,
     twinId: null,
     outOfStep: false,
+    pastRecord: false,
+    withdrawn: false,
+    recordedOn: null,
     ...over,
   };
 }

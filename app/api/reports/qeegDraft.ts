@@ -312,6 +312,10 @@ export async function saveQeegDraft(
     if (existing.kind !== 'qeeg') {
       return c.json({ error: 'unprocessable', code: 'wrong_kind', requestId }, 422);
     }
+    if (existing.status === 'imported') {
+      // A kept past record is frozen, and was never this door's.
+      return c.json({ error: 'unprocessable', code: 'imported_record', requestId }, 422);
+    }
     if (existing.status !== 'draft') {
       return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
     }

@@ -49,3 +49,14 @@ export function maySupersedeReport(actor: Actor, clientId: string, now: Date): b
 export function mayDeliverReport(actor: Actor, now: Date): boolean {
   return canActor(actor, { type: 'report.deliver' }, {}, now);
 }
+
+/**
+ * Bringing in a past record from the practice's old tool, keeping it, and
+ * withdrawing one kept against the wrong client: the owner and the lead
+ * practitioner (docs/SPEC/reports-qeeg.md section 11;
+ * docs/CHANGE-REQUESTS/reports-02.md request 6). Migration 603's guard and
+ * `app.keep_imported_report` ask the same two roles underneath.
+ */
+export function mayImportReport(actor: Actor, clientId: string, now: Date): boolean {
+  return canActor(actor, { type: 'report.import', clientId }, {}, now);
+}

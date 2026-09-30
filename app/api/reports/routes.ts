@@ -3,6 +3,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { mountReportDeliver } from './deliver';
 import { mountReportDraft } from './draft';
 import { mountReportFigures } from './qeeg/figures';
+import { mountReportPastRecords } from './qeeg/pastRecord';
 import { mountReportTwin } from './qeeg/twin';
 import { mountReportGet } from './get';
 import { mountReportIssue } from './issue';
@@ -29,6 +30,9 @@ import { mountReportSupersede } from './supersede';
  */
 export function mountReports(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   mountReportList(api, now);
+  // A fixed path, `/api/reports/qeeg/import`, beside the `:id` ones: mounted
+  // before them, as the list's fixed paths are.
+  mountReportPastRecords(api, now);
   mountReportDraft(api, now);
   mountReportIssue(api, now);
   mountReportPreview(api, now);

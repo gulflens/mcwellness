@@ -186,6 +186,31 @@ describe('PUT and DELETE /api/reports/:id/figures', () => {
   });
 });
 
+describe('the past record doors of a brain-map report', () => {
+  // Bringing in, keeping and withdrawing a past record from the practice's
+  // old tool (docs/SPEC/reports-qeeg.md sections 11 and 14). Each answers its
+  // own check of the request, never the unmounted-route 404.
+  it('mounts the import door', async () => {
+    const res = await call('POST', '/api/reports/qeeg/import', authIdOf(0), {});
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
+  });
+
+  it('mounts the keep and the withdraw doors', async () => {
+    for (const door of ['keep-import', 'withdraw-import']) {
+      const res = await call('POST', `/api/reports/not-a-report/${door}`, authIdOf(0), {});
+      expect(res.status, door).toBe(400);
+      expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
+    }
+  });
+
+  it('mounts the other language of a signed report', async () => {
+    const res = await call('POST', '/api/reports/not-a-report/twin', authIdOf(0), {});
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
+  });
+});
+
 describe('GET /api/portal/reports', () => {
   it('is mounted, and refuses a member of the practice rather than 404ing', async () => {
     // The household's sixth screen (docs/SPEC/reports-v1.md section 7.3). A

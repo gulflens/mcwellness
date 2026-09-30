@@ -5,6 +5,7 @@ import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isUuid } from '../billing/ids';
 import { maySupersedeReport } from './access';
+import { importedRefusal } from './qeeg/imported';
 import { supersedeQeeg } from './qeeg/supersede';
 import { QeegSupersedeInput, SupersedeInput, SupersedeResponse } from './schema';
 import { asRow, readReport } from './source';
@@ -78,6 +79,19 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
         { reason: 'not_permitted' },
       );
       return c.json({ error: 'forbidden', requestId }, 403);
+    }
+
+    const imported = importedRefusal(standing);
+    if (imported !== null) {
+      // A past record is withdrawn when it is wrong, never corrected
+      // (docs/SPEC/reports-qeeg.md section 11, points 4 and 7).
+      await logAction(
+        db,
+        'report.supersede_refused',
+        { type: 'report', id: reportId, clientId: standing.client_id },
+        { reason: imported },
+      );
+      return c.json({ error: 'unprocessable', code: imported, requestId }, 422);
     }
 
     const answer = canSupersede(

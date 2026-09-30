@@ -23,6 +23,9 @@ const row = {
   twinOfId: null,
   twinId: null,
   outOfStep: false,
+  pastRecord: false,
+  withdrawn: false,
+  recordedOn: '2026-06-01',
 };
 
 describe('the stand-in comparison', () => {

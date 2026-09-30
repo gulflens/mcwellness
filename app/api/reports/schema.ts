@@ -65,6 +65,19 @@ export const ReportRow = z.object({
    * point 5): worked out when it is read, from the two rows, never stored.
    */
   outOfStep: z.boolean().default(false),
+  /**
+   * Read from the practice's old tool's file (docs/SPEC/reports-qeeg.md
+   * section 11): a draft being brought in, or a kept past record. Defaulted,
+   * as the three above are.
+   */
+  pastRecord: z.boolean().default(false),
+  /** A past record withdrawn because it was kept against the wrong client (point 7). */
+  withdrawn: z.boolean().default(false),
+  /**
+   * A brain map's day of recording, as its content says, or null: what a
+   * follow-up's list of earlier reports is ordered by (brief R, item 8).
+   */
+  recordedOn: z.string().nullable().default(null),
 });
 export type ReportRow = z.infer<typeof ReportRow>;
 
@@ -337,6 +350,69 @@ export const TwinResponse = z.object({
   report: ReportRow,
 });
 export type TwinResponse = z.infer<typeof TwinResponse>;
+
+/** A fingerprint of a file, as small hexadecimal: what `source_sha256` holds (migration 602). */
+export const SourceSha256 = z.string().regex(/^[0-9a-f]{64}$/);
+
+/**
+ * Bringing in a past record from the practice's old tool
+ * (`POST /api/reports/qeeg/import`, docs/SPEC/reports-qeeg.md section 11).
+ *
+ * **What the reader made of the file, never the file** (point 1): the file is
+ * read in the browser by `readLegacyReport` and only its `content` is sent,
+ * with the fingerprint of the file's bytes, which the content's own
+ * provenance must repeat. The name, age and sex the file typed are shown in
+ * the browser and never sent (point 2): the content's `subject` must be
+ * empty, and there is no field here for them. Strict, so a body that tries to
+ * carry them beside the content is refused rather than read.
+ */
+export const ImportInput = z
+  .object({
+    clientId: z.uuid(),
+    sourceSha256: SourceSha256,
+    content: z.unknown(),
+  })
+  .strict();
+export type ImportInput = z.infer<typeof ImportInput>;
+
+/** The import draft as saved, with the stamp its pictures and its keep are made over. */
+export const ImportResponse = z.object({
+  report: ReportRow,
+  content: z.unknown(),
+  savedAt: SavedAt,
+});
+export type ImportResponse = z.infer<typeof ImportResponse>;
+
+/**
+ * Keeping a past record (`POST /api/reports/:id/keep-import`): where each of
+ * its pictures went once filed through the maps door, keyed by its place in
+ * the file as the reader keys it, and the places that could not be brought in
+ * (section 11, point 5). Nothing else of the record can change: the content is
+ * the one brought in. `savedAt` is the last write's, the last picture's.
+ */
+export const KeepImportInput = z
+  .object({
+    savedAt: SavedAt,
+    maps: z.record(z.string(), z.unknown()),
+    leftOut: z.array(z.string().max(12)).max(64),
+  })
+  .strict();
+export type KeepImportInput = z.infer<typeof KeepImportInput>;
+
+/**
+ * Withdrawing a past record kept against the wrong client
+ * (`POST /api/reports/:id/withdraw-import`, point 7). Nothing is sent: the
+ * reason travels in `X-Reason` and is the one the stamp keeps.
+ */
+export const WithdrawImportInput = z.object({}).strict();
+export type WithdrawImportInput = z.infer<typeof WithdrawImportInput>;
+
+/** A past record kept or withdrawn, as the list shows it. */
+export const PastRecordResponse = z.object({ report: ReportRow });
+export type PastRecordResponse = z.infer<typeof PastRecordResponse>;
+
+/** The path whose body carries a whole brain map, and so the draft's envelope. */
+export const REPORT_IMPORT_PATH = '/api/reports/qeeg/import';
 
 export const SupersedeResponse = z.object({
   /** The new draft, ready to be read over and signed. */
