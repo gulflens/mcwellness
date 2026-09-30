@@ -17,7 +17,10 @@
 --           the after-commit sweep reads (app/api/clients/erasure-file-sweep.ts),
 --           as every other document of the household's. The summary counts
 --           the links as `reportFiguresUnlinked`.
---        b) on the client's reports, `source_sha256 = null` — the fingerprint
+--        b) on the client's reports, `recipient_name` becomes the fixed
+--           phrase "Erased client" wherever one was snapshotted at signing
+--           (every kind: it is the client's own name, and 107 to 971 left
+--           it), and `source_sha256 = null` — the fingerprint
 --           of a file brought in from the old tool identifies that file
 --           wherever else it turns up — and `withdraw_reason` becomes the
 --           fixed phrase "Erased with the record" where a past record was
@@ -54,8 +57,8 @@
 --        971 (the version of app.erase_client this replaces).
 
 ------------------------------------------------------------------------------
--- 1. 971's body, verbatim, with step 4e's two additions and one more count in
---    the summary. Four words of its comments are reworded, and nothing else
+-- 1. 971's body, verbatim, with step 4e's two additions (the name cleared in
+--    its fallback branch too) and one more count in the summary. Four words of its comments are reworded, and nothing else
 --    of them: this repository does not describe a person's care in another
 --    kind of practice's words (CLAUDE.md, rule 1).
 ------------------------------------------------------------------------------
@@ -496,15 +499,22 @@ begin
         into v_report_figures_unlinked using p_client_id;
     end if;
 
-    --      972: and on the report rows, two more columns. `source_sha256`
-    --      is the fingerprint of a file brought in from the old tool: the
-    --      household's own file, and enough to recognise it anywhere else it
-    --      turns up, so it goes; `imported_from` names a format and not a
-    --      file, and stays. A withdrawn past record's reason is free text
-    --      about the household ("kept against the wrong client") and becomes
-    --      the fixed phrase, as a voided visit's does (971), because 602's
-    --      stamp needs a reason beside the date. Guarded on the column, 4c's
-    --      way, so this is the body 971 ran wherever 602 is not applied.
+    --      972: and on the report rows, three more columns. The name a
+    --      signed report was made out to (`recipient_name`, snapshotted at
+    --      signing by 600, on every kind) is the client's own name, and
+    --      becomes the fixed phrase "Erased client": 600's
+    --      `report_issued_is_complete` needs a name on a signed row, and a
+    --      draft, which has none, keeps none. The record number beside it
+    --      is the practice's, which the client row keeps, and stays.
+    --      `source_sha256` is the fingerprint of a file brought in from the
+    --      old tool: the household's own file, and enough to recognise it
+    --      anywhere else it turns up, so it goes; `imported_from` names a
+    --      format and not a file, and stays. A withdrawn past record's reason
+    --      is free text about the household ("kept against the wrong client")
+    --      and becomes the fixed phrase, as a voided visit's does (971),
+    --      because 602's stamp needs a reason beside the date. Guarded on the
+    --      column, 4c's way: wherever 602 is not applied, the body is 971's
+    --      with the name cleared as well.
     v_reports_cleared := 0;
     if exists (select 1 from pg_catalog.pg_attribute
                 where attrelid = to_regclass('public.report')
@@ -515,6 +525,9 @@ begin
               '       amendment_reason = case '
               '         when version = 1 and supersedes_id is null then null '
               '         else ''Erased with the record'' end, '
+              '       recipient_name   = case '
+              '         when recipient_name is null then null '
+              '         else ''Erased client'' end, '
               '       source_sha256    = null, '
               '       withdraw_reason  = case '
               '         when withdrawn_at is null then null '
@@ -528,7 +541,10 @@ begin
               '       document_id      = null, '
               '       amendment_reason = case '
               '         when version = 1 and supersedes_id is null then null '
-              '         else ''Erased with the record'' end '
+              '         else ''Erased with the record'' end, '
+              '       recipient_name   = case '
+              '         when recipient_name is null then null '
+              '         else ''Erased client'' end '
               ' where client_id = $1 returning id) '
               'select count(*) from cleared'
         into v_reports_cleared using p_client_id;

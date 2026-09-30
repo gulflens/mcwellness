@@ -27,6 +27,8 @@ const SOURCE_SHA = '2'.repeat(64);
 const WITHDRAWN_SHA = '3'.repeat(64);
 const WITHDRAW_REASON = 'Kept against the wrong household on the day';
 const SIGNED_FIGURE = '0000000d-0000-4000-8000-0000000000d1';
+/** The name a signed report snapshots at signing (600): a seed family name. */
+const RECIPIENT = 'Cedar Meadow';
 
 let h: Harness;
 let clientId: string;
@@ -37,6 +39,8 @@ let uploadedKey = '';
 let signedKey = '';
 let summary: Record<string, unknown> = {};
 let erasedDraftImport = '';
+/** The client's own name as the seed wrote it, in each script it holds. */
+let ownNames: string[] = [];
 
 beforeAll(async () => {
   h = await startHarness(NOW);
@@ -46,6 +50,11 @@ beforeAll(async () => {
   if (index < 0) throw new Error('The seed has no client to write about.');
   clientId = h.clientId(index);
   const tenantId = h.data.tenant.id;
+  const person = h.data.clients[index];
+  ownNames = [
+    `${person?.givenName ?? ''} ${person?.familyName ?? ''}`,
+    `${person?.givenNameAr ?? ''} ${person?.familyNameAr ?? ''}`,
+  ];
 
   // 1. A draft with a picture uploaded through the door.
   const draftRes = await h.call(
@@ -110,11 +119,12 @@ beforeAll(async () => {
   await h.owner.query(
     "update report set status = 'issued', number = 811, issued_on = current_date, " +
       "signed_at = now(), signed_by_practitioner_id = $2, signed_by_name = 'Rowan Ridge', " +
-      "signed_by_certification = 'bcia_bcn', recipient_name = 'Cedar Meadow', " +
+      "signed_by_certification = 'bcia_bcn', recipient_name = $3, " +
       "recipient_record_number = 'MW-000001', practice_legal_name = 'Synthetic Studio' " +
       'where id = $1',
-    [signedId, h.practitionerIdOf(SEEDED.owner)],
+    [signedId, h.practitionerIdOf(SEEDED.owner), RECIPIENT],
   );
+  needles.push({ what: 'the name the signed report was made out to', text: RECIPIENT });
   needles.push({ what: 'the signed picture', text: SIGNED_FIGURE });
   needles.push({ what: 'the signed digest', text: SIGNED_SHA });
 
@@ -256,6 +266,40 @@ describe('an erasure reaches the brain maps', () => {
       expect(row.withdraw_reason).toBe(row.withdrawn ? 'Erased with the record' : null);
     }
     expect(rows.map((row) => row.status)).toEqual(['imported', 'imported', 'draft']);
+  });
+
+  it('makes a signed report out to the erased client, and leaves a draft made out to nobody', async () => {
+    const { rows } = await h.owner.query<{ status: string; recipient_name: string | null }>(
+      'select status::text as status, recipient_name from report where client_id = $1',
+      [clientId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.recipient_name).toBe(row.status === 'issued' ? 'Erased client' : null);
+    }
+    expect(rows.some((row) => row.status === 'issued')).toBe(true);
+  });
+
+  it('leaves the client’s name in no column of any of their reports', async () => {
+    const columns = await h.owner.query<{ name: string }>(
+      'select attname as name from pg_attribute ' +
+        "where attrelid = 'public.report'::regclass and attnum > 0 and not attisdropped " +
+        'order by attnum',
+    );
+    expect(columns.rows.length).toBeGreaterThan(20);
+    const names = [RECIPIENT, ...ownNames.filter((name) => name.trim() !== '')];
+    const found: string[] = [];
+    for (const { name: column } of columns.rows) {
+      for (const text of names) {
+        const { rows } = await h.owner.query<{ n: string }>(
+          `select count(*)::text as n from public.report where client_id = $1 ` +
+            `and ${JSON.stringify(column)}::text like $2`,
+          [clientId, `%${text}%`],
+        );
+        if (Number(rows[0]?.n) > 0) found.push(`${text} in report.${column}`);
+      }
+    }
+    expect(found).toEqual([]);
   });
 
   it('leaves nothing that could identify them in any column of any table', async () => {
