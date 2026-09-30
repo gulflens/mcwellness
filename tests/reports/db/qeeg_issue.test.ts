@@ -772,6 +772,16 @@ describe('what a household is answered for a signed brain map', () => {
         'where id = $1',
       [signedId, h.practitionerIdOf(SEEDED.owner)],
     );
+    // Sent once to the household, so the practice's page has a delivery to list.
+    const contact = await h.owner.query<{ id: string }>(
+      'select id from contact where client_id = $1 order by id limit 1',
+      [clientId],
+    );
+    await h.owner.query(
+      'insert into report_delivery (tenant_id, report_id, client_id, contact_id, channel) ' +
+        "values ($1, $2, $3, $4, 'email')",
+      [h.data.tenant.id, signedId, clientId, contact.rows[0]?.id],
+    );
   });
 
   it('gives the practice the whole body, as its own screen reads it', async () => {
@@ -794,5 +804,40 @@ describe('what a household is answered for a signed brain map', () => {
     for (const held of [UNTICKED, EARLIER_ASSESSMENT, LATER_ASSESSMENT, comparedId]) {
       expect(text).not.toContain(held);
     }
+  });
+
+  it('gives a household only what its own Reports screen reads of the row, and no delivery list', async () => {
+    const asPractice = (await (
+      await h.call('GET', `/api/reports/${signedId}`, SEEDED.owner)
+    ).json()) as ReportResponse;
+    expect(asPractice.report.signedByName).toBe('Rowan Ridge');
+    expect(asPractice.deliveries).toHaveLength(1);
+
+    const body = (await (
+      await h.callAs('GET', `/api/reports/${signedId}`, household)
+    ).json()) as ReportResponse;
+    // What the portal's list reads, as the practice's own answer has it.
+    for (const field of [
+      'id',
+      'clientId',
+      'kind',
+      'status',
+      'reference',
+      'issuedOn',
+      'coverageFrom',
+      'coverageTo',
+      'version',
+      'documentId',
+    ] as const) {
+      expect(body.report[field], field).toEqual(asPractice.report[field]);
+    }
+    // And nothing the practice keeps about the row or about whom it sent it to.
+    expect(body.report.signedByName).toBeNull();
+    expect(body.report.amendmentReason).toBeNull();
+    expect(body.report.supersedesId).toBeNull();
+    expect(body.report.twinOfId).toBeNull();
+    expect(body.report.twinId).toBeNull();
+    expect(body.report.deliveries).toBe(0);
+    expect(body.deliveries).toEqual([]);
   });
 });

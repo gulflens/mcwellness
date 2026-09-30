@@ -10,7 +10,7 @@ import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayReadReport } from './access';
 import { contactClientIds } from './household';
-import { ReportResponse } from './schema';
+import { ReportResponse, type ReportRow } from './schema';
 import { renderSigned, type PictureRefusal } from './qeeg/pages';
 import { asRow, documentFrom, readReport, type ReportRecord } from './source';
 
@@ -42,7 +42,8 @@ import { asRow, documentFrom, readReport, type ReportRecord } from './source';
  * never print: items she left unticked, a calculated figure's assessments,
  * the id of the report it is compared with (which may be a past record the
  * household must never see). So a caller who is only a household is answered
- * the row, the deliveries and the link, and `content: null`. And when the
+ * the row as the portal's list reads it (`asHouseholdRow`), the link, no
+ * deliveries and `content: null`. And when the
  * signed file is missing, the household is answered 404 with no link, as the
  * portal's own link route answers it: re-rendering is the practice's to do,
  * and the repair's refusals are sentences for the practice.
@@ -144,6 +145,27 @@ async function remade(
   }
 }
 
+/**
+ * A signed brain map's row as a household is answered it: what the portal's
+ * list reads (id, client, kind, status, reference, dates, version, the
+ * document), and the shape's neutral value for everything else the practice
+ * keeps about the row — who signed it, why it was corrected, the versions and
+ * other-language reports it is tied to, and how often it was sent.
+ */
+function asHouseholdRow(row: ReportRow): ReportRow {
+  return {
+    ...row,
+    signedByName: null,
+    supersedesId: null,
+    amendmentReason: null,
+    deliveries: 0,
+    twinOfId: null,
+    twinId: null,
+    outOfStep: false,
+    recordedOn: null,
+  };
+}
+
 export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.get('/api/reports/:id', async (c) => {
     const requestId = c.get('requestId');
@@ -175,13 +197,17 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
     // is a document behind it yet.
     await logRead(db, 'report', record.id, record.client_id);
 
-    const deliveries = await db.query<{
+    type DeliveryRead = {
       id: string;
       contact_id: string;
       contact_label: string;
       channel: 'whatsapp' | 'email';
       sent_at: string;
-    }>(DELIVERIES_SQL, [reportId]);
+    };
+    // Who a report was sent to is the practice's bookkeeping, never read for a household.
+    const deliveries = householdBrainMap
+      ? { rows: [] as DeliveryRead[] }
+      : await db.query<DeliveryRead>(DELIVERIES_SQL, [reportId]);
 
     let url: string | null = null;
     const storage = c.get('storage');
@@ -246,7 +272,7 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
 
     return c.json(
       ReportResponse.parse({
-        report: asRow(record),
+        report: householdBrainMap ? asHouseholdRow(asRow(record)) : asRow(record),
         content: householdBrainMap ? null : record.content,
         deliveries: deliveries.rows.map((row) => ({
           id: row.id,
