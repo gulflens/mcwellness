@@ -433,6 +433,77 @@ describe('a complete draft, signed', () => {
     }
   });
 
+  it('refuses to repair, by name, when its pages would now run over, and hands out no link', async () => {
+    await h.storage.delete(documentRow.storage_key);
+    overrun.parts = ['summary.1'];
+    try {
+      const res = await h.call('GET', `/api/reports/${draft.id}`, SEEDED.owner);
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ code: 'document_overrun' });
+      expect(typeof body['sentence']).toBe('string');
+      expect(body['url']).toBeUndefined();
+      expect(await h.storage.exists(documentRow.storage_key)).toBe(false);
+    } finally {
+      overrun.parts = null;
+      await h.storage.put(documentRow.storage_key, stored, 'application/pdf', { overwrite: true });
+    }
+  });
+
+  it('refuses to repair, by name, when its content can no longer be read, and hands out no link', async () => {
+    const { rows } = await h.owner.query<{ content: unknown }>(
+      'select content from report where id = $1',
+      [draft.id],
+    );
+    const content = rows[0]?.content;
+    // Past the guard, for this test alone and put back after: no route writes a signed body.
+    const rewrite = async (value: unknown) => {
+      await h.owner.query('alter table report disable trigger guard_report_write');
+      try {
+        await h.owner.query('update report set content = $2::jsonb where id = $1', [
+          draft.id,
+          JSON.stringify(value),
+        ]);
+      } finally {
+        await h.owner.query('alter table report enable always trigger guard_report_write');
+      }
+    };
+    await h.storage.delete(documentRow.storage_key);
+    await rewrite({ ...(content as object), plan: 7 });
+    try {
+      const res = await h.call('GET', `/api/reports/${draft.id}`, SEEDED.owner);
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ code: 'document_unreadable' });
+      expect(typeof body['sentence']).toBe('string');
+      expect(body['url']).toBeUndefined();
+    } finally {
+      await rewrite(content);
+      await h.storage.put(documentRow.storage_key, stored, 'application/pdf', { overwrite: true });
+    }
+  });
+
+  it('refuses to repair, by the field, when a map it prints is not what was filed', async () => {
+    const second = draft.maps[1];
+    if (!second) throw new Error('No map.');
+    const mapKey = clientDocumentKey(h.data.tenant.id, clientId, second.figureId);
+    const mapBytes = await h.storage.get(mapKey);
+    if (!mapBytes) throw new Error('The map is not in the store.');
+    await h.storage.delete(documentRow.storage_key);
+    const other = await goodPng(MAP_SIZE.width, MAP_SIZE.height, 99);
+    await h.storage.put(mapKey, other, 'image/png', { overwrite: true });
+    try {
+      const res = await h.call('GET', `/api/reports/${draft.id}`, SEEDED.owner);
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ code: 'map_differs', field: 'maps.map-1.figureId' });
+      expect(body['url']).toBeUndefined();
+    } finally {
+      await h.storage.put(mapKey, mapBytes, 'image/png', { overwrite: true });
+      await h.storage.put(documentRow.storage_key, stored, 'application/pdf', { overwrite: true });
+    }
+  });
+
   it('refuses to repair with bytes that differ from what was filed', async () => {
     await h.storage.delete(documentRow.storage_key);
     await h.owner.query(
@@ -471,12 +542,15 @@ describe('two signatures at once', () => {
       [h.data.tenant.id],
     );
     expect(after.rows[0]?.next_number).toBe((before.rows[0]?.next_number ?? 0) + 1);
-    const filed = await h.owner.query<{ n: string }>(
-      'select count(*)::text as n from document d join report r on r.document_id = d.id ' +
-        'where r.id = $1',
+    // The reference on the report row is the one the winner was answered with,
+    // made from the one number taken.
+    const winner = (await (one.status === 201 ? one : two).json()) as IssueResponse;
+    const row = await h.owner.query<{ reference: string; number: number }>(
+      'select reference, number from report where id = $1',
       [draft.id],
     );
-    expect(filed.rows[0]?.n).toBe('1');
+    expect(row.rows[0]?.reference).toBe(winner.report.reference);
+    expect(row.rows[0]?.number).toBe(before.rows[0]?.next_number);
   });
 });
 

@@ -64,17 +64,24 @@ const DOCUMENT_SQL =
  * changed either since is then refused below, as any other whose source has
  * moved is.
  *
- * **A map that is gone, or not what was filed, is refused by name**
- * (docs/SPEC/reports-qeeg.md section 9, point 6): the answer names the field
- * that places it, and no link to a missing file is handed out.
+ * **A brain map that cannot be made again is refused by name**, and no link
+ * to its missing file is handed out: a map that is gone or not what was filed
+ * (docs/SPEC/reports-qeeg.md section 9, point 6) by the field that places it;
+ * pages that would now run over; a body that no longer reads as a report.
  */
+type RepairRefusal = PictureRefusal | { readonly code: 'document_overrun' | 'document_unreadable' };
+
 type Remade =
   | { ok: true; bytes: Uint8Array }
-  | { ok: false; refusal: PictureRefusal }
+  | { ok: false; refusal: RepairRefusal }
   | { ok: false; refusal: null };
 
 /** What a person reads when a signed brain map cannot be made again for want of a map. */
-export const REPAIR_SENTENCES: Readonly<Record<PictureRefusal['code'], string>> = Object.freeze({
+export const REPAIR_SENTENCES: Readonly<Record<RepairRefusal['code'], string>> = Object.freeze({
+  document_overrun:
+    'The file of this signed report is missing, and its pages would no longer fit as they were filed (the practice’s logo or contact lines may have changed), so the file cannot be made again.',
+  document_unreadable:
+    'The file of this signed report is missing, and what it says can no longer be read as a report, so the file cannot be made again.',
   unlinked_figure:
     'The signed report names a map it does not hold, so its file cannot be made again.',
   map_missing:
@@ -105,9 +112,12 @@ async function remade(
         case 'map_differs':
           return { ok: false, refusal: filed.refusal };
         case 'overrun':
+          // A signed page that would now run over: the live logo or footer
+          // moved. Refused by name, never a link to the missing file.
+          return { ok: false, refusal: { code: 'document_overrun' } };
         case 'not_signed':
         case 'invalid_content':
-          return { ok: false, refusal: null };
+          return { ok: false, refusal: { code: 'document_unreadable' } };
         default: {
           const unknown: never = filed;
           return unknown;
@@ -175,7 +185,12 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
           if (!again.ok && again.refusal !== null) {
             // Ids and a path, never a key or a digest: both name a client's document.
             console.error(
-              JSON.stringify({ requestId, name: 'ReportMapMissing', documentId: row.id }),
+              JSON.stringify({
+                requestId,
+                name: 'ReportCannotBeMadeAgain',
+                code: again.refusal.code,
+                documentId: row.id,
+              }),
             );
             return c.json(
               {
