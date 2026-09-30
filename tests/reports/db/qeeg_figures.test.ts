@@ -1257,3 +1257,42 @@ describe('fix round 1: the door', () => {
     });
   });
 });
+
+describe('fix round 2: the guard names the rule it raises', () => {
+  it('names the digest rule and the kind rule, so the door can tell them from a fault', async () => {
+    const SHA = '6'.repeat(64);
+    const reportId = await ownerDraft(clientId);
+    const names: (string | undefined)[] = [];
+    for (const [documentId, kind, linkSha] of [
+      ['0000000d-0000-4000-8000-000000000501', 'report_figure', '5'.repeat(64)],
+      ['0000000d-0000-4000-8000-000000000502', 'referral', SHA],
+    ] as const) {
+      await h.owner.query(
+        'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256) ' +
+          "values ($1, $2, $3, $4, $5, 'image/png', decode($6, 'hex'))",
+        [
+          documentId,
+          h.data.tenant.id,
+          clientId,
+          kind,
+          clientDocumentKey(h.data.tenant.id, clientId, documentId),
+          SHA,
+        ],
+      );
+      await h.owner.query('begin');
+      try {
+        await h.owner.query(
+          'insert into report_figure (tenant_id, client_id, report_id, document_id, sha256, ' +
+            "width_px, height_px) values ($1, $2, $3, $4, decode($5, 'hex'), 10, 10)",
+          [h.data.tenant.id, clientId, reportId, documentId, linkSha],
+        );
+        names.push('admitted');
+      } catch (error) {
+        names.push((error as { constraint?: string }).constraint);
+      } finally {
+        await h.owner.query('rollback');
+      }
+    }
+    expect(names).toEqual(['report_figure_digest_matches', 'report_figure_is_a_map']);
+  });
+});
