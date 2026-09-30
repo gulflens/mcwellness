@@ -3,12 +3,14 @@ import type { QeegDraftResponse } from '../../../app/api/reports/schema';
 import {
   FIGURE_SENTENCES,
   type FigureFiledResponse,
+  type FigureListResponse,
   type FigureRemovedResponse,
 } from '../../../app/api/reports/qeeg/figureSchema';
 import { clientDocumentKey } from '../../../domain/shared';
 import { blankFollowUp, blankInitial } from '../../../domain/reports/qeeg/blank';
 import type { ComparedWith, QeegInitial } from '../../../domain/reports/qeeg/types';
 import { goodPng, handPng, jpegBytes, linkFigureAsOwner, sha256Hex } from './figures-support';
+import { seedClient, seedTenant } from '../../db/helpers';
 import { SEEDED, startHarness, type Harness } from './support';
 
 /**
@@ -192,15 +194,14 @@ describe('uploading a brain map to a draft', () => {
   it('files a valid PNG, writes the bytes after the commit, and answers the new savedAt', async () => {
     const draft = await newDraft();
     const bytes = await goodPng(40, 30, 1);
-    const res = await upload(draft.report.id, bytes, { query: '?condition=eyes_open&position=0' });
+    const res = await upload(draft.report.id, bytes);
     expect(res.status, await res.clone().text()).toBe(201);
     const body = (await res.json()) as FigureFiledResponse;
-    expect(body.figure).toMatchObject({
+    expect(body.figure).toEqual({
+      figureId: body.figure.figureId,
       sha256: sha256Hex(bytes),
       widthPx: 40,
       heightPx: 30,
-      condition: 'eyes_open',
-      position: 0,
       borrowed: false,
     });
     expect(body.savedAt > draft.savedAt).toBe(true);
@@ -223,13 +224,11 @@ describe('uploading a brain map to a draft', () => {
     const stored = await h.storage.get(rows[0]?.storage_key ?? '');
     expect(stored && sha256Hex(stored)).toBe(sha256Hex(bytes));
 
-    const link = await h.owner.query<{ report_id: string; width_px: number; condition: string }>(
-      'select report_id, width_px, condition from report_figure where document_id = $1',
+    const link = await h.owner.query<{ report_id: string; width_px: number }>(
+      'select report_id, width_px from report_figure where document_id = $1',
       [body.figure.figureId],
     );
-    expect(link.rows).toEqual([
-      { report_id: draft.report.id, width_px: 40, condition: 'eyes_open' },
-    ]);
+    expect(link.rows).toEqual([{ report_id: draft.report.id, width_px: 40 }]);
 
     // The link's row on the trail carries the reason the door was given.
     const trail = await h.owner.query<{ reason: string }>(
@@ -293,8 +292,9 @@ describe('uploading a brain map to a draft', () => {
       headers: { 'content-type': 'image/jpeg' },
     });
     expect(jpegType.status).toBe(415);
-    const badCondition = await upload(draft.report.id, bytes, { query: '?condition=eyes-open' });
-    expect(badCondition.status).toBe(400);
+    // A map's condition and place are the draft's to say, never the link's.
+    const placed = await upload(draft.report.id, bytes, { query: '?condition=eyes_open' });
+    expect(placed.status).toBe(400);
   });
 });
 
@@ -527,7 +527,7 @@ describe('frozen when the report leaves draft', () => {
       '23001',
     );
     expect(
-      await ownerFails('update report_figure set position = 1 where report_id = $1', [reportId]),
+      await ownerFails('update report_figure set width_px = 11 where report_id = $1', [reportId]),
     ).toBe('23001');
     const anotherDoc = '0000000d-0000-4000-8000-0000000000a2';
     await h.owner.query(
@@ -603,11 +603,7 @@ describe('borrowing an earlier report’s picture', () => {
       await linkFigureAsOwner(
         h.owner,
         { tenantId: h.data.tenant.id, clientId, reportId: signedId },
-        {
-          documentId: '0000000d-0000-4000-8000-0000000000b1',
-          sha256: SHA,
-          condition: 'eyes_closed',
-        },
+        { documentId: '0000000d-0000-4000-8000-0000000000b1', sha256: SHA },
       )
     ).figureId;
     await signAsOwner(signedId);
@@ -621,14 +617,14 @@ describe('borrowing an earlier report’s picture', () => {
         signedId,
         figureId,
       ]);
-      const { rows } = await h.owner.query<{ borrowed: string; condition: string }>(
-        'select borrowed_from_report_id as borrowed, condition from report_figure ' +
+      const { rows } = await h.owner.query<{ borrowed: string; width_px: number }>(
+        'select borrowed_from_report_id as borrowed, width_px from report_figure ' +
           'where report_id = $1',
         [draft.report.id],
       );
       return rows;
     });
-    expect(link).toEqual([{ borrowed: signedId, condition: 'eyes_closed' }]);
+    expect(link).toEqual([{ borrowed: signedId, width_px: 800 }]);
   });
 
   it('refuses to borrow from another client’s report', async () => {
@@ -699,7 +695,7 @@ describe('borrowing an earlier report’s picture', () => {
     await linkFigureAsOwner(
       h.owner,
       { tenantId: h.data.tenant.id, clientId, reportId: withMap },
-      { documentId: mapId, sha256: SHA, condition: 'eyes_closed' },
+      { documentId: mapId, sha256: SHA },
     );
     await signAsOwner(withMap);
 
@@ -880,7 +876,7 @@ describe('a draft names only the maps linked to it', () => {
   it('saves a draft naming its own maps', async () => {
     const draft = await newDraft();
     const filed = (await (
-      await upload(draft.report.id, await goodPng(9, 5, 14), { query: '?condition=eyes_closed' })
+      await upload(draft.report.id, await goodPng(9, 5, 14))
     ).json()) as FigureFiledResponse;
     const { figureId, sha256, widthPx, heightPx } = filed.figure;
     const res = await saveOver(
@@ -958,15 +954,12 @@ async function fileDirectly(who: { userId: string; roles: string }, reportId: st
   const documentId = `0000000d-0000-4000-8000-0000000003${String(n).padStart(2, '0')}`;
   return asRole(who, async () => {
     try {
-      await h.owner.query(
-        'select app.file_report_figure($1, $2, $3, $4, 10, 10, null, null, now())',
-        [
-          reportId,
-          documentId,
-          clientDocumentKey(h.data.tenant.id, clientId, documentId),
-          Buffer.alloc(32, n),
-        ],
-      );
+      await h.owner.query('select app.file_report_figure($1, $2, $3, $4, 10, 10, now())', [
+        reportId,
+        documentId,
+        clientDocumentKey(h.data.tenant.id, clientId, documentId),
+        Buffer.alloc(32, n),
+      ]);
       return null;
     } catch (error) {
       return (error as { code?: string }).code ?? 'unknown';
@@ -1211,21 +1204,16 @@ describe('fix round 1: the door', () => {
     expect(stored && sha256Hex(stored)).toBe(sha256Hex(bytes));
   });
 
-  it('refuses the same picture sent again with another condition or place, saying what it is', async () => {
+  it('answers the same picture sent again with the link it already has and the current stamp', async () => {
     const draft = await newDraft();
     const bytes = await goodPng(11, 8, 41);
-    expect(
-      (await upload(draft.report.id, bytes, { query: '?condition=eyes_open&position=1' })).status,
-    ).toBe(201);
-    const res = await upload(draft.report.id, bytes, {
-      query: '?condition=eyes_closed&position=1',
-    });
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as { code: string; sentence: string };
-    expect(body.code).toBe('already_on_report');
-    expect(body.sentence).toContain('already on the report as eyes open, in place 2');
-    const same = await upload(draft.report.id, bytes, { query: '?condition=eyes_open&position=1' });
-    expect(same.status).toBe(200);
+    const first = (await (await upload(draft.report.id, bytes)).json()) as FigureFiledResponse;
+    const again = await upload(draft.report.id, bytes);
+    expect(again.status).toBe(200);
+    const body = (await again.json()) as FigureFiledResponse;
+    expect(body.figure).toEqual(first.figure);
+    // Nothing was written the second time, so the stamp is the one the first left.
+    expect(body.savedAt).toBe(first.savedAt);
   });
 
   it('takes one of two uploads racing for the eighth place and refuses the other', async () => {
@@ -1294,5 +1282,168 @@ describe('fix round 2: the guard names the rule it raises', () => {
       }
     }
     expect(names).toEqual(['report_figure_digest_matches', 'report_figure_is_a_map']);
+  });
+});
+
+describe('fix round 3: a draft’s links, listed', () => {
+  async function list(reportId: string, as: number = SEEDED.practitioner) {
+    return h.call('GET', `/api/reports/${reportId}/figures`, as);
+  }
+
+  it('lists each link with its size, whether it is borrowed and whether the draft names it, and no bytes', async () => {
+    // A signed report printing one picture, and a follow-up that borrows it.
+    const SHA = '4'.repeat(64);
+    const mapId = '0000000d-0000-4000-8000-000000000601';
+    const earlier: QeegInitial = {
+      ...blankInitial(),
+      recording: { recordedOn: '2026-03-14', eyes: 'closed_and_open', handedness: 'right' },
+      maps: {
+        'map-0': {
+          figureId: mapId,
+          sha256: SHA,
+          widthPx: 800,
+          heightPx: 600,
+          condition: 'eyes_open',
+          caption: null,
+          position: 0,
+        },
+      },
+    };
+    const signed = await ownerDraft(clientId, earlier);
+    await linkFigureAsOwner(
+      h.owner,
+      { tenantId: h.data.tenant.id, clientId, reportId: signed },
+      { documentId: mapId, sha256: SHA },
+    );
+    await signAsOwner(signed);
+    const placeholder: ComparedWith = {
+      reportId: signed,
+      recordedOn: '2026-03-14',
+      relation: 'initial',
+      origin: 'issued',
+      reference: 'RPT-000000',
+    };
+    const followUpRes = await h.call(
+      'POST',
+      '/api/reports/draft',
+      SEEDED.practitioner,
+      {
+        clientId,
+        kind: 'qeeg',
+        content: sent(blankFollowUp(placeholder, 'follow_up'), {
+          comparedWith: { reportId: signed },
+        }),
+      },
+      { 'x-reason': 'Starting the follow-up' },
+    );
+    const followUp = (await followUpRes.json()) as QeegDraftResponse;
+
+    // Two uploads: one placed in the draft, one left unplaced.
+    const placedBytes = await goodPng(10, 6, 50);
+    const loose = await goodPng(12, 6, 51);
+    const placed = (await (
+      await upload(followUp.report.id, placedBytes)
+    ).json()) as FigureFiledResponse;
+    const unplaced = (await (
+      await upload(followUp.report.id, loose)
+    ).json()) as FigureFiledResponse;
+    const { figureId, sha256, widthPx, heightPx } = placed.figure;
+    const withMap = sent(followUp.content as object, {
+      maps: {
+        'map-0': {
+          figureId,
+          sha256,
+          widthPx,
+          heightPx,
+          condition: 'eyes_closed',
+          caption: null,
+          position: 0,
+        },
+      },
+    });
+    const saved = await h.call(
+      'POST',
+      '/api/reports/draft',
+      SEEDED.practitioner,
+      {
+        id: followUp.report.id,
+        clientId,
+        kind: 'qeeg',
+        savedAt: unplaced.savedAt,
+        content: { ...withMap, comparedWith: { reportId: signed } },
+      },
+      { 'x-reason': 'Placing a map' },
+    );
+    expect(saved.status, await saved.clone().text()).toBe(200);
+
+    const res = await list(followUp.report.id);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as FigureListResponse;
+    const byId = new Map(body.figures.map((f) => [f.figureId, f]));
+    expect(byId.get(mapId)).toEqual({
+      figureId: mapId,
+      sha256: SHA,
+      widthPx: 800,
+      heightPx: 600,
+      borrowed: true,
+      named: true,
+    });
+    expect(byId.get(placed.figure.figureId)).toMatchObject({ borrowed: false, named: true });
+    expect(byId.get(unplaced.figure.figureId)).toEqual({
+      ...unplaced.figure,
+      named: false,
+    });
+    expect(body.figures).toHaveLength(3);
+    expect(JSON.stringify(body)).not.toContain('storage');
+
+    // A read of the report, on the trail.
+    const trail = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'read' and entity_type = 'report' " +
+        'and entity_id = $1',
+      [followUp.report.id],
+    );
+    expect(Number(trail.rows[0]?.n)).toBeGreaterThan(0);
+  });
+
+  it('refuses an admin and a household', async () => {
+    const draft = await newDraft();
+    expect((await list(draft.report.id, SEEDED.admin)).status).toBe(403);
+    const userId = '0000000d-0000-4000-8000-0000000000e5';
+    const authId = '0000000d-0000-4000-8000-0000000000e6';
+    const contact = await h.owner.query<{ id: string }>(
+      'select id from contact where client_id = $1 and user_id is null order by id limit 1',
+      [clientId],
+    );
+    await h.owner.query(
+      'insert into app_user (id, tenant_id, auth_id, display_name) values ($1, $2, $3, $4)',
+      [userId, h.data.tenant.id, authId, 'Household login'],
+    );
+    await h.owner.query(
+      "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'client_contact')",
+      [h.data.tenant.id, userId],
+    );
+    if (contact.rows[0]) {
+      await h.owner.query(
+        'update contact set user_id = $1, is_legal_guardian = true where id = $2',
+        [userId, contact.rows[0].id],
+      );
+    }
+    const res = await h.callAs('GET', `/api/reports/${draft.report.id}/figures`, authId);
+    // A draft is nobody's but the practice's: row security hides it.
+    expect(res.status).toBe(404);
+  });
+
+  it('answers not found for another practice’s report', async () => {
+    const tenantId = '0000000d-0000-4000-8000-000000000701';
+    const ownerId = '0000000d-0000-4000-8000-000000000702';
+    const theirClient = '0000000d-0000-4000-8000-000000000703';
+    await seedTenant(h.owner, tenantId, ownerId, 'Other Studio');
+    await seedClient(h.owner, tenantId, theirClient, ownerId, 'Ridge');
+    const { rows } = await h.owner.query<{ id: string }>(
+      "insert into report (tenant_id, client_id, kind, content) values ($1, $2, 'qeeg', '{}'::jsonb) " +
+        'returning id',
+      [tenantId, theirClient],
+    );
+    expect((await list(rows[0]?.id ?? '', SEEDED.owner)).status).toBe(404);
   });
 });

@@ -173,6 +173,12 @@ describe('PUT and DELETE /api/reports/:id/figures', () => {
     expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
   });
 
+  it('mounts the list of a draft’s links', async () => {
+    const res = await call('GET', '/api/reports/not-a-report/figures', authIdOf(0));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
+  });
+
   it('mounts the remove door', async () => {
     const res = await raw('DELETE', '/api/reports/not-a-report/figures/not-a-figure');
     expect(res.status).toBe(400);

@@ -164,8 +164,6 @@ export async function linkFigureAsOwner(
     sha256: string;
     widthPx?: number;
     heightPx?: number;
-    condition?: 'eyes_open' | 'eyes_closed' | null;
-    position?: number | null;
   },
 ): Promise<FigureRef> {
   const widthPx = figure.widthPx ?? 800;
@@ -187,7 +185,7 @@ export async function linkFigureAsOwner(
   }
   await owner.query(
     'insert into report_figure (tenant_id, client_id, report_id, document_id, sha256, width_px, ' +
-      "height_px, condition, position) values ($1, $2, $3, $4, decode($5, 'hex'), $6, $7, $8, $9)",
+      "height_px) values ($1, $2, $3, $4, decode($5, 'hex'), $6, $7)",
     [
       where.tenantId,
       where.clientId,
@@ -196,8 +194,6 @@ export async function linkFigureAsOwner(
       figure.sha256,
       widthPx,
       heightPx,
-      figure.condition ?? null,
-      figure.position ?? null,
     ],
   );
   return { figureId: figure.documentId, sha256: figure.sha256, widthPx, heightPx };

@@ -7,7 +7,15 @@
 -- server to be exactly that, and filed as a `document` of the client, kind
 -- `report_figure`. The report's content names it by that document's id and
 -- the digest of its bytes (section 9, point 6). This table is the link: which
--- report may print which document, at what size, under which condition.
+-- report may print which document, and at what size.
+--
+-- **A link holds no placement.** Where a map sits in the report — its
+-- condition, its label, its place in the order, or a side of a follow-up's
+-- pair — is the draft's to say, in its content, and nowhere else. A second
+-- copy here would go stale at the first reorder, be copied on by every
+-- borrow, and wait for a later reader to trust the wrong one (review of the
+-- form's pictures, fix round 3). A link is the report, the client, the
+-- document, the digest and the size.
 --
 -- **Why a link table and not a column on the report.** A report holds up to
 -- eight maps and the two "later" pictures of a follow-up's pairs, and a
@@ -106,11 +114,6 @@ create table report_figure (
   sha256                  bytea not null,
   width_px                integer not null,
   height_px               integer not null,
-  -- The condition the map was recorded under, where the editor said, in the
-  -- content's own words. Never read from a file name.
-  condition               text,
-  -- Its place among the report's maps, where the editor said.
-  position                smallint,
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now(),
   created_by              uuid references app_user (id),
@@ -136,10 +139,7 @@ create table report_figure (
   constraint report_figure_size check (
     width_px between 1 and 4096 and height_px between 1 and 4096
     and width_px::bigint * height_px <= 12000000
-  ),
-  constraint report_figure_condition
-    check (condition is null or condition in ('eyes_open', 'eyes_closed')),
-  constraint report_figure_position check (position is null or position between 0 and 7)
+  )
 );
 comment on table public.report_figure is
   'audited: client - a brain-map report''s pictures: which report may print which document '
@@ -321,8 +321,6 @@ create function app.file_report_figure(
   p_sha256          bytea,
   p_width_px        integer,
   p_height_px       integer,
-  p_condition       text,
-  p_position        smallint,
   p_retention_until timestamptz
 ) returns uuid
 language plpgsql security definer
@@ -389,11 +387,10 @@ begin
   );
 
   insert into public.report_figure (
-    tenant_id, client_id, report_id, document_id, sha256, width_px, height_px,
-    condition, position, created_by
+    tenant_id, client_id, report_id, document_id, sha256, width_px, height_px, created_by
   ) values (
     v_tenant_id, v_report.client_id, p_report_id, p_document_id, p_sha256, p_width_px,
-    p_height_px, p_condition, p_position, v_actor_id
+    p_height_px, v_actor_id
   );
 
   update public.report set updated_at = now()
@@ -403,9 +400,9 @@ begin
 end
 $$;
 revoke execute on function app.file_report_figure(
-  uuid, uuid, text, bytea, integer, integer, text, smallint, timestamptz) from public;
+  uuid, uuid, text, bytea, integer, integer, timestamptz) from public;
 grant execute on function app.file_report_figure(
-  uuid, uuid, text, bytea, integer, integer, text, smallint, timestamptz) to app_role;
+  uuid, uuid, text, bytea, integer, integer, timestamptz) to app_role;
 
 ------------------------------------------------------------------------------
 -- 5. A picture borrowed from an earlier report (section 9, point 7).
@@ -414,7 +411,8 @@ grant execute on function app.file_report_figure(
 --    correction's are links to the first report's stored documents. The
 --    earlier report must be the same client's (the composite key says so as
 --    well), a brain map, and signed or kept; the picture must be one it
---    prints. The link copies the earlier link's size, condition and place.
+--    prints. The link copies the earlier link's size; where the picture
+--    sits in the new report is that report's content's to say.
 --
 --    It does not move `updated_at`: every caller is itself writing the report
 --    row in the same transaction (the draft save, and later the twin and the
@@ -497,11 +495,10 @@ begin
 
   insert into public.report_figure (
     tenant_id, client_id, report_id, document_id, borrowed_from_report_id, sha256,
-    width_px, height_px, condition, position, created_by
+    width_px, height_px, created_by
   ) values (
     v_tenant_id, v_report.client_id, p_report_id, p_document_id, p_from_report_id,
-    v_link.sha256, v_link.width_px, v_link.height_px, v_link.condition, v_link.position,
-    v_actor_id
+    v_link.sha256, v_link.width_px, v_link.height_px, v_actor_id
   );
 
   return p_document_id;
@@ -641,7 +638,7 @@ $$;
 --   drop function if exists app.remove_report_figure(uuid, uuid);
 --   drop function if exists app.borrow_report_figure(uuid, uuid, uuid);
 --   drop function if exists app.file_report_figure(
---     uuid, uuid, text, bytea, integer, integer, text, smallint, timestamptz);
+--     uuid, uuid, text, bytea, integer, integer, timestamptz);
 --   drop function if exists app.may_touch_report_figures(uuid, boolean);
 --   drop trigger if exists guard_report_figure_write on public.report_figure;
 --   drop function if exists app.guard_report_figure_write();

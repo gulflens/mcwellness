@@ -105,7 +105,7 @@ beforeAll(async () => {
   await linkFigureAsOwner(
     h.owner,
     { tenantId, clientId, reportId: signedId },
-    { documentId: SIGNED_FIGURE, sha256: SIGNED_SHA, condition: 'eyes_open' },
+    { documentId: SIGNED_FIGURE, sha256: SIGNED_SHA },
   );
   await h.owner.query(
     "update report set status = 'issued', number = 811, issued_on = current_date, " +
