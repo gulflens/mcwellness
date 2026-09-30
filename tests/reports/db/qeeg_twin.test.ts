@@ -558,13 +558,54 @@ describe('a signature racing a correction of the first report', () => {
       withArabic(first.content),
       SEEDED.owner,
     );
-    // A second connection marks the first superseded and holds its row, as a
-    // correction does before it commits.
-    await h.owner.query('begin');
-    await h.owner.query("update report set status = 'superseded' where id = $1", [first.id]);
-    const signing = sign(saved);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    await h.owner.query('commit');
+    // The correction below is written without its audit row, for this test
+    // only. The trail links every row under one lock, which the signature
+    // takes early (it reads the client) and holds while it waits; a
+    // correction that wrote its audit row after the signature was blocked
+    // would wait on that lock in turn, and the database would end one of the
+    // two. In the app a correction takes the trail's lock before it touches
+    // the row, so the two never cross; the test holds the row alone to prove
+    // the row's lock by itself.
+    await h.owner.query('alter table report disable trigger audit_row');
+    let answeredWhileHeld = true;
+    let blocked = false;
+    let signing: Promise<Response>;
+    try {
+      // A second connection holds the first report's row, as a correction's
+      // own update does before it commits (`for no key update`: it keeps the
+      // signature's `for share` waiting, and not the check of the twin's key
+      // at its commit, so only the lock in issue.ts can be what waits).
+      await h.owner.query('begin');
+      await h.owner.query('select id from report where id = $1 for no key update', [first.id]);
+      let settled = false;
+      signing = sign(saved).finally(() => {
+        settled = true;
+      });
+      // Wait until the signature is seen blocked on this connection, so the
+      // test cannot pass without exercising the lock. Without the `for share`
+      // in issue.ts nothing of the signature waits on this row: it is
+      // answered while the row is held, or the deadline passes, and the test
+      // fails.
+      const deadline = Date.now() + 10_000;
+      while (!blocked && Date.now() < deadline && !settled) {
+        const waiting = await h.owner.query<{ n: string }>(
+          'select count(*)::text as n from pg_stat_activity ' +
+            'where pid <> pg_backend_pid() and pg_backend_pid() = any(pg_blocking_pids(pid)) ' +
+            "and wait_event_type = 'Lock'",
+        );
+        blocked = Number(waiting.rows[0]?.n ?? 0) > 0;
+        if (!blocked) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      // Held here, the signature had not been answered.
+      answeredWhileHeld = settled;
+      // Only now, the correction.
+      await h.owner.query("update report set status = 'superseded' where id = $1", [first.id]);
+      await h.owner.query('commit');
+    } finally {
+      await h.owner.query('alter table report enable always trigger audit_row');
+    }
+    expect(blocked).toBe(true);
+    expect(answeredWhileHeld).toBe(false);
     const res = await signing;
     expect(res.status).toBe(409);
     expect(await codeOf(res)).toMatchObject({ code: 'twin_out_of_step' });
