@@ -149,7 +149,12 @@ second-language drafts use `report.draft`, which exists.
 ## 7. The audit's sentences — `domain/shared/audit-narrative.ts`
 
 **What.** Sentences for `report.figure_filed`, `report.figure_removed`,
-`report.imported`, `report.import_kept` and `report.import_withdrawn`.
+`report.imported`, `report.import_kept` and `report.import_withdrawn`; and,
+for the second-language report (added 30 September, from the review of
+records PR 9), `report.twin_started` ("{actor} started this report in the
+other language", with its Arabic) and `report.twin_refused`, joined to the
+case `report.supersede_refused` and `report.deliver_refused` already share.
+Until then the timeline shows these actions' raw codes in both languages.
 
 ## 8. One comparison rule — `domain/shared/compare.ts` (new)
 
