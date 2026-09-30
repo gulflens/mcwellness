@@ -52,7 +52,7 @@ async function asOwner(h: Harness): Promise<void> {
 }
 
 /** A completed visit, exactly as the session-capture stream writes one. */
-async function deliverVisit(h: Harness, clientId: string): Promise<void> {
+export async function deliverVisit(h: Harness, clientId: string): Promise<void> {
   sessionSeq += 1;
   const id = `0000000e-0000-4000-8000-00000000b${String(sessionSeq).padStart(3, '0')}`;
   await asPractitioner(h);
