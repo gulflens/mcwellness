@@ -27,6 +27,24 @@ export const MAX_PIXELS = 12_000_000;
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_MAPS_PER_REPORT = 8;
 
+/**
+ * The largest FILE she may choose, checked before the browser decodes it.
+ *
+ * Decoding is where the memory goes, and the size in pixels is known only
+ * once it is done, so a file far larger than any map is refused by its bytes
+ * first. Eight times the stored cap (40 MiB) is chosen because it holds the
+ * largest picture the pixel cap admits written with no compression at all (a
+ * 24-bit BMP of 12 million pixels is about 34.3 MiB), so no export that could
+ * be taken is refused here; the stored PNG is still held to `MAX_FILE_BYTES`.
+ */
+export const MAX_INPUT_BYTES = 8 * MAX_FILE_BYTES;
+
+/** Why a chosen file cannot be read as a map, by its bytes alone, or null when it can be. */
+export function refuseInputBytes(bytes: number): 'file_too_large' | 'empty' | null {
+  if (!Number.isInteger(bytes) || bytes <= 0) return 'empty';
+  return bytes > MAX_INPUT_BYTES ? 'file_too_large' : null;
+}
+
 export type SizeRefusal = 'too_wide' | 'too_tall' | 'too_many_pixels' | 'empty';
 
 /**

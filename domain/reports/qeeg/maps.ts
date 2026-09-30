@@ -124,6 +124,18 @@ export function placeMap(
   };
 }
 
+/**
+ * Her own label for a map, typed in English. The Arabic beside it is kept as
+ * it is. Emptied, with no Arabic, the label is none.
+ */
+export function labelMap(content: QeegContent, figureId: string, en: string): QeegContent {
+  const entry = Object.values(content.maps).find((each) => each.figureId === figureId);
+  if (entry === undefined) return content;
+  const ar = entry.caption?.ar ?? null;
+  const caption = en.trim() === '' && ar === null ? null : { en, ar };
+  return placeMap(content, figureId, entry.condition, caption);
+}
+
 /** The map one place earlier (-1) or later (1); at either end, the content as it was. */
 export function moveMap(content: QeegContent, figureId: string, by: -1 | 1): QeegContent {
   const listed = mapsInOrder(content);
@@ -145,6 +157,20 @@ export function removeMap(content: QeegContent, figureId: string): QeegContent {
     ...content,
     maps: renumbered(listed.filter(({ entry }) => entry.figureId !== figureId)),
   };
+}
+
+/**
+ * A map taken out put back at the place it had, the maps after it moving down
+ * one; one added meanwhile is kept. Already there, the content as it was.
+ */
+export function putBack(content: QeegContent, taken: ListedMap): QeegContent {
+  const listed = mapsInOrder(content);
+  if (listed.some(({ entry }) => entry.figureId === taken.entry.figureId)) return content;
+  const key = Object.hasOwn(content.maps, taken.key) ? freeKey(content) : taken.key;
+  const at = Math.min(Math.max(taken.entry.position, 0), listed.length);
+  const next = [...listed];
+  next.splice(at, 0, { key, entry: taken.entry });
+  return { ...content, maps: renumbered(next) };
 }
 
 /** Where the report names this picture other than in its list of maps. */

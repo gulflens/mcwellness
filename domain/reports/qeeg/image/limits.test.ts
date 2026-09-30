@@ -6,11 +6,27 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_FILE_BYTES,
+  MAX_INPUT_BYTES,
   MAX_LONG_EDGE_PX,
   MAX_MAPS_PER_REPORT,
   MAX_PIXELS,
+  refuseInputBytes,
   refuseSize,
 } from './limits';
+
+describe('the size of the file she chooses', () => {
+  it('is capped at eight times the stored cap, which holds the largest plain picture inside the pixel cap', () => {
+    expect(MAX_INPUT_BYTES).toBe(8 * MAX_FILE_BYTES);
+    // An uncompressed 24-bit picture at the pixel cap, with a generous header.
+    expect(MAX_PIXELS * 3 + 1024).toBeLessThan(MAX_INPUT_BYTES);
+  });
+
+  it('refuses a larger file before it is read', () => {
+    expect(refuseInputBytes(MAX_INPUT_BYTES)).toBeNull();
+    expect(refuseInputBytes(MAX_INPUT_BYTES + 1)).toBe('file_too_large');
+    expect(refuseInputBytes(0)).toBe('empty');
+  });
+});
 
 describe('the size a brain map may be', () => {
   it('states its caps', () => {

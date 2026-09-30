@@ -322,3 +322,41 @@ describe('connectivityIsComplete', () => {
     ).toBe(true);
   });
 });
+
+describe('a map the page cannot name', () => {
+  it('is left to fill while it has neither a condition nor a label of her own', () => {
+    const unnamed = { ...MAP, condition: null, caption: null };
+    const content = { ...blankInitial(), maps: { m: unnamed } };
+    expect(missingForIssue(content)).toContainEqual({
+      section: 'heading.brain',
+      what: 'label.maps',
+    });
+    const blankLabel = { ...content, maps: { m: { ...unnamed, caption: { en: '  ', ar: null } } } };
+    expect(missingForIssue(blankLabel)).toContainEqual({
+      section: 'heading.brain',
+      what: 'label.maps',
+    });
+  });
+
+  it('is named by a condition or by a label', () => {
+    for (const named of [
+      { ...MAP, condition: 'eyes_closed' as const, caption: null },
+      { ...MAP, condition: null, caption: { en: 'Coherence', ar: null } },
+    ]) {
+      const content = { ...blankInitial(), maps: { m: named } };
+      expect(missingForIssue(content).map((each) => each.what)).not.toContain('label.maps');
+    }
+  });
+
+  it('is asked for once, however many maps are unnamed', () => {
+    const unnamed = { ...MAP, condition: null, caption: null };
+    const content = {
+      ...blankInitial(),
+      maps: {
+        m: unnamed,
+        n: { ...unnamed, figureId: MAP.figureId.replace(/0$/, '1'), position: 1 },
+      },
+    };
+    expect(missingForIssue(content).filter((each) => each.what === 'label.maps')).toHaveLength(1);
+  });
+});

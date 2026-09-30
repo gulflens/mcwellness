@@ -20,6 +20,10 @@
  * first report always names its regions, as the tool this was rebuilt from
  * required.
  *
+ * **A map is named on its page** by the condition it was recorded under, or
+ * else by her own label. One with neither is unnamed, and the maps are then
+ * still to fill (ruling on review O, finding 8).
+ *
  * **What is not asked.** Sex may be unknown, and the report then prints no
  * line for it. Every figure on a follow-up's page of what has changed is
  * optional, so that page asks for nothing.
@@ -33,7 +37,7 @@ import {
   type ConnectivityId,
   QEEG_ONLY,
 } from './catalogue/ids';
-import { isEmpty } from './text';
+import { isBlank, isEmpty } from './text';
 import type { Missing, Picked, QeegContent, Regions } from './types';
 
 /** A follow-up choice that needs no region named. */
@@ -81,7 +85,13 @@ export function missingForIssue(content: QeegContent): Missing[] {
   need(content.subject.ageYears !== null, 'heading.client', 'label.age');
   need(anyPicked(content.findings), 'heading.findings', 'heading.findings');
   need(anyPicked(content.focus), 'heading.focus', 'heading.focus');
-  need(Object.keys(content.maps).length > 0, 'heading.brain', 'label.maps');
+  // A map the page prints under neither condition nor a label of hers is
+  // unnamed on the page: it is asked for, once, as the maps are.
+  const maps = Object.values(content.maps);
+  const unnamed = maps.some(
+    (entry) => entry.condition === null && (entry.caption === null || isBlank(entry.caption.en)),
+  );
+  need(maps.length > 0 && !unnamed, 'heading.brain', 'label.maps');
   for (const band of BAND_IDS) {
     need(bandIsComplete(content, band), 'heading.brain', `band.${band}.name`);
   }

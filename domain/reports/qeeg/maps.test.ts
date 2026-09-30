@@ -3,6 +3,8 @@ import { blankFollowUp, blankInitial } from './blank';
 import {
   addMap,
   choosePair,
+  labelMap,
+  putBack,
   compareWith,
   mapRefusal,
   mapsInOrder,
@@ -169,5 +171,44 @@ describe('the before-and-after pairs of a follow-up', () => {
     expect(moved.change.pairs.eyes_open).toEqual({ earlier: null, later: figure(2) });
     // The same report again changes nothing.
     expect(compareWith(withLater, COMPARED)).toBe(withLater);
+  });
+});
+
+describe('a map put back after a refused removal', () => {
+  it('returns to its place, and keeps a map added since', () => {
+    const three = [1, 2, 3].reduce<QeegContent>(
+      (content, n) => addMap(content, figure(n), null),
+      blankInitial(),
+    );
+    const taken = mapsInOrder(three)[1];
+    if (!taken) throw new Error('three maps');
+    const without = removeMap(three, figure(2).figureId);
+    const added = addMap(without, figure(4), 'eyes_open');
+    const back = valid(putBack(added, taken));
+    expect(mapsInOrder(back).map((each) => each.entry.figureId)).toEqual([
+      figure(1).figureId,
+      figure(2).figureId,
+      figure(3).figureId,
+      figure(4).figureId,
+    ]);
+    expect(putBack(back, taken)).toBe(back);
+  });
+});
+
+describe('her own label for a map', () => {
+  it('changes the English and keeps the Arabic as it is', () => {
+    const start = placeMap(addMap(blankInitial(), figure(1), null), figure(1).figureId, null, {
+      en: 'Coherence',
+      ar: 'تماسك',
+    });
+    const typed = labelMap(start, figure(1).figureId, 'Coherence map');
+    expect(mapsInOrder(typed)[0]?.entry.caption).toEqual({ en: 'Coherence map', ar: 'تماسك' });
+  });
+
+  it('is none once emptied, when there is no Arabic', () => {
+    const start = addMap(blankInitial(), figure(1), null);
+    expect(mapsInOrder(labelMap(start, figure(1).figureId, ''))[0]?.entry.caption).toBeNull();
+    const named = labelMap(start, figure(1).figureId, 'Coherence');
+    expect(mapsInOrder(labelMap(named, figure(1).figureId, ' '))[0]?.entry.caption).toBeNull();
   });
 });
