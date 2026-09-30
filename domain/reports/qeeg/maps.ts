@@ -28,6 +28,7 @@
  */
 
 import { figuresNamedIn } from './figuresNamed';
+import { freeKey } from './shape';
 import {
   LIMITS,
   type Bilingual,
@@ -74,13 +75,6 @@ function renumbered(listed: readonly ListedMap[]): Record<string, Placed> {
   );
 }
 
-/** A key of the shape's form (section 4, rule 9) not yet used by a map. */
-function freeKey(content: QeegContent): string {
-  let n = 0;
-  while (Object.hasOwn(content.maps, `m${n}`)) n += 1;
-  return `m${n}`;
-}
-
 /** The picture added at the end, or the content as it was when it is there already or full. */
 export function addMap(
   content: QeegContent,
@@ -97,7 +91,7 @@ export function addMap(
     caption: null,
     position: Object.keys(content.maps).length,
   };
-  return { ...content, maps: { ...content.maps, [freeKey(content)]: entry } };
+  return { ...content, maps: { ...content.maps, [freeKey(content.maps, 'm')]: entry } };
 }
 
 /**
@@ -170,7 +164,7 @@ export function removeMap(content: QeegContent, figureId: string): QeegContent {
 export function putBack(content: QeegContent, taken: ListedMap): QeegContent {
   const listed = mapsInOrder(content);
   if (listed.some(({ entry }) => entry.figureId === taken.entry.figureId)) return content;
-  const key = Object.hasOwn(content.maps, taken.key) ? freeKey(content) : taken.key;
+  const key = Object.hasOwn(content.maps, taken.key) ? freeKey(content.maps, 'm') : taken.key;
   const at = Math.min(Math.max(taken.entry.position, 0), listed.length);
   const next = [...listed];
   next.splice(at, 0, { key, entry: taken.entry });

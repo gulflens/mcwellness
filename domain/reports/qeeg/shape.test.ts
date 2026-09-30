@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { blankFollowUp, blankInitial } from './blank';
 import { BAND_IDS, CONNECTIVITY_IDS, DIMENSION_IDS } from './catalogue/ids';
-import { validateQeegContent } from './shape';
+import { freeKey, isSessionCount, validateQeegContent } from './shape';
 import { DRAWS_NOTHING } from './testing/drawsNothing';
 import {
   LIMITS,
@@ -1091,5 +1091,41 @@ describe('validateQeegContent', () => {
         'comparedWith.reference',
       );
     });
+  });
+});
+
+describe('the keys the app makes, and the one bound on a number of sessions', () => {
+  it('makes the first key of its form not in use, for her items and for maps', () => {
+    expect(freeKey({}, 'c')).toBe('c0');
+    expect(freeKey({ c0: 1, c2: 1 }, 'c')).toBe('c1');
+    expect(freeKey({ m0: 1, m1: 1, c2: 1 }, 'm')).toBe('m2');
+  });
+
+  it('makes a key the shape takes', () => {
+    const content = blankInitial();
+    const key = freeKey(content.findings.custom, 'c');
+    const withItem = {
+      ...content,
+      findings: {
+        ...content.findings,
+        custom: {
+          [key]: {
+            label: { en: 'Slow mornings', ar: null },
+            note: null,
+            chosen: true,
+            position: 0,
+          },
+        },
+      },
+    };
+    expect(validateQeegContent(withItem).ok).toBe(true);
+  });
+
+  it('holds every number of sessions to one bound: a whole number from 1 to the most', () => {
+    expect(isSessionCount(1)).toBe(true);
+    expect(isSessionCount(LIMITS.sessionsMost)).toBe(true);
+    for (const refused of [0, LIMITS.sessionsMost + 1, 2.5, Number.NaN, '3', null]) {
+      expect(isSessionCount(refused), String(refused)).toBe(false);
+    }
   });
 });

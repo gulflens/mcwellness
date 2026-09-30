@@ -27,8 +27,8 @@
  * given.
  */
 
+import { isSessionCount } from './shape';
 import { isRealDay, isRecord } from './text';
-import { LIMITS } from './types';
 
 /** One of the client's visits, as far as this rule is concerned. */
 export type VisitForCount = {
@@ -85,9 +85,7 @@ export type CountedFigure = { readonly count: number; readonly source: 'gathered
 
 /** The count as the figure a follow-up holds, or none. */
 export function countedFigure(count: number | null): CountedFigure | null {
-  return count !== null && Number.isInteger(count) && count >= 1 && count <= LIMITS.sessionsMost
-    ? { count, source: 'gathered' }
-    : null;
+  return isSessionCount(count) ? { count, source: 'gathered' } : null;
 }
 
 /**

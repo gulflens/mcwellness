@@ -10,6 +10,7 @@ import type {
 import { LIMITS } from '../../../../domain/reports/qeeg/types';
 import { phrase } from '../../../../domain/reports/qeeg/wording';
 import { typedFigure } from '../../../../domain/reports/qeeg/choices';
+import { freeKey } from '../../../../domain/reports/qeeg/shape';
 import { isBlank } from '../../../../domain/reports/qeeg/text';
 import { Button, Field, Select } from '../../../shell/components/Controls';
 import { Checkbox } from '../../clients/FormAtoms';
@@ -37,13 +38,6 @@ import { RichTextBox } from './RichTextBox';
 // ---------------------------------------------------------------------------
 
 type OwnItem = CustomItem & { readonly position: number };
-
-/** The next key the app makes for an item of hers: `c0`, `c1`, … never one in use. */
-function nextKey(custom: Readonly<Record<string, OwnItem>>): string {
-  let n = 0;
-  while (Object.hasOwn(custom, `c${n}`)) n += 1;
-  return `c${n}`;
-}
 
 /** Her items in their order. */
 function inOrder(custom: Readonly<Record<string, OwnItem>>): [string, OwnItem][] {
@@ -123,7 +117,7 @@ export function PickedList<Id extends string>({
   const add = () => {
     const label = adding.trim();
     if (label === '' || full) return;
-    const key = nextKey(custom);
+    const key = freeKey(custom, 'c');
     onChange({
       ...picked,
       custom: {

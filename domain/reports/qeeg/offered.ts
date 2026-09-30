@@ -31,7 +31,7 @@ import {
   type ConnectivityId,
 } from './catalogue/ids';
 import type { Offered } from './prefill';
-import { OfferedShape } from './shape';
+import { freeKey, OfferedShape } from './shape';
 import type { CustomItem, Picked, QeegFollowUp, Regions } from './types';
 
 /** The four lists a follow-up shares with the report before it. */
@@ -53,13 +53,6 @@ export function isOffered(value: unknown): value is Offered {
 
 function inListOrder(ids: readonly string[], chosen: readonly string[]): string[] {
   return ids.filter((id) => chosen.includes(id));
-}
-
-/** A key of the shape's form not yet used in `custom`: `c0`, `c1`, as the form makes them. */
-function freeKey(custom: Readonly<Record<string, Placed>>): string {
-  let n = 0;
-  while (Object.hasOwn(custom, `c${n}`)) n += 1;
-  return `c${n}`;
 }
 
 function sameLabel(a: CustomItem, b: CustomItem): boolean {
@@ -101,7 +94,7 @@ export function takeCustom(
   };
   return withList(content, list, {
     chosen: was.chosen,
-    custom: { ...was.custom, [freeKey(was.custom)]: added },
+    custom: { ...was.custom, [freeKey(was.custom, 'c')]: added },
   });
 }
 

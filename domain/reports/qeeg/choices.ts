@@ -4,7 +4,7 @@
  * **One rule, one home** (CLAUDE.md rule 4). The form holds a half-typed
  * figure or number of sessions on screen until it is one the report can
  * keep. Whether it is, is the shape's answer (`TypedFigureShape`,
- * `SessionCountShape`), asked here, so the form keeps no copy of a limit that
+ * `isSessionCount`), asked here, so the form keeps no copy of a limit that
  * could drift from the one the route enforces.
  *
  * **Choosing the brain map alone clears the approach.** The shape refuses a
@@ -21,7 +21,7 @@
  */
 
 import { QEEG_ONLY, type QeegOnly } from './catalogue/ids';
-import { SessionCountShape, TypedFigureShape } from './shape';
+import { isSessionCount, TypedFigureShape } from './shape';
 import type { ChangeFigure, Locale, QeegContent, TypedFigure } from './types';
 import { fill, phrase } from './wording';
 
@@ -43,10 +43,8 @@ export function typedFigure(
   return parsed.success ? (parsed.data as TypedFigure) : null;
 }
 
-/** Whether a typed number of sessions is one the report takes. */
-export function isSessionCount(count: number): boolean {
-  return SessionCountShape.safeParse(count).success;
-}
+/** Whether a typed number of sessions is one the report takes: the shape's one bound. */
+export { isSessionCount };
 
 /** The content with its number of sessions chosen, and what that choice clears. */
 export function chooseSessions<C extends QeegContent>(

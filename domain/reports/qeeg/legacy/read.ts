@@ -80,6 +80,7 @@ import { clean, cleanRich, isBlank, isRealDay, isRecord } from '../text';
 import { LIMITS } from '../types';
 import { LEGACY_FORMAT, LEGACY_SUBJECT_KEY, LEGACY_VERSION } from './keys';
 import { fromQuillDelta } from './quill';
+import { isSessionCount } from '../shape';
 import {
   APPROACHES_BY_POSITION,
   BAND_LEVEL_BY_OLD_WORD,
@@ -456,7 +457,7 @@ function sessionsOf(value: unknown, notes: Notes): number | null {
   if (label.trim() === '') return null;
   const digits = /^\s*(\d{1,3})\s+Sessions?\s*$/i.exec(label);
   const count = digits?.[1] === undefined ? null : Number(digits[1]);
-  if (count === null || count < 1 || count > LIMITS.sessionsMost) {
+  if (!isSessionCount(count)) {
     notes.add('value_not_recognised', 'plan.sessions');
     return null;
   }

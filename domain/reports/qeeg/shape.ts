@@ -218,6 +218,18 @@ const ORDERED_KEY = /^[a-z][a-z0-9-]{0,31}$/;
 const isOrderedKey = (key: string) => ORDERED_KEY.test(key) && !(key in Object.prototype);
 
 /**
+ * The key the app makes for a new item of an ordered list: the prefix and
+ * the first number not in use (`c0`, `c1` for her own items, `m0` for a
+ * map). One rule, here beside the rule it must satisfy, for the form, the
+ * offered suggestions and the maps alike.
+ */
+export function freeKey(taken: Readonly<Record<string, unknown>>, prefix: 'c' | 'm'): string {
+  let n = 0;
+  while (Object.hasOwn(taken, `${prefix}${n}`)) n += 1;
+  return `${prefix}${n}`;
+}
+
+/**
  * Every key of an ordered list, read from the input AS IT WAS SENT. A record
  * in zod passes over a key named after the prototype, so its value would be
  * neither read nor handed back; looking at the raw keys first is what lets
@@ -654,6 +666,14 @@ const followUpShape = z
  */
 export const TypedFigureShape = typedFigure;
 export const SessionCountShape = sessionCount;
+
+/**
+ * Whether a number of sessions is one a report takes: the one bound, asked
+ * by the form, the count of completed visits and the old-file reader alike.
+ */
+export function isSessionCount(count: unknown): count is number {
+  return sessionCount.safeParse(count).success;
+}
 
 /**
  * What a follow-up begun from an earlier report offers beside the form
