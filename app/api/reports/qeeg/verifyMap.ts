@@ -26,6 +26,15 @@ import type { FigureRefusalCode } from './figureSchema';
  * filter byte is then one of the five PNG defines, because the writer's
  * predictor reads it.
  *
+ * **Exactly, chunk by chunk** (fix round 1). `readPng` walks past chunks it
+ * does not know and ignores bytes after the end, which suits a logo; a map is
+ * stricter. The browser writes IHDR, the image data and IEND and nothing else
+ * (`encodePng`), so that and only that is taken: IHDR first, one unbroken run
+ * of IDAT, IEND last with no byte after it. Anything else is refused by what
+ * it is — transparency (`tRNS`) is not opaque, and a text or `eXIf` chunk can
+ * carry the name of the person the software mapped, which the PDF would drop
+ * but the stored document would keep.
+ *
  * Under `app/api`, never `domain/`: the inflate is Node's (the plan's own
  * words, "never in domain/"). Nothing here logs, and no refusal carries a byte
  * or a length of the file.
@@ -58,11 +67,69 @@ function headerRefusal(bytes: Uint8Array): FigureRefusalCode | null {
   return null;
 }
 
+/** What a chunk the door does not take is, by its four-letter type. */
+function extraChunk(type: string): FigureRefusalCode {
+  switch (type) {
+    case 'tRNS':
+      return 'transparency';
+    case 'PLTE':
+      return 'palette';
+    case 'tEXt':
+    case 'iTXt':
+    case 'zTXt':
+      return 'text';
+    case 'eXIf':
+      return 'metadata';
+    default:
+      return 'unknown_chunk';
+  }
+}
+
+/**
+ * IHDR, one unbroken run of IDAT, IEND, and nothing after it: the chunks the
+ * browser writes. The first chunk's type is `headerRefusal`'s to have checked.
+ */
+function chunkRefusal(bytes: Uint8Array): FigureRefusalCode | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let at = IHDR_AT;
+  let index = 0;
+  // 0: before any image data; 1: inside the run; 2: the run has ended.
+  let data = 0;
+  let pending: FigureRefusalCode | null = null;
+  while (at + 12 <= bytes.length) {
+    const length = view.getUint32(at);
+    const end = at + 12 + length;
+    if (end > bytes.length) return 'damaged';
+    const type = String.fromCharCode(...bytes.subarray(at + 4, at + 8));
+    if (index === 0) {
+      if (type !== 'IHDR') return 'damaged';
+    } else if (type === 'IDAT') {
+      if (data === 2) return 'split_data';
+      data = 1;
+    } else if (type === 'IEND') {
+      if (pending !== null) return pending;
+      if (data === 0 || length !== 0) return 'damaged';
+      return end === bytes.length ? null : 'trailing_bytes';
+    } else {
+      // Refused for what it is, unless image data follows it: then the run was
+      // split, which is the refusal a person can act on.
+      if (data === 1) data = 2;
+      pending = pending ?? extraChunk(type);
+      if (data === 0) return pending;
+    }
+    at = end;
+    index += 1;
+  }
+  return 'damaged';
+}
+
 export function verifyMap(bytes: Uint8Array): MapCheck {
   if (bytes.byteLength > MAX_FILE_BYTES) return { ok: false, code: 'too_many_bytes' };
   if (!isPng(bytes)) return { ok: false, code: 'not_a_png' };
   const header = headerRefusal(bytes);
   if (header !== null) return { ok: false, code: header };
+  const chunks = chunkRefusal(bytes);
+  if (chunks !== null) return { ok: false, code: chunks };
 
   let image: ReturnType<typeof readPng>;
   try {

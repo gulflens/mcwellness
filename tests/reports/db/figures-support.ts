@@ -56,19 +56,32 @@ export async function goodPng(width = 40, height = 30, seed = 0): Promise<Uint8A
   );
 }
 
+/** A chunk to write into a hand-made PNG: its four-letter type and its data. */
+export type ExtraChunk = { type: string; data?: Uint8Array };
+
 /**
  * A PNG written by hand, for the files the door must refuse: another colour
- * type or depth, or image data whose inflated length is not what the header
- * says. `rowBytes` is the length of a scanline without its filter byte; the
- * data is `rows` scanlines of filter 0.
+ * type, depth or interlace; image data whose inflated length is not what the
+ * header says, or whose rows start with a filter byte PNG does not define;
+ * chunks the door does not take, before or after the image data or between
+ * two halves of it; bytes after the end. `rowBytes` is the length of a
+ * scanline without its filter byte; the data is `rows` scanlines of
+ * `filterByte` (0 unless said).
  */
 export function handPng(options: {
   width: number;
   height: number;
   depth?: number;
   colourType?: number;
+  interlace?: number;
   rows?: number;
   rowBytes?: number;
+  filterByte?: number;
+  before?: readonly ExtraChunk[];
+  after?: readonly ExtraChunk[];
+  /** Splits the image data in two, with these chunks between the halves. */
+  between?: readonly ExtraChunk[];
+  trailer?: Uint8Array;
 }): Uint8Array {
   const depth = options.depth ?? 8;
   const colourType = options.colourType ?? 2;
@@ -76,17 +89,34 @@ export function handPng(options: {
   const view = new DataView(header.buffer);
   view.setUint32(0, options.width);
   view.setUint32(4, options.height);
-  header.set([depth, colourType, 0, 0, 0], 8);
+  header.set([depth, colourType, 0, 0, options.interlace ?? 0], 8);
   const channels = colourType === 6 ? 4 : colourType === 2 ? 3 : colourType === 4 ? 2 : 1;
   const rowBytes = options.rowBytes ?? Math.ceil((options.width * channels * depth) / 8);
   const rows = options.rows ?? options.height;
   const raw = new Uint8Array(rows * (rowBytes + 1));
-  for (let i = 0; i < raw.length; i += 1) raw[i] = i % (rowBytes + 1) === 0 ? 0 : (i * 7) % 251;
+  for (let i = 0; i < raw.length; i += 1) {
+    raw[i] = i % (rowBytes + 1) === 0 ? (options.filterByte ?? 0) : (i * 7) % 251;
+  }
+  const compressed = Uint8Array.from(deflateSync(raw));
+  const extra = (list: readonly ExtraChunk[] | undefined) =>
+    (list ?? []).map((c) => chunk(c.type, c.data ?? new Uint8Array([1, 2, 3])));
+  const half = Math.floor(compressed.length / 2);
+  const data =
+    options.between === undefined
+      ? [chunk('IDAT', compressed)]
+      : [
+          chunk('IDAT', compressed.subarray(0, half)),
+          ...extra(options.between),
+          chunk('IDAT', compressed.subarray(half)),
+        ];
   return join([
     SIGNATURE,
     chunk('IHDR', header),
-    chunk('IDAT', Uint8Array.from(deflateSync(raw))),
+    ...extra(options.before),
+    ...data,
+    ...extra(options.after),
     chunk('IEND', new Uint8Array(0)),
+    options.trailer ?? new Uint8Array(0),
   ]);
 }
 

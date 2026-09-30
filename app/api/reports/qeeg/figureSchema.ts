@@ -54,7 +54,19 @@ export type FigureRefusalCode =
   | 'not_rgb'
   | 'not_8_bit'
   | 'interlaced'
-  | 'damaged';
+  | 'damaged'
+  | 'transparency'
+  | 'palette'
+  | 'text'
+  | 'metadata'
+  | 'unknown_chunk'
+  | 'split_data'
+  | 'trailing_bytes'
+  | 'not_permitted'
+  | 'not_a_draft'
+  | 'not_accepted'
+  | 'no_such_map'
+  | 'already_on_report';
 
 /** One sentence for each refusal of a picture, as the form shows it. */
 export const FIGURE_SENTENCES: Readonly<Record<FigureRefusalCode, string>> = Object.freeze({
@@ -75,6 +87,26 @@ export const FIGURE_SENTENCES: Readonly<Record<FigureRefusalCode, string>> = Obj
   interlaced:
     'This picture is interlaced. The form prepares each map as a plain one before it is sent.',
   damaged: 'This picture is damaged: its data does not match its size. Export it again.',
+  transparency:
+    'This picture carries transparency. The form prepares each map without it before it is sent.',
+  palette:
+    'This picture carries a colour palette. The form prepares each map without one before it is sent.',
+  text: 'This picture carries text inside the file, which can hold a name. The form prepares each map without it before it is sent.',
+  metadata:
+    'This picture carries camera or device details inside the file. The form prepares each map without them before it is sent.',
+  unknown_chunk:
+    'This picture carries information beside the image that a map does not keep. The form prepares each map without it before it is sent.',
+  split_data:
+    'This picture has other information in the middle of its image data. Export it again.',
+  trailing_bytes:
+    'This picture has data after its end. The form prepares each map as a plain one before it is sent.',
+  not_permitted: 'You may not change the maps of this report.',
+  not_a_draft: 'This report is no longer a draft, and its maps are kept as they were signed.',
+  not_accepted: 'This report cannot take this picture.',
+  no_such_map: 'That report, or that map on it, is not there.',
+  // The form's own sentence names the condition and place (figures.ts).
+  already_on_report:
+    'This picture is already on the report with another condition or place. Remove it first to add it again.',
 });
 
 /** A picture as a report names it, and what the link adds. */
