@@ -212,3 +212,14 @@ describe('her own label for a map', () => {
     expect(mapsInOrder(labelMap(named, figure(1).figureId, ' '))[0]?.entry.caption).toBeNull();
   });
 });
+
+describe('the eight a report holds, counted as the door counts them', () => {
+  it('counts pictures uploaded and not placed as well as the maps placed', () => {
+    const six = [0, 1, 2, 3, 4, 5].reduce<QeegContent>(
+      (content, n) => addMap(content, figure(n), null),
+      blankInitial(),
+    );
+    expect(mapRefusal(six, 1)).toBeNull();
+    expect(mapRefusal(six, 2)).toBe('too_many_maps');
+  });
+});

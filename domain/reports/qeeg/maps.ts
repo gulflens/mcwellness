@@ -49,9 +49,13 @@ export function mapsInOrder(content: QeegContent): ListedMap[] {
     .sort((a, b) => a.entry.position - b.entry.position);
 }
 
-/** Why another map cannot be added, or null when it can. */
-export function mapRefusal(content: QeegContent): 'too_many_maps' | null {
-  return Object.keys(content.maps).length >= LIMITS.maps ? 'too_many_maps' : null;
+/**
+ * Why another map cannot be added, or null when it can. The door counts every
+ * picture uploaded to the report, so `unplaced` (uploaded and not in the
+ * list of maps) counts as well as the maps placed.
+ */
+export function mapRefusal(content: QeegContent, unplaced = 0): 'too_many_maps' | null {
+  return Object.keys(content.maps).length + unplaced >= LIMITS.maps ? 'too_many_maps' : null;
 }
 
 function refOf(figure: FigureRef): FigureRef {
