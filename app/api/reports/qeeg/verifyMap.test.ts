@@ -1,3 +1,4 @@
+import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { goodPng, handPng } from '../../../../tests/reports/db/figures-support';
 import { FIGURE_SENTENCES } from './figureSchema';
@@ -61,6 +62,38 @@ describe('verifyMap', () => {
 
   it('refuses a row whose filter byte PNG does not define', () => {
     expect(verifyMap(handPng({ ...base, filterByte: 5 }))).toEqual({ ok: false, code: 'damaged' });
+  });
+
+  it('refuses bytes hidden after the compressed stream inside the image data', () => {
+    expect(
+      verifyMap(handPng({ ...base, dataTrailer: new TextEncoder().encode('hidden words') })),
+    ).toEqual({ ok: false, code: 'damaged' });
+  });
+
+  it('refuses a second compressed stream after the first', () => {
+    const second = Uint8Array.from(deflateSync(new Uint8Array([1, 2, 3])));
+    expect(verifyMap(handPng({ ...base, dataTrailer: second }))).toEqual({
+      ok: false,
+      code: 'damaged',
+    });
+  });
+
+  it('refuses a chunk whose CRC is wrong', () => {
+    expect(verifyMap(handPng({ ...base, badCrc: true }))).toEqual({ ok: false, code: 'damaged' });
+  });
+
+  it('refuses an image data chunk with nothing in it', () => {
+    expect(verifyMap(handPng({ ...base, emptyIdat: true }))).toEqual({
+      ok: false,
+      code: 'damaged',
+    });
+  });
+
+  it('refuses a header of twelve bytes as damaged, before reading its fields', () => {
+    expect(verifyMap(handPng({ ...base, headerLength: 12 }))).toEqual({
+      ok: false,
+      code: 'damaged',
+    });
   });
 
   it('has a sentence for every refusal', () => {

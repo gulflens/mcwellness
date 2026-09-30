@@ -82,6 +82,14 @@ export function handPng(options: {
   /** Splits the image data in two, with these chunks between the halves. */
   between?: readonly ExtraChunk[];
   trailer?: Uint8Array;
+  /** Bytes after the zlib stream, inside the image data. */
+  dataTrailer?: Uint8Array;
+  /** An IDAT chunk with no data, after the run's first half. */
+  emptyIdat?: boolean;
+  /** The image data chunk's CRC, wrong by one bit. */
+  badCrc?: boolean;
+  /** A header chunk of this many bytes instead of thirteen. */
+  headerLength?: number;
 }): Uint8Array {
   const depth = options.depth ?? 8;
   const colourType = options.colourType ?? 2;
@@ -97,21 +105,34 @@ export function handPng(options: {
   for (let i = 0; i < raw.length; i += 1) {
     raw[i] = i % (rowBytes + 1) === 0 ? (options.filterByte ?? 0) : (i * 7) % 251;
   }
-  const compressed = Uint8Array.from(deflateSync(raw));
+  const compressed = join([
+    Uint8Array.from(deflateSync(raw)),
+    options.dataTrailer ?? new Uint8Array(0),
+  ]);
   const extra = (list: readonly ExtraChunk[] | undefined) =>
     (list ?? []).map((c) => chunk(c.type, c.data ?? new Uint8Array([1, 2, 3])));
   const half = Math.floor(compressed.length / 2);
   const data =
-    options.between === undefined
-      ? [chunk('IDAT', compressed)]
-      : [
+    options.emptyIdat === true
+      ? [
           chunk('IDAT', compressed.subarray(0, half)),
-          ...extra(options.between),
+          chunk('IDAT', new Uint8Array(0)),
           chunk('IDAT', compressed.subarray(half)),
-        ];
+        ]
+      : options.between === undefined
+        ? [chunk('IDAT', compressed)]
+        : [
+            chunk('IDAT', compressed.subarray(0, half)),
+            ...extra(options.between),
+            chunk('IDAT', compressed.subarray(half)),
+          ];
+  if (options.badCrc === true) {
+    const first = data[0];
+    if (first) first[first.length - 1] = (first[first.length - 1] ?? 0) ^ 1;
+  }
   return join([
     SIGNATURE,
-    chunk('IHDR', header),
+    chunk('IHDR', header.subarray(0, options.headerLength ?? 13)),
     ...extra(options.before),
     ...data,
     ...extra(options.after),
