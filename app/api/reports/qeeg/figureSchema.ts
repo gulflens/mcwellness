@@ -80,7 +80,8 @@ export const FIGURE_SENTENCES: Readonly<Record<FigureRefusalCode, string>> = Obj
     'This picture is not 8 bits to a colour. The form prepares each map as one before it is sent.',
   interlaced:
     'This picture is interlaced. The form prepares each map as a plain one before it is sent.',
-  damaged: 'This picture is damaged: its data does not match its size. Export it again.',
+  damaged:
+    'This picture could not be read as the plain picture the form prepares. Reload the page and try again.',
   transparency:
     'This picture carries transparency. The form prepares each map without it before it is sent.',
   palette:

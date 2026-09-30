@@ -109,4 +109,12 @@ describe('verifyMap', () => {
       expect(FIGURE_SENTENCES[code].length).toBeGreaterThan(20);
     }
   });
+
+  it('says of a damaged picture what damaged covers: not read as the plain picture the form writes', () => {
+    // A bad checksum or data after the image stream is damaged too, and the
+    // form wrote the file, so exporting again is not the remedy: reloading is.
+    expect(FIGURE_SENTENCES.damaged).toBe(
+      'This picture could not be read as the plain picture the form prepares. Reload the page and try again.',
+    );
+  });
 });
