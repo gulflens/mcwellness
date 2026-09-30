@@ -1,16 +1,22 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { IssueResponse, ReportResponse } from '../../../app/api/reports/schema';
+import type {
+  IssueResponse,
+  QeegDraftResponse,
+  ReportResponse,
+} from '../../../app/api/reports/schema';
 import { WORDS } from '../../../domain/reports/document/strings';
 import { missingForIssue } from '../../../domain/reports/qeeg/complete';
 import type * as Pages from '../../../domain/reports/qeeg/document';
-import type { QeegInitial } from '../../../domain/reports/qeeg/types';
+import { fullFollowUp, sparseFollowUp } from '../../../domain/reports/qeeg/testing/reports';
+import type { FigureRef, QeegInitial } from '../../../domain/reports/qeeg/types';
 import type * as Wording from '../../../domain/reports/qeeg/wording';
 import { extractAll } from '../../../domain/shared/document';
 import { clientDocumentKey } from '../../../domain/shared/storage';
 import { goodPng, sha256Hex } from './figures-support';
 import {
   clientToWriteAbout,
+  completeReport,
   householdOf,
   MAP_SIZE,
   pageCount,
@@ -419,5 +425,61 @@ describe('a complete draft, signed', () => {
       ]);
       await h.storage.put(documentRow.storage_key, stored, 'application/pdf', { overwrite: true });
     }
+  });
+});
+
+describe('a follow-up, signed', () => {
+  it('signs a follow-up compared with a signed first report, printing both sides of each pair', async () => {
+    const first = await steps.completeDraft(SEEDED.owner, { seed: 21 });
+    const firstSigned = await issue(first);
+    expect(firstSigned.status).toBe(201);
+
+    const draft = await steps.saveAs(SEEDED.owner, {
+      locale: 'en',
+      content: { ...sent(sparseFollowUp()), comparedWith: { reportId: first.id } },
+    });
+    expect(draft.status).toBe(201);
+    const blank = (await draft.json()) as QeegDraftResponse;
+    let savedAt = blank.savedAt;
+    const own: FigureRef[] = [];
+    for (const seed of [31, 32, 33, 34]) {
+      const filed = await steps.upload(blank.report.id, SEEDED.owner, seed);
+      own.push(filed.ref);
+      savedAt = filed.savedAt;
+    }
+    const [mapA, mapB, laterClosed, laterOpen] = own;
+    if (!mapA || !mapB || !laterClosed || !laterOpen) throw new Error('Uploads went missing.');
+    const full = fullFollowUp();
+    const content = {
+      ...sent(full),
+      comparedWith: { reportId: first.id },
+      recording: { ...full.recording, recordedOn: '2026-09-28' },
+      maps: completeReport([mapA, mapB]).maps,
+      change: {
+        ...full.change,
+        sessionsCompleted: { count: 20, source: 'typed' },
+        pairs: {
+          // The earlier sides are the first report's, written by the server.
+          eyes_closed: { earlier: null, later: laterClosed },
+          eyes_open: { earlier: null, later: laterOpen },
+        },
+      },
+    };
+    const saved = await steps.saveAs(SEEDED.owner, { id: blank.report.id, savedAt, content });
+    if (saved.status !== 200)
+      throw new Error(`Save refused: ${saved.status} ${await saved.text()}`);
+    const body = (await saved.json()) as QeegDraftResponse;
+
+    const res = await issue({ id: blank.report.id, savedAt: body.savedAt });
+    expect(res.status).toBe(201);
+    const pdf = await h.call(
+      'GET',
+      `/api/reports/${blank.report.id}/preview?locale=en`,
+      SEEDED.owner,
+    );
+    expect(pdf.status).toBe(200);
+    // Its own two maps and both sides of both pairs: six pictures drawn.
+    const raw = Buffer.from(await pdf.arrayBuffer()).toString('latin1');
+    expect(raw.match(/\/Interpolate true/g)?.length).toBe(6);
   });
 });
