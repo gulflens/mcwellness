@@ -28,6 +28,10 @@ export const DRAFT_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   cannot_compare: 'The earlier report chosen cannot be compared with.',
   stale_draft:
     'A newer version of this draft was saved somewhere else, perhaps in another tab. Nothing here was saved over it.',
+  unlinked_figure:
+    'A map the report names is not on this draft, so nothing was saved. Take it out where it is named, then add it again.',
+  figure_mismatch:
+    'A map the report names does not match the picture on file, so nothing was saved. Take it out where it is named, then add it again.',
 });
 
 /** Why the earlier report a follow-up names was refused (`prefillFollowUp`, and the route's own). */
@@ -46,6 +50,8 @@ export const CANNOT_COMPARE: Readonly<Record<string, string>> = Object.freeze({
   undated: 'The earlier report chosen has no recording date, so nothing can be measured from it.',
   no_such_day: 'The recording date is not a real day.',
   recorded_later: 'This recording is dated before the report it is compared with.',
+  map_not_held:
+    'The earlier report does not hold the map chosen for before, so nothing was saved. Choose one of its maps again.',
 });
 
 const FORBIDDEN = 'You are not allowed to write reports for this client.';
@@ -87,6 +93,12 @@ export function refusalSentence(status: number, body: unknown): string {
   if (code === 'cannot_compare' && typeof refusal.reason === 'string') {
     return CANNOT_COMPARE[refusal.reason] ?? DRAFT_REFUSALS['cannot_compare'] ?? FALLBACK;
   }
+  if (
+    (code === 'unlinked_figure' || code === 'figure_mismatch') &&
+    typeof refusal.field === 'string'
+  ) {
+    return `${DRAFT_REFUSALS[code] ?? FALLBACK} It is named in ${whereWords(refusal.field)}.`;
+  }
   if (code === 'invalid_content') {
     const field = typeof refusal.field === 'string' ? refusal.field : '';
     const section = sectionOfField(field);
@@ -96,4 +108,107 @@ export function refusalSentence(status: number, body: unknown): string {
     }
   }
   return Object.hasOwn(DRAFT_REFUSALS, code) ? (DRAFT_REFUSALS[code] ?? FALLBACK) : FALLBACK;
+}
+
+// ---------------------------------------------------------------------------
+// The brain maps' two doors, and what the form refuses before sending
+// ---------------------------------------------------------------------------
+
+const SMALLER = 'Export it again at a smaller size: a map is never shrunk here.';
+const PREPARED = 'The form prepares every map before it is sent, so reload the page and try again.';
+
+/**
+ * A sentence for every refusal of a brain map: the ones the form makes before
+ * a picture leaves the browser (the caps of `image/limits.ts`, the eighth map,
+ * a file that is not a picture), and every code the upload and remove doors
+ * answer (app/api/reports/qeeg/figures.ts and `FIGURE_SENTENCES`). The form's
+ * own words, as for a save: the practitioner needs to know what to do next,
+ * and "export it again" or "remove one first" is that.
+ *
+ * A cap is refused and never shrunk around (section 9, point 3), and every
+ * sentence of a cap says so, because the obvious question is why the form
+ * did not just make it fit.
+ */
+export const FIGURE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
+  // The caps, before sending and at the door.
+  too_wide: `This map is wider than 4,096 pixels. ${SMALLER}`,
+  too_tall: `This map is taller than 4,096 pixels. ${SMALLER}`,
+  too_many_pixels: `This map has more than 12 million pixels. ${SMALLER}`,
+  too_many_bytes: `This map is larger than 5 MB once prepared. ${SMALLER}`,
+  too_many_maps: 'A report holds eight maps. Remove one before adding another.',
+  empty: 'This picture has nothing in it to place. Choose the exported map itself.',
+  undecodable:
+    'This file could not be read as a picture. Choose a map exported as a PNG, JPEG or BMP.',
+  // The picture as the door checks it.
+  not_a_png: `What arrived was not a PNG picture. ${PREPARED}`,
+  not_rgb: `What arrived was not in plain colour. ${PREPARED}`,
+  not_8_bit: `What arrived was not 8 bits to a colour. ${PREPARED}`,
+  interlaced: `What arrived was interlaced. ${PREPARED}`,
+  transparency: `What arrived still carried transparency. ${PREPARED}`,
+  palette: `What arrived carried a colour palette. ${PREPARED}`,
+  text: `What arrived carried text inside the file. ${PREPARED}`,
+  metadata: `What arrived carried device details inside the file. ${PREPARED}`,
+  unknown_chunk: `What arrived carried more than the picture. ${PREPARED}`,
+  trailing_bytes: `What arrived carried data after the picture. ${PREPARED}`,
+  split_data: 'This map was damaged on the way. Try adding it again.',
+  damaged: 'This map is damaged: its data does not match its size. Export it again.',
+  // The request.
+  invalid_request: 'The form asked for something the server does not accept. Reload the page.',
+  digest_missing: 'The map was sent without its fingerprint. Try adding it again.',
+  digest_mismatch:
+    'The map changed on its way to the server, so it was not kept. Try adding it again.',
+  empty_body: 'The map arrived empty. Try adding it again.',
+  reason_required: 'The form did not say why the map was changed, so nothing was done. Try again.',
+  unsupported_media_type: 'The map was not sent as a picture. Reload the page and try again.',
+  storage_unavailable:
+    'The store that keeps the maps cannot be reached just now, so nothing was changed. Try again later.',
+  // The report.
+  wrong_kind: 'This is not a brain-map report, so it holds no maps.',
+  not_a_draft: 'This report is no longer a draft. Its maps are kept as they were signed.',
+  not_permitted: 'You are not allowed to change the maps of this report.',
+  not_accepted: 'This report cannot take this picture.',
+  no_such_map: 'That map is no longer on this report.',
+  already_on_report:
+    'This picture is already on the report. To give it another condition or place, change it in the list.',
+  figure_in_use: 'This map is still used elsewhere in the report. Take it out there first.',
+});
+
+const MAPS_FORBIDDEN = 'You are not allowed to change the maps of this client’s reports.';
+const MAPS_NOT_FOUND =
+  'This draft could not be found. It may have been removed, or you may no longer have access to it.';
+const MAPS_FALLBACK = 'The map could not be sent. Check the connection and try again.';
+
+const CONDITION_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  eyes_open: 'eyes open',
+  eyes_closed: 'eyes closed',
+});
+
+/** Where the report names a picture, from the path a refusal gives, in words. */
+export function whereWords(path: string): string {
+  const parts = path.split('.');
+  if (parts[0] === 'maps') return 'the saved list of brain maps';
+  if (parts[0] === 'change' && parts[1] === 'pairs') {
+    const condition = CONDITION_WORDS[parts[2] ?? ''] ?? 'one condition';
+    const side = parts[3] === 'earlier' ? 'the earlier side' : 'the later side';
+    return `${SECTION_TITLES.change}, before and after, ${condition}, ${side}`;
+  }
+  return 'another part of the report';
+}
+
+/** What the form says when a map was refused, before it was sent (status 0) or by a door. */
+export function figureRefusalSentence(status: number, body: unknown): string {
+  const refusal = asRefusal(body);
+  const code =
+    typeof refusal.code === 'string'
+      ? refusal.code
+      : typeof refusal.error === 'string'
+        ? refusal.error
+        : '';
+  if (code === 'figure_in_use' && typeof refusal.field === 'string') {
+    return `This map is still used in ${whereWords(refusal.field)}. Take it out there first, then remove it.`;
+  }
+  if (Object.hasOwn(FIGURE_REFUSALS, code)) return FIGURE_REFUSALS[code] ?? MAPS_FALLBACK;
+  if (status === 403) return MAPS_FORBIDDEN;
+  if (status === 404) return MAPS_NOT_FOUND;
+  return MAPS_FALLBACK;
 }
