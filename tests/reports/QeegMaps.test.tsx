@@ -178,10 +178,13 @@ function mountApi({
   remove,
   stored,
   earlier,
+  list,
 }: {
   /** How the upload door answers; by default it files the picture. */
   upload?: (call: Call) => Response | Promise<Response | null> | null;
   remove?: (call: Call) => Response | null;
+  /** How `GET /api/reports/<draft>/figures` answers; by default, no pictures. */
+  list?: (call: Call) => Response | null;
   /** What `GET /api/reports/<draft>` holds. */
   stored?: QeegContent;
   /** What the earlier report holds. */
@@ -208,7 +211,6 @@ function mountApi({
     if (url.startsWith(`/api/reports/${DRAFT}/figures`) && method === 'PUT') {
       const answer = await upload?.(call);
       if (answer) return answer;
-      const query = new URL(url, 'http://localhost').searchParams;
       return json(
         {
           figure: {
@@ -216,14 +218,15 @@ function mountApi({
             sha256: headers.get('x-sha256'),
             widthPx: 40,
             heightPx: 30,
-            condition: query.get('condition'),
-            position: query.has('position') ? Number(query.get('position')) : null,
             borrowed: false,
           },
           savedAt: FILED_STAMP,
         },
         201,
       );
+    }
+    if (url === `/api/reports/${DRAFT}/figures` && method === 'GET') {
+      return list?.(call) ?? json({ figures: [] });
     }
     if (url.startsWith(`/api/reports/${DRAFT}/figures/`) && method === 'DELETE') {
       const answer = remove?.(call);
@@ -469,13 +472,13 @@ describe('every refusal of the upload door has its sentence', () => {
     }
     return code === 'too_many_bytes' ? 413 : code === 'not_a_png' ? 415 : 422;
   };
-  const picture422 = (Object.keys(FIGURE_SENTENCES) as string[])
-    .filter((code) => code !== 'already_on_report')
-    .map((code): [string, number, Record<string, unknown>] => [
+  const picture422 = (Object.keys(FIGURE_SENTENCES) as string[]).map(
+    (code): [string, number, Record<string, unknown>] => [
       code,
       statusOf(code),
       { error: 'unprocessable', code, sentence: 'The door’s own words.' },
-    ]);
+    ],
+  );
 
   it.each([...route, ...picture422])(
     'says what %s means, and leaves the form as it was',
@@ -507,28 +510,25 @@ describe('every refusal of the upload door has its sentence', () => {
     }
   });
 
-  it('says a picture sent again is already on the report, and lists one the form had lost', async () => {
+  it('places a picture the door already held, with the condition she chose, not one from the door', async () => {
     const user = userEvent.setup();
-    const figure = { ...OWN, condition: 'eyes_open', position: 0, borrowed: false };
     const api = mountApi({
-      upload: () =>
-        json({ error: 'conflict', code: 'already_on_report', sentence: 'x', figure }, 409),
+      upload: () => json({ figure: { ...OWN, borrowed: false }, savedAt: FILED_STAMP }, 200),
     });
     mountEditor(null, api, { reportId: DRAFT });
     const maps = await openSection(user, 'Brain maps');
+    await user.selectOptions(screen.getByLabelText('Recorded with'), 'eyes_open');
     await choose(user, picture('40x30'));
-    expect(await screen.findByText(FIGURE_REFUSALS['already_on_report'] as string)).toBeTruthy();
-    // The link was there and the draft did not name it: it is named now, as filed.
-    expect(maps.textContent).toMatch(/Nothing left to fill$/);
-    const listed = screen.getByRole('table', { name: 'Brain maps on this report' });
+    const listed = await screen.findByRole('table', { name: 'Brain maps on this report' });
     expect((within(listed).getByLabelText('Recorded with, map 1') as HTMLSelectElement).value).toBe(
       'eyes_open',
     );
+    expect(maps.textContent).toMatch(/Nothing left to fill$/);
   });
 
   it('adds a picture the door hands back once, however often it is chosen', async () => {
     const user = userEvent.setup();
-    const figure = { ...OWN, condition: 'eyes_closed', position: 0, borrowed: false };
+    const figure = { ...OWN, borrowed: false };
     const api = mountApi({
       stored: withOwnMap(blankInitial()),
       upload: () => json({ figure, savedAt: FILED_STAMP }, 200),
@@ -728,6 +728,8 @@ describe('what happens when an upload cannot finish as asked (fix round 1)', () 
       upload: () => {
         throw new TypeError('Failed to fetch');
       },
+      // The list cannot settle it either.
+      list: () => json({ error: 'internal' }, 500),
     });
     mountEditor(blankInitial(), api);
     const maps = await openSection(user, 'Brain maps');
@@ -749,7 +751,10 @@ describe('what happens when an upload cannot finish as asked (fix round 1)', () 
 
   it('says the same when the door’s answer cannot be read', async () => {
     const user = userEvent.setup();
-    const api = mountApi({ upload: () => json({ filed: 'perhaps' }, 201) });
+    const api = mountApi({
+      upload: () => json({ filed: 'perhaps' }, 201),
+      list: () => json({ error: 'internal' }, 500),
+    });
     mountEditor(null, api, { reportId: DRAFT });
     await openSection(user, 'Brain maps');
     await choose(user, picture('40x30'));
@@ -883,5 +888,175 @@ describe('a map with no name on the page (fix round 1)', () => {
     expect(maps.textContent).toMatch(/1 left to fill$/);
     await user.type(within(listed).getByLabelText('Label, map 1'), 'Coherence');
     expect(maps.textContent).toMatch(/Nothing left to fill$/);
+  });
+});
+
+describe('pictures uploaded and not on the report (fix round 2)', () => {
+  const UNPLACED = '0000000d-0000-4000-8000-000000000004';
+  const listing = (figures: Record<string, unknown>[]) => () => json({ figures });
+  const link = (figureId: string, over: Record<string, unknown> = {}) => ({
+    figureId,
+    sha256: 'c'.repeat(64),
+    widthPx: 60,
+    heightPx: 40,
+    borrowed: false,
+    named: false,
+    ...over,
+  });
+
+  it('are listed on opening the section, apart from those placed or borrowed, with Place and Remove', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({
+      stored: withOwnMap(blankInitial()),
+      list: listing([
+        link(FIGURE, { named: true }),
+        link(EARLIER_FIGURE, { borrowed: true, named: true }),
+        link(UNPLACED),
+      ]),
+    });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    const unplaced = await screen.findByRole('table', { name: 'Uploaded, not on the report' });
+    expect(within(unplaced).getAllByRole('row')).toHaveLength(2);
+    expect(within(unplaced).getByText('60 × 40 pixels')).toBeTruthy();
+
+    await user.click(within(unplaced).getByRole('button', { name: 'Place uploaded picture 1' }));
+    expect(screen.queryByRole('table', { name: 'Uploaded, not on the report' })).toBeNull();
+    const listed = screen.getByRole('table', { name: 'Brain maps on this report' });
+    expect(within(listed).getAllByRole('row')).toHaveLength(3);
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }));
+    const named = Object.values(sentContent(api.saves().at(-1))['maps'] as object).map(
+      (entry: { figureId: string }) => entry.figureId,
+    );
+    expect(named).toEqual([FIGURE, UNPLACED]);
+  });
+
+  it('can be removed after she confirms', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({ list: listing([link(UNPLACED)]) });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    const unplaced = await screen.findByRole('table', { name: 'Uploaded, not on the report' });
+    await user.click(within(unplaced).getByRole('button', { name: 'Remove uploaded picture 1' }));
+    await user.click(screen.getByRole('button', { name: 'Remove the map' }));
+    await waitFor(() => expect(api.removals()).toHaveLength(1));
+    expect(api.removals()[0]?.url).toBe(`/api/reports/${DRAFT}/figures/${UNPLACED}`);
+    expect(api.saves()).toEqual([]);
+    await waitFor(() =>
+      expect(screen.queryByRole('table', { name: 'Uploaded, not on the report' })).toBeNull(),
+    );
+  });
+
+  it('count toward the eight, and the refusal says how many could make room', async () => {
+    const user = userEvent.setup();
+    let seven: QeegContent = blankInitial();
+    for (let n = 0; n < 7; n += 1) {
+      seven = addMap(seven, { ...OWN, figureId: `0000000d-0000-4000-8000-00000000002${n}` }, null);
+    }
+    const api = mountApi({ stored: asSaved({ ...seven }), list: listing([link(UNPLACED)]) });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    await screen.findByRole('table', { name: 'Uploaded, not on the report' });
+    await choose(user, picture('40x30'));
+    expect(
+      await screen.findByText(
+        'A report holds eight maps. Remove one before adding another. 1 uploaded picture is not on the report; removing it makes room.',
+      ),
+    ).toBeTruthy();
+    expect(api.sent()).toEqual([]);
+  });
+
+  it('say where the list could not be read, and change nothing', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({ list: () => json({ error: 'forbidden' }, 403) });
+    mountEditor(null, api, { reportId: DRAFT });
+    await openSection(user, 'Brain maps');
+    expect(
+      await screen.findByText('You are not allowed to see the pictures uploaded to this draft.'),
+    ).toBeTruthy();
+  });
+});
+
+describe('an answer that never came, settled by the list (fix round 2)', () => {
+  it('places the picture when the list shows it was filed', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({
+      upload: () => {
+        throw new TypeError('Failed to fetch');
+      },
+      list: (call) => {
+        void call;
+        const put = api.uploads()[0];
+        if (!put) return json({ figures: [] });
+        return json({
+          figures: [
+            {
+              figureId: FIGURE,
+              sha256: put.headers.get('x-sha256'),
+              widthPx: 40,
+              heightPx: 30,
+              borrowed: false,
+              named: false,
+            },
+          ],
+        });
+      },
+    });
+    mountEditor(null, api, { reportId: DRAFT });
+    const maps = await openSection(user, 'Brain maps');
+    await user.selectOptions(screen.getByLabelText('Recorded with'), 'eyes_closed');
+    await choose(user, picture('40x30'));
+    expect(await screen.findByText(FIGURE_REFUSALS['kept_after_all'] as string)).toBeTruthy();
+    expect(maps.textContent).toMatch(/Nothing left to fill$/);
+    const listed = screen.getByRole('table', { name: 'Brain maps on this report' });
+    expect((within(listed).getByLabelText('Recorded with, map 1') as HTMLSelectElement).value).toBe(
+      'eyes_closed',
+    );
+    expect(screen.queryByRole('table', { name: 'Uploaded, not on the report' })).toBeNull();
+  });
+
+  it('says it was not kept when the list does not show it', async () => {
+    const user = userEvent.setup();
+    const api = mountApi({
+      upload: () => {
+        throw new TypeError('Failed to fetch');
+      },
+    });
+    mountEditor(null, api, { reportId: DRAFT });
+    const maps = await openSection(user, 'Brain maps');
+    await choose(user, picture('40x30'));
+    expect(await screen.findByText(FIGURE_REFUSALS['not_kept'] as string)).toBeTruthy();
+    expect(maps.textContent).toMatch(/1 left to fill$/);
+  });
+
+  it('puts a map back when the list shows its removal did not happen, and not when it did', async () => {
+    for (const [stillThere, words] of [
+      [true, FIGURE_REFUSALS['not_removed']],
+      [false, FIGURE_REFUSALS['removed_after_all']],
+    ] as const) {
+      const user = userEvent.setup();
+      const api = mountApi({
+        stored: withOwnMap(blankInitial()),
+        remove: () => {
+          throw new TypeError('Failed to fetch');
+        },
+        list: () =>
+          json({
+            figures:
+              stillThere && api.removals().length > 0
+                ? [{ ...OWN, borrowed: false, named: false }]
+                : api.removals().length > 0
+                  ? []
+                  : [{ ...OWN, borrowed: false, named: true }],
+          }),
+      });
+      mountEditor(null, api, { reportId: DRAFT });
+      const maps = await openSection(user, 'Brain maps');
+      await user.click(screen.getByRole('button', { name: 'Remove map 1' }));
+      await user.click(screen.getByRole('button', { name: 'Remove the map' }));
+      expect(await screen.findByText(words as string)).toBeTruthy();
+      expect(maps.textContent).toMatch(stillThere ? /Nothing left to fill$/ : /1 left to fill$/);
+      cleanup();
+    }
   });
 });

@@ -143,6 +143,13 @@ export function MapsSection({
     setFocusAsked((was) => was + 1);
   };
 
+  // The draft's uploaded pictures are read each time the section opens: an
+  // upload from another tab, or one left behind when a form closed, shows.
+  const { refresh } = maps;
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
   // Focus is moved once the change is drawn and the control is enabled
   // again: a button that has just gone, or just been disabled, drops focus to
   // the page, and she would have to find her place again.
@@ -280,41 +287,20 @@ export function MapsSection({
                         </Button>
                       </div>
                       {confirming === entry.figureId ? (
-                        <div
-                          className="qeeg-maps__confirm"
-                          role="group"
-                          aria-label="Remove a map"
-                          tabIndex={-1}
-                          data-confirm
-                        >
-                          <p>
-                            Remove map {n} from the report? The draft is saved without it, and the
-                            picture is deleted.
-                          </p>
-                          <div className="report-editor__actions">
-                            <Button
-                              variant="primary"
-                              disabled={busy}
-                              onClick={() => {
-                                setConfirming(null);
-                                void maps
-                                  .remove(entry.figureId)
-                                  .then(() => setFocusNext({ to: 'removed', index }));
-                              }}
-                            >
-                              Remove the map
-                            </Button>
-                            <Button
-                              variant="quiet"
-                              onClick={() => {
-                                setConfirming(null);
-                                setFocusNext({ to: 'remove', figureId: entry.figureId });
-                              }}
-                            >
-                              Keep it
-                            </Button>
-                          </div>
-                        </div>
+                        <ConfirmRemove
+                          question={`Remove map ${n} from the report? The draft is saved without it, and the picture is deleted.`}
+                          busy={busy}
+                          onRemove={() => {
+                            setConfirming(null);
+                            void maps
+                              .remove(entry.figureId)
+                              .then(() => setFocusNext({ to: 'removed', index }));
+                          }}
+                          onKeep={() => {
+                            setConfirming(null);
+                            setFocusNext({ to: 'remove', figureId: entry.figureId });
+                          }}
+                        />
                       ) : null}
                     </td>
                   </tr>
@@ -324,6 +310,90 @@ export function MapsSection({
           </table>
         </div>
       ) : null}
+
+      {maps.unplaced.length > 0 ? (
+        <div className="ledger__scroll">
+          <table className="ledger qeeg-maps">
+            <caption className="visually-hidden">Uploaded, not on the report</caption>
+            <thead>
+              <tr>
+                <th scope="col">Uploaded, not on the report</th>
+                <th scope="col">Size</th>
+                <th scope="col">
+                  <span className="visually-hidden">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {maps.unplaced.map((link, index) => {
+                const n = index + 1;
+                return (
+                  <tr key={link.figureId}>
+                    <td>
+                      <p className="qeeg-maps__place">Uploaded picture {n}</p>
+                      <DocumentLink
+                        clientId={clientId}
+                        documentId={link.figureId}
+                        label={`Open uploaded picture ${n}`}
+                      />
+                    </td>
+                    <td className="numeric">{sizeWords(link.widthPx, link.heightPx)}</td>
+                    <td>
+                      <div className="qeeg-maps__actions">
+                        <Button
+                          variant="quiet"
+                          disabled={busy || listed.length >= LIMITS.maps}
+                          aria-label={`Place uploaded picture ${n}`}
+                          onClick={() => {
+                            maps.place(link.figureId, condition);
+                            setFocusNext({ to: 'removed', index });
+                          }}
+                        >
+                          Place
+                        </Button>
+                        <Button
+                          variant="quiet"
+                          disabled={busy}
+                          aria-label={`Remove uploaded picture ${n}`}
+                          data-remove={link.figureId}
+                          onClick={() => {
+                            setConfirming(link.figureId);
+                            setFocusNext({ to: 'panel' });
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      {confirming === link.figureId ? (
+                        <ConfirmRemove
+                          question={`Remove uploaded picture ${n}? It is not on the report, and the picture is deleted.`}
+                          busy={busy}
+                          onRemove={() => {
+                            setConfirming(null);
+                            void maps
+                              .remove(link.figureId)
+                              .then(() => setFocusNext({ to: 'removed', index }));
+                          }}
+                          onKeep={() => {
+                            setConfirming(null);
+                            setFocusNext({ to: 'remove', figureId: link.figureId });
+                          }}
+                        />
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="small muted">
+            These were uploaded to this draft and are not on the report. Each counts toward the{' '}
+            {LIMITS.maps} a report holds until it is placed or removed. Place puts it at the end of
+            the maps, recorded with what is chosen under Add a map.
+          </p>
+        </div>
+      ) : null}
+      {maps.listError ? <Note tone="critical">{maps.listError}</Note> : null}
 
       <fieldset className="qeeg-item">
         <legend className="qeeg-item__title">Add a map</legend>
@@ -373,6 +443,39 @@ export function MapsSection({
         </div>
       ) : null}
       {maps.notice ? <p className="small">{maps.notice}</p> : null}
+    </div>
+  );
+}
+
+/** Asking inside the form before a picture is deleted, never with the browser's own dialog. */
+function ConfirmRemove({
+  question,
+  busy,
+  onRemove,
+  onKeep,
+}: {
+  question: string;
+  busy: boolean;
+  onRemove: () => void;
+  onKeep: () => void;
+}) {
+  return (
+    <div
+      className="qeeg-maps__confirm"
+      role="group"
+      aria-label="Remove a map"
+      tabIndex={-1}
+      data-confirm
+    >
+      <p>{question}</p>
+      <div className="report-editor__actions">
+        <Button variant="primary" disabled={busy} onClick={onRemove}>
+          Remove the map
+        </Button>
+        <Button variant="quiet" onClick={onKeep}>
+          Keep it
+        </Button>
+      </div>
     </div>
   );
 }
