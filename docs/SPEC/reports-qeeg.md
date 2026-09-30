@@ -82,7 +82,7 @@ Rules of the shape:
 8. **Formatted text is refused, never cleaned**, when it holds anything cleaning would remove. Its marks count from its letters, and cleaning would move them. The editor cleans the summary before it saves.
 9. **The key of a typed thing is one the app makes**: a small letter, then up to thirty-one small letters, figures or hyphens, and never a name every object answers to. The keys are read as they were sent, before anything else looks at the list.
 10. **The day of the recording is a real day**, from 2000 to 2100.
-11. **What the server works out is never taken from a request**: the client, where a report came from, a calculated figure. A request that carries one is refused by the route.
+11. **What the server works out is never taken from a request**: the client, where a report came from, what it is compared with beyond its id, and a calculated figure. A request that carries one is refused by the route. The earlier scores and maps, and a number of sessions said to be counted from the visits, are shown on the form and sent back as it got them, so the server writes them afresh at every save, whatever the request carried. Only a number of sessions marked typed is kept from the request, and it is printed as recorded by the practitioner.
 12. **What counts as nothing.** Text is nothing when nothing in it would be drawn: white space, the two characters that part letters and join them, a soft hyphen, a mark with no letter to stand on. English that must not be empty is refused when it is nothing in this sense, and an Arabic of nothing is none. What is STORED still keeps the two characters of rule 7.
 13. **A follow-up is not recorded before what it is compared with.** The same day is allowed. A recording with no day yet is allowed: a draft is saved before it is filled.
 
@@ -163,12 +163,12 @@ A follow-up's own page, modelled on a one-page example the practice supplied as 
 2. **A figure says where it came from.** `typed` is the practitioner's own estimate. `calculated` is arithmetic on two recorded assessments, and records which two.
 3. **No figure is ever read off a picture.** There is no path in the code from the bytes of an image to a number, and there is not to be one.
 4. **The note follows from the source.** A page of typed figures says they are the practitioner's approximate visual estimates and not a measure of change in function. A page of calculated figures says what they were calculated from. The practitioner does not choose the note.
-5. **The server does the arithmetic.** A `calculated` figure in a request is discarded and worked out again. Only a `typed` figure is kept from the caller.
+5. **The server does the arithmetic.** While decision 5 of section 18 stands, a `calculated` figure in a request is refused by the route, as rule 11 of section 4 says, and nothing is calculated. Only a `typed` figure is kept from the caller. When the mapping software's figures can be brought in, the server will work out a calculated figure itself and still never take one from a request.
 6. **Four measures can be calculated**: delta, theta, alpha and beta, which the assessment records. High beta and the narrower bands are typed until an instrument records them.
 7. **Direction is a shape.** A figure that went down is marked by a triangle pointing down, in ink. Whether that is welcome is said in her summary and never by a colour the system chose.
 8. **The comparison's own sentence** is printed beneath the figures, as on every comparison (`assessment.md` section 3.3).
 
-Sessions completed are counted from the client's visits, and may be typed when some were elsewhere. The figure says which.
+Sessions completed are counted from the client's visits, and may be typed when some were elsewhere. The figure says which. A visit counts when it is the client's, completed and closed, and not voided, and its day (the practice's day of its check-in) falls after the earlier recording and before this one, neither day included; while this recording has no day, the count runs to today, today included. The count is of every visit in the practice, whoever asks, and is made again at every save. A count of none gives no figure. A correction keeps the figure as it was signed, and its next save counts a counted figure again.
 
 ## 11. Past records
 
@@ -268,13 +268,13 @@ All under `/api/reports`, behind the same fence and the same permissions as the 
 
 | Route | Does |
 | --- | --- |
-| `POST /draft` | saves a `qeeg` draft: gathers the client, recomputes calculated figures, validates, refuses a save made over a newer one |
+| `POST /draft` | saves a `qeeg` draft: gathers the client, refuses a calculated figure (section 18, decision 5), counts again a number of sessions said to be counted, validates, refuses a save made over a newer one |
 | `GET /:id/preview?locale=` | renders the draft in either language; prints the draft-wording line while the wording is a draft |
 | `POST /:id/issue` | refuses what is incomplete, a language still in draft, a map that is missing; gathers the client once more; signs |
 | `POST /:id/supersede` | carries what it is compared with, its twin and its maps to the new draft |
 | `PUT /:id/figures`, `DELETE /:id/figures/:figureId` | a draft's maps |
 | `POST /:id/twin` | the draft in the other language |
-| `GET /qeeg/prefill` | an empty follow-up, with the earlier scores and maps brought forward and every judgement left for her |
+| `GET /qeeg/prefill?clientId=&from=&recordedOn=&stage=&draftId=` | a follow-up begun from a signed report or a kept past record: the earlier scores and maps, what it is compared with and the handedness brought forward, the sessions counted from the visits, every judgement left for her, and what she chose last time answered beside it as `offered`, never filled in. Writes no report, and is audited as a read of the report and of the client. Each of `prefillFollowUp`'s refusals is answered by its own code and sentence, in its order, `other_client` first; a household is refused |
 | `POST /qeeg/import`, `POST /:id/keep-import`, `POST /:id/withdraw-import` | past records |
 
 ## 15. Screens
