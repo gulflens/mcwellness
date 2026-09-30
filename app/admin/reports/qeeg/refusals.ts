@@ -34,6 +34,8 @@ export const DRAFT_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
     'A map the report names is not on this draft, so nothing was saved. Take it out where it is named, then add it again.',
   figure_mismatch:
     'A map the report names does not match the picture on file, so nothing was saved. Take it out where it is named, then add it again.',
+  twin_fixed:
+    'This is the other language of a signed report, so only its own language’s versions of what was typed can change, and nothing was saved. Load the draft again.',
 });
 
 /** Why the earlier report a follow-up names was refused (`prefillFollowUp`, and the route's own). */
@@ -100,6 +102,11 @@ export function refusalSentence(status: number, body: unknown): string {
     typeof refusal.field === 'string'
   ) {
     return `${DRAFT_REFUSALS[code] ?? FALLBACK} It is named in ${whereWords(refusal.field)}.`;
+  }
+  if (code === 'twin_fixed' && typeof refusal.field === 'string') {
+    const section = sectionOfField(refusal.field);
+    const where = section === null ? '' : ` It tried to change ${SECTION_TITLES[section]}.`;
+    return `${DRAFT_REFUSALS['twin_fixed'] ?? FALLBACK}${where}`;
   }
   if (code === 'invalid_content') {
     const field = typeof refusal.field === 'string' ? refusal.field : '';
@@ -191,6 +198,9 @@ export const FIGURE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
     'Something went wrong in the form while the map was being sent, so it cannot tell whether the map was kept. Reload the draft and look at its maps before adding it again.',
   unexpected_removal:
     'Something went wrong in the form while the map was being removed, so it cannot tell whether it went. Reload the draft and look at its maps.',
+  // The other language of a signed report prints that report's maps.
+  twin_fixed:
+    'The maps of a report in the other language are the maps of the report it was made from, so none is added or removed here.',
   unknown_removal:
     'The server’s answer did not arrive, so the form cannot tell whether the map was removed. It may have been. It is off the draft; reload the draft to see where it stands.',
 });
@@ -314,6 +324,10 @@ export const ISSUE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   credential_cannot_sign: 'Your certificate does not carry the right to sign a report.',
   credential_lapsed: 'Your certificate has lapsed. Renew it before signing.',
   credential_not_yet_valid: 'Your certificate is not valid yet.',
+  twin_out_of_step:
+    'The report this one was made from has been corrected since, so this one is out of step and is not signed. Start the other language again from the corrected report once it is signed.',
+  twin_differs:
+    'This report says something the report it was made from does not, beyond its own language, so nothing was signed.',
 });
 
 /**
@@ -361,6 +375,34 @@ export const SUPERSEDE_REFUSALS: Readonly<Record<string, string>> = Object.freez
   not_permitted: 'You are not allowed to change the maps of this client’s reports.',
   cannot_compare:
     'The report this one is compared with has been withdrawn, so a corrected version cannot be compared with it.',
+});
+
+/**
+ * A sentence for every refusal of "Sign the other language"
+ * (app/api/reports/qeeg/twin.ts). Where the other language already exists,
+ * it says so: the answer names where, and the form opens it from the list.
+ */
+export const TWIN_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
+  invalid_request:
+    'The form asked for the other language in a way the server does not accept. Reload the page.',
+  reason_required:
+    'The request did not say why the other language was started, so nothing was started. Try again.',
+  not_permitted:
+    'Only the owner and the lead practitioner may start the other language of a report.',
+  wrong_kind: 'Only a brain-map report is signed in both languages.',
+  imported_record: 'A past record read from the old tool has no other language made here.',
+  not_signed: 'The other language is made from a signed report. Sign this one first.',
+  already_superseded:
+    'This version has been replaced by a corrected one. Start the other language from that one once it is signed.',
+  twin_exists:
+    'This report already has its other language, a draft or signed. Open it from the list of reports.',
+  client_erased: 'This client’s record has been erased, so no report can be started for it.',
+  invalid_content:
+    'The signed report can no longer be read as a report, so nothing can be made from it.',
+  cannot_compare:
+    'The report this one is compared with has been withdrawn, so the other language cannot be compared with it.',
+  map_not_held:
+    'The signed report names a map it does not hold, so the other language could not borrow it.',
 });
 
 const SIGN_FALLBACK = 'The report could not be signed. Check the connection and try again.';
@@ -454,6 +496,21 @@ export function supersedeRefusalSentence(
     body,
     SUPERSEDE_FALLBACK,
     'Only the owner and the lead practitioner may correct a signed report.',
+    edition,
+  );
+}
+
+export function twinRefusalSentence(
+  status: number,
+  body: unknown,
+  { edition = 'initial' }: { edition?: Edition } = {},
+): string {
+  return doorSentence(
+    TWIN_REFUSALS,
+    status,
+    body,
+    'The other language could not be started. Check the connection and try again.',
+    'Only the owner and the lead practitioner may start the other language of a report.',
     edition,
   );
 }

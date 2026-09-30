@@ -13,6 +13,8 @@ import {
   refusalSentence,
   SUPERSEDE_REFUSALS,
   supersedeRefusalSentence,
+  TWIN_REFUSALS,
+  twinRefusalSentence,
 } from './refusals';
 
 /**
@@ -335,5 +337,50 @@ describe('what the form says when a preview, a signature or a correction is refu
     expect(issueRefusalSentence(500, {})).toMatch(/could not be signed/);
     expect(previewRefusalSentence(500, {})).toMatch(/preview could not be made/);
     expect(supersedeRefusalSentence(500, {})).toMatch(/corrected version could not be started/);
+  });
+});
+
+describe('what the form says about the other language (brief Q)', () => {
+  it('has a different sentence for every code starting the other language answers', () => {
+    const codes = [
+      'invalid_request',
+      'reason_required',
+      'not_permitted',
+      'wrong_kind',
+      'imported_record',
+      'not_signed',
+      'already_superseded',
+      'twin_exists',
+      'client_erased',
+      'invalid_content',
+      'cannot_compare',
+      'map_not_held',
+    ];
+    for (const code of codes) expect(TWIN_REFUSALS[code], code).toBeTruthy();
+    expect(new Set(codes.map((code) => TWIN_REFUSALS[code])).size).toBe(codes.length);
+    expect(twinRefusalSentence(409, { code: 'twin_exists' })).toBe(TWIN_REFUSALS['twin_exists']);
+    expect(twinRefusalSentence(403, { error: 'forbidden' })).toMatch(/owner and the lead/);
+    expect(twinRefusalSentence(0, null)).toMatch(/Check the connection/);
+  });
+
+  it('names the field a save of the other language tried to change', () => {
+    const sentence = refusalSentence(422, {
+      code: 'twin_fixed',
+      field: 'dashboard.mental_energy.score',
+    });
+    expect(sentence).toMatch(/only its own language/);
+    expect(sentence).toMatch(/Performance dashboard/);
+  });
+
+  it('says why the other language is not signed while its first report was corrected', () => {
+    expect(issueRefusalSentence(409, { code: 'twin_out_of_step' })).toBe(
+      ISSUE_REFUSALS['twin_out_of_step'],
+    );
+    expect(ISSUE_REFUSALS['twin_differs']).toBeTruthy();
+    expect(ISSUE_REFUSALS['twin_differs']).not.toBe(ISSUE_REFUSALS['twin_out_of_step']);
+  });
+
+  it('says why no map is added to or taken from the other language', () => {
+    expect(figureRefusalSentence(422, { code: 'twin_fixed' })).toBe(FIGURE_REFUSALS['twin_fixed']);
   });
 });
