@@ -57,7 +57,13 @@ export async function supersedeQeeg(
   reason: string,
 ): Promise<Response> {
   const requestId = c.get('requestId');
+  const db = c.get('db');
+  const target = { type: 'report', id: standing.id, clientId: standing.client_id } as const;
+  /** Written before the answer, as every refusal of a correction is (supersede.ts). */
+  const refused = (code: string) =>
+    logAction(db, 'report.supersede_refused', target, { reason: code });
   if (input.content !== undefined) {
+    await refused('route_owned');
     return c.json(
       {
         error: 'bad_request',
@@ -70,11 +76,13 @@ export async function supersedeQeeg(
     );
   }
   if (input.locale !== undefined && input.locale !== standing.locale) {
+    await refused('locale_fixed');
     return c.json({ error: 'unprocessable', code: 'locale_fixed', requestId }, 422);
   }
   const checked = validateQeegContent(standing.content);
   if (!checked.ok) {
     // A signed body the shape no longer reads, or one an erasure cleared.
+    await refused('invalid_content');
     return c.json(
       {
         error: 'unprocessable',
@@ -85,9 +93,6 @@ export async function supersedeQeeg(
       422,
     );
   }
-  const db = c.get('db');
-  const target = { type: 'report', id: standing.id, clientId: standing.client_id } as const;
-
   await db.query('savepoint qeeg_supersede');
   let written: { rows: { id: string }[] };
   try {
@@ -106,6 +111,7 @@ export async function supersedeQeeg(
     const { code, constraint } = codeOf(error);
     if (code !== '23503' || constraint !== 'report_compared_with_comparable') throw error;
     await db.query('rollback to savepoint qeeg_supersede');
+    await refused('cannot_compare');
     return c.json(
       {
         error: 'conflict',
@@ -141,12 +147,14 @@ export async function supersedeQeeg(
         // who may correct one; at the edge (a record erased meanwhile) it is
         // an answer, and nothing of the correction stays.
         await db.query('rollback to savepoint qeeg_supersede');
+        await refused('not_permitted');
         return c.json({ error: 'forbidden', code: 'not_permitted', requestId }, 403);
       }
       if (code === '23503') {
         // A picture the signed report names but does not hold: signing
         // refuses that, so only a row written some other way reaches here.
         await db.query('rollback to savepoint qeeg_supersede');
+        await refused('map_not_held');
         return c.json(
           {
             error: 'unprocessable',

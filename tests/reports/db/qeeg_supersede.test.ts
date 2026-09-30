@@ -78,6 +78,16 @@ async function links(reportId: string) {
   return rows;
 }
 
+/** The reasons the trail gives for each refused correction of a report. */
+async function refusedFor(reportId: string): Promise<string[]> {
+  const { rows } = await h.owner.query<{ reason: string }>(
+    "select new_values->>'reason' as reason from audit_log where action = 'report.supersede_refused' " +
+      'and entity_id = $1',
+    [reportId],
+  );
+  return rows.map((row) => row.reason);
+}
+
 /** Signs a draft as the table owner, with the snapshots signing leaves on a row. */
 async function signAsOwner(reportId: string): Promise<void> {
   signedNumber += 1;
@@ -277,6 +287,7 @@ describe('what a correction carries, and what it refuses', () => {
     const res = await supersede(standing.id, { content: standing.content });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'route_owned', field: 'content' });
+    expect(await refusedFor(standing.id)).toContain('route_owned');
   });
 
   it('refuses another language: each language is its own report', async () => {
@@ -284,6 +295,7 @@ describe('what a correction carries, and what it refuses', () => {
     const res = await supersede(standing.id, { locale: 'ar' });
     expect(res.status).toBe(422);
     expect(await res.json()).toMatchObject({ code: 'locale_fixed' });
+    expect(await refusedFor(standing.id)).toContain('locale_fixed');
   });
 
   it('refuses a practitioner: a signed version is replaced by the owner or the lead', async () => {
