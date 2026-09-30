@@ -34,6 +34,19 @@ import { asRow, documentFrom, readReport, type ReportRecord } from './source';
  * and the mismatch is logged with the request id and nothing else — a key and
  * a hash both name a client's document.
  *
+ * **A household reads a signed brain map as its own screen does** (final
+ * security review, finding 1). The portal's Reports screen reads a report's
+ * row — reference, kind, status, dates, version, the document — and opens the
+ * PDF through an audited link; it never reads the body
+ * (app/api/portal/reports.ts). A brain map's stored body holds what its pages
+ * never print: items she left unticked, a calculated figure's assessments,
+ * the id of the report it is compared with (which may be a past record the
+ * household must never see). So a caller who is only a household is answered
+ * the row, the deliveries and the link, and `content: null`. And when the
+ * signed file is missing, the household is answered 404 with no link, as the
+ * portal's own link route answers it: re-rendering is the practice's to do,
+ * and the repair's refusals are sentences for the practice.
+ *
  * This is the same shape `app/api/billing/documents.ts` keeps, and it is what
  * the integrator asked for on the specification's own pull request: the report
  * carries `document_id` on its row *and* has billing's repair path, so the
@@ -155,6 +168,8 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
     if (!mayReadReport(actor, record.client_id, { clientIds }, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
+    const ofThePractice = hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner');
+    const householdBrainMap = !ofThePractice && record.kind === 'qeeg';
 
     // Opening a report is a `read` (section 8), written whether or not there
     // is a document behind it yet.
@@ -178,6 +193,10 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
       const row = found.rows[0];
       if (row) {
         if (!(await storage.exists(row.storage_key))) {
+          if (householdBrainMap) {
+            // The household's answer is the portal link route's: absent.
+            return c.json({ error: 'not_found', requestId }, 404);
+          }
           // From the row and nothing else, which is what makes the repair
           // path sound: the bytes it re-renders are the bytes that were filed,
           // whatever has been corrected on the client record since.
@@ -228,7 +247,7 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
     return c.json(
       ReportResponse.parse({
         report: asRow(record),
-        content: record.content,
+        content: householdBrainMap ? null : record.content,
         deliveries: deliveries.rows.map((row) => ({
           id: row.id,
           contactId: row.contact_id,
@@ -242,9 +261,7 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
         // cannot save over one made since (app/api/reports/qeegDraft.ts).
         // The practice's alone: a household edits nothing, and when the
         // practice last touched a row is not theirs to read.
-        ...(hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner')
-          ? { savedAt: record.saved_at }
-          : {}),
+        ...(ofThePractice ? { savedAt: record.saved_at } : {}),
       }),
     );
   });

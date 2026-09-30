@@ -476,6 +476,29 @@ describe('a complete draft, signed', () => {
     }
   });
 
+  it('answers a household 404 when its file is missing, never the practice’s repair sentence', async () => {
+    const first = draft.maps[0];
+    if (!first) throw new Error('No map.');
+    const mapKey = clientDocumentKey(h.data.tenant.id, clientId, first.figureId);
+    const mapBytes = await h.storage.get(mapKey);
+    if (!mapBytes) throw new Error('The map is not in the store.');
+    await h.storage.delete(documentRow.storage_key);
+    await h.storage.delete(mapKey);
+    try {
+      const res = await h.callAs('GET', `/api/reports/${draft.id}`, household);
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body['sentence']).toBeUndefined();
+      expect(body['url']).toBeUndefined();
+      expect(body['code']).toBeUndefined();
+      // Nothing re-rendered on the household's behalf either.
+      expect(await h.storage.exists(documentRow.storage_key)).toBe(false);
+    } finally {
+      await h.storage.put(mapKey, mapBytes, 'image/png', { overwrite: true });
+      await h.storage.put(documentRow.storage_key, stored, 'application/pdf', { overwrite: true });
+    }
+  });
+
   it('refuses to repair, by name, when its pages would now run over, and hands out no link', async () => {
     await h.storage.delete(documentRow.storage_key);
     overrun.parts = ['summary.1'];
@@ -650,5 +673,97 @@ describe('a follow-up, signed', () => {
     // Its own two maps and both sides of both pairs: six pictures drawn.
     const raw = Buffer.from(await pdf.arrayBuffer()).toString('latin1');
     expect(raw.match(/\/Interpolate true/g)?.length).toBe(6);
+  });
+});
+
+describe('what a household is answered for a signed brain map', () => {
+  const UNTICKED = 'A line she typed and left unticked';
+  const EARLIER_ASSESSMENT = '0000000d-0000-4000-8000-0000000003a1';
+  const LATER_ASSESSMENT = '0000000d-0000-4000-8000-0000000003a2';
+  let signedId = '';
+  let comparedId = '';
+
+  beforeAll(async () => {
+    // A first report, signed, that the follow-up below names.
+    const first = await steps.completeDraft(SEEDED.owner, { seed: 41 });
+    const firstSigned = await issue(first);
+    if (firstSigned.status !== 201) throw new Error(`Refused: ${firstSigned.status}`);
+    comparedId = first.id;
+
+    // A signed follow-up whose body holds what the page never prints: an item
+    // she left unticked, a calculated figure's assessments, and the id of the
+    // report it is compared with. Written as the owner, as a stored row can
+    // hold it, because the draft route refuses a calculated figure today.
+    const full = fullFollowUp();
+    const content = {
+      ...full,
+      comparedWith: { ...full.comparedWith, reportId: comparedId },
+      findings: {
+        ...full.findings,
+        custom: {
+          ...full.findings.custom,
+          c9: { label: { en: UNTICKED, ar: null }, note: null, chosen: false, position: 9 },
+        },
+      },
+      change: {
+        ...full.change,
+        table: {
+          ...full.change.table,
+          delta: {
+            position: 0,
+            eyesOpen: {
+              kind: 'percent',
+              direction: 'decrease',
+              low: 25,
+              high: null,
+              source: 'calculated',
+              basis: {
+                earlierAssessmentId: EARLIER_ASSESSMENT,
+                laterAssessmentId: LATER_ASSESSMENT,
+                unit: 'uV2',
+                sitesPaired: 19,
+              },
+            },
+            eyesClosed: null,
+          },
+        },
+      },
+    };
+    const inserted = await h.owner.query<{ id: string }>(
+      "insert into report (tenant_id, client_id, kind, content) values ($1, $2, 'qeeg', $3::jsonb) " +
+        'returning id',
+      [h.data.tenant.id, clientId, JSON.stringify(content)],
+    );
+    signedId = inserted.rows[0]?.id ?? '';
+    await h.owner.query(
+      "update report set status = 'issued', number = 977, issued_on = current_date, " +
+        "signed_at = now(), signed_by_practitioner_id = $2, signed_by_name = 'Rowan Ridge', " +
+        "signed_by_certification = 'bcia_bcn', recipient_name = 'Hazel Harbour', " +
+        "recipient_record_number = 'MW-000001', practice_legal_name = 'Synthetic Studio' " +
+        'where id = $1',
+      [signedId, h.practitionerIdOf(SEEDED.owner)],
+    );
+  });
+
+  it('gives the practice the whole body, as its own screen reads it', async () => {
+    const res = await h.call('GET', `/api/reports/${signedId}`, SEEDED.owner);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    for (const held of [UNTICKED, EARLIER_ASSESSMENT, LATER_ASSESSMENT, comparedId]) {
+      expect(text).toContain(held);
+    }
+  });
+
+  it('gives a household the row and nothing of the body: no unticked item, assessment or compared report', async () => {
+    const res = await h.callAs('GET', `/api/reports/${signedId}`, household);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const body = JSON.parse(text) as ReportResponse;
+    expect(body.report.id).toBe(signedId);
+    expect(body.report.status).toBe('issued');
+    expect(body.content).toBeNull();
+    for (const held of [UNTICKED, EARLIER_ASSESSMENT, LATER_ASSESSMENT, comparedId]) {
+      expect(text).not.toContain(held);
+    }
   });
 });
