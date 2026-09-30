@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import { LEAD_PRACTITIONER, signedInProvider } from '../../app/admin/clients/testActors';
 import {
@@ -59,6 +59,11 @@ vi.mock('../../app/admin/reports/qeeg/decodePicture', () => ({
     };
   }),
 }));
+
+beforeEach(() => {
+  URL.createObjectURL = vi.fn(() => 'blob:past-record-map');
+  URL.revokeObjectURL = vi.fn();
+});
 
 afterEach(() => {
   cleanup();
@@ -266,6 +271,58 @@ describe('bringing in a past record', () => {
     expect(
       screen.getByText(/does not match this client’s record in the name, the age and the sex/),
     ).toBeTruthy();
+  });
+
+  it('says the Arabic name cannot be compared when the record holds none', async () => {
+    const user = userEvent.setup();
+    mountImport();
+    await chooseFile(user, oldFile());
+    const row = (await screen.findByRole('rowheader', { name: 'Arabic name' })).closest('tr');
+    expect(row?.textContent).toMatch(/Cannot be compared: none on the record/);
+    expect(row?.textContent).not.toMatch(/Agrees/);
+  });
+
+  it('says the Arabic name agrees only when the record holds one that does', async () => {
+    const user = userEvent.setup();
+    const [givenAr = '', familyAr = ''] = LEGACY_NAME.ar.split(' ');
+    mountImport(
+      mountApi({
+        record: {
+          givenName: GIVEN,
+          familyName: FAMILY,
+          givenNameAr: givenAr,
+          familyNameAr: familyAr,
+          dateOfBirth: '1978-10-01',
+          sexAtBirth: 'female',
+        },
+      }),
+    );
+    await chooseFile(user, oldFile());
+    const row = (await screen.findByRole('rowheader', { name: 'Arabic name' })).closest('tr');
+    expect(row?.textContent).toMatch(/Agrees with the record/);
+    // Compared, never shown: the console is English.
+    expect(row?.textContent).not.toContain(LEGACY_NAME.ar);
+  });
+
+  it('shows each picture as it will be kept, with its condition and caption, before keeping', async () => {
+    const user = userEvent.setup();
+    const file = oldFile();
+    const maps = file['maps'] as Record<string, unknown>[];
+    maps.push({
+      label: 'Her own view',
+      name: 'other.png',
+      img: { url: picture('40x30'), w: 40, h: 30 },
+    });
+    mountImport();
+    await chooseFile(user, file);
+    await user.click(await screen.findByRole('button', { name: 'Bring it in' }));
+    const table = await screen.findByRole('table', { name: 'The pictures as they will be kept' });
+    const rows = [...table.querySelectorAll('tbody tr')].map((tr) => tr.textContent ?? '');
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatch(/1.*Eyes open.*No caption/);
+    expect(rows[1]).toMatch(/2.*Not brought in/);
+    expect(rows[2]).toMatch(/3.*No condition.*Her own view/);
+    expect(screen.getByAltText('The picture in place 1 of the file')).toBeTruthy();
   });
 
   it('warns of nothing when the file and the record agree', async () => {

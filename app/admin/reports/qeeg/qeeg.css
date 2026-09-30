@@ -349,3 +349,10 @@
   flex-direction: column;
   gap: var(--s-1);
 }
+
+/* A past record's picture, as it will be kept, beside its condition. */
+.qeeg-past__thumb {
+  display: block;
+  max-inline-size: 8rem;
+  block-size: auto;
+}

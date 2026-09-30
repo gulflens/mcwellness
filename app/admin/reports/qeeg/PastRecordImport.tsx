@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { displayFromIso, isoDateIn } from '@domain/shared';
 import { ageOn } from '../../../../domain/shared/dates';
 import { readLegacyReport, type LegacyImage } from '../../../../domain/reports/qeeg/legacy/read';
@@ -65,6 +65,8 @@ type Brought = {
   leftOut: string[];
   /** Why each picture left out was, in words, by its place. */
   said: string[];
+  /** A picture made ready, to show before keeping, by its key. */
+  thumbs: Record<string, string>;
 };
 
 type Stage =
@@ -75,6 +77,15 @@ type Stage =
   | { kind: 'kept' };
 
 type ClientFacts = RecordFacts & { name: string };
+
+/** A picture made ready, as a link the page can show, or none where the browser gives none. */
+function thumbnailOf(png: Uint8Array): string | null {
+  try {
+    return URL.createObjectURL(new Blob([png as Uint8Array<ArrayBuffer>], { type: 'image/png' }));
+  } catch {
+    return null;
+  }
+}
 
 /** A picture held inside the file, as bytes the browser can decode. */
 export function bytesOfDataUrl(url: string): Blob | null {
@@ -104,6 +115,12 @@ const SEX_WORDS: Readonly<Record<string, string>> = Object.freeze({
   female: 'Female',
   male: 'Male',
   unknown: 'Not recorded',
+});
+
+const CONDITION_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  eyes_open: 'Eyes open',
+  eyes_closed: 'Eyes closed',
+  none: 'No condition',
 });
 
 const DISAGREEMENT_WORDS: Readonly<Record<Disagreement, string>> = Object.freeze({
@@ -143,6 +160,14 @@ export function PastRecordImport({
   const [stage, setStage] = useState<Stage>({ kind: 'choose' });
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<ClientFacts | null | 'unreadable'>(null);
+  /** Every picture shown, let go of when the screen closes. */
+  const madeRef = useRef<string[]>([]);
+  useEffect(
+    () => () => {
+      for (const url of madeRef.current) URL.revokeObjectURL(url);
+    },
+    [],
+  );
 
   // The client's own record, to set the file's person beside. Read once.
   useEffect(() => {
@@ -246,7 +271,10 @@ export function PastRecordImport({
   async function fileMap(
     reportId: string,
     image: LegacyImage,
-  ): Promise<{ ok: true; entry: MapEntry; savedAt: string } | { ok: false; said: string }> {
+  ): Promise<
+    | { ok: true; entry: MapEntry; savedAt: string; thumb: string | null }
+    | { ok: false; said: string }
+  > {
     const blob = bytesOfDataUrl(image.dataUrl);
     if (blob === null)
       return { ok: false, said: figureRefusalSentence(0, { code: 'undecodable' }) };
@@ -274,6 +302,7 @@ export function PastRecordImport({
     }
     const { figureId, sha256, widthPx, heightPx } = filed.data.figure;
     return {
+      thumb: thumbnailOf(prepared.png),
       ok: true,
       entry: {
         figureId,
@@ -296,7 +325,7 @@ export function PastRecordImport({
         setStage({ kind: 'review', read, sha });
         return;
       }
-      const brought: Brought = { ...draft, maps: {}, leftOut: [], said: [] };
+      const brought: Brought = { ...draft, maps: {}, leftOut: [], said: [], thumbs: {} };
       for (const [index, image] of read.images.entries()) {
         setStage({
           kind: 'working',
@@ -309,6 +338,10 @@ export function PastRecordImport({
         if (filed.ok) {
           brought.maps[image.key] = { ...filed.entry, position: Object.keys(brought.maps).length };
           brought.savedAt = filed.savedAt;
+          if (filed.thumb !== null) {
+            brought.thumbs[image.key] = filed.thumb;
+            madeRef.current.push(filed.thumb);
+          }
         } else {
           brought.leftOut.push(image.key);
           brought.said.push(`The picture in place ${place} of the file: ${filed.said}`);
@@ -390,12 +423,19 @@ export function PastRecordImport({
     facts !== null && facts !== 'unreadable' && facts.dateOfBirth !== null
       ? String(ageOn(facts.dateOfBirth, on))
       : 'Not recorded';
+  const recordHasArabic =
+    facts !== null &&
+    facts !== 'unreadable' &&
+    [facts.givenNameAr, facts.familyNameAr].some((part) => part !== null && part.trim() !== '');
+  // Compared, and said in words, never shown: the console is English.
   const arabicWord =
     read.asTyped.nameAr.trim() === ''
       ? 'Not in the file'
-      : disagreements.includes('nameAr')
-        ? 'Differs from the record'
-        : 'Agrees with the record';
+      : !recordHasArabic
+        ? 'Cannot be compared: none on the record'
+        : disagreements.includes('nameAr')
+          ? 'Differs from the record'
+          : 'Agrees with the record';
 
   const person = (
     <div className="ledger__scroll">
@@ -474,6 +514,56 @@ export function PastRecordImport({
         <Note tone="attention">
           The file gives no day of recording, so a follow-up cannot be compared with this record.
         </Note>
+      ) : null}
+
+      {stage.kind === 'ready' ? (
+        <div className="ledger__scroll">
+          <table className="ledger">
+            <caption className="report-editor__heading">The pictures as they will be kept</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="numeric">
+                  Place in the file
+                </th>
+                <th scope="col">Picture</th>
+                <th scope="col">Condition</th>
+                <th scope="col">Caption</th>
+              </tr>
+            </thead>
+            <tbody>
+              {read.images.map((image) => {
+                const place = Number(image.key.replace('map-', '')) + 1;
+                const entry = stage.brought.maps[image.key];
+                const thumb = stage.brought.thumbs[image.key];
+                return (
+                  <tr key={image.key}>
+                    <td className="numeric">{place}</td>
+                    <td>
+                      {entry !== undefined && thumb !== undefined ? (
+                        <img
+                          className="qeeg-past__thumb"
+                          src={thumb}
+                          alt={`The picture in place ${place} of the file`}
+                        />
+                      ) : null}
+                    </td>
+                    {entry === undefined ? (
+                      <td colSpan={2}>Not brought in</td>
+                    ) : (
+                      <>
+                        <td>{CONDITION_WORDS[entry.condition ?? 'none'] ?? ''}</td>
+                        <td>{entry.caption === null ? 'No caption' : entry.caption.en}</td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="small muted">
+            A follow-up pairs its pictures with these by condition. Check each is the one it says.
+          </p>
+        </div>
       ) : null}
 
       <h4 className="report-editor__heading">What could not be carried</h4>
