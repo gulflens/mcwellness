@@ -3,7 +3,7 @@ import { blankFollowUp, blankInitial } from './blank';
 import { QEEG_ONLY } from './catalogue/ids';
 import { chooseSessions, figureText, isSessionCount, typedFigure } from './choices';
 import { validateQeegContent } from './shape';
-import { LIMITS, type ComparedWith } from './types';
+import { LIMITS, type ChangeFigure, type ComparedWith } from './types';
 
 const COMPARED: ComparedWith = {
   reportId: '00000006-0000-4000-8000-000000000001',
@@ -84,5 +84,23 @@ describe('a figure in words', () => {
     expect(figureText(typedFigure('increase', 25, null)!, 'en')).toBe('about 25% higher');
     expect(figureText(typedFigure('decrease', 25, 30)!, 'en')).toBe('about 25–30% lower');
     expect(figureText(typedFigure('none', null, null)!, 'en')).toBe('No appreciable change');
+  });
+
+  it('words a calculated figure as it words a typed one: where it came from is not said here', () => {
+    const calculated: ChangeFigure = {
+      kind: 'percent',
+      direction: 'decrease',
+      low: 25,
+      high: 30,
+      source: 'calculated',
+      basis: {
+        earlierAssessmentId: '00000006-0000-4000-8000-0000000000a1',
+        laterAssessmentId: '00000006-0000-4000-8000-0000000000a2',
+        unit: 'uV2',
+        sitesPaired: 19,
+      },
+    };
+    expect(figureText(calculated, 'en')).toBe('about 25–30% lower');
+    expect(figureText(calculated, 'ar')).toBe(figureText(typedFigure('decrease', 25, 30)!, 'ar'));
   });
 });

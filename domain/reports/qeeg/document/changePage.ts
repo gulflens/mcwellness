@@ -35,6 +35,7 @@ import { COMPARISON_SENTENCE } from '../../document/strings';
 import { MEASURE_IDS, MEASURE_RANGES } from '../catalogue/ids';
 import type { MeasureId } from '../catalogue/ids';
 import { changeNoteKey } from '../changeNote';
+import { figureText } from '../choices';
 import { richFor, textFor, toParagraphs } from '../text';
 import type { ChangeFigure, ChangeRow, Condition, FigureRef, Locale, QeegFollowUp } from '../types';
 import { fill, phrase } from '../wording';
@@ -59,21 +60,15 @@ import type { Drawing } from './typeset';
 /** The pairs in the order the page prints them: eyes closed, then eyes open (section 10). */
 export const PAIR_ORDER: readonly Condition[] = Object.freeze(['eyes_closed', 'eyes_open']);
 
-/** A figure in the words of the report, and which way it moved. */
+/**
+ * A figure in the words of the report, and which way it moved. The words are
+ * `figureText`'s, the one wording of a figure the form shows too; the page
+ * adds only the direction its triangle points.
+ */
 export function figureWords(figure: ChangeFigure, locale: Locale): FigureLineInput {
-  const say = (key: string) => phrase(key, 'follow-up', locale);
-  if (figure.kind === 'no_appreciable_change') {
-    return { words: fixed(say('figure.none')), points: null };
-  }
-  const amount =
-    figure.high === null
-      ? fill(say('figure.about'), { value: figure.low })
-      : fill(say('figure.about_range'), { low: figure.low, high: figure.high });
-  const rose = figure.direction === 'increase';
-  return {
-    words: fixed(`${amount} ${say(rose ? 'figure.higher' : 'figure.lower')}`),
-    points: rose ? 'up' : 'down',
-  };
+  const words = fixed(figureText(figure, locale));
+  if (figure.kind === 'no_appreciable_change') return { words, points: null };
+  return { words, points: figure.direction === 'increase' ? 'up' : 'down' };
 }
 
 /** The rows she chose that hold a figure, in the order she placed them. */

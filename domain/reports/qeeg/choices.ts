@@ -22,7 +22,7 @@
 
 import { QEEG_ONLY, type QeegOnly } from './catalogue/ids';
 import { SessionCountShape, TypedFigureShape } from './shape';
-import type { Locale, QeegContent, TypedFigure } from './types';
+import type { ChangeFigure, Locale, QeegContent, TypedFigure } from './types';
 import { fill, phrase } from './wording';
 
 /**
@@ -61,8 +61,13 @@ export function chooseSessions<C extends QeegContent>(
   return { ...content, plan: { ...content.plan, sessions } };
 }
 
-/** A change figure, as the page of what has changed words it. */
-export function figureText(figure: TypedFigure, locale: Locale): string {
+/**
+ * A change figure in words, typed or calculated alike: the form's line and
+ * the page of what has changed (`figureWords`) both say it through this, so
+ * the wording of a figure has one home. Where a figure came from is the
+ * note's to say, never these words'.
+ */
+export function figureText(figure: ChangeFigure, locale: Locale): string {
   const say = (key: string) => phrase(key, 'follow-up', locale);
   if (figure.kind === 'no_appreciable_change') return say('figure.none');
   const amount =
