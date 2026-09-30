@@ -454,6 +454,32 @@ describe('a complete draft, signed', () => {
   });
 });
 
+describe('two signatures at once', () => {
+  it('signs once: one 201, one stale refusal, and one reference taken', async () => {
+    const draft = await steps.completeDraft(SEEDED.owner, { seed: 41 });
+    const before = await h.owner.query<{ next_number: number }>(
+      'select next_number from report_number_series where tenant_id = $1',
+      [h.data.tenant.id],
+    );
+    const [one, two] = await Promise.all([issue(draft), issue(draft)]);
+    const statuses = [one.status, two.status].sort();
+    expect(statuses).toEqual([201, 409]);
+    const refused = one.status === 409 ? one : two;
+    expect(await codeOf(refused)).toBe('stale_draft');
+    const after = await h.owner.query<{ next_number: number }>(
+      'select next_number from report_number_series where tenant_id = $1',
+      [h.data.tenant.id],
+    );
+    expect(after.rows[0]?.next_number).toBe((before.rows[0]?.next_number ?? 0) + 1);
+    const filed = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from document d join report r on r.document_id = d.id ' +
+        'where r.id = $1',
+      [draft.id],
+    );
+    expect(filed.rows[0]?.n).toBe('1');
+  });
+});
+
 describe('a follow-up, signed', () => {
   it('signs a follow-up compared with a signed first report, printing both sides of each pair', async () => {
     const first = await steps.completeDraft(SEEDED.owner, { seed: 21 });
