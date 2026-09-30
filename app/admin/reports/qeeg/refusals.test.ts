@@ -5,8 +5,14 @@ import {
   DRAFT_REFUSALS,
   FIGURE_REFUSALS,
   figureRefusalSentence,
+  ISSUE_REFUSALS,
+  issueRefusalSentence,
   listRefusalSentence,
+  PREVIEW_REFUSALS,
+  previewRefusalSentence,
   refusalSentence,
+  SUPERSEDE_REFUSALS,
+  supersedeRefusalSentence,
 } from './refusals';
 
 /**
@@ -215,5 +221,110 @@ describe('the sentences fix round 2 asked for', () => {
     for (const code of ['kept_after_all', 'not_kept', 'removed_after_all', 'not_removed']) {
       expect(FIGURE_REFUSALS[code], code).toBeTruthy();
     }
+  });
+});
+
+describe('what the form says when a preview, a signature or a correction is refused', () => {
+  const ISSUE_CODES = [
+    'invalid_request',
+    'reason_required',
+    'storage_unavailable',
+    'imported_draft',
+    'stale_draft',
+    'invalid_content',
+    'client_erased',
+    'incomplete',
+    'wording_draft',
+    'unplaced_figures',
+    'unlinked_figure',
+    'map_missing',
+    'map_differs',
+    'overrun',
+    'already_issued',
+    'not_a_practitioner',
+    'no_signing_credential',
+    'credential_cannot_sign',
+    'credential_lapsed',
+    'credential_not_yet_valid',
+  ];
+  const PREVIEW_CODES = [
+    'invalid_request',
+    'storage_unavailable',
+    'imported_draft',
+    'imported_record',
+    'invalid_content',
+    'client_erased',
+    'locale_fixed',
+    'unlinked_figure',
+    'map_missing',
+    'map_differs',
+    'overrun',
+    'not_signed',
+  ];
+  const SUPERSEDE_CODES = [
+    'invalid_request',
+    'route_owned',
+    'locale_fixed',
+    'invalid_content',
+    'not_issued',
+    'already_superseded',
+    'no_reason',
+    'map_not_held',
+    'not_permitted',
+    'cannot_compare',
+  ];
+
+  it('has a different sentence for every code the issue route answers', () => {
+    for (const code of ISSUE_CODES) expect(ISSUE_REFUSALS[code], code).toBeTruthy();
+    expect(new Set(ISSUE_CODES.map((code) => ISSUE_REFUSALS[code])).size).toBe(ISSUE_CODES.length);
+  });
+
+  it('has a different sentence for every code the preview answers', () => {
+    for (const code of PREVIEW_CODES) expect(PREVIEW_REFUSALS[code], code).toBeTruthy();
+    expect(new Set(PREVIEW_CODES.map((code) => PREVIEW_REFUSALS[code])).size).toBe(
+      PREVIEW_CODES.length,
+    );
+  });
+
+  it('has a different sentence for every code a correction answers', () => {
+    for (const code of SUPERSEDE_CODES) expect(SUPERSEDE_REFUSALS[code], code).toBeTruthy();
+    expect(new Set(SUPERSEDE_CODES.map((code) => SUPERSEDE_REFUSALS[code])).size).toBe(
+      SUPERSEDE_CODES.length,
+    );
+  });
+
+  it('says where a map whose bytes are gone is placed', () => {
+    expect(issueRefusalSentence(422, { code: 'map_missing', field: 'maps.map-1.figureId' })).toBe(
+      `${ISSUE_REFUSALS['map_missing']} It is placed in the saved list of brain maps.`,
+    );
+    expect(
+      previewRefusalSentence(422, {
+        code: 'map_differs',
+        field: 'change.pairs.eyes_open.later.figureId',
+      }),
+    ).toMatch(/eyes open, the later side\.$/);
+  });
+
+  it('says how many pictures are left unplaced', () => {
+    expect(issueRefusalSentence(422, { code: 'unplaced_figures', figures: ['a'] })).toMatch(
+      /^1 picture uploaded to this draft is not on the report\./,
+    );
+    expect(issueRefusalSentence(422, { code: 'unplaced_figures', figures: ['a', 'b'] })).toMatch(
+      /^2 pictures uploaded to this draft are not on the report\./,
+    );
+  });
+
+  it('names what ran over, by the part of the report', () => {
+    expect(previewRefusalSentence(422, { code: 'overrun', parts: ['summary.1'] })).toBe(
+      `${PREVIEW_REFUSALS['overrun']} It ran over at: summary.1.`,
+    );
+  });
+
+  it('says who may not, and falls back to a sentence of its own for anything else', () => {
+    expect(issueRefusalSentence(403, { error: 'forbidden' })).toMatch(/not allowed/);
+    expect(issueRefusalSentence(404, { error: 'not_found' })).toMatch(/could not be found/);
+    expect(issueRefusalSentence(500, {})).toMatch(/could not be signed/);
+    expect(previewRefusalSentence(500, {})).toMatch(/preview could not be made/);
+    expect(supersedeRefusalSentence(500, {})).toMatch(/corrected version could not be started/);
   });
 });

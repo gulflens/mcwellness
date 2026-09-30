@@ -265,3 +265,170 @@ export function listRefusalSentence(status: number, body: unknown): string {
     return 'The pictures uploaded to this draft could not be found. The draft may have been removed.';
   return 'The pictures uploaded to this draft could not be listed. Check the connection and open the section again.';
 }
+
+// ---------------------------------------------------------------------------
+// The preview, the signature and the correction
+// ---------------------------------------------------------------------------
+
+/**
+ * A sentence for every refusal the issue route answers a brain-map
+ * signature with (app/api/reports/qeeg/issue.ts). Each says what to do next,
+ * because every one of them is something she can put right at her desk,
+ * except the certificate, which says whose it is to renew.
+ */
+export const ISSUE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
+  invalid_request:
+    'The form asked to sign in a way the server does not accept. Reload the page and try again.',
+  reason_required: 'The signature did not say why it was made, so nothing was signed. Try again.',
+  storage_unavailable:
+    'The store that keeps signed reports cannot be reached just now, so nothing was signed. Try again shortly.',
+  imported_draft: 'This is a past record read from the old tool. It is kept, never signed.',
+  stale_draft:
+    'This draft was saved somewhere else after the version on this screen, so nothing was signed. Load the newer version, read it over, then sign.',
+  invalid_content:
+    'Something saved in this report is not what the report accepts, so nothing was signed. Reload the draft and save it again.',
+  client_erased: 'This client’s record has been erased, so no report can be signed for it.',
+  incomplete: 'The report still has parts to fill before it can be signed.',
+  wording_draft:
+    'The report’s fixed words in this language are still waiting for the practice’s approval, so it cannot be signed yet. The preview can be seen meanwhile.',
+  unplaced_figures:
+    'Place each on the report or remove it in Brain maps, then sign: a signature would keep every picture on the draft for good.',
+  unlinked_figure:
+    'A map the report names is not on this draft, so nothing was signed. Take it out where it is named, then add it again.',
+  map_missing:
+    'A map the report names can no longer be found in the store, so nothing was signed. Remove it and add the exported map again.',
+  map_differs:
+    'A map the report names is not the picture that was filed, so nothing was signed. Remove it and add the exported map again.',
+  overrun:
+    'Something in the report runs past the foot of its page, so nothing was signed. Shorten it, preview, then sign.',
+  already_issued: 'This report has already been signed.',
+  not_a_practitioner: 'A report is signed by a practitioner, and you are not one.',
+  no_signing_credential: 'You hold no certificate that lets you sign a report.',
+  credential_cannot_sign: 'Your certificate does not carry the right to sign a report.',
+  credential_lapsed: 'Your certificate has lapsed. Renew it before signing.',
+  credential_not_yet_valid: 'Your certificate is not valid yet.',
+});
+
+/**
+ * A sentence for every refusal of the preview of a brain-map report
+ * (app/api/reports/qeeg/preview.ts). A preview refuses what a signature would
+ * refuse on the page itself: a page that runs over, and a map it cannot draw.
+ */
+export const PREVIEW_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
+  invalid_request:
+    'The form asked for the preview in a way the server does not accept. Reload the page.',
+  storage_unavailable:
+    'The store that keeps the maps cannot be reached just now, so the preview could not be drawn. Try again shortly.',
+  imported_draft:
+    'This is a past record read from the old tool. It is read over through its own screen.',
+  imported_record: 'A past record has no pages of this app’s: the old tool printed it.',
+  invalid_content:
+    'Something saved in this report is not what the report accepts, so it cannot be drawn. Reload the draft and save it again.',
+  client_erased: 'This client’s record has been erased, so no report can be drawn for it.',
+  locale_fixed: 'A signed report is shown only in the language it was signed in.',
+  unlinked_figure:
+    'A map the report names is not on this draft, so the preview could not be drawn. Take it out where it is named, then add it again.',
+  map_missing:
+    'A map the report names can no longer be found in the store, so the preview could not be drawn. Remove it and add the exported map again.',
+  map_differs:
+    'A map the report names is not the picture that was filed, so the preview could not be drawn. Remove it and add the exported map again.',
+  overrun:
+    'Something in the report runs past the foot of its page, and no page is made while anything does. Shorten it and preview again.',
+  not_signed: 'This report is missing part of its signature, so its pages cannot be drawn.',
+});
+
+/** A sentence for every refusal of a correction (app/api/reports/qeeg/supersede.ts and supersede.ts). */
+export const SUPERSEDE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
+  invalid_request:
+    'The form asked for a corrected version in a way the server does not accept. Reload the page.',
+  route_owned:
+    'A corrected version starts from the signed report, and the form sent something of its own. Reload the page and try again.',
+  locale_fixed: 'A corrected version keeps the language the report was signed in.',
+  invalid_content:
+    'The signed report can no longer be read as a report, so no corrected version can start from it.',
+  not_issued: 'Only a signed report that still stands can be corrected.',
+  already_superseded: 'A corrected version of this report already exists.',
+  no_reason: 'Say why the report is being corrected. The reason is kept with both versions.',
+  map_not_held:
+    'The signed report names a map it does not hold, so no corrected version could start from it.',
+  not_permitted: 'You are not allowed to change the maps of this client’s reports.',
+  cannot_compare:
+    'The report this one is compared with has been withdrawn, so a corrected version cannot be compared with it.',
+});
+
+const SIGN_FALLBACK = 'The report could not be signed. Check the connection and try again.';
+const PREVIEW_FALLBACK = 'The preview could not be made. Check the connection and try again.';
+const SUPERSEDE_FALLBACK =
+  'A corrected version could not be started. Check the connection and try again.';
+
+function codeIn(refusal: Refusal): string {
+  if (typeof refusal.code === 'string') return refusal.code;
+  return typeof refusal.error === 'string' ? refusal.error : '';
+}
+
+/** A sentence from one of the tables above, with the place a map is named, when it is. */
+function doorSentence(
+  table: Readonly<Record<string, string>>,
+  status: number,
+  body: unknown,
+  fallback: string,
+  forbidden: string,
+): string {
+  const refusal = asRefusal(body);
+  const code = codeIn(refusal);
+  const base = Object.hasOwn(table, code) ? (table[code] ?? fallback) : null;
+  if (base === null) {
+    if (status === 403) return forbidden;
+    if (status === 404) return NOT_FOUND;
+    return fallback;
+  }
+  if (
+    (code === 'map_missing' || code === 'map_differs' || code === 'unlinked_figure') &&
+    typeof refusal.field === 'string'
+  ) {
+    return `${base} It is placed in ${whereWords(refusal.field)}.`;
+  }
+  const extra = body as { parts?: unknown; figures?: unknown };
+  if (code === 'overrun' && Array.isArray(extra.parts) && extra.parts.length > 0) {
+    return `${base} It ran over at: ${extra.parts.join(', ')}.`;
+  }
+  if (code === 'unplaced_figures' && Array.isArray(extra.figures)) {
+    const count = extra.figures.length;
+    const lead =
+      count === 1
+        ? '1 picture uploaded to this draft is not on the report.'
+        : `${count} pictures uploaded to this draft are not on the report.`;
+    return `${lead} ${base}`;
+  }
+  return base;
+}
+
+export function issueRefusalSentence(status: number, body: unknown): string {
+  return doorSentence(
+    ISSUE_REFUSALS,
+    status,
+    body,
+    SIGN_FALLBACK,
+    'You are not allowed to sign reports for this client.',
+  );
+}
+
+export function previewRefusalSentence(status: number, body: unknown): string {
+  return doorSentence(
+    PREVIEW_REFUSALS,
+    status,
+    body,
+    PREVIEW_FALLBACK,
+    'You are not allowed to preview reports for this client.',
+  );
+}
+
+export function supersedeRefusalSentence(status: number, body: unknown): string {
+  return doorSentence(
+    SUPERSEDE_REFUSALS,
+    status,
+    body,
+    SUPERSEDE_FALLBACK,
+    'Only the owner and the lead practitioner may correct a signed report.',
+  );
+}
