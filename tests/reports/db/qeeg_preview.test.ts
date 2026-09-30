@@ -68,7 +68,7 @@ afterAll(async () => {
 });
 
 describe('the preview of a brain-map draft', () => {
-  it('renders a blank draft as a PDF, with the signature room, no signer and the draft line', async () => {
+  it('renders a blank draft as a PDF, with the signature room, no signer, and no draft line once the wording is approved', async () => {
     const draft = await steps.newDraft(SEEDED.owner);
     const res = await preview(draft.id);
     expect(res.status).toBe(200);
@@ -85,9 +85,10 @@ describe('the preview of a brain-map draft', () => {
     expect(text).toContain(WORDS.signedBy.en);
     // No signer yet (section 12, point 9), so no certificate either.
     expect(text).not.toContain(WORDS.certificateNumber.en);
-    // Every language of the wording is still a draft.
+    // The practice approved the wording in both languages on 30 September
+    // 2026, so the draft line is no longer printed.
     const line = sharedPhrase('note.draft_wording', 'en');
-    expect(text.replace(/\s+/g, '')).toContain(line.replace(/\s+/g, ''));
+    expect(text.replace(/\s+/g, '')).not.toContain(line.replace(/\s+/g, ''));
     expect(text).not.toMatch(/lawyer/i);
   });
 
@@ -124,7 +125,9 @@ describe('the preview of a brain-map draft', () => {
     expect(res.status).toBe(200);
     const text = extractAll(await pdfOf(res));
     const say = (key: string) => phrase(key, 'initial', 'en');
-    expect(text).toContain(say('heading.programme'));
+    // The practice's answer of 30 September 2026: the whole training
+    // recommendation goes, its heading included.
+    expect(text).not.toContain(say('heading.programme'));
     expect(text).not.toContain(say('heading.approach'));
     expect(text).not.toContain(say('label.qeeg_only'));
     expect(text).not.toMatch(/[0-9]+ Sessions?/);
