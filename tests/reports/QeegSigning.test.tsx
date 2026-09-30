@@ -57,6 +57,7 @@ const NOTES = {
   dashboardScale: 0.908,
   overflowing: [],
   unprintable: ['U+0141'],
+  unprintableMore: 0,
   maps: [{ figureId: MAP, dpi: 180, quality: 'fair' }],
   pairs: [],
 };

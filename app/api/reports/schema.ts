@@ -260,6 +260,8 @@ export const QeegLayoutNotes = z.object({
   overflowing: z.array(z.string()),
   /** Every character no face draws, as `U+` and its code point. */
   unprintable: z.array(z.string()),
+  /** How many more such characters, beyond the first twenty named. */
+  unprintableMore: z.number().int().min(0),
   maps: z.array(
     z.object({
       figureId: z.string(),

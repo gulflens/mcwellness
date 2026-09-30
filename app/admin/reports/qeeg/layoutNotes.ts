@@ -58,8 +58,9 @@ export function layoutLines(notes: QeegLayoutNotes, content: QeegContent): strin
     lines.push(`Runs past the foot of its page: ${notes.overflowing.join(', ')}.`);
   }
   if (notes.unprintable.length > 0) {
+    const more = notes.unprintableMore > 0 ? ` and ${notes.unprintableMore} more` : '';
     lines.push(
-      `The typeface cannot draw ${notes.unprintable.map(characterWords).join(', ')}. ` +
+      `The typeface cannot draw ${notes.unprintable.map(characterWords).join(', ')}${more}. ` +
         'Those characters would be left out of the page.',
     );
   }

@@ -11,6 +11,7 @@ import {
   type QeegReportInput,
   type ReportFacts,
 } from '../../../../domain/reports/qeeg/document';
+import { layoutNotesOf, type LayoutNotes } from '../../../../domain/reports/qeeg/document/notes';
 import { unprintableIn } from '../../../../domain/reports/qeeg/document/unprintable';
 import { subjectFrom } from '../../../../domain/reports/qeeg/draftRequest';
 import { figuresNamedIn } from '../../../../domain/reports/qeeg/figuresNamed';
@@ -63,42 +64,11 @@ import type { ReportRecord } from '../source';
 /** The response header the preview answers the editor's notes in, as JSON. */
 export const QEEG_LAYOUT_HEADER = 'x-report-layout';
 
-/** What the editor is told of a report's pages. ASCII throughout, so it fits a header. */
-export type LayoutNotes = {
-  readonly pages: number;
-  readonly dashboardScale: number;
-  readonly overflowing: readonly string[];
-  readonly unprintable: readonly string[];
-  readonly maps: readonly { figureId: string; dpi: number; quality: string }[];
-  readonly pairs: readonly {
-    figureId: string;
-    condition: string;
-    side: string;
-    dpi: number;
-    quality: string;
-  }[];
-};
+export type { LayoutNotes };
 
+/** What the editor is told of the pages: bounded, so it fits a header (`notes.ts`). */
 export function notesOf(laid: Laid, fonts: FontSet): LayoutNotes {
-  const round = (dpi: number) => Math.round(dpi);
-  return {
-    pages: laid.pages.length,
-    dashboardScale: Math.round(laid.dashboardScale * 1000) / 1000,
-    overflowing: [...laid.overflowing],
-    unprintable: unprintableIn(laid.pages, fonts),
-    maps: laid.maps.map((map) => ({
-      figureId: map.figureId,
-      dpi: round(map.dpi),
-      quality: map.quality,
-    })),
-    pairs: laid.pairs.map((pair) => ({
-      figureId: pair.figureId,
-      condition: pair.condition,
-      side: pair.side,
-      dpi: round(pair.dpi),
-      quality: pair.quality,
-    })),
-  };
+  return layoutNotesOf(laid, unprintableIn(laid.pages, fonts));
 }
 
 // ---------------------------------------------------------------------------

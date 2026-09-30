@@ -37,6 +37,7 @@ function notes(over: Partial<QeegLayoutNotes> = {}): QeegLayoutNotes {
     dashboardScale: 1,
     overflowing: [],
     unprintable: [],
+    unprintableMore: 0,
     maps: [],
     pairs: [],
     ...over,
@@ -67,6 +68,12 @@ describe('what the form says of the pages beside the Preview button', () => {
   it('names each character the typeface cannot draw, by its code point', () => {
     expect(layoutLines(notes({ unprintable: ['U+0141', 'U+FEFB'] }), content)).toContain(
       'The typeface cannot draw Ł (U+0141), U+FEFB. Those characters would be left out of the page.',
+    );
+  });
+
+  it('counts the characters beyond those named', () => {
+    expect(layoutLines(notes({ unprintable: ['U+0141'], unprintableMore: 12 }), content)).toContain(
+      'The typeface cannot draw Ł (U+0141) and 12 more. Those characters would be left out of the page.',
     );
   });
 
