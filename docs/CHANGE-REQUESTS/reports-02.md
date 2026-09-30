@@ -191,6 +191,22 @@ reports code would say so.
 **What.** `report_figure`, as a kind the system writes and nobody uploads by
 hand. Whether the Documents tab lists it is client-record's to say.
 
+## 11a. A household does not read a brain map's document row — `db/policies/client/readers.sql` (client-record's)
+
+**What.** In `client_record_readers` on `public.document`, the client-contact
+arm of the client branch becomes
+`(app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id) and kind <> 'report_figure')`.
+
+**Why.** Migration 604 grants a household no read of `report_figure`, but the
+document row each link points at is the client's and so falls under this
+policy's contact arm: a household can read its metadata (kind, size,
+digest), never the bytes. No portal route serves documents today, so nothing
+is exposed in practice. It must land before any portal screen lists a
+client's documents. Found by the review of records PR 7, 30 September.
+
+**Test.** A client contact reads no `document` row of kind `report_figure`
+and still reads the client's other documents as before.
+
 ## 12. The records of the change — trunk's
 
 | File | Change |
