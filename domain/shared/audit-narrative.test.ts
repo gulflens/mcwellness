@@ -769,6 +769,90 @@ describe('reports (docs/SPEC/reports-v1.md section 8)', () => {
   });
 });
 
+describe('brain-map reports and past records (docs/CHANGE-REQUESTS/reports-02.md request 7)', () => {
+  // Each sentence in both languages, word for word. The Arabic reuses the
+  // catalogue's own words: `خريطة الدماغ` is the portal's name for the kind
+  // (app/client/i18n/dictionary.ts), `أضاف`/`أزال` add and take away as the
+  // measurement's file does, `رُفض له` is the reports' own shape for a
+  // refusal, and `سجل سابق` is a record from before.
+  const cases: { name: string; overrides: Partial<AuditEvent>; en: string; ar: string }[] = [
+    {
+      name: 'a brain-map report signed, named by its kind',
+      overrides: {
+        action: 'report.issued',
+        newValues: { kind: 'qeeg', reference: 'RPT-000007', version: '1' },
+      },
+      en: 'Hazel Harbour signed and issued a brain map report RPT-000007',
+      ar: 'Hazel Harbour وقّع وأصدر تقرير خريطة الدماغ RPT-000007',
+    },
+    {
+      name: 'a past record brought in from the old tool',
+      overrides: { action: 'report.imported', newValues: { format: 'qeeg.json/1' } },
+      en: 'Hazel Harbour brought in a past record from the old report tool',
+      ar: 'Hazel Harbour أدخل سجلًا سابقًا من أداة التقارير القديمة',
+    },
+    {
+      name: 'a past record kept',
+      overrides: { action: 'report.import_kept' },
+      en: 'Hazel Harbour kept this past record',
+      ar: 'Hazel Harbour حفظ هذا السجل السابق',
+    },
+    {
+      name: 'a past record withdrawn',
+      overrides: { action: 'report.import_withdrawn' },
+      en: 'Hazel Harbour withdrew this past record',
+      ar: 'Hazel Harbour سحب هذا السجل السابق',
+    },
+    {
+      name: 'a brain map added to a report',
+      overrides: { action: 'report.figure_filed' },
+      en: 'Hazel Harbour added a brain map to this report',
+      ar: 'Hazel Harbour أضاف خريطة دماغ إلى هذا التقرير',
+    },
+    {
+      name: 'a brain map taken off a report',
+      overrides: { action: 'report.figure_removed' },
+      en: 'Hazel Harbour removed a brain map from this report',
+      ar: 'Hazel Harbour أزال خريطة دماغ من هذا التقرير',
+    },
+    {
+      name: 'the other language started',
+      overrides: { action: 'report.twin_started', newValues: { locale: 'ar' } },
+      en: 'Hazel Harbour started this report in the other language',
+      ar: 'Hazel Harbour بدأ هذا التقرير باللغة الأخرى',
+    },
+    {
+      name: 'the other language refused',
+      overrides: { action: 'report.twin_refused', newValues: { reason: 'not_signed' } },
+      en: 'Hazel Harbour was refused an action on this report',
+      ar: 'Hazel Harbour رُفض له إجراء على هذا التقرير',
+    },
+    {
+      name: 'keeping or withdrawing a past record refused',
+      overrides: { action: 'report.import_refused', newValues: { reason: 'in_comparison' } },
+      en: 'Hazel Harbour was refused an action on this report',
+      ar: 'Hazel Harbour رُفض له إجراء على هذا التقرير',
+    },
+  ];
+
+  for (const { name, overrides, en, ar } of cases) {
+    it(`says ${name}, in English and in Arabic`, () => {
+      const said = event({ entityType: 'report', ...overrides });
+      expect(narrate(said, 'en')?.sentence).toBe(en);
+      expect(narrate(said, 'ar')?.sentence).toBe(ar);
+    });
+  }
+
+  it('never says what the old file held, the reason or the map', () => {
+    // The format and a refusal's code ride in `newValues`; neither is a
+    // sentence's to repeat, and no sentence names a digest or a person.
+    for (const { overrides } of cases) {
+      const sentence = narrate(event({ entityType: 'report', ...overrides }), 'en')?.sentence;
+      expect(sentence).not.toMatch(/qeeg\.json|not_signed|in_comparison/);
+    }
+  });
+});
+
 describe('the article before an entity', () => {
   it('says "an appointment", not "a appointment"', () => {
     // The sentence the client Timeline actually showed

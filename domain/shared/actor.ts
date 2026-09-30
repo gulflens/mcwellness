@@ -86,6 +86,13 @@ export type Action =
   | { type: 'report.read'; clientId: string }
   | { type: 'report.draft'; clientId: string }
   | { type: 'report.supersede'; clientId: string }
+  /**
+   * Bringing in a past record from the practice's old report tool, keeping
+   * it, and withdrawing one kept against the wrong client
+   * (docs/SPEC/reports-qeeg.md section 11; docs/CHANGE-REQUESTS/reports-02.md
+   * request 6).
+   */
+  | { type: 'report.import'; clientId: string }
   | { type: 'report.deliver' }
   | { type: 'audit.read'; clientId: string }
   | { type: 'audit.activity' }
@@ -276,6 +283,14 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // no longer the practice's answer is a different act. The guard trigger
       // on the row says the same underneath (migration 600), which is the
       // boundary; this is the courtesy.
+      return hasRole(actor, 'owner', 'lead_practitioner');
+    case 'report.import':
+      // Bringing in a report the old tool wrote, keeping it as a past record,
+      // and withdrawing one kept against the wrong client. The owner and the
+      // lead practitioner (docs/CHANGE-REQUESTS/reports-02.md request 6): a
+      // past record is kept without a signature, so who keeps it is the
+      // practice's own answer for it. Migration 603's guard and
+      // `app.keep_imported_report` ask the same two roles underneath.
       return hasRole(actor, 'owner', 'lead_practitioner');
     case 'report.deliver':
       // Putting a signed report in front of a household. The owner, an admin
