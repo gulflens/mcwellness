@@ -207,7 +207,7 @@ beforeAll(async () => {
   await linkFigureAsOwner(
     h.owner,
     { ...where, reportId: issuedId },
-    { documentId: EARLIER_MAP, sha256: SHA, widthPx: 800, heightPx: 600, condition: 'eyes_open' },
+    { documentId: EARLIER_MAP, sha256: SHA, widthPx: 800, heightPx: 600 },
   );
   await h.owner.query(
     "update report set status = 'issued', number = $2, issued_on = current_date, " +
@@ -228,7 +228,7 @@ beforeAll(async () => {
   await linkFigureAsOwner(
     h.owner,
     { ...where, reportId: importedId },
-    { documentId: EARLIER_MAP, sha256: SHA, widthPx: 800, heightPx: 600, condition: 'eyes_open' },
+    { documentId: EARLIER_MAP, sha256: SHA, widthPx: 800, heightPx: 600 },
   );
   await h.owner.query("update report set status = 'imported' where id = $1", [importedId]);
 

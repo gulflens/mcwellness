@@ -3,16 +3,17 @@ import { MAX_FILE_BYTES } from '../../../../domain/reports/qeeg/image/limits';
 import { SavedAt } from '../schema';
 
 /**
- * What the brain map's two doors take and answer
- * (docs/SPEC/reports-qeeg.md sections 9 and 14): `PUT /api/reports/:id/figures`
- * and `DELETE /api/reports/:id/figures/:figureId`.
+ * What the brain map's doors take and answer (docs/SPEC/reports-qeeg.md
+ * sections 9 and 14): `PUT /api/reports/:id/figures`, `GET
+ * /api/reports/:id/figures` and `DELETE /api/reports/:id/figures/:figureId`.
  *
  * **The body is the picture**, raw, never JSON: an opaque 8-bit RGB PNG the
- * browser has already trimmed and flattened (section 9, point 2). What the
- * editor knows about it beside the bytes travels in the query — the
- * condition it was recorded under and its place among the maps — and the
- * digest in `X-Sha256`. The file's own name never crosses the door: the
- * practice's exports are named after the people in them.
+ * browser has already trimmed and flattened (section 9, point 2), with its
+ * digest in `X-Sha256`. Nothing else travels with it: where a map sits in the
+ * report — its condition, label and place — is the draft's content's to say,
+ * and a link holds no copy of it (migration 604, fix round 3). So the door
+ * takes no query at all. The file's own name never crosses the door either:
+ * the practice's exports are named after the people in them.
  *
  * **A refusal of a picture carries a sentence**, because the practitioner is
  * the one who must act on it and the form shows it as it stands (section 9,
@@ -33,14 +34,8 @@ export const FIGURE_BODY_LIMIT_BYTES = MAX_FILE_BYTES;
  */
 export const FIGURE_TIMEOUT_MS = 60_000;
 
-export const FIGURE_CONDITIONS = ['eyes_open', 'eyes_closed'] as const;
-
-export const FigureQuery = z
-  .object({
-    condition: z.enum(FIGURE_CONDITIONS).optional(),
-    position: z.coerce.number().int().min(0).max(7).optional(),
-  })
-  .strict();
+/** No query: a placement sent here is refused, so a caller who thinks it set one is told. */
+export const FigureQuery = z.object({}).strict();
 
 export const FigureDigest = z.string().regex(/^[0-9a-f]{64}$/);
 
@@ -65,8 +60,7 @@ export type FigureRefusalCode =
   | 'not_permitted'
   | 'not_a_draft'
   | 'not_accepted'
-  | 'no_such_map'
-  | 'already_on_report';
+  | 'no_such_map';
 
 /** One sentence for each refusal of a picture, as the form shows it. */
 export const FIGURE_SENTENCES: Readonly<Record<FigureRefusalCode, string>> = Object.freeze({
@@ -104,9 +98,6 @@ export const FIGURE_SENTENCES: Readonly<Record<FigureRefusalCode, string>> = Obj
   not_a_draft: 'This report is no longer a draft, and its maps are kept as they were signed.',
   not_accepted: 'This report cannot take this picture.',
   no_such_map: 'That report, or that map on it, is not there.',
-  // The form's own sentence names the condition and place (figures.ts).
-  already_on_report:
-    'This picture is already on the report with another condition or place. Remove it first to add it again.',
 });
 
 /** A picture as a report names it, and what the link adds. */
@@ -115,11 +106,21 @@ export const FigureOut = z.object({
   sha256: FigureDigest,
   widthPx: z.number().int().min(1),
   heightPx: z.number().int().min(1),
-  condition: z.enum(FIGURE_CONDITIONS).nullable(),
-  position: z.number().int().nullable(),
   borrowed: z.boolean(),
 });
 export type FigureOut = z.infer<typeof FigureOut>;
+
+/**
+ * A report's links, listed: each picture it holds, and whether its saved
+ * content names it. A link it holds and does not name is "uploaded, not on
+ * the report" — still counted towards the eight, so the form shows it with
+ * Place and Remove rather than leave her at a cap she cannot see
+ * (review of the form's pictures, concern 3). Never the bytes or a key.
+ */
+export const FigureListed = FigureOut.extend({ named: z.boolean() });
+export type FigureListed = z.infer<typeof FigureListed>;
+export const FigureListResponse = z.object({ figures: z.array(FigureListed) });
+export type FigureListResponse = z.infer<typeof FigureListResponse>;
 
 /** A picture filed, and the stamp the editor's next save is made over (brief L, "For PR 7"). */
 export const FigureFiledResponse = z.object({ figure: FigureOut, savedAt: SavedAt });

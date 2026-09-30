@@ -7,7 +7,7 @@ import { clientDocumentKey } from '../../../../domain/shared';
 import { documentRetentionUntil } from '../../../../domain/shared/storage';
 import { figuresNamedIn } from '../../../../domain/reports/qeeg/figuresNamed';
 import { validateQeegContent } from '../../../../domain/reports/qeeg/shape';
-import { logAction } from '../../_middleware/audit';
+import { logAction, logRead } from '../../_middleware/audit';
 import type { ApiEnv, Db } from '../../_middleware/request-context';
 import { mayDraftReport } from '../access';
 import { requiredReason } from '../reason';
@@ -16,6 +16,7 @@ import {
   FIGURE_SENTENCES,
   FigureDigest,
   FigureFiledResponse,
+  FigureListResponse,
   FigureQuery,
   FigureRemovedResponse,
   type FigureRefusalCode,
@@ -25,8 +26,10 @@ import { verifyMap } from './verifyMap';
 
 /**
  * A brain-map draft's pictures (docs/SPEC/reports-qeeg.md sections 9 and 14):
- * `PUT /api/reports/:id/figures` files one, `DELETE
- * /api/reports/:id/figures/:figureId` takes one away.
+ * `PUT /api/reports/:id/figures` files one, `GET /api/reports/:id/figures`
+ * lists them, `DELETE /api/reports/:id/figures/:figureId` takes one away.
+ * A picture carries no placement: where it sits in the report is the draft's
+ * content's to say (migration 604, fix round 3).
  *
  * **A door of the report's own** (section 9, point 1). The assessment's file
  * door refuses images on purpose and is not widened: a past record has no
@@ -82,31 +85,25 @@ function answerFor(c: Context<ApiEnv>, error: unknown): Response {
   return c.json({ ...answer.body, requestId: c.get('requestId') }, answer.status);
 }
 
-const CONDITION_WORDS: Readonly<Record<'eyes_open' | 'eyes_closed', string>> = {
-  eyes_open: 'eyes open',
-  eyes_closed: 'eyes closed',
-};
-
-/** How the form names a map's condition and place, for the sentence of a second upload. */
-function placeWords(
-  condition: 'eyes_open' | 'eyes_closed' | null,
-  position: number | null,
-): string {
-  const kept = condition === null ? 'with no condition' : CONDITION_WORDS[condition];
-  return position === null ? `${kept}, in no place` : `${kept}, in place ${position + 1}`;
-}
-
 type Door = { ok: true; report: ReportRecord } | { ok: false; response: Response };
 
 /**
- * The questions both doors ask before touching anything, in the order the
- * draft route asks them: a reason, the report as the caller may see it, the
- * caller's right to write it, and whether it is a brain-map draft at all.
+ * The questions every door asks before touching anything, in the order the
+ * draft route asks them: a reason (for a write), the report as the caller may
+ * see it, the caller's right to write it, and whether it is a brain map at
+ * all. The list asks the same, less the reason: it writes nothing but its
+ * read on the trail, and who may see a draft's pictures is who may change
+ * them.
  */
-async function openDoor(c: Context<ApiEnv>, reportId: string, now: Date): Promise<Door> {
+async function openDoor(
+  c: Context<ApiEnv>,
+  reportId: string,
+  now: Date,
+  writes: boolean,
+): Promise<Door> {
   const requestId = c.get('requestId');
   const db = c.get('db');
-  if ((await requiredReason(db)) === null) {
+  if (writes && (await requiredReason(db)) === null) {
     return { ok: false, response: c.json({ error: 'reason_required', requestId }, 400) };
   }
   const report = await readReport(db, reportId);
@@ -162,21 +159,32 @@ type LinkRow = {
   sha256: string;
   width_px: number;
   height_px: number;
-  condition: 'eyes_open' | 'eyes_closed' | null;
-  position: number | null;
   borrowed: boolean;
   storage_key: string | null;
 };
 
+const LINK_COLUMNS =
+  "f.document_id, encode(f.sha256, 'hex') as sha256, f.width_px, f.height_px, " +
+  'f.borrowed_from_report_id is not null as borrowed, d.storage_key ' +
+  'from report_figure f ' +
+  'left join document d on d.tenant_id = f.tenant_id and d.id = f.document_id ' +
+  'where f.tenant_id = app.current_tenant_id() and f.report_id = $1';
+
+function figureOf(link: LinkRow) {
+  return {
+    figureId: link.document_id,
+    sha256: link.sha256,
+    widthPx: link.width_px,
+    heightPx: link.height_px,
+    borrowed: link.borrowed,
+  };
+}
+
 async function linkOf(db: Db, reportId: string, documentId: string): Promise<LinkRow | null> {
-  const found = await db.query<LinkRow>(
-    "select f.document_id, encode(f.sha256, 'hex') as sha256, f.width_px, f.height_px, " +
-      'f.condition, f.position, f.borrowed_from_report_id is not null as borrowed, ' +
-      'd.storage_key from report_figure f ' +
-      'left join document d on d.tenant_id = f.tenant_id and d.id = f.document_id ' +
-      'where f.tenant_id = app.current_tenant_id() and f.report_id = $1 and f.document_id = $2',
-    [reportId, documentId],
-  );
+  const found = await db.query<LinkRow>(`select ${LINK_COLUMNS} and f.document_id = $2`, [
+    reportId,
+    documentId,
+  ]);
   return found.rows[0] ?? null;
 }
 
@@ -190,6 +198,43 @@ async function inUseAt(db: Db, reportId: string, figureId: string): Promise<stri
 }
 
 export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  // A report's links, listed (review of the form's pictures, concern 3): each
+  // picture it holds, whether it is borrowed, and whether its saved content
+  // names it, so the form can show an upload that is not on the report and
+  // let her place it or remove it. Ids, digests and sizes; never bytes, never
+  // a storage key. Whoever may change the pictures may list them, as the
+  // doors ask it; the read is on the trail as every report read is.
+  api.get('/api/reports/:id/figures', async (c) => {
+    const requestId = c.get('requestId');
+    const db = c.get('db');
+    const params = Params.safeParse(c.req.param());
+    if (!params.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const reportId = params.data.id;
+    const door = await openDoor(c, reportId, now(), false);
+    if (!door.ok) return door.response;
+    await logRead(db, 'report', reportId, door.report.client_id);
+
+    const content = validateQeegContent(door.report.content);
+    const named = new Set(
+      content.ok ? figuresNamedIn(content.content).map((entry) => entry.ref.figureId) : [],
+    );
+    const links = await db.query<LinkRow>(
+      `select ${LINK_COLUMNS} order by f.created_at, f.document_id`,
+      [reportId],
+    );
+    return c.json(
+      FigureListResponse.parse({
+        figures: links.rows.map((link) => ({
+          ...figureOf(link),
+          named: named.has(link.document_id),
+        })),
+      }),
+      200,
+    );
+  });
+
   api.put('/api/reports/:id/figures', async (c) => {
     const requestId = c.get('requestId');
     const db = c.get('db');
@@ -214,7 +259,7 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
     }
 
     const reportId = params.data.id;
-    const door = await openDoor(c, reportId, now());
+    const door = await openDoor(c, reportId, now(), true);
     if (!door.ok) return door.response;
     if (door.report.status !== 'draft') return notADraft(c);
 
@@ -247,7 +292,7 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
     let filedId: string;
     try {
       const filed = await db.query<{ document_id: string }>(
-        'select app.file_report_figure($1, $2, $3, $4, $5, $6, $7, $8::smallint, $9) as document_id',
+        'select app.file_report_figure($1, $2, $3, $4, $5, $6, $7) as document_id',
         [
           reportId,
           documentId,
@@ -255,8 +300,6 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
           Buffer.from(computed, 'hex'),
           checked.widthPx,
           checked.heightPx,
-          query.data.condition ?? null,
-          query.data.position ?? null,
           retentionUntil,
         ],
       );
@@ -271,15 +314,7 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
 
     const link = await linkOf(db, reportId, filedId);
     if (!link) throw new Error('The map filed a moment ago has no link.');
-    const figure = {
-      figureId: filedId,
-      sha256: link.sha256,
-      widthPx: link.width_px,
-      heightPx: link.height_px,
-      condition: link.condition,
-      position: link.position,
-      borrowed: link.borrowed,
-    };
+    const figure = figureOf(link);
 
     if (filedId !== documentId) {
       // These bytes are already this report's: hand that picture back. A row
@@ -291,26 +326,10 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
           await storage.put(key, body, 'image/png');
         });
       }
-      // The same picture asked for with another condition or place is not
-      // answered with the first link's values as if it had been taken: the
-      // form would show one thing and the report hold another. It is refused,
-      // saying what the report holds; the form removes it and adds it again.
-      const askedCondition = query.data.condition ?? null;
-      const askedPosition = query.data.position ?? null;
-      if (askedCondition !== link.condition || askedPosition !== link.position) {
-        return c.json(
-          {
-            error: 'conflict',
-            code: 'already_on_report',
-            sentence:
-              `This picture is already on the report as ${placeWords(link.condition, link.position)}. ` +
-              'Remove it first to add it again with another condition or place.',
-            figure,
-            requestId,
-          },
-          409,
-        );
-      }
+      // Idempotent: the same bytes to the same draft are the same picture,
+      // answered with its link and the draft's current stamp (nothing was
+      // written, so the stamp has not moved). There is no placement on a link
+      // for a second upload to disagree with (fix round 3).
       return c.json(
         FigureFiledResponse.parse({ figure, savedAt: await savedAtOf(db, reportId) }),
         200,
@@ -322,12 +341,7 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
     });
     // What was done and nothing of the picture: the link row itself is on the
     // trail with its ids, written by the audit trigger with the reason.
-    await logAction(
-      db,
-      'report.figure_filed',
-      { type: 'report', id: reportId, clientId },
-      figure.condition === null ? {} : { condition: figure.condition },
-    );
+    await logAction(db, 'report.figure_filed', { type: 'report', id: reportId, clientId }, {});
     return c.json(
       FigureFiledResponse.parse({ figure, savedAt: await savedAtOf(db, reportId) }),
       201,
@@ -348,7 +362,7 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
       return c.json({ error: 'storage_unavailable', requestId }, 503);
     }
     const { id: reportId, figureId } = params.data;
-    const door = await openDoor(c, reportId, now());
+    const door = await openDoor(c, reportId, now(), true);
     if (!door.ok) return door.response;
     // Drafts only. A withdrawn past record's maps are removed by the
     // withdraw's own door (section 11, point 7), not by this one.
