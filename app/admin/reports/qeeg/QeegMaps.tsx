@@ -1,0 +1,418 @@
+import { useEffect, useState } from 'react';
+import {
+  choosePair,
+  mapsInOrder,
+  moveMap,
+  placeMap,
+  type ListedMap,
+} from '../../../../domain/reports/qeeg/maps';
+import { validateQeegContent } from '../../../../domain/reports/qeeg/shape';
+import {
+  CONDITIONS,
+  LIMITS,
+  type Condition,
+  type FigureRef,
+  type QeegContent,
+  type QeegFollowUp,
+} from '../../../../domain/reports/qeeg/types';
+import { ReportResponse } from '../../../api/reports/schema';
+import { useAuth } from '../../../shell/auth/AuthContext';
+import { Button, Note, Select } from '../../../shell/components/Controls';
+import { DocumentLink } from '../../clients/DocumentLink';
+import type { QeegMaps } from './useQeegMaps';
+
+/**
+ * The brain maps on the form: the report's own section of them, and the
+ * before-and-after pairs on a follow-up's page of what has changed
+ * (docs/SPEC/reports-qeeg.md sections 9, 10 and 15).
+ *
+ * **A table, because the maps are alike**: each row is one picture, its place,
+ * what it was recorded with, and its size in pixels, with the actions at the
+ * end (docs/DESIGN-BRIEF.md: tables for homogeneous data). A map chosen in
+ * this sitting shows the pixels she chose; one saved before is opened on
+ * request through the record's own document link, because opening it is a
+ * read the trail records.
+ *
+ * **Placing is the content's**, through `domain/reports/qeeg/maps.ts`: the
+ * condition, her own label where there is none, and the order the maps print
+ * in. The door filed each picture with the condition and place it was sent
+ * with, and never changes a filing; what prints is what the draft names.
+ *
+ * **Removing asks first, in the form**, never with the browser's own dialog:
+ * the row says what will happen and offers to keep it.
+ *
+ * **The pairs name pictures and nothing else.** The before side offers the
+ * maps of the report this one is compared with, read from that report; the
+ * route borrows the one chosen when the draft is saved. The after side offers
+ * this report's own. No figure is typed here, and none is read from a picture
+ * (section 10, point 3).
+ */
+
+type Edit = (change: (content: QeegContent) => QeegContent) => void;
+
+/** The console's own words for a condition: English, as every staff screen is. */
+const CONDITION_LABELS: Readonly<Record<Condition, string>> = Object.freeze({
+  eyes_closed: 'Eyes closed',
+  eyes_open: 'Eyes open',
+});
+
+/** Closed first, as the practice lays a montage out. */
+const CONDITION_ORDER: readonly Condition[] = ['eyes_closed', 'eyes_open'];
+
+function conditionOf(value: string): Condition | null {
+  return (CONDITIONS as readonly string[]).includes(value) ? (value as Condition) : null;
+}
+
+function sizeWords(widthPx: number, heightPx: number): string {
+  return `${widthPx} × ${heightPx} pixels`;
+}
+
+/** A map as a choice in a list: its place, what it shows, its size. */
+function mapWords({ entry }: ListedMap): string {
+  const shows =
+    entry.condition !== null
+      ? CONDITION_LABELS[entry.condition].toLowerCase()
+      : (entry.caption?.en ?? 'no condition');
+  return `Map ${entry.position + 1}, ${shows}, ${sizeWords(entry.widthPx, entry.heightPx)}`;
+}
+
+export function MapsSection({
+  clientId,
+  content,
+  edit,
+  maps,
+}: {
+  clientId: string;
+  content: QeegContent;
+  edit: Edit;
+  maps: QeegMaps;
+}) {
+  const listed = mapsInOrder(content);
+  const [condition, setCondition] = useState<Condition | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [round, setRound] = useState(0);
+  const busy = maps.busy !== null;
+
+  return (
+    <>
+      <p className="small muted">
+        Each map is prepared here before it is sent: a plain white border is trimmed and it is saved
+        as a PNG without transparency. A map is never shrunk: one wider or taller than 4,096 pixels,
+        over 12 million pixels or over 5 MB is refused. A report holds up to {LIMITS.maps}.
+      </p>
+
+      {listed.length > 0 ? (
+        <div className="ledger__scroll">
+          <table className="ledger qeeg-maps">
+            <caption className="visually-hidden">Brain maps on this report</caption>
+            <thead>
+              <tr>
+                <th scope="col">Map</th>
+                <th scope="col">Recorded with</th>
+                <th scope="col">Size</th>
+                <th scope="col">
+                  <span className="visually-hidden">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {listed.map((item, index) => {
+                const { entry } = item;
+                const n = index + 1;
+                const thumbnail = maps.thumbnails[entry.figureId];
+                return (
+                  <tr key={item.key}>
+                    <td>
+                      <p className="qeeg-maps__place">Map {n}</p>
+                      {thumbnail ? (
+                        <img
+                          className="qeeg-maps__thumb"
+                          src={thumbnail}
+                          alt={`Map ${n}, as chosen`}
+                        />
+                      ) : (
+                        <DocumentLink
+                          clientId={clientId}
+                          documentId={entry.figureId}
+                          label={`Open map ${n}`}
+                        />
+                      )}
+                    </td>
+                    <td>
+                      <select
+                        className="field__input"
+                        aria-label={`Recorded with, map ${n}`}
+                        value={entry.condition ?? ''}
+                        disabled={busy}
+                        onChange={(event) => {
+                          const next = conditionOf(event.currentTarget.value);
+                          edit((was) => placeMap(was, entry.figureId, next, entry.caption));
+                        }}
+                      >
+                        {CONDITION_ORDER.map((value) => (
+                          <option key={value} value={value}>
+                            {CONDITION_LABELS[value]}
+                          </option>
+                        ))}
+                        <option value="">Another view, labelled</option>
+                      </select>
+                      {entry.condition === null ? (
+                        <CaptionField
+                          n={n}
+                          value={entry.caption?.en ?? ''}
+                          onChange={(text) =>
+                            edit((was) =>
+                              placeMap(
+                                was,
+                                entry.figureId,
+                                null,
+                                text.trim() === '' ? null : { en: text, ar: null },
+                              ),
+                            )
+                          }
+                        />
+                      ) : null}
+                    </td>
+                    <td className="numeric">{sizeWords(entry.widthPx, entry.heightPx)}</td>
+                    <td>
+                      <div className="qeeg-maps__actions">
+                        <Button
+                          variant="quiet"
+                          disabled={busy || index === 0}
+                          aria-label={`Move map ${n} earlier`}
+                          onClick={() => edit((was) => moveMap(was, entry.figureId, -1))}
+                        >
+                          Earlier
+                        </Button>
+                        <Button
+                          variant="quiet"
+                          disabled={busy || index === listed.length - 1}
+                          aria-label={`Move map ${n} later`}
+                          onClick={() => edit((was) => moveMap(was, entry.figureId, 1))}
+                        >
+                          Later
+                        </Button>
+                        <Button
+                          variant="quiet"
+                          disabled={busy}
+                          aria-label={`Remove map ${n}`}
+                          onClick={() => setConfirming(entry.figureId)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      {confirming === entry.figureId ? (
+                        <div className="qeeg-maps__confirm" role="group" aria-label="Remove a map">
+                          <p>
+                            Remove map {n} from the report? The draft is saved without it, and the
+                            picture is deleted.
+                          </p>
+                          <div className="report-editor__actions">
+                            <Button
+                              variant="primary"
+                              onClick={() => {
+                                setConfirming(null);
+                                void maps.remove(entry.figureId);
+                              }}
+                            >
+                              Remove the map
+                            </Button>
+                            <Button variant="quiet" onClick={() => setConfirming(null)}>
+                              Keep it
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      <fieldset className="qeeg-item">
+        <legend className="qeeg-item__title">Add a map</legend>
+        <Select
+          id="qeeg-map-condition"
+          label="Recorded with"
+          value={condition ?? ''}
+          disabled={busy}
+          onChange={(event) => setCondition(conditionOf(event.currentTarget.value))}
+        >
+          <option value="">Not said yet</option>
+          {CONDITION_ORDER.map((value) => (
+            <option key={value} value={value}>
+              {CONDITION_LABELS[value]}
+            </option>
+          ))}
+        </Select>
+        <div className="field">
+          <label className="field__label" htmlFor="qeeg-map-file">
+            Choose a brain map
+          </label>
+          <input
+            key={round}
+            id="qeeg-map-file"
+            className="field__input"
+            type="file"
+            accept="image/png,image/jpeg,image/bmp,image/webp"
+            disabled={busy}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              // A new input each time, so the same file can be chosen again.
+              setRound((was) => was + 1);
+              if (file) void maps.add(file, condition);
+            }}
+          />
+        </div>
+      </fieldset>
+
+      {maps.busy !== null ? (
+        <p className="small" role="status">
+          {maps.busy === 'preparing'
+            ? 'Preparing the map.'
+            : maps.busy === 'uploading'
+              ? 'Uploading the map.'
+              : 'Removing the map.'}
+        </p>
+      ) : null}
+      {maps.error ? (
+        <div role="alert">
+          <Note tone="critical">{maps.error}</Note>
+        </div>
+      ) : null}
+      {maps.notice ? <p className="small">{maps.notice}</p> : null}
+    </>
+  );
+}
+
+/** Her own label for a map of another view. Held as typed; the content takes it trimmed of nothing. */
+function CaptionField({
+  n,
+  value,
+  onChange,
+}: {
+  n: number;
+  value: string;
+  onChange: (text: string) => void;
+}) {
+  return (
+    <input
+      className="field__input"
+      aria-label={`Label, map ${n}`}
+      maxLength={LIMITS.caption}
+      value={value}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// A follow-up's pairs
+// ---------------------------------------------------------------------------
+
+type Earlier = { state: 'loading' } | { state: 'ready'; maps: ListedMap[] } | { state: 'failed' };
+
+/** The maps of the report a follow-up is compared with, read from that report. */
+function useEarlierMaps(reportId: string): Earlier {
+  const { apiFetch } = useAuth();
+  // Kept with the report it was read for, so choosing another shows loading
+  // until that one is read, with no state set inside the effect itself.
+  const [read, setRead] = useState<{ reportId: string; earlier: Earlier } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      let earlier: Earlier;
+      try {
+        const res = await apiFetch(`/api/reports/${reportId}`);
+        if (!res.ok) throw new Error('not read');
+        const checked = validateQeegContent(ReportResponse.parse(await res.json()).content);
+        if (!checked.ok) throw new Error('not a brain map');
+        earlier = { state: 'ready', maps: mapsInOrder(checked.content) };
+      } catch {
+        earlier = { state: 'failed' };
+      }
+      if (live) setRead({ reportId, earlier });
+    })();
+    return () => {
+      live = false;
+    };
+  }, [apiFetch, reportId]);
+  return read !== null && read.reportId === reportId ? read.earlier : { state: 'loading' };
+}
+
+function refOf({ entry }: ListedMap): FigureRef {
+  return {
+    figureId: entry.figureId,
+    sha256: entry.sha256,
+    widthPx: entry.widthPx,
+    heightPx: entry.heightPx,
+  };
+}
+
+export function PairsField({ content, edit }: { content: QeegFollowUp; edit: Edit }) {
+  const earlier = useEarlierMaps(content.comparedWith.reportId);
+  const own = mapsInOrder(content);
+  const earlierMaps = earlier.state === 'ready' ? earlier.maps : [];
+
+  const side = (
+    condition: Condition,
+    which: 'earlier' | 'later',
+    options: readonly ListedMap[],
+  ) => {
+    const chosen = content.change.pairs[condition][which];
+    const known =
+      chosen === null || options.some(({ entry }) => entry.figureId === chosen.figureId);
+    return (
+      <Select
+        id={`qeeg-pair-${condition}-${which}`}
+        label={`${CONDITION_LABELS[condition]}, ${which === 'earlier' ? 'before' : 'after'}`}
+        value={chosen?.figureId ?? ''}
+        onChange={(event) => {
+          const id = event.currentTarget.value;
+          const picked = options.find(({ entry }) => entry.figureId === id);
+          edit((was) => choosePair(was, condition, which, picked ? refOf(picked) : null));
+        }}
+      >
+        <option value="">None</option>
+        {options.map((item) => (
+          <option key={item.entry.figureId} value={item.entry.figureId}>
+            {mapWords(item)}
+          </option>
+        ))}
+        {known || chosen === null ? null : (
+          <option value={chosen.figureId}>
+            A map no longer offered, {sizeWords(chosen.widthPx, chosen.heightPx)}
+          </option>
+        )}
+      </Select>
+    );
+  };
+
+  return (
+    <fieldset className="qeeg-item">
+      <legend className="qeeg-item__title">Before and after</legend>
+      <p className="small muted">
+        Before is a map of the report this one is compared with. After is one of this report’s own
+        maps, added under Brain maps. Either may be left empty.
+      </p>
+      {earlier.state === 'loading' ? (
+        <p className="small muted">Reading the earlier maps.</p>
+      ) : null}
+      {earlier.state === 'failed' ? (
+        <Note tone="critical">The earlier report’s maps could not be read. Try again later.</Note>
+      ) : null}
+      {earlier.state === 'ready' && earlierMaps.length === 0 ? (
+        <p className="small muted">The earlier report holds no maps.</p>
+      ) : null}
+      {CONDITION_ORDER.map((condition) => (
+        <div key={condition} className="qeeg-measure__figures">
+          {side(condition, 'earlier', earlierMaps)}
+          {side(condition, 'later', own)}
+        </div>
+      ))}
+    </fieldset>
+  );
+}

@@ -25,12 +25,13 @@ const COMPARED: ComparedWith = {
 };
 
 describe('the sections of the brain-map form', () => {
-  it('are the report’s eleven in its order for a first report', () => {
+  it('are the report’s twelve in its order for a first report', () => {
     expect(sectionsFor('initial')).toEqual([
       'client',
       'overview',
       'findings',
       'focus',
+      'maps',
       'bands',
       'connectivity',
       'dashboard',
@@ -45,7 +46,13 @@ describe('the sections of the brain-map form', () => {
     const sections = sectionsFor('follow-up');
     expect(sections[0]).toBe('compared');
     expect(sections.at(-1)).toBe('change');
-    expect(sections).toHaveLength(13);
+    expect(sections).toHaveLength(14);
+  });
+
+  it('count the brain maps in their own section, and the five bands in theirs', () => {
+    const left = leftBySection(blankInitial());
+    expect(left.maps.map((each) => each.what)).toEqual(['label.maps']);
+    expect(left.bands).toHaveLength(5);
   });
 
   it('give every missing thing of a blank report, of either edition, a section', () => {
@@ -113,6 +120,7 @@ describe('where a refused field sits', () => {
     expect(sectionOfField('plan.approach')).toBe('programme');
     expect(sectionOfField('change.tiles.t0.caption.en')).toBe('change');
     expect(sectionOfField('comparedWith.reportId')).toBe('compared');
+    expect(sectionOfField('maps.m0.figureId')).toBe('maps');
     expect(sectionOfField('')).toBeNull();
   });
 });

@@ -35,7 +35,7 @@ import { refusalSentence } from './refusals';
  */
 
 export type RestPoint =
-  'section' | 'idle' | 'button' | 'leave' | 'edition' | 'preview' | 'sign' | 'upload';
+  'section' | 'idle' | 'button' | 'leave' | 'edition' | 'preview' | 'sign' | 'upload' | 'remove';
 
 /** The reason each rest point writes to the trail. */
 export const SAVE_REASONS: Readonly<Record<RestPoint, string>> = Object.freeze({
@@ -47,6 +47,7 @@ export const SAVE_REASONS: Readonly<Record<RestPoint, string>> = Object.freeze({
   preview: 'Brain-map report saved before a preview',
   sign: 'Brain-map report saved before signing',
   upload: 'Brain-map report saved before a brain map was uploaded',
+  remove: 'Brain-map report saved before a brain map was removed',
 });
 
 /** How long after her last change the form saves on its own. */
@@ -71,6 +72,16 @@ export type QeegDraft = {
   reload: () => Promise<void>;
   /** Drop what is on screen unsaved: nothing is sent for it, not even on leaving. */
   discard: () => void;
+  /**
+   * Save at `point` when there is anything to save (or no draft yet), then
+   * run `door` on the saved draft with no save beside it. `door` answers the
+   * draft's new stamp, which the next save is made over, or null when it was
+   * refused. True when both went through.
+   */
+  withSaved: (
+    point: RestPoint,
+    door: (reportId: string) => Promise<string | null>,
+  ) => Promise<boolean>;
 };
 
 type Loaded = { content: QeegContent; savedAt: string | null } | null;
@@ -234,6 +245,45 @@ export function useQeegDraft({
     [send],
   );
 
+  // A map's door moves the draft's stamp (brief L, "For PR 7"), so it runs as
+  // a save does: after the save on its way, with none beside it, and its
+  // answer becomes the stamp the next save is made over. A draft with changes
+  // is saved first (section 15: "before an upload"), so the draft on the
+  // server is the one the picture joins.
+  const withSaved = useCallback(
+    async (point: RestPoint, door: (reportId: string) => Promise<string | null>) => {
+      while (inFlightRef.current !== null) await inFlightRef.current;
+      if (staleRef.current) return false;
+      const changed = versionRef.current !== savedVersionRef.current;
+      if (changed || idRef.current === null) {
+        clearTimer();
+        const saving = send(point);
+        inFlightRef.current = saving;
+        try {
+          if (!(await saving)) return false;
+        } finally {
+          inFlightRef.current = null;
+        }
+      }
+      const id = idRef.current;
+      if (id === null) return false;
+      const running = door(id)
+        .then((stamp) => {
+          if (stamp === null) return false;
+          savedAtRef.current = stamp;
+          return true;
+        })
+        .catch(() => false);
+      inFlightRef.current = running;
+      try {
+        return await running;
+      } finally {
+        inFlightRef.current = null;
+      }
+    },
+    [send],
+  );
+
   useEffect(() => {
     saveRef.current = save;
   }, [save]);
@@ -310,5 +360,6 @@ export function useQeegDraft({
     save,
     reload,
     discard,
+    withSaved,
   };
 }

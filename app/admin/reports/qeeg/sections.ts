@@ -14,12 +14,14 @@ import { phrase } from '../../../../domain/reports/qeeg/wording';
  * count a section shows and the refusal a signature meets cannot disagree.
  * Nothing here decides whether a thing is filled.
  *
- * **Eleven sections, and two more for a follow-up.** The report's own
- * sections, from the client to the programme. A follow-up adds what it is
+ * **Twelve sections, and two more for a follow-up.** The report's own
+ * sections, from the client to the programme, the brain maps among them where
+ * the report prints them, before the bands. A follow-up adds what it is
  * compared with at the top and the page of what has changed at the end. The
- * brain maps' own section (the twelfth) arrives with the pictures; until then
- * "Brain maps" is counted where the domain puts it, under the bands, whose
- * heading it prints beneath.
+ * domain files the maps and the bands under one heading, the one they print
+ * beneath; the form gives the maps a section of their own, because adding a
+ * picture is a different act from choosing a level, and is picked out by what
+ * is missing (`label.maps`), not by the heading.
  *
  * The section titles are the console's words for its own form, in English
  * (tests/lint/console-is-english.test.ts). What a section asks for is named
@@ -32,6 +34,7 @@ export type SectionId =
   | 'overview'
   | 'findings'
   | 'focus'
+  | 'maps'
   | 'bands'
   | 'connectivity'
   | 'dashboard'
@@ -47,6 +50,7 @@ export const SECTION_TITLES: Readonly<Record<SectionId, string>> = Object.freeze
   overview: 'Overview',
   findings: 'Key findings',
   focus: 'Areas of focus',
+  maps: 'Brain maps',
   bands: 'Frequency bands',
   connectivity: 'Connectivity',
   dashboard: 'Performance dashboard',
@@ -62,6 +66,7 @@ const COMMON: readonly SectionId[] = [
   'overview',
   'findings',
   'focus',
+  'maps',
   'bands',
   'connectivity',
   'dashboard',
@@ -107,6 +112,7 @@ function emptyGroups(): Record<SectionId, Missing[]> {
     overview: [],
     findings: [],
     focus: [],
+    maps: [],
     bands: [],
     connectivity: [],
     dashboard: [],
@@ -126,7 +132,7 @@ function emptyGroups(): Record<SectionId, Missing[]> {
 export function leftBySection(content: QeegContent): Record<SectionId, Missing[]> {
   const groups = emptyGroups();
   for (const missing of missingForIssue(content)) {
-    const section = BY_HEADING[missing.section];
+    const section = missing.what === 'label.maps' ? 'maps' : BY_HEADING[missing.section];
     if (section === undefined) {
       throw new Error(`The form has no section for ${missing.section}.`);
     }
@@ -183,7 +189,7 @@ const BY_FIELD: Readonly<Record<string, SectionId>> = Object.freeze({
   findings: 'findings',
   focus: 'focus',
   bands: 'bands',
-  maps: 'bands',
+  maps: 'maps',
   connectivity: 'connectivity',
   dashboard: 'dashboard',
   recommendations: 'recommendations',

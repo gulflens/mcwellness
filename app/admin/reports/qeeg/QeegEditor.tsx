@@ -32,6 +32,7 @@ import {
   programmeAgreed,
   sessionLabel,
 } from '../../../../domain/reports/qeeg/sentences';
+import { compareWith } from '../../../../domain/reports/qeeg/maps';
 import { toFollowUp, toInitial } from '../../../../domain/reports/qeeg/switchEdition';
 import { spansOf } from '../../../../domain/reports/qeeg/text';
 import {
@@ -59,6 +60,7 @@ import {
   RichField,
   wholeNumberIn,
 } from './QeegFields';
+import { MapsSection, PairsField } from './QeegMaps';
 import {
   SECTION_TITLES,
   leftBySection,
@@ -68,6 +70,7 @@ import {
   type SectionId,
 } from './sections';
 import { useQeegDraft } from './useQeegDraft';
+import { useQeegMaps } from './useQeegMaps';
 import './qeeg.css';
 
 /**
@@ -94,9 +97,13 @@ import './qeeg.css';
  * gathers the client and what a follow-up is compared with; the form shows
  * them and never sends them.
  *
- * **Not here yet**, each with its own piece of work: the brain maps and the
- * before-and-after pictures (the upload door), the Arabic version of what she
- * typed (the one component allowed to show Arabic on a staff screen),
+ * **The brain maps** are a section of their own, and a follow-up's
+ * before-and-after pictures sit on its page of what has changed
+ * (`QeegMaps.tsx`, `useQeegMaps.ts`): a picture goes through the report's own
+ * door, and the draft is saved before it does.
+ *
+ * **Not here yet**, each with its own piece of work: the Arabic version of
+ * what she typed (the one component allowed to show Arabic on a staff screen),
  * preview and signing, bringing in a past record, and filling a follow-up
  * from the report before it.
  */
@@ -122,6 +129,7 @@ function leftWords(count: number): string {
 
 export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props) {
   const draft = useQeegDraft({ clientId, reportId, start });
+  const maps = useQeegMaps(draft);
   const [open, setOpen] = useState<SectionId | null>(null);
   const [all, setAll] = useState(false);
   const [entered, setEntered] = useState<SectionId | null>(null);
@@ -201,6 +209,7 @@ export function QeegEditor({ clientId, reportId, start, reports, onDone }: Props
         onChange={(findings) => draft.edit((was) => ({ ...was, findings }))}
       />
     ),
+    maps: () => <MapsSection clientId={clientId} content={content} edit={draft.edit} maps={maps} />,
     focus: () => (
       <PickedList
         id="qeeg-focus"
@@ -536,9 +545,8 @@ function ComparedSection({
           onChange={(event) => {
             const row = candidates.find((each) => each.id === event.currentTarget.value);
             if (!row) return;
-            edit((was) =>
-              was.edition === 'follow-up' ? { ...was, comparedWith: comparedFromRow(row) } : was,
-            );
+            // The earlier side of each pair was the other report's picture.
+            edit((was) => compareWith(was, comparedFromRow(row)));
           }}
         >
           {candidates.map((row) => (
@@ -626,7 +634,6 @@ function ClientSection({
 function BandsSection({ content, edit }: { content: QeegContent; edit: Edit }) {
   return (
     <>
-      <p className="small muted">Brain maps cannot be added from this form yet.</p>
       {BAND_IDS.map((band) => (
         <fieldset key={band} className="qeeg-item">
           <legend className="qeeg-item__title">{bandHeading(band, 'en')}</legend>
@@ -995,8 +1002,10 @@ function ChangeSection({ content, edit }: { content: QeegFollowUp; edit: Edit })
     <>
       <p className="small muted">
         Every figure on this page is optional, and is your own estimate. A row or a headline left
-        empty is not printed. The before-and-after brain maps cannot be added from this form yet.
+        empty is not printed.
       </p>
+
+      <PairsField content={content} edit={edit} />
 
       <fieldset className="qeeg-item">
         <legend className="qeeg-item__title">Headlines</legend>

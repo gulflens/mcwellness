@@ -229,3 +229,41 @@
   border: none;
   min-inline-size: 0;
 }
+
+/*
+  The brain maps: a ledger row per map. The picture she has just chosen is a
+  small thumbnail at its own proportions, never cropped; the actions wrap
+  under one another when the drawer is narrow.
+*/
+.qeeg-maps td {
+  vertical-align: top;
+}
+
+.qeeg-maps__place {
+  margin: 0;
+}
+
+.qeeg-maps__thumb {
+  display: block;
+  max-inline-size: 8rem;
+  max-block-size: 6rem;
+  margin-block-start: var(--s-2);
+  border: var(--hairline) solid var(--rule);
+  object-fit: contain;
+}
+
+.qeeg-maps__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.qeeg-maps__confirm {
+  margin-block-start: var(--s-2);
+  padding-block-start: var(--s-2);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.qeeg-maps__confirm p {
+  margin: 0;
+}

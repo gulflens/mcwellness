@@ -278,21 +278,21 @@ describe('the sections and how much each has left', () => {
     expect(findings.textContent).toMatch(/Nothing left to fill$/);
 
     const bands = await openSection(user, 'Frequency bands');
-    // Five bands and the brain maps.
-    expect(bands.textContent).toMatch(/6 left to fill$/);
+    // Five bands; the brain maps are a section of their own.
+    expect(bands.textContent).toMatch(/5 left to fill$/);
     await user.selectOptions(
       screen.getByLabelText('Level', { selector: '#qeeg-band-delta' }),
       'within_normal_limits',
     );
-    expect(bands.textContent).toMatch(/5 left to fill$/);
+    expect(bands.textContent).toMatch(/4 left to fill$/);
     await user.selectOptions(
       screen.getByLabelText('Level', { selector: '#qeeg-band-theta' }),
       'increased',
     );
     // A level with no region is half a sentence.
-    expect(bands.textContent).toMatch(/5 left to fill$/);
-    await user.click(document.getElementById('qeeg-band-theta-regions-frontal') as HTMLElement);
     expect(bands.textContent).toMatch(/4 left to fill$/);
+    await user.click(document.getElementById('qeeg-band-theta-regions-frontal') as HTMLElement);
+    expect(bands.textContent).toMatch(/3 left to fill$/);
   });
 
   it('starts every score blank, never at 5', async () => {
