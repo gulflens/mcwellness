@@ -48,6 +48,8 @@ const REFUSALS: Record<string, string> = {
   no_document: 'This report has no filed document yet.',
   already_superseded: 'A newer version of this report already exists.',
   no_reason: 'Say in a sentence why a new version is needed.',
+  imported_draft: 'A past record read from the old tool is never sent: the old tool printed it.',
+  imported_record: 'A past record read from the old tool is never sent: the old tool printed it.',
 };
 
 type Contact = { id: string; label: string };

@@ -26,6 +26,8 @@ export const DRAFT_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   already_issued: 'This report has already been signed, so it can no longer be changed.',
   imported_draft:
     'This is a past record read from the old tool. It is reviewed through its own screen, not saved here.',
+  imported_record:
+    'This is a past record read from the old tool. It is kept as it was brought in and never changed.',
   locale_fixed: 'The language of a saved report cannot be changed.',
   cannot_compare: 'The earlier report chosen cannot be compared with.',
   stale_draft:
@@ -300,6 +302,7 @@ export const ISSUE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   storage_unavailable:
     'The store that keeps signed reports cannot be reached just now, so nothing was signed. Try again shortly.',
   imported_draft: 'This is a past record read from the old tool. It is kept, never signed.',
+  imported_record: 'This is a past record read from the old tool. It is kept, never signed.',
   stale_draft:
     'This draft was saved somewhere else after the version on this screen, so nothing was signed. Load the newer version, read it over, then sign.',
   invalid_content:
@@ -370,6 +373,10 @@ export const SUPERSEDE_REFUSALS: Readonly<Record<string, string>> = Object.freez
   not_issued: 'Only a signed report that still stands can be corrected.',
   already_superseded: 'A corrected version of this report already exists.',
   no_reason: 'Say why the report is being corrected. The reason is kept with both versions.',
+  imported_draft:
+    'This is a past record read from the old tool. It is never corrected; withdraw it if it was kept against the wrong client.',
+  imported_record:
+    'This is a past record read from the old tool. It is never corrected; withdraw it if it was kept against the wrong client.',
   map_not_held:
     'The signed report names a map it does not hold, so no corrected version could start from it.',
   not_permitted: 'You are not allowed to change the maps of this client’s reports.',

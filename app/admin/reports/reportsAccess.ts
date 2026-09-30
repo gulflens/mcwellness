@@ -58,3 +58,12 @@ export function isPracticeMember(actor: Actor | null): boolean {
     hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner', 'finance')
   );
 }
+
+/**
+ * Whether to offer "Bring in a past record", and "Withdraw" on a kept one:
+ * the owner and the lead practitioner (docs/SPEC/reports-qeeg.md section 11;
+ * docs/CHANGE-REQUESTS/reports-02.md request 6).
+ */
+export function canImportReports(actor: Actor | null, now: Date, clientId: string): boolean {
+  return actor !== null && canActor(actor, { type: 'report.import', clientId }, {}, now);
+}

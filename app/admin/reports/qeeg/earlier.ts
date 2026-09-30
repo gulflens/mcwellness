@@ -13,19 +13,38 @@ import type { ReportRow } from '../../../api/reports/schema';
  * what it can already see is no candidate, so she is not offered a choice the
  * server would refuse: anything but a brain-map report, signed or kept.
  *
- * The client's first comes first, and is where the choice starts: the
- * specification's default.
+ * **In the order they were recorded** (brief R, item 8; M's parked note 9).
+ * A past record is brought in long after it was recorded, so the day its row
+ * was made says nothing of its place among the client's reports. The day of
+ * recording, which the list row carries from the content, orders them, and
+ * the day each row was made breaks a tie. The client's first comes first, and
+ * is where the choice starts: the specification's default.
+ *
+ * A kept past record that was withdrawn, or that holds no day of recording,
+ * is left out: the route refuses both (`withdrawn`, `undated`). A draft being
+ * brought in is no candidate either.
  */
 export function comparableReports(rows: readonly ReportRow[]): ReportRow[] {
   return rows
-    .filter((row) => row.kind === 'qeeg' && (row.status === 'issued' || row.status === 'imported'))
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    .filter(
+      (row) =>
+        row.kind === 'qeeg' &&
+        (row.status === 'issued' ||
+          (row.status === 'imported' && !row.withdrawn && row.recordedOn !== null)),
+    )
+    .sort(
+      (a, b) =>
+        (a.recordedOn ?? '').localeCompare(b.recordedOn ?? '') ||
+        a.createdAt.localeCompare(b.createdAt),
+    );
 }
 
-/** How a report is named in a list: its reference, or when a past record was kept. */
+/** How a report is named in a list: its reference, or the day a past record was recorded. */
 export function earlierLabel(row: ReportRow): string {
   if (row.status === 'imported') {
-    return `Past record, kept on ${displayFromIso(row.createdAt.slice(0, 10))}`;
+    return row.recordedOn === null
+      ? 'Past record from the old tool'
+      : `Past record from the old tool, recorded on ${displayFromIso(row.recordedOn)}`;
   }
   const on = row.issuedOn ? `, signed on ${displayFromIso(row.issuedOn)}` : '';
   return `${row.reference ?? 'Signed report'}${on}`;

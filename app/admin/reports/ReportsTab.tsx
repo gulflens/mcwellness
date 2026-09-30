@@ -9,8 +9,15 @@ import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
 import { QeegEditor } from './qeeg/QeegEditor';
 import { QeegStart } from './qeeg/QeegStart';
+import { PastRecordImport } from './qeeg/PastRecordImport';
+import { PastRecordView } from './qeeg/PastRecordView';
 import { languageWord, twinLines } from './qeeg/twinWords';
-import { canDeliverReports, canDraftReports, canSupersedeReports } from './reportsAccess';
+import {
+  canDeliverReports,
+  canDraftReports,
+  canImportReports,
+  canSupersedeReports,
+} from './reportsAccess';
 import { inChains, useReports } from './useReports';
 import './reports.css';
 
@@ -34,6 +41,13 @@ import './reports.css';
  * beside the thing they act on. A brain map says which language it is in,
  * and names its other language and whether it is out of step
  * (`qeeg/twinWords.ts`), beneath its reference.
+ *
+ * **A past record** from the practice's old tool (docs/SPEC/reports-qeeg.md
+ * section 11) is brought in from here, by the owner and the lead practitioner
+ * ("Bring in a past record", `qeeg/PastRecordImport.tsx`), and opens
+ * read-only as "Past record" (`qeeg/PastRecordView.tsx`), withdrawn there by
+ * the same two. One brought in and not yet kept opens the import again, to be
+ * finished with the same file.
  *
  * **A draft opens in the editor, not the viewer.** Every row used to open in
  * `ReportView`, which offers a draft no edit, no preview and no signature — so
@@ -67,7 +81,7 @@ function Row({
     <tr className={beneath ? 'reports__row--superseded' : undefined}>
       <td>
         <button type="button" className="link" onClick={() => onOpen(report)}>
-          {report.reference ?? 'Not yet signed'}
+          {report.pastRecord ? 'Past record' : (report.reference ?? 'Not yet signed')}
         </button>
         {beneath && report.amendmentReason ? (
           <span className="reports__reason small">Replaced: {report.amendmentReason}</span>
@@ -81,7 +95,16 @@ function Row({
       <td>{language === null ? kindWord(report.kind) : `${kindWord(report.kind)}, ${language}`}</td>
       <td className="numeric">{coverageOf(report)}</td>
       <td>
-        <StatusChip label={statusWord(report.status)} tone={statusTone(report.status)} />
+        <StatusChip
+          label={
+            report.withdrawn
+              ? 'Withdrawn'
+              : report.pastRecord && report.status === 'draft'
+                ? 'Being brought in'
+                : statusWord(report.status)
+          }
+          tone={statusTone(report.status)}
+        />
       </td>
       <td>{report.signedByName ?? ''}</td>
       <td className="numeric">
@@ -116,6 +139,10 @@ export function ReportsTab({
   const [openId, setOpenId] = useState<string | null>(null);
   /** Choosing which brain-map report to start. */
   const [startingQeeg, setStartingQeeg] = useState(false);
+  /** Bringing in a past record from the old tool; `resuming` when one was left as a draft. */
+  const [importing, setImporting] = useState<{ resuming: boolean } | null>(null);
+  /** The past record open read-only. */
+  const [pastId, setPastId] = useState<string | null>(null);
   /** The brain-map report being written: a draft to open, or a blank to start. */
   const [qeeg, setQeeg] = useState<{ reportId: string | null; start: QeegContent | null } | null>(
     null,
@@ -124,6 +151,7 @@ export function ReportsTab({
   const mayWrite = canDraftReports(actor, now, clientId) && !erased;
   const maySupersede = canSupersedeReports(actor, now, clientId) && !erased;
   const maySend = canDeliverReports(actor, now) && !erased;
+  const mayImport = canImportReports(actor, now, clientId) && !erased;
 
   if (state.kind === 'loading') return <Note>Loading.</Note>;
   if (state.kind === 'error') return <Note tone="critical">The reports could not be loaded.</Note>;
@@ -132,6 +160,43 @@ export function ReportsTab({
     setWriting(null);
     setDraftId(null);
     void refetch();
+  }
+
+  if (importing !== null) {
+    return (
+      <>
+        {importing.resuming ? (
+          <Note>
+            This record was brought in and not yet kept. Choose the same file again to finish.
+          </Note>
+        ) : null}
+        <PastRecordImport
+          clientId={clientId}
+          onDone={(id) => {
+            setImporting(null);
+            setPastId(id);
+            void refetch();
+          }}
+          onCancel={() => {
+            setImporting(null);
+            void refetch();
+          }}
+        />
+      </>
+    );
+  }
+
+  if (pastId !== null) {
+    return (
+      <PastRecordView
+        reportId={pastId}
+        mayWithdraw={mayImport}
+        onBack={() => {
+          setPastId(null);
+          void refetch();
+        }}
+      />
+    );
   }
 
   if (qeeg !== null) {
@@ -215,6 +280,15 @@ export function ReportsTab({
    * the brain-map form.
    */
   function open(report: ReportRow): void {
+    if (report.pastRecord) {
+      // Brought in from the old tool: finished through the import, else read.
+      if (report.status === 'draft' && mayImport) {
+        setImporting({ resuming: true });
+        return;
+      }
+      setPastId(report.id);
+      return;
+    }
     if (report.kind === 'qeeg' && report.status === 'draft' && mayWrite) {
       setQeeg({ reportId: report.id, start: null });
       return;
@@ -239,6 +313,11 @@ export function ReportsTab({
           </Button>
           <Button onClick={() => setWriting('session')}>Write a session report</Button>
           <Button onClick={() => setStartingQeeg(true)}>New brain-map report</Button>
+          {mayImport ? (
+            <Button onClick={() => setImporting({ resuming: false })}>
+              Bring in a past record
+            </Button>
+          ) : null}
         </div>
       ) : null}
 

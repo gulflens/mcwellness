@@ -500,3 +500,49 @@ describe('the Reports tab', () => {
     expect(await screen.findByText('The reports could not be loaded.')).toBeTruthy();
   });
 });
+
+describe('past records from the old tool (docs/SPEC/reports-qeeg.md section 11)', () => {
+  const past = (over: Record<string, unknown> = {}) =>
+    row({
+      id: DRAFT,
+      kind: 'qeeg',
+      status: 'imported',
+      reference: null,
+      issuedOn: null,
+      coverageFrom: null,
+      coverageTo: null,
+      signedByName: null,
+      documentId: null,
+      pastRecord: true,
+      withdrawn: false,
+      recordedOn: '2026-03-14',
+      ...over,
+    });
+
+  it('offers bringing one in to a lead practitioner, and not to a practitioner', async () => {
+    mount([]);
+    expect(await screen.findByRole('button', { name: 'Bring in a past record' })).toBeTruthy();
+    cleanup();
+    mount([], PRACTITIONER);
+    await screen.findByRole('button', { name: 'New brain-map report' });
+    expect(screen.queryByRole('button', { name: 'Bring in a past record' })).toBeNull();
+  });
+
+  it('lists a kept one as "Past record", and a withdrawn one as withdrawn', async () => {
+    mount([past(), past({ id: SECOND, withdrawn: true })]);
+    expect(await screen.findAllByRole('button', { name: 'Past record' })).toHaveLength(2);
+    expect(screen.getByText('Withdrawn')).toBeTruthy();
+  });
+
+  it('opens a kept one read-only, never in the brain-map form', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = mount([past()]);
+    await user.click(await screen.findByRole('button', { name: 'Past record' }));
+    await waitFor(() =>
+      expect(fetchImpl.mock.calls.some(([url]) => String(url) === `/api/reports/${DRAFT}`)).toBe(
+        true,
+      ),
+    );
+    expect(screen.queryByRole('button', { name: /left to fill$/ })).toBeNull();
+  });
+});
