@@ -10,6 +10,7 @@ import { LEAD_PRACTITIONER, signedInProvider } from '../../app/admin/clients/tes
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import { blankInitial } from '../../domain/reports/qeeg/blank';
 import { prefillFollowUp } from '../../domain/reports/qeeg/prefill';
+import { countedFigure } from '../../domain/reports/qeeg/sessionsCompleted';
 import type { QeegContent, QeegInitial } from '../../domain/reports/qeeg/types';
 
 /**
@@ -143,11 +144,14 @@ function mountTab({
   refuse,
   sessions = 3,
   reports = [FIRST_ROW],
+  stored,
 }: {
   /** A refusal code the prefill answers instead. */
   refuse?: { status: number; code: string };
   sessions?: number;
   reports?: unknown[];
+  /** A saved draft, as `GET /api/reports/:id` holds it. */
+  stored?: QeegContent;
 } = {}) {
   const calls: Call[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -186,7 +190,7 @@ function mountTab({
           ...begun.content,
           change: {
             ...begun.content.change,
-            sessionsCompleted: count > 0 ? { count, source: 'gathered' } : null,
+            sessionsCompleted: countedFigure(count),
           },
         },
         offered: begun.offered,
@@ -209,6 +213,16 @@ function mountTab({
         { report: row(), content: content as unknown as QeegContent, savedAt: STAMP },
         201,
       );
+    }
+    if (stored && url === `/api/reports/${DRAFT}`) {
+      return json({
+        report: row(),
+        content: stored,
+        deliveries: [],
+        url: null,
+        expiresInSeconds: null,
+        savedAt: STAMP,
+      });
     }
     const earlier = Object.values(EARLIER).find((each) => url === `/api/reports/${each.row.id}`);
     if (earlier) {
@@ -502,4 +516,140 @@ describe('each refusal of the prefill', () => {
       expect(screen.queryByText('Brain-map report, follow-up')).toBeNull();
     });
   }
+});
+
+/** A saved follow-up of the first report, with nothing counted in it. */
+function savedFollowUp(): QeegContent {
+  const begun = prefillFollowUp(
+    {
+      reportId: FIRST,
+      clientId: CLIENT,
+      status: 'issued',
+      withdrawn: false,
+      erased: false,
+      reference: 'RPT-000001',
+      content: firstContent(),
+    },
+    { clientId: CLIENT, draftId: DRAFT, stage: 'follow_up', recordedOn: null },
+  );
+  if (!begun.ok) throw new Error(begun.reason);
+  return {
+    ...begun.content,
+    subject: { nameAr: null, ageYears: 9, sex: 'female' },
+  } as QeegContent;
+}
+
+describe('a saved follow-up, opened again (fix round 1)', () => {
+  it('asks the prefill once, with the draft named, so the count and the suggestions come back', async () => {
+    const user = userEvent.setup();
+    const api = mountTab({ reports: [FIRST_ROW, row()], stored: savedFollowUp() });
+    await user.click(await screen.findByRole('button', { name: 'Not yet signed' }));
+    expect(await screen.findByText('Brain-map report, follow-up')).toBeTruthy();
+    await waitFor(() => expect(api.prefills()).toHaveLength(1));
+    const asked = new URL(api.prefills()[0]?.url ?? '', 'http://localhost').searchParams;
+    expect(asked.get('from')).toBe(FIRST);
+    expect(asked.get('draftId')).toBe(DRAFT);
+
+    await openSection(user, 'Key findings');
+    expect(await screen.findByRole('group', { name: 'Chosen in the earlier report' })).toBeTruthy();
+    await openSection(user, 'What has changed');
+    const group = screen.getByRole('radiogroup', { name: 'Neurofeedback sessions completed' });
+    const counted = within(group).getByRole('radio', {
+      name: 'Counted from the client’s visits',
+    }) as HTMLInputElement;
+    expect(counted.disabled).toBe(false);
+    await user.click(counted);
+    expect(screen.getByText(/^3 completed sessions/)).toBeTruthy();
+    expect(api.prefills()).toHaveLength(1);
+  });
+
+  it('never says no visit is recorded when nothing was counted', async () => {
+    const user = userEvent.setup();
+    mountTab({
+      reports: [FIRST_ROW, row()],
+      stored: savedFollowUp(),
+      refuse: { status: 422, code: 'recorded_later' },
+    });
+    await user.click(await screen.findByRole('button', { name: 'Not yet signed' }));
+    await openSection(user, 'What has changed');
+    expect(screen.queryByText(/No completed visit is recorded/)).toBeNull();
+    const group = screen.getByRole('radiogroup', { name: 'Neurofeedback sessions completed' });
+    expect(
+      (
+        within(group).getByRole('radio', {
+          name: 'Counted from the client’s visits',
+        }) as HTMLInputElement
+      ).disabled,
+    ).toBe(true);
+  });
+});
+
+describe('a count over what a figure may hold (fix round 1)', () => {
+  it('is never set as the counted figure, and she is told to type it', async () => {
+    const user = userEvent.setup();
+    const api = mountTab({ sessions: 250 });
+    await startFollowUp(user);
+    await openSection(user, 'What has changed');
+    const group = screen.getByRole('radiogroup', { name: 'Neurofeedback sessions completed' });
+    const counted = within(group).getByRole('radio', {
+      name: 'Counted from the client’s visits',
+    }) as HTMLInputElement;
+    expect(counted.disabled).toBe(true);
+    expect(screen.getByText(/^250 completed visits were counted/)).toBeTruthy();
+    expect(screen.queryByText(/No completed visit is recorded/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }));
+    await waitFor(() => expect(api.saves()).toHaveLength(1));
+    const sent = sentContent(api.saves()[0]) as { change: { sessionsCompleted: unknown } };
+    expect(sent.change.sessionsCompleted).toBeNull();
+  });
+});
+
+describe('focus and what is announced (fix round 1)', () => {
+  it('keeps “Compare with” usable while she is asked, moves focus into the question, and back', async () => {
+    const user = userEvent.setup();
+    mountTab({ reports: [FIRST_ROW, SECOND_ROW] });
+    await startFollowUp(user);
+    await openSection(user, 'Compared with');
+    await user.selectOptions(screen.getByLabelText('This report is'), 'final');
+    const select = screen.getByLabelText('Compare with') as HTMLSelectElement;
+    await user.selectOptions(select, SECOND);
+    const asking = screen.getByRole('group', { name: 'Start again from another report' });
+    expect(select.disabled).toBe(false);
+    expect(select.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(asking);
+    expect(asking.textContent).toMatch(/“Keep what I have” keeps everything you have filled in/);
+    await user.click(within(asking).getByRole('button', { name: 'Keep what I have' }));
+    expect(document.activeElement).toBe(screen.getByLabelText('Compare with'));
+  });
+
+  it('says it is reading the earlier report in a live region that is always there', async () => {
+    const user = userEvent.setup();
+    mountTab({ reports: [FIRST_ROW, SECOND_ROW] });
+    await user.click(await screen.findByRole('button', { name: 'New brain-map report' }));
+    const starting = document.getElementById('qeeg-start-status');
+    expect(starting?.getAttribute('aria-live')).toBe('polite');
+    expect(starting?.textContent).toBe('');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await startFollowUp(user);
+    await openSection(user, 'Compared with');
+    const live = document.getElementById('qeeg-compared-status');
+    expect(live?.getAttribute('aria-live')).toBe('polite');
+    expect(live?.textContent).toBe('');
+  });
+
+  it('moves focus to the next suggestion after one is taken, and to the ticked item after the last', async () => {
+    const user = userEvent.setup();
+    mountTab();
+    await startFollowUp(user);
+    await openSection(user, 'Key findings');
+    await user.click(screen.getByRole('button', { name: 'Take Mental Fatigue' }));
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Take Sleep Dysregulation' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Take Sleep Dysregulation' }));
+    await user.click(screen.getByRole('button', { name: 'Take Slow mornings' }));
+    expect(screen.queryByRole('group', { name: 'Chosen in the earlier report' })).toBeNull();
+    expect(document.activeElement?.tagName).toBe('INPUT');
+    expect(document.activeElement?.closest('.qeeg-section')).toBeTruthy();
+  });
 });

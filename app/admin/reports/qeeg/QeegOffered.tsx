@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { displayFromIso } from '@domain/shared';
 import {
   BAND_IDS,
@@ -7,6 +7,7 @@ import {
   type ConnectivityId,
 } from '../../../../domain/reports/qeeg/catalogue/ids';
 import { isSessionCount } from '../../../../domain/reports/qeeg/choices';
+import { countedFigure } from '../../../../domain/reports/qeeg/sessionsCompleted';
 import {
   stillOffered,
   takeChosen,
@@ -65,6 +66,39 @@ function regionWords(regions: readonly string[]): string {
   return regions.map((region) => phrase(`region.${region}.label`, 'initial', 'en')).join(', ');
 }
 
+/**
+ * Where focus goes once a suggestion is taken and its button is gone: the
+ * suggestion now in its place, or the one before it, or, when none is left,
+ * `fallback()`, the thing just taken in the form beside it. Run after the
+ * render the take caused, so the element it names is on screen.
+ */
+function useFocusAfterTake(
+  container: { readonly current: HTMLDivElement | null },
+  fallback: () => string | null,
+): (index: number) => void {
+  const pending = useRef<number | null>(null);
+  const fallbackRef = useRef(fallback);
+  useEffect(() => {
+    fallbackRef.current = fallback;
+  });
+  useEffect(() => {
+    const index = pending.current;
+    if (index === null) return;
+    pending.current = null;
+    const buttons = container.current ? [...container.current.querySelectorAll('button')] : [];
+    const next = buttons[Math.min(index, buttons.length - 1)];
+    if (next) {
+      next.focus();
+      return;
+    }
+    const id = fallbackRef.current();
+    if (id !== null) document.getElementById(id)?.focus();
+  });
+  return (index: number) => {
+    pending.current = index;
+  };
+}
+
 const INTRO =
   'Chosen in the earlier report. Nothing here is ticked for you: take any you want again.';
 
@@ -82,14 +116,33 @@ export function OfferedItems({
 }) {
   const left = stillOffered(content, offered)[list];
   const custom = Object.entries(left.custom).sort(([, a], [, b]) => a.position - b.position);
+  /** What was taken last, to be focused in the list once no suggestion is left. */
+  const lastTaken = useRef<{ id: string } | { label: string } | null>(null);
+  const container = useRef<HTMLDivElement | null>(null);
+  const taking = useFocusAfterTake(container, () => {
+    const taken = lastTaken.current;
+    if (taken === null) return null;
+    if ('id' in taken) return `qeeg-${list}-${taken.id}`;
+    const own = Object.entries(content[list].custom).find(
+      ([, item]) => item.label.en === taken.label,
+    );
+    return own ? `qeeg-${list}-own-${own[0]}` : `qeeg-${list}-add`;
+  });
   if (left.chosen.length === 0 && custom.length === 0) return null;
-  const take = (change: (was: QeegFollowUp) => QeegFollowUp) =>
+  const take = (index: number, change: (was: QeegFollowUp) => QeegFollowUp) => {
+    taking(index);
     edit((was) => (was.edition === 'follow-up' ? change(was) : was));
+  };
   return (
-    <div className="qeeg-offered" role="group" aria-label="Chosen in the earlier report">
+    <div
+      ref={container}
+      className="qeeg-offered"
+      role="group"
+      aria-label="Chosen in the earlier report"
+    >
       <p className="small muted">{INTRO}</p>
       <ul className="qeeg-offered__list">
-        {left.chosen.map((id) => {
+        {left.chosen.map((id, index) => {
           const label = itemLabel(list, id);
           return (
             <li key={id}>
@@ -97,20 +150,26 @@ export function OfferedItems({
               <Button
                 variant="quiet"
                 aria-label={`Take ${label}`}
-                onClick={() => take((was) => takeChosen(was, list, id))}
+                onClick={() => {
+                  lastTaken.current = { id };
+                  take(index, (was) => takeChosen(was, list, id));
+                }}
               >
                 Take
               </Button>
             </li>
           );
         })}
-        {custom.map(([key, item]) => (
+        {custom.map(([key, item], at) => (
           <li key={key}>
             <span>{item.label.en}</span>
             <Button
               variant="quiet"
               aria-label={`Take ${item.label.en}`}
-              onClick={() => take((was) => takeCustom(was, list, key, offered))}
+              onClick={() => {
+                lastTaken.current = { label: item.label.en };
+                take(left.chosen.length + at, (was) => takeCustom(was, list, key, offered));
+              }}
             >
               Take
             </Button>
@@ -143,15 +202,27 @@ export function OfferedRegions({
           regions: left.connectivity[id],
         }));
   const shown = rows.filter((row) => row.regions.length > 0);
+  const lastTaken = useRef<string | null>(null);
+  const container = useRef<HTMLDivElement | null>(null);
+  const taking = useFocusAfterTake(container, () =>
+    lastTaken.current === null
+      ? null
+      : `qeeg-${kind === 'bands' ? 'band' : 'connectivity'}-${lastTaken.current}`,
+  );
   if (shown.length === 0) return null;
   return (
-    <div className="qeeg-offered" role="group" aria-label="Regions named in the earlier report">
+    <div
+      ref={container}
+      className="qeeg-offered"
+      role="group"
+      aria-label="Regions named in the earlier report"
+    >
       <p className="small muted">
         Regions named in the earlier report. Nothing here is chosen for you: take any you want
         again.
       </p>
       <ul className="qeeg-offered__list">
-        {shown.map((row) => (
+        {shown.map((row, index) => (
           <li key={row.id}>
             <span>
               {row.title}: {regionWords(row.regions)}
@@ -159,11 +230,13 @@ export function OfferedRegions({
             <Button
               variant="quiet"
               aria-label={`Take the earlier regions of ${row.title}`}
-              onClick={() =>
+              onClick={() => {
+                lastTaken.current = row.id;
+                taking(index);
                 edit((was) =>
                   was.edition === 'follow-up' ? takeRegions(was, kind, row.id, offered) : was,
-                )
-              }
+                );
+              }}
             >
               Take
             </Button>
@@ -187,7 +260,7 @@ export function SessionsCompletedField({
   edit,
 }: {
   content: QeegFollowUp;
-  /** The last count the server gave, or null when it gave none this time. */
+  /** The last count the server gave, 0 when it counted none, or null when it has not counted. */
   counted: number | null;
   edit: Edit;
 }) {
@@ -196,6 +269,8 @@ export function SessionsCompletedField({
   const [typed, setTyped] = useState(figure?.source === 'typed' ? String(figure.count) : '');
   const pick: Pick = figure?.source === 'gathered' ? 'counted' : typing ? 'typed' : 'none';
   const lastCounted = figure?.source === 'gathered' ? figure.count : counted;
+  // Whether a count can stand as the figure is the domain's (`countedFigure`).
+  const countable = lastCounted === null ? null : countedFigure(lastCounted);
   const typedValid = isSessionCount(wholeNumberIn(typed));
 
   const setFigure = (next: QeegFollowUp['change']['sessionsCompleted']) =>
@@ -208,11 +283,7 @@ export function SessionsCompletedField({
   const choose = (next: Pick) => {
     setTyping(next === 'typed');
     if (next === 'counted') {
-      setFigure(
-        lastCounted !== null && lastCounted >= 1
-          ? { count: lastCounted, source: 'gathered' }
-          : null,
-      );
+      setFigure(countable);
     } else if (next === 'typed') {
       const n = wholeNumberIn(typed);
       setFigure(isSessionCount(n) ? { count: n, source: 'typed' } : null);
@@ -228,7 +299,7 @@ export function SessionsCompletedField({
       ? `before this one on ${displayFromIso(before)}`
       : 'up to today, as this recording has no date yet'
   }`;
-  const mayCount = lastCounted !== null && lastCounted >= 1;
+  const mayCount = countable !== null;
   const options: { value: Pick; label: string; disabled?: boolean }[] = [
     { value: 'counted', label: 'Counted from the client’s visits', disabled: !mayCount },
     { value: 'typed', label: 'Typed, because some were elsewhere' },
@@ -258,10 +329,16 @@ export function SessionsCompletedField({
           client’s visits {between}. It is counted again each time the draft is saved.
         </p>
       ) : null}
-      {!mayCount && pick !== 'typed' ? (
+      {lastCounted === 0 && pick !== 'typed' ? (
         <p className="small muted">
           No completed visit is recorded {between}. If some sessions were elsewhere, type the
           number.
+        </p>
+      ) : null}
+      {lastCounted !== null && lastCounted > 0 && countable === null && pick !== 'typed' ? (
+        <p className="small muted">
+          {lastCounted} completed visits were counted {between}, more than the page can print as
+          counted. Type the number if it is to be shown.
         </p>
       ) : null}
       {pick === 'typed' ? (

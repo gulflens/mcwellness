@@ -111,7 +111,10 @@ export function QeegStart({
         )
       ) : null}
       {edition === 'follow-up' && refusal !== null ? <Note tone="critical">{refusal}</Note> : null}
-      {asking ? <p className="small muted">Reading the earlier report.</p> : null}
+      {/* Always there, so what it comes to say is announced. */}
+      <p id="qeeg-start-status" className="small muted" role="status" aria-live="polite">
+        {asking ? 'Reading the earlier report.' : ''}
+      </p>
       <div className="report-editor__actions">
         <Button
           variant="primary"

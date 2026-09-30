@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Offered } from '../../../../domain/reports/qeeg/prefill';
 import { displayFromIso } from '@domain/shared';
 import {
@@ -195,7 +195,7 @@ export function QeegEditor({
   const [leaving, setLeaving] = useState(false);
   /** What she chose last time, offered while this form is open (brief S). */
   const [offered, setOffered] = useState<Offered | null>(prefilled?.offered ?? null);
-  /** The last count of sessions the prefill gave. */
+  /** The last count of sessions the prefill gave; null until something was counted. */
   const [counted, setCounted] = useState<number | null>(prefilled?.sessions.count ?? null);
   /** The content as the prefill last gave it: anything else means she has changed something. */
   const [basis, setBasis] = useState<QeegContent | null>(prefilled?.content ?? null);
@@ -206,6 +206,25 @@ export function QeegEditor({
 
   const candidates = comparableReports(reports);
   const { content } = draft;
+
+  // A saved follow-up opened again asks the prefill once, naming itself, so
+  // the count of sessions and the suggestions come back (brief S, fix round
+  // 1): one audited read, and never a count the form made up. A second
+  // language is not asked: every part of it but its words is the first's.
+  const reopened = useRef(false);
+  const loadedFollowUp =
+    reportId !== null && prefilled === null && content !== null && content.edition === 'follow-up'
+      ? content.comparedWith.reportId
+      : null;
+  const isTwin = (draft.row?.twinOfId ?? null) !== null;
+  useEffect(() => {
+    if (reopened.current || loadedFollowUp === null || draft.row === null || isTwin) return;
+    if (reportId === null || draft.row.status !== 'draft') return;
+    reopened.current = true;
+    void reoffer(loadedFollowUp, reportId);
+    // `reoffer` reads the draft as it stands when it runs; asked once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedFollowUp, draft.row, isTwin, reportId]);
 
   if (signing.signed !== null) {
     return (
@@ -303,11 +322,11 @@ export function QeegEditor({
    * everything she filled in, and only the suggestions and the last count
    * follow the report now chosen. A refusal is said, and nothing is offered.
    */
-  async function reoffer(row: ReportRow, draftId: string): Promise<void> {
+  async function reoffer(from: string, draftId: string): Promise<void> {
     const now = draft.content;
     if (prefill === undefined || now === null || now.edition !== 'follow-up') return;
     const answer = await prefill({
-      from: row.id,
+      from,
       recordedOn: now.recording.recordedOn,
       stage: now.stage,
       draftId,
@@ -337,7 +356,7 @@ export function QeegEditor({
     }
     if (draft.reportId !== null) {
       draft.edit((was) => compareWith(was, comparedFromRow(row)));
-      void reoffer(row, draft.reportId);
+      void reoffer(row.id, draft.reportId);
       return;
     }
     if (content !== basis) {
@@ -772,6 +791,15 @@ function ComparedSection({
 }) {
   const { comparedWith } = content;
   const inList = candidates.some((row) => row.id === comparedWith.reportId);
+  const busy = refilling || asking !== null;
+  const current = candidates.find((row) => row.id === comparedWith.reportId) ?? null;
+  // The question takes focus when it is put, so it is read out; "Keep what I
+  // have" hands focus back to the list it came from.
+  const question = useRef<HTMLDivElement | null>(null);
+  const askingId = asking?.id ?? null;
+  useEffect(() => {
+    if (askingId !== null) question.current?.focus();
+  }, [askingId]);
   return (
     <>
       <dl className="report-editor__figures">
@@ -789,8 +817,12 @@ function ComparedSection({
           id="qeeg-compared"
           label="Compare with"
           value={comparedWith.reportId}
-          disabled={refilling || asking !== null}
+          // Never disabled while it may hold focus: busy is said, and a choice
+          // made meanwhile waits for the one in hand.
+          aria-busy={busy}
+          aria-describedby="qeeg-compared-status"
           onChange={(event) => {
+            if (busy) return;
             const row = candidates.find((each) => each.id === event.currentTarget.value);
             if (!row) return;
             onChoose(row);
@@ -805,26 +837,40 @@ function ComparedSection({
       ) : null}
       {asking !== null ? (
         <div
+          ref={question}
+          tabIndex={-1}
           className="report-editor__sign"
           role="group"
           aria-label="Start again from another report"
+          aria-describedby="qeeg-compared-question"
         >
-          <p>
+          <p id="qeeg-compared-question">
             You have already filled in part of this follow-up. Starting again from{' '}
             {earlierLabel(asking)} replaces everything on this form with what that report brings
-            forward, and what you filled in is not kept.
+            forward, and what you filled in is not kept. “Keep what I have” keeps everything you
+            have filled in, and this follow-up stays compared with{' '}
+            {current === null ? 'the report it is compared with now' : earlierLabel(current)}.
           </p>
           <div className="report-editor__actions">
             <Button variant="primary" onClick={() => onRefill(asking)}>
               Start again from that report
             </Button>
-            <Button variant="quiet" onClick={onKeep}>
+            <Button
+              variant="quiet"
+              onClick={() => {
+                onKeep();
+                document.getElementById('qeeg-compared')?.focus();
+              }}
+            >
               Keep what I have
             </Button>
           </div>
         </div>
       ) : null}
-      {refilling ? <p className="small muted">Reading the earlier report.</p> : null}
+      {/* Always there, so what it comes to say is announced. */}
+      <p id="qeeg-compared-status" className="small muted" role="status" aria-live="polite">
+        {refilling ? 'Reading the earlier report.' : ''}
+      </p>
       {refillError !== null ? <Note tone="critical">{refillError}</Note> : null}
       <Select
         id="qeeg-stage"
