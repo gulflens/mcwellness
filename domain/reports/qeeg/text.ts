@@ -205,8 +205,9 @@ function cutAt(text: string, most: number): number {
   return isHighSurrogate(text.charCodeAt(most - 1)) ? most - 1 : most;
 }
 
-const BOLD_BIT = 1;
-const UNDERLINE_BIT = 2;
+/** The bits of a unit's style, as `unitStyles` answers it and `marksOf` reads it. */
+export const BOLD_BIT = 1;
+export const UNDERLINE_BIT = 2;
 const COMBINING = /\p{M}/u;
 
 /**
@@ -231,8 +232,11 @@ export function isMark(value: unknown): value is Mark {
  * text are what a person's editor may hand over, so they are read, never
  * refused: a unit is bold when any bold mark covers it, and so for
  * underline. An edge that is no number covers nothing.
+ *
+ * Exported with `marksOf` so the form's summary box (the admin screen's
+ * `richEdit.ts`) reads and writes marks by this rule and keeps no copy of it.
  */
-function unitStyles(marks: readonly unknown[], length: number): Uint8Array {
+export function unitStyles(marks: readonly unknown[], length: number): Uint8Array {
   const bold = new Int32Array(length + 1);
   const underline = new Int32Array(length + 1);
   for (const mark of marks) {
@@ -357,7 +361,7 @@ export function cleanRich(rich: RichText, most: number): RichText {
 }
 
 /** One mark for each run of units alike in style, leaving out the unstyled. */
-function marksOf(styles: readonly number[]): Mark[] {
+export function marksOf(styles: ArrayLike<number>): Mark[] {
   const marks: Mark[] = [];
   let from = 0;
   for (let i = 1; i <= styles.length; i += 1) {

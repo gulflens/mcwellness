@@ -1,4 +1,5 @@
-import type { Mark, RichText } from '../../../../domain/reports/qeeg/types';
+import { BOLD_BIT, marksOf, UNDERLINE_BIT, unitStyles } from '../../../../domain/reports/qeeg/text';
+import type { RichText } from '../../../../domain/reports/qeeg/types';
 
 /**
  * Bold and underline in the brain-map summary box, kept on the letters they
@@ -16,50 +17,20 @@ import type { Mark, RichText } from '../../../../domain/reports/qeeg/types';
  * not styled, as in most editors; what is deleted takes its part of the mark
  * with it, and a mark deleted whole is gone. That is all this file decides.
  * Cleaning the text before it is saved is the domain's (`cleanRich`), and so
- * is every rule of what a mark may be.
+ * is every rule of what a mark may be, and how marks become the style of each
+ * unit and back (`unitStyles`, `marksOf`), which this file asks rather than
+ * restates.
  *
  * Pure, and each function returns a new value.
  */
 
 export type Style = 'bold' | 'underline';
 
-const BIT: Readonly<Record<Style, number>> = { bold: 1, underline: 2 };
-
-/** The style of every unit of the text, from its marks. */
-function unitStyles(rich: RichText): number[] {
-  const styles = new Array<number>(rich.text.length).fill(0);
-  for (const mark of rich.marks) {
-    const bits = (mark.bold ? BIT.bold : 0) | (mark.underline ? BIT.underline : 0);
-    for (let at = Math.max(0, mark.from); at < Math.min(mark.to, styles.length); at += 1) {
-      styles[at] = (styles[at] ?? 0) | bits;
-    }
-  }
-  return styles;
-}
-
-/** One mark for each run of units alike in style, the unstyled left out. */
-function marksOf(styles: readonly number[]): Mark[] {
-  const marks: Mark[] = [];
-  let from = 0;
-  for (let at = 1; at <= styles.length; at += 1) {
-    const style = styles[from] ?? 0;
-    if (at < styles.length && styles[at] === style) continue;
-    if (style !== 0) {
-      marks.push({
-        from,
-        to: at,
-        ...((style & BIT.bold) !== 0 ? { bold: true as const } : {}),
-        ...((style & BIT.underline) !== 0 ? { underline: true as const } : {}),
-      });
-    }
-    from = at;
-  }
-  return marks;
-}
+const BIT: Readonly<Record<Style, number>> = { bold: BOLD_BIT, underline: UNDERLINE_BIT };
 
 /** Whether every unit from `from` to `to` has each style. False for an empty stretch. */
 export function stylesAt(rich: RichText, from: number, to: number): Record<Style, boolean> {
-  const styles = unitStyles(rich).slice(from, to);
+  const styles = unitStyles(rich.marks, rich.text.length).slice(from, to);
   const every = (bit: number) => styles.length > 0 && styles.every((style) => (style & bit) !== 0);
   return { bold: every(BIT.bold), underline: every(BIT.underline) };
 }
@@ -72,7 +43,7 @@ export function toggleMark(rich: RichText, from: number, to: number, style: Styl
   const start = Math.max(0, Math.min(from, to));
   const end = Math.min(rich.text.length, Math.max(from, to));
   if (start >= end) return rich;
-  const styles = unitStyles(rich);
+  const styles = unitStyles(rich.marks, rich.text.length);
   const on = !stylesAt(rich, start, end)[style];
   for (let at = start; at < end; at += 1) {
     const was = styles[at] ?? 0;
