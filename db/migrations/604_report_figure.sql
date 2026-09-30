@@ -25,7 +25,7 @@
 --
 -- **Frozen with the report** (point 5). While the report is a draft a map
 -- may be added or removed; when it leaves draft its links admit no change,
--- and its own pictures become immutable documents (the trigger in section 4
+-- and its own pictures become immutable documents (the trigger in section 7
 -- sets `is_immutable`, which 903 then enforces for ever). The guard below
 -- asks on EVERY connection, the owner's included: nothing but an erasure
 -- (app.erasure_active) steps round it. One removal is admitted after a
@@ -45,9 +45,15 @@
 -- and removes them after the commit when a removal deletes the document
 -- (docs/SEAMS.md). Nothing in SQL talks to a store.
 --
--- **The household reads none of it.** No policy grants `client_contact` a
--- read of this table (section 13; db/policies/reports/figures.sql). A map
--- reaches a household inside a signed report and in no other way.
+-- **The household reads no `report_figure` row.** No policy grants
+-- `client_contact` a read of this table (section 13;
+-- db/policies/reports/figures.sql). The picture's own `document` row is
+-- another matter: it is read under client-record's policy on `document`
+-- (db/policies/client/readers.sql), which today admits a contact to every
+-- document of their client, this kind included — its storage key and digest,
+-- never its bytes, which no portal route serves. It stays visible that way
+-- until the change request to client-record that leaves `report_figure` out
+-- of the household's arm lands; this stream does not edit that policy.
 --
 -- Needs: 010 (tenant), 020 (app_user), 060 (client, document), 080
 -- (app.audit_row, app.set_updated_at), 095 (app.actor_has_role,
@@ -193,9 +199,15 @@ begin
       from public.report r
      where r.tenant_id = old.tenant_id and r.id = old.report_id;
     -- A draft's map may be removed; so may a withdrawn past record's
-    -- (section 11, point 7). A report that is gone takes nothing with it.
-    if v_status is null or v_status = 'draft' or (v_status = 'imported' and v_withdrawn) then
+    -- (section 11, point 7). A link whose report cannot be found is refused
+    -- with the rest: the foreign key makes it unreachable, and a guard that
+    -- admits what it cannot see is a guard with a hole in it.
+    if v_status = 'draft' or (v_status = 'imported' and v_withdrawn) then
       return old;
+    end if;
+    if v_status is null then
+      raise exception 'the report this map belongs to cannot be found, so the map stays'
+        using errcode = 'restrict_violation';
     end if;
     raise exception 'report % has left draft and its maps are frozen with it', old.report_id
       using errcode = 'restrict_violation',

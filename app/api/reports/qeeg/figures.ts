@@ -20,6 +20,7 @@ import {
   FigureRemovedResponse,
   type FigureRefusalCode,
 } from './figureSchema';
+import { databaseRefusal } from './databaseRefusal';
 import { verifyMap } from './verifyMap';
 
 /**
@@ -74,10 +75,25 @@ function refused(c: Context<ApiEnv>, code: FigureRefusalCode, status: 413 | 415 
   );
 }
 
-function sqlState(error: unknown): string | null {
-  if (typeof error !== 'object' || error === null) return null;
-  const { code } = error as { code?: unknown };
-  return typeof code === 'string' ? code : null;
+/** A database function's refusal as an answer, or the error again for the handler. */
+function answerFor(c: Context<ApiEnv>, error: unknown): Response {
+  const answer = databaseRefusal(error);
+  if (answer === null) throw error;
+  return c.json({ ...answer.body, requestId: c.get('requestId') }, answer.status);
+}
+
+const CONDITION_WORDS: Readonly<Record<'eyes_open' | 'eyes_closed', string>> = {
+  eyes_open: 'eyes open',
+  eyes_closed: 'eyes closed',
+};
+
+/** How the form names a map's condition and place, for the sentence of a second upload. */
+function placeWords(
+  condition: 'eyes_open' | 'eyes_closed' | null,
+  position: number | null,
+): string {
+  const kept = condition === null ? 'with no condition' : CONDITION_WORDS[condition];
+  return position === null ? `${kept}, in no place` : `${kept}, in place ${position + 1}`;
 }
 
 type Door = { ok: true; report: ReportRecord } | { ok: false; response: Response };
@@ -125,7 +141,12 @@ async function openDoor(c: Context<ApiEnv>, reportId: string, now: Date): Promis
 
 function notADraft(c: Context<ApiEnv>): Response {
   return c.json(
-    { error: 'unprocessable', code: 'not_a_draft', requestId: c.get('requestId') },
+    {
+      error: 'unprocessable',
+      code: 'not_a_draft',
+      sentence: FIGURE_SENTENCES.not_a_draft,
+      requestId: c.get('requestId'),
+    },
     422,
   );
 }
@@ -243,16 +264,9 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
       if (!id) throw new Error('Filing a map did not return an id.');
       filedId = id;
     } catch (error) {
-      const state = sqlState(error);
-      if (state === '54000') {
-        await db.query('rollback to savepoint report_figure_file');
-        return refused(c, 'too_many_maps', 422);
-      }
-      if (state === '23001') {
-        await db.query('rollback to savepoint report_figure_file');
-        return notADraft(c);
-      }
-      throw error;
+      if (databaseRefusal(error) === null) throw error;
+      await db.query('rollback to savepoint report_figure_file');
+      return answerFor(c, error);
     }
 
     const link = await linkOf(db, reportId, filedId);
@@ -276,6 +290,26 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
         c.get('afterCommit')(async () => {
           await storage.put(key, body, 'image/png');
         });
+      }
+      // The same picture asked for with another condition or place is not
+      // answered with the first link's values as if it had been taken: the
+      // form would show one thing and the report hold another. It is refused,
+      // saying what the report holds; the form removes it and adds it again.
+      const askedCondition = query.data.condition ?? null;
+      const askedPosition = query.data.position ?? null;
+      if (askedCondition !== link.condition || askedPosition !== link.position) {
+        return c.json(
+          {
+            error: 'conflict',
+            code: 'already_on_report',
+            sentence:
+              `This picture is already on the report as ${placeWords(link.condition, link.position)}. ` +
+              'Remove it first to add it again with another condition or place.',
+            figure,
+            requestId,
+          },
+          409,
+        );
       }
       return c.json(
         FigureFiledResponse.parse({ figure, savedAt: await savedAtOf(db, reportId) }),
@@ -341,16 +375,9 @@ export function mountReportFigures(api: Hono<ApiEnv>, now: () => Date = () => ne
         );
       }
     } catch (error) {
-      const state = sqlState(error);
-      if (state === 'P0002') {
-        await db.query('rollback to savepoint report_figure_remove');
-        return c.json({ error: 'not_found', requestId }, 404);
-      }
-      if (state === '23001') {
-        await db.query('rollback to savepoint report_figure_remove');
-        return notADraft(c);
-      }
-      throw error;
+      if (databaseRefusal(error) === null) throw error;
+      await db.query('rollback to savepoint report_figure_remove');
+      return answerFor(c, error);
     }
 
     if (key !== null) {

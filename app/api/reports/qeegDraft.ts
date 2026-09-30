@@ -165,7 +165,7 @@ async function comparedFrom(
 type LinkedFigure = { document_id: string; sha256: string; width_px: number; height_px: number };
 
 type Unowned = {
-  status: 400 | 422;
+  status: 400 | 403 | 422;
   body: { error: string; code: string; field: string; reason?: string };
 };
 
@@ -203,6 +203,15 @@ async function figuresNotOwned(
       await db.query('release savepoint qeeg_draft_borrow');
     } catch (error) {
       const code = (error as { code?: unknown }).code;
+      if (code === '42501') {
+        // The route and the database read who may touch a report's maps
+        // differently at the edge of a schedule: an answer, not a 500.
+        await db.query('rollback to savepoint qeeg_draft_borrow');
+        return {
+          status: 403,
+          body: { error: 'forbidden', code: 'not_permitted', field: `${figure.path}.figureId` },
+        };
+      }
       if (code !== '23503' && code !== '23001') throw error;
       await db.query('rollback to savepoint qeeg_draft_borrow');
       return {

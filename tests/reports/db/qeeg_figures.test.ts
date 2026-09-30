@@ -948,3 +948,312 @@ describe('who reads the links', () => {
     expect(household).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fix round 1 (N-review.md findings 1, 3, 4, 6 and 10).
+// ---------------------------------------------------------------------------
+
+/** Calls `app.file_report_figure` as a person, and answers the SQLSTATE it refused with, or null. */
+async function fileDirectly(who: { userId: string; roles: string }, reportId: string, n: number) {
+  const documentId = `0000000d-0000-4000-8000-0000000003${String(n).padStart(2, '0')}`;
+  return asRole(who, async () => {
+    try {
+      await h.owner.query(
+        'select app.file_report_figure($1, $2, $3, $4, 10, 10, null, null, now())',
+        [
+          reportId,
+          documentId,
+          clientDocumentKey(h.data.tenant.id, clientId, documentId),
+          Buffer.alloc(32, n),
+        ],
+      );
+      return null;
+    } catch (error) {
+      return (error as { code?: string }).code ?? 'unknown';
+    }
+  });
+}
+
+/** A draft brought in from a file, as the table owner writes one. */
+async function importDraft(sha: string): Promise<string> {
+  const { rows } = await h.owner.query<{ id: string }>(
+    'insert into report (tenant_id, client_id, kind, content, imported_from, source_sha256) ' +
+      "values ($1, $2, 'qeeg', $3::jsonb, 'qeeg.json/1', $4) returning id",
+    [h.data.tenant.id, clientId, JSON.stringify(blankInitial()), sha],
+  );
+  return rows[0]?.id ?? '';
+}
+
+describe('fix round 1: the functions ask who is calling', () => {
+  let erasedDraft: string;
+
+  beforeAll(async () => {
+    // A third client, with a draft, then erased through the erasure itself.
+    const spare = h.data.clients.find(
+      (c) => c.status === 'active' && c.id !== clientId && c.id !== otherClientId,
+    );
+    if (!spare) throw new Error('The seed has too few active clients.');
+    erasedDraft = await ownerDraft(spare.id);
+    await h.owner.query('begin');
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_roles', 'owner', true)",
+      [h.data.tenant.id],
+    );
+    const request = await h.owner.query<{ id: string }>(
+      'insert into erasure_request (tenant_id, client_id, reason) ' +
+        "values ($1, $2, 'The household asked.') returning id",
+      [h.data.tenant.id, spare.id],
+    );
+    await h.owner.query('select app.erase_client($1, $2)', [spare.id, request.rows[0]?.id]);
+    await h.owner.query('commit');
+  });
+
+  it('refuses an admin', async () => {
+    const draft = await newDraft();
+    expect(await fileDirectly(seededUser(SEEDED.admin), draft.report.id, 1)).toBe('42501');
+  });
+
+  it('refuses a practitioner for a client off their schedule', async () => {
+    const draft = await newDraft(otherClientId, SEEDED.owner);
+    expect(await fileDirectly(seededUser(SEEDED.practitioner), draft.report.id, 2)).toBe('42501');
+  });
+
+  it('refuses a practitioner on a draft brought in from a file, at the function and at the door', async () => {
+    const reportId = await importDraft('9'.repeat(64));
+    expect(await fileDirectly(seededUser(SEEDED.practitioner), reportId, 3)).toBe('42501');
+    expect(await fileDirectly(seededUser(SEEDED.owner), reportId, 4)).toBeNull();
+    expect((await upload(reportId, await goodPng(6, 6, 30))).status).toBe(403);
+  });
+
+  it('refuses everybody for an erased client, the owner included', async () => {
+    expect(await fileDirectly(seededUser(SEEDED.owner), erasedDraft, 5)).toBe('42501');
+  });
+
+  it('answers the owner’s upload to an erased client’s draft with 403 and a sentence, not 500', async () => {
+    const res = await upload(erasedDraft, await goodPng(6, 6, 31), { as: SEEDED.owner });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      code: 'not_permitted',
+      sentence: FIGURE_SENTENCES.not_permitted,
+    });
+  });
+});
+
+describe('fix round 1: the guard refuses a link that is not what it says', () => {
+  const SHA = '7'.repeat(64);
+
+  it('refuses a link whose digest is not its document’s', async () => {
+    const reportId = await ownerDraft(clientId);
+    const documentId = '0000000d-0000-4000-8000-000000000401';
+    await h.owner.query(
+      'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256) ' +
+        "values ($1, $2, $3, 'report_figure', $4, 'image/png', decode($5, 'hex'))",
+      [
+        documentId,
+        h.data.tenant.id,
+        clientId,
+        clientDocumentKey(h.data.tenant.id, clientId, documentId),
+        SHA,
+      ],
+    );
+    expect(
+      await ownerFails(
+        'insert into report_figure (tenant_id, client_id, report_id, document_id, sha256, ' +
+          "width_px, height_px) values ($1, $2, $3, $4, decode($5, 'hex'), 10, 10)",
+        [h.data.tenant.id, clientId, reportId, documentId, '8'.repeat(64)],
+      ),
+    ).toBe('23514');
+  });
+
+  it('refuses a link to a document that is not a brain map', async () => {
+    const reportId = await ownerDraft(clientId);
+    const documentId = '0000000d-0000-4000-8000-000000000402';
+    await h.owner.query(
+      'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256) ' +
+        "values ($1, $2, $3, 'referral', $4, 'image/png', decode($5, 'hex'))",
+      [
+        documentId,
+        h.data.tenant.id,
+        clientId,
+        clientDocumentKey(h.data.tenant.id, clientId, documentId),
+        SHA,
+      ],
+    );
+    expect(
+      await ownerFails(
+        'insert into report_figure (tenant_id, client_id, report_id, document_id, sha256, ' +
+          "width_px, height_px) values ($1, $2, $3, $4, decode($5, 'hex'), 10, 10)",
+        [h.data.tenant.id, clientId, reportId, documentId, SHA],
+      ),
+    ).toBe('23514');
+  });
+
+  it('refuses borrowing a picture the earlier report does not print', async () => {
+    const signed = await ownerDraft(clientId);
+    await signAsOwner(signed);
+    const draft = await ownerDraft(clientId);
+    const loose = await ownerDraft(clientId);
+    const documentId = '0000000d-0000-4000-8000-000000000403';
+    await linkFigureAsOwner(
+      h.owner,
+      { tenantId: h.data.tenant.id, clientId, reportId: loose },
+      { documentId, sha256: SHA },
+    );
+    expect(
+      await ownerFails(
+        'insert into report_figure (tenant_id, client_id, report_id, document_id, ' +
+          'borrowed_from_report_id, sha256, width_px, height_px) values ($1, $2, $3, $4, $5, ' +
+          "decode($6, 'hex'), 800, 600)",
+        [h.data.tenant.id, clientId, draft, documentId, signed, SHA],
+      ),
+    ).toBe('23503');
+  });
+
+  it('refuses a follow-up of a report whose content names a map it does not hold', async () => {
+    const earlier: QeegInitial = {
+      ...blankInitial(),
+      recording: { recordedOn: '2026-03-14', eyes: 'closed_and_open', handedness: 'right' },
+      maps: {
+        'map-0': {
+          figureId: '0000000d-0000-4000-8000-000000000404',
+          sha256: SHA,
+          widthPx: 800,
+          heightPx: 600,
+          condition: 'eyes_open',
+          caption: null,
+          position: 0,
+        },
+      },
+    };
+    const signed = await ownerDraft(clientId, earlier);
+    await signAsOwner(signed);
+    const placeholder: ComparedWith = {
+      reportId: signed,
+      recordedOn: '2026-03-14',
+      relation: 'initial',
+      origin: 'issued',
+      reference: 'RPT-000000',
+    };
+    const res = await h.call(
+      'POST',
+      '/api/reports/draft',
+      SEEDED.practitioner,
+      {
+        clientId,
+        kind: 'qeeg',
+        content: sent(blankFollowUp(placeholder, 'follow_up'), {
+          comparedWith: { reportId: signed },
+        }),
+      },
+      { 'x-reason': 'Starting the follow-up' },
+    );
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({
+      code: 'cannot_compare',
+      reason: 'map_not_held',
+      field: 'change.pairs.eyes_open.earlier.figureId',
+    });
+  });
+
+  it('refuses taking a link away when its report cannot be found', async () => {
+    const reportId = await ownerDraft(clientId);
+    await linkFigureAsOwner(
+      h.owner,
+      { tenantId: h.data.tenant.id, clientId, reportId },
+      { documentId: '0000000d-0000-4000-8000-000000000405', sha256: SHA },
+    );
+    // Only reachable with the foreign keys switched off, which is the point:
+    // the guard does not lean on them.
+    await h.owner.query('begin');
+    try {
+      await h.owner.query('set local session_replication_role = replica');
+      await h.owner.query('delete from report where id = $1', [reportId]);
+      const code = await h.owner
+        .query('delete from report_figure where report_id = $1', [reportId])
+        .then(
+          () => null,
+          (error: { code?: string }) => error.code,
+        );
+      expect(code).toBe('23001');
+    } finally {
+      await h.owner.query('rollback');
+    }
+  });
+});
+
+describe('fix round 1: the door', () => {
+  it('refuses a picture carrying a text chunk, by its sentence', async () => {
+    const draft = await newDraft();
+    const res = await upload(
+      draft.report.id,
+      handPng({ width: 4, height: 4, before: [{ type: 'tEXt' }] }),
+    );
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ code: 'text', sentence: FIGURE_SENTENCES.text });
+  });
+
+  it('puts back the bytes of a picture whose first put never landed, when it is sent again', async () => {
+    const draft = await newDraft();
+    const bytes = await goodPng(11, 7, 40);
+    const first = (await (await upload(draft.report.id, bytes)).json()) as FigureFiledResponse;
+    const key =
+      (
+        await h.owner.query<{ storage_key: string }>(
+          'select storage_key from document where id = $1',
+          [first.figure.figureId],
+        )
+      ).rows[0]?.storage_key ?? '';
+    await h.storage.delete(key);
+    expect(await h.storage.exists(key)).toBe(false);
+    const again = await upload(draft.report.id, bytes);
+    expect(again.status).toBe(200);
+    const stored = await h.storage.get(key);
+    expect(stored && sha256Hex(stored)).toBe(sha256Hex(bytes));
+  });
+
+  it('refuses the same picture sent again with another condition or place, saying what it is', async () => {
+    const draft = await newDraft();
+    const bytes = await goodPng(11, 8, 41);
+    expect(
+      (await upload(draft.report.id, bytes, { query: '?condition=eyes_open&position=1' })).status,
+    ).toBe(201);
+    const res = await upload(draft.report.id, bytes, {
+      query: '?condition=eyes_closed&position=1',
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { code: string; sentence: string };
+    expect(body.code).toBe('already_on_report');
+    expect(body.sentence).toContain('already on the report as eyes open, in place 2');
+    const same = await upload(draft.report.id, bytes, { query: '?condition=eyes_open&position=1' });
+    expect(same.status).toBe(200);
+  });
+
+  it('takes one of two uploads racing for the eighth place and refuses the other', async () => {
+    const draft = await newDraft();
+    for (let i = 0; i < 7; i += 1) {
+      expect((await upload(draft.report.id, await goodPng(8, 8, 300 + i))).status).toBe(201);
+    }
+    const [a, b] = await Promise.all([
+      upload(draft.report.id, await goodPng(8, 8, 400)),
+      upload(draft.report.id, await goodPng(8, 8, 401)),
+    ]);
+    expect([a?.status, b?.status].sort()).toEqual([201, 422]);
+    const refused = a?.status === 422 ? a : b;
+    expect(await refused?.json()).toMatchObject({ code: 'too_many_maps' });
+    expect(
+      await count('select count(*)::text as n from report_figure where report_id = $1', [
+        draft.report.id,
+      ]),
+    ).toBe(8);
+  });
+
+  it('answers the removal of a map the report does not hold with a sentence', async () => {
+    const draft = await newDraft();
+    const res = await remove(draft.report.id, '0000000d-0000-4000-8000-0000000004ff');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      code: 'no_such_map',
+      sentence: FIGURE_SENTENCES.no_such_map,
+    });
+  });
+});
