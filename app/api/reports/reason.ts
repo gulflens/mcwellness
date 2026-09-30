@@ -21,7 +21,7 @@ import type { Db } from '../_middleware/request-context';
 
 const MINIMUM_REASON = 8;
 
-function isRealText(value: string): boolean {
+export function isRealText(value: string): boolean {
   const withoutSpaces = value.replace(/\s/g, '');
   return (
     value.length >= MINIMUM_REASON &&

@@ -51,7 +51,8 @@ vi.mock('../../../domain/reports/qeeg/wording', async (importOriginal) => {
 const NOW = () => new Date('2026-09-30T08:00:00.000Z');
 const IMPORT_REASON = 'Bringing in a past record from the old tool';
 const KEEP_REASON = 'Keeping the past record as read over';
-const WITHDRAW_REASON = 'Kept against the wrong client by mistake';
+/** Typed by a person, with a letter no header may carry. */
+const WITHDRAW_REASON = 'Kept against another client’s record by mistake';
 /** An age no seeded record could hold as a word, so a probe for it finds only the file's. */
 const TYPED_AGE = '47 years and 3 months';
 
@@ -161,12 +162,16 @@ async function kept(forClient: string = clientId, file: LegacyFile = newFile()) 
   return { id: draft.report.id, map: map.ref, file };
 }
 
+/**
+ * The reason is typed by a person, so it travels in the body, where any
+ * letter may go, and is the one the stamp and the trail keep.
+ */
 async function withdraw(
   reportId: string,
   as: number = SEEDED.owner,
-  headers: Record<string, string> = { 'x-reason': WITHDRAW_REASON },
+  reason: string = WITHDRAW_REASON,
 ): Promise<Response> {
-  return h.call('POST', `/api/reports/${reportId}/withdraw-import`, as, {}, headers);
+  return h.call('POST', `/api/reports/${reportId}/withdraw-import`, as, { reason });
 }
 
 async function codeOf(res: Response): Promise<string> {
@@ -488,15 +493,19 @@ describe('withdrawing a past record kept against the wrong client', () => {
     for (const as of [SEEDED.practitioner, SEEDED.admin]) {
       expect((await withdraw(record.id, as)).status, String(as)).toBe(403);
     }
-    expect((await withdraw(record.id, SEEDED.owner, {})).status).toBe(400);
+    const none = await withdraw(record.id, SEEDED.owner, '   ');
+    expect(none.status).toBe(400);
+    expect(((await none.json()) as { error: string }).error).toBe('reason_required');
     expect((await rowOf(record.id)).withdrawn_at).toBeNull();
   });
 
   it('refuses a reason longer than the stamp keeps', async () => {
     const record = await kept();
-    const res = await withdraw(record.id, SEEDED.owner, {
-      'x-reason': `Kept against the wrong client. ${'More words. '.repeat(20)}`,
-    });
+    const res = await withdraw(
+      record.id,
+      SEEDED.owner,
+      `Kept against the wrong client. ${'More words. '.repeat(20)}`,
+    );
     expect(res.status).toBe(400);
     expect(await codeOf(res)).toBe('reason_too_long');
   });

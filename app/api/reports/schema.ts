@@ -401,10 +401,15 @@ export type KeepImportInput = z.infer<typeof KeepImportInput>;
 
 /**
  * Withdrawing a past record kept against the wrong client
- * (`POST /api/reports/:id/withdraw-import`, point 7). Nothing is sent: the
- * reason travels in `X-Reason` and is the one the stamp keeps.
+ * (`POST /api/reports/:id/withdraw-import`, point 7): why, and nothing else.
+ *
+ * **The reason is in the body**, as a correction's is, because a person types
+ * it and a header carries only Latin-1: an apostrophe typed on a phone, or a
+ * word in Arabic, cannot travel in `X-Reason`. The route cleans it as the
+ * fence cleans a header, stamps it on the transaction for the trail, and
+ * keeps it on the row.
  */
-export const WithdrawImportInput = z.object({}).strict();
+export const WithdrawImportInput = z.object({ reason: z.string().max(2000) }).strict();
 export type WithdrawImportInput = z.infer<typeof WithdrawImportInput>;
 
 /** A past record kept or withdrawn, as the list shows it. */

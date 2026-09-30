@@ -10,7 +10,9 @@ import { logAction } from '../../_middleware/audit';
 import type { ApiEnv, Db } from '../../_middleware/request-context';
 import { isUuid } from '../../billing/ids';
 import { mayImportReport } from '../access';
-import { requiredReason } from '../reason';
+import { cleanText } from '../../_middleware/text';
+import { scrubReason } from '../../_middleware/request-context';
+import { isRealText, requiredReason } from '../reason';
 import {
   ImportInput,
   ImportResponse,
@@ -69,8 +71,10 @@ import { linksOf, picturesOf } from './pages';
  *
  * **Who.** `report.import`: the owner and the lead practitioner (reports-02
  * request 6), asked here, by the row policy on insert and update, and by the
- * guard and the functions. Every call carries a reason (`X-Reason`); the
- * withdraw's is the one its stamp keeps. Refusals of the keep and the
+ * guard and the functions. Every call carries a reason: the import's and the
+ * keep's in `X-Reason`, which the screen writes; the withdraw's in its body,
+ * because a person types it (`WithdrawImportInput`), stamped on the
+ * transaction by the route and kept on the row. Refusals of the keep and the
  * withdraw, once the record is found, are written as `report.import_refused`.
  */
 
@@ -464,19 +468,27 @@ async function keepRecord(c: Context<ApiEnv>, now: Date): Promise<Response> {
 
 async function withdrawRecord(c: Context<ApiEnv>, now: Date): Promise<Response> {
   if (!isUuid(c.req.param('id') ?? '')) return answer(c, 400, 'invalid_request');
-  const body = WithdrawImportInput.safeParse(await c.req.json().catch(() => ({})));
+  const body = WithdrawImportInput.safeParse(await c.req.json().catch(() => null));
   if (!body.success) return answer(c, 400, 'invalid_request');
   const storage = c.get('storage');
   if (!storage) return answer(c, 503, 'storage_unavailable');
-  const opened = await openRecord(c, now);
-  if (!opened.ok) return opened.response;
-  const { record, refuse } = opened;
   const db = c.get('db');
 
-  const reason = (await requiredReason(db)) ?? '';
+  // Cleaned as the fence cleans a header, and stamped on the transaction as
+  // the fence stamps one, so the trail and the row keep the same words.
+  const reason = scrubReason(cleanText(body.data.reason, 500));
+  if (!isRealText(reason)) {
+    return c.json({ error: 'reason_required', requestId: c.get('requestId') }, 400);
+  }
   if (reason.length > WITHDRAW_REASON_MOST) {
     return answer(c, 400, 'reason_too_long', { most: WITHDRAW_REASON_MOST });
   }
+  await db.query("select set_config('app.reason', $1, true)", [reason]);
+
+  const opened = await openRecord(c, now);
+  if (!opened.ok) return opened.response;
+  const { record, refuse } = opened;
+
   switch (record.status) {
     case 'imported':
       break;
