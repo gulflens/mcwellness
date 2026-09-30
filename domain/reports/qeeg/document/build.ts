@@ -157,29 +157,27 @@ export type ReportInput = {
 /**
  * What a first report leaves out when no programme was agreed: a brain map
  * with no training after it (the practice's request of 30 September 2026,
- * `programmeAgreed`). The page's heading, the closing paragraphs, the final
- * note and the signature are drawn as always.
+ * `programmeAgreed`). The practice's answer of the same day: the whole
+ * training recommendation goes, which is the programme's heading and its
+ * introduction, its length and the approach, and the two closing paragraphs
+ * on how training proceeds (the wording's `text.monitoring` and
+ * `text.gradual`). The final note, which carries the report's confidentiality
+ * sentence, the agreement's standing sentences and the signature are drawn as
+ * always.
  *
- * The practice may yet ask for the programme's own introduction
- * (`programme.text`, the wording's `text.programme`) and the two closing
- * paragraphs (`closing.monitoring` and `closing.gradual`, the wording's
- * `text.monitoring` and `text.gradual`) to go too. Each is then one more id
- * in this list, and nothing else changes.
- *
- * **It takes two section marks away too.** Spare room on a page is shared
- * among the parts that open a section (`breathe`). With the programme's
- * parts gone, only the closing paragraphs and the final note would be left
- * to share it, and each would take the whole cap: two wide gaps on a short
- * page. So on a brain-map-only report `closing.monitoring` and `final.note`
- * open no section and keep the gap of a paragraph, and the spare room goes
- * above the pinned signature.
+ * With the programme's pages gone, the final note opens no section of its own
+ * and keeps the gap of a paragraph after what comes before it.
  */
 export const LEFT_OUT_WITHOUT_PROGRAMME: readonly string[] = Object.freeze([
+  'programme.heading',
+  'programme.text',
   'programme.length',
   'programme.sessions',
   'approach.heading',
   'approach.text',
   'approach.line',
+  'closing.monitoring',
+  'closing.gradual',
 ]);
 
 /** The key the engine looks the logo up by. */

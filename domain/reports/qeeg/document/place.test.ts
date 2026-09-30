@@ -110,11 +110,11 @@ describe('the pages of a first report', () => {
     }
   });
 
-  it('leave, on the last page of a brain map only, the gap of a paragraph before the closing and the final note', () => {
+  it('leave, on the last page of a brain map only, the gap of a paragraph before the final note', () => {
     for (const locale of LOCALES) {
       const { sheets } = laid('qeegOnly', locale);
       const last = sheets[sheets.length - 1]?.parts ?? [];
-      for (const id of ['closing.monitoring', 'final.note']) {
+      for (const id of ['final.note']) {
         const at = last.findIndex((part) => part.id === id);
         const before = last[at - 1];
         const part = last[at];

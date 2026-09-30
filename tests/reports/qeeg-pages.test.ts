@@ -274,8 +274,14 @@ describe('the words a report prints', () => {
       expect(agreed).toContain(say('heading.approach'));
       expect(agreed).toContain(opening('text.programme_length'));
       expect(agreed).toContain(opening('text.approach'));
-      expect(text).toContain(opening('text.monitoring'));
-      expect(text).toContain(say('heading.programme'));
+      // The practice's answer of 30 September 2026: the whole training
+      // recommendation goes on a brain map only.
+      expect(text).not.toContain(opening('text.monitoring'));
+      expect(text).not.toContain(opening('text.gradual'));
+      expect(text).not.toContain(opening('text.programme'));
+      expect(text).not.toContain(say('heading.programme'));
+      expect(agreed).toContain(say('heading.programme'));
+      expect(agreed).toContain(opening('text.monitoring'));
       expect(text).toContain(WORDS.signedBy[locale]);
       const programme = laid('qeegOnly', locale)
         .sheets.flatMap((sheet) => sheet.parts)

@@ -431,11 +431,15 @@ describe('the brain maps', () => {
 describe('a brain map with no programme after it', () => {
   it('lists what it leaves out in one place', () => {
     expect(LEFT_OUT_WITHOUT_PROGRAMME).toEqual([
+      'programme.heading',
+      'programme.text',
       'programme.length',
       'programme.sessions',
       'approach.heading',
       'approach.text',
       'approach.line',
+      'closing.monitoring',
+      'closing.gradual',
     ]);
   });
 
@@ -456,12 +460,15 @@ describe('a brain map with no programme after it', () => {
     expect(wordsDrawn(build(qeegOnlyReport()), ENGLISH)).not.toMatch(/[0-9]+ Sessions?/);
   });
 
-  it('still draws its heading, the closing paragraphs, the final note and the signature', () => {
+  it('draws no training recommendation, and still the final note and the signature', () => {
+    // The practice's answer of 30 September 2026: the whole training
+    // recommendation goes; the final note carries the confidentiality sentence.
     for (const locale of LOCALES) {
       const words = wordsDrawn(build(qeegOnlyReport(), locale), drawingOf(locale));
-      expect(words).toContain(say('heading.programme', locale));
-      expect(words).toContain(openingOf('text.monitoring', locale));
-      expect(words).toContain(openingOf('text.gradual', locale));
+      expect(words).not.toContain(say('heading.programme', locale));
+      expect(words).not.toContain(openingOf('text.programme', locale));
+      expect(words).not.toContain(openingOf('text.monitoring', locale));
+      expect(words).not.toContain(openingOf('text.gradual', locale));
       expect(words).toContain(openingOf('text.final_note', locale, 2));
       expect(words).toContain(WORDS.signedBy[locale]);
     }
