@@ -9,6 +9,7 @@ import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
 import { QeegEditor } from './qeeg/QeegEditor';
 import { QeegStart } from './qeeg/QeegStart';
+import { usePrefill, type Prefilled } from './qeeg/prefill';
 import { PastRecordImport } from './qeeg/PastRecordImport';
 import { PastRecordView } from './qeeg/PastRecordView';
 import { languageWord, twinLines } from './qeeg/twinWords';
@@ -144,9 +145,13 @@ export function ReportsTab({
   /** The past record open read-only. */
   const [pastId, setPastId] = useState<string | null>(null);
   /** The brain-map report being written: a draft to open, or a blank to start. */
-  const [qeeg, setQeeg] = useState<{ reportId: string | null; start: QeegContent | null } | null>(
-    null,
-  );
+  const [qeeg, setQeeg] = useState<{
+    reportId: string | null;
+    start: QeegContent | null;
+    /** A follow-up begun from an earlier report: what came with it (brief S). */
+    prefilled: Prefilled | null;
+  } | null>(null);
+  const loadPrefill = usePrefill(clientId);
 
   const mayWrite = canDraftReports(actor, now, clientId) && !erased;
   const maySupersede = canSupersedeReports(actor, now, clientId) && !erased;
@@ -207,6 +212,8 @@ export function ReportsTab({
         clientId={clientId}
         reportId={qeeg.reportId}
         start={qeeg.start}
+        prefilled={qeeg.prefilled}
+        prefill={loadPrefill}
         reports={state.reports}
         erased={erased}
         onDone={() => {
@@ -214,7 +221,7 @@ export function ReportsTab({
           void refetch();
         }}
         onCorrected={(id) => {
-          setQeeg({ reportId: id, start: null });
+          setQeeg({ reportId: id, start: null, prefilled: null });
           void refetch();
         }}
       />
@@ -244,7 +251,7 @@ export function ReportsTab({
         onTwinStarted={(id) => {
           // The other language of a signed brain map opens in its own form.
           setOpenId(null);
-          setQeeg({ reportId: id, start: null });
+          setQeeg({ reportId: id, start: null, prefilled: null });
         }}
         onBack={() => {
           setOpenId(null);
@@ -258,7 +265,7 @@ export function ReportsTab({
           switch (superseded) {
             case 'qeeg':
               // A brain map's corrected draft opens in its own form.
-              setQeeg({ reportId: id, start: null });
+              setQeeg({ reportId: id, start: null, prefilled: null });
               return;
             case 'session':
             case 'progress':
@@ -290,7 +297,7 @@ export function ReportsTab({
       return;
     }
     if (report.kind === 'qeeg' && report.status === 'draft' && mayWrite) {
-      setQeeg({ reportId: report.id, start: null });
+      setQeeg({ reportId: report.id, start: null, prefilled: null });
       return;
     }
     const editor = editorKindFor(report.kind);
@@ -324,9 +331,10 @@ export function ReportsTab({
       {mayWrite && startingQeeg ? (
         <QeegStart
           reports={state.reports}
-          onStart={(start) => {
+          prefill={loadPrefill}
+          onStart={(start, prefilled) => {
             setStartingQeeg(false);
-            setQeeg({ reportId: null, start });
+            setQeeg({ reportId: null, start, prefilled });
           }}
           onCancel={() => setStartingQeeg(false)}
         />

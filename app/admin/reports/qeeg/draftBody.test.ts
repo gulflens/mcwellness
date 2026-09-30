@@ -99,6 +99,31 @@ describe('what a save hands back', () => {
     expect(merged.subject.ageYears).toBe(9);
   });
 
+  it('takes the sessions the server counted again, and never a count she typed', () => {
+    const blank = blankFollowUp(COMPARED, 'follow_up');
+    const withSessions = (sessionsCompleted: QeegFollowUp['change']['sessionsCompleted']) => ({
+      ...blank,
+      change: { ...blank.change, sessionsCompleted },
+    });
+    const counted = withServerParts(
+      withSessions({ count: 5, source: 'gathered' }),
+      withSessions({ count: 3, source: 'gathered' }),
+    ) as QeegFollowUp;
+    expect(counted.change.sessionsCompleted).toEqual({ count: 3, source: 'gathered' });
+    // Nothing counted any more: the headline goes, as the server wrote it.
+    const none = withServerParts(
+      withSessions({ count: 5, source: 'gathered' }),
+      withSessions(null),
+    ) as QeegFollowUp;
+    expect(none.change.sessionsCompleted).toBeNull();
+    // A count she typed, or chose to type while the save was on its way, stays hers.
+    const typed = withServerParts(
+      withSessions({ count: 30, source: 'typed' }),
+      withSessions({ count: 3, source: 'gathered' }),
+    ) as QeegFollowUp;
+    expect(typed.change.sessionsCompleted).toEqual({ count: 30, source: 'typed' });
+  });
+
   it('keeps what she typed while the save was on its way', () => {
     const local = { ...blankInitial(), summary: { en: { text: 'typing ', marks: [] }, ar: null } };
     const merged = withServerParts(local, blankInitial());

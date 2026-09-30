@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import type { Offered } from '../../../../domain/reports/qeeg/prefill';
 import { displayFromIso } from '@domain/shared';
 import {
   APPROACH_IDS,
@@ -64,6 +65,8 @@ import {
   wholeNumberIn,
 } from './QeegFields';
 import { MapsSection, PairsField } from './QeegMaps';
+import { OfferedItems, OfferedRegions, SessionsCompletedField } from './QeegOffered';
+import type { LoadPrefill, Prefilled } from './prefill';
 import {
   SECTION_TITLES,
   leftBySection,
@@ -126,8 +129,14 @@ import './qeeg.css';
  * beneath is shown read only, because the server rebuilds everything else from
  * the signed report and refuses a save that changes it.
  *
- * **Not here yet**, each with its own piece of work: bringing in a past
- * record, and filling a follow-up from the report before it.
+ * **A follow-up begun from an earlier report** (brief S) opens with what the
+ * prefill brought forward, and offers what she chose last time beside each
+ * list and band (`QeegOffered.tsx`), to be taken one by one. Choosing another
+ * report to compare with, before the first save, asks the prefill again; when
+ * she has already changed something, the form asks her first, inside itself.
+ * Once saved, choosing another keeps what she filled in and lets go of the
+ * earlier pictures (`compareWith`), as before, and the suggestions follow the
+ * report now chosen.
  */
 
 type Props = {
@@ -145,6 +154,10 @@ type Props = {
    * it: nothing new, the other language included, is started for them.
    */
   erased?: boolean;
+  /** What came with a follow-up begun from an earlier report (brief S). */
+  prefilled?: Prefilled | null;
+  /** Asks the prefill again, when she chooses another report before the first save. */
+  prefill?: LoadPrefill;
 };
 
 type Switching = { to: 'follow-up'; earlierId: string } | { to: 'initial' };
@@ -164,6 +177,8 @@ export function QeegEditor({
   onDone,
   onCorrected,
   erased = false,
+  prefilled = null,
+  prefill,
 }: Props) {
   const draft = useQeegDraft({ clientId, reportId, start });
   const maps = useQeegMaps(draft);
@@ -178,6 +193,16 @@ export function QeegEditor({
   /** Bumped when the draft is replaced whole, so every field starts from it afresh. */
   const [generation, setGeneration] = useState(0);
   const [leaving, setLeaving] = useState(false);
+  /** What she chose last time, offered while this form is open (brief S). */
+  const [offered, setOffered] = useState<Offered | null>(prefilled?.offered ?? null);
+  /** The last count of sessions the prefill gave. */
+  const [counted, setCounted] = useState<number | null>(prefilled?.sessions.count ?? null);
+  /** The content as the prefill last gave it: anything else means she has changed something. */
+  const [basis, setBasis] = useState<QeegContent | null>(prefilled?.content ?? null);
+  /** Another report chosen while she has changed something: asked before the prefill runs again. */
+  const [asking, setAsking] = useState<ReportRow | null>(null);
+  const [refilling, setRefilling] = useState(false);
+  const [refillError, setRefillError] = useState<string | null>(null);
 
   const candidates = comparableReports(reports);
   const { content } = draft;
@@ -249,46 +274,158 @@ export function QeegEditor({
     void draft.save('edition');
   }
 
+  /** Starts the follow-up again from `row`, as the prefill brings it forward. */
+  async function refill(row: ReportRow): Promise<void> {
+    const now = draft.content;
+    if (prefill === undefined || now === null || now.edition !== 'follow-up') return;
+    setRefilling(true);
+    setRefillError(null);
+    const answer = await prefill({
+      from: row.id,
+      recordedOn: now.recording.recordedOn,
+      stage: now.stage,
+    });
+    setRefilling(false);
+    setAsking(null);
+    if (!answer.ok) {
+      setRefillError(answer.sentence);
+      return;
+    }
+    draft.edit(() => answer.prefilled.content);
+    setBasis(answer.prefilled.content);
+    setOffered(answer.prefilled.offered);
+    setCounted(answer.prefilled.sessions.count);
+    setGeneration((was) => was + 1);
+  }
+
+  /**
+   * What is offered, asked again of `row` for a saved draft: the draft keeps
+   * everything she filled in, and only the suggestions and the last count
+   * follow the report now chosen. A refusal is said, and nothing is offered.
+   */
+  async function reoffer(row: ReportRow, draftId: string): Promise<void> {
+    const now = draft.content;
+    if (prefill === undefined || now === null || now.edition !== 'follow-up') return;
+    const answer = await prefill({
+      from: row.id,
+      recordedOn: now.recording.recordedOn,
+      stage: now.stage,
+      draftId,
+    });
+    if (!answer.ok) {
+      setOffered(null);
+      setRefillError(answer.sentence);
+      return;
+    }
+    setOffered(answer.prefilled.offered);
+    setCounted(answer.prefilled.sessions.count);
+  }
+
+  /**
+   * Another report chosen to compare with. Before the first save the prefill
+   * runs again, asking her first when she has changed anything since it last
+   * ran. Once saved, the draft keeps what she filled in, lets go of the
+   * earlier pictures (`compareWith`; the save borrows the new report's), and
+   * the suggestions are asked again of the report now chosen.
+   */
+  function chooseEarlier(row: ReportRow): void {
+    setRefillError(null);
+    if (prefill === undefined) {
+      draft.edit((was) => compareWith(was, comparedFromRow(row)));
+      setOffered(null);
+      return;
+    }
+    if (draft.reportId !== null) {
+      draft.edit((was) => compareWith(was, comparedFromRow(row)));
+      void reoffer(row, draft.reportId);
+      return;
+    }
+    if (content !== basis) {
+      setAsking(row);
+      return;
+    }
+    void refill(row);
+  }
+
+  const followUpOffered = content.edition === 'follow-up' ? offered : null;
+  const offeredList = (list: 'findings' | 'focus' | 'recommendations' | 'benefits') =>
+    content.edition === 'follow-up' && followUpOffered !== null ? (
+      <OfferedItems list={list} content={content} offered={followUpOffered} edit={draft.edit} />
+    ) : null;
+  const offeredRegions = (kind: 'bands' | 'connectivity') =>
+    content.edition === 'follow-up' && followUpOffered !== null ? (
+      <OfferedRegions kind={kind} content={content} offered={followUpOffered} edit={draft.edit} />
+    ) : null;
+
   const body: Record<SectionId, () => ReactNode> = {
     compared: () =>
       content.edition === 'follow-up' ? (
-        <ComparedSection content={content} candidates={candidates} edit={draft.edit} />
+        <ComparedSection
+          content={content}
+          candidates={candidates}
+          edit={draft.edit}
+          onChoose={chooseEarlier}
+          asking={asking}
+          refilling={refilling}
+          refillError={refillError}
+          onRefill={(row) => void refill(row)}
+          onKeep={() => setAsking(null)}
+        />
       ) : null,
     client: () => (
       <ClientSection content={content} saved={draft.reportId !== null} edit={draft.edit} />
     ),
     overview: () => <Paragraph text={paragraph('text.overview', content, 'en')} />,
     findings: () => (
-      <PickedList
-        id="qeeg-findings"
-        ids={FINDING_IDS}
-        labelOf={(id) => en(`finding.${id}`, edition)}
-        picked={content.findings}
-        onChange={(findings) => draft.edit((was) => ({ ...was, findings }))}
-      />
+      <>
+        {offeredList('findings')}
+        <PickedList
+          id="qeeg-findings"
+          ids={FINDING_IDS}
+          labelOf={(id) => en(`finding.${id}`, edition)}
+          picked={content.findings}
+          onChange={(findings) => draft.edit((was) => ({ ...was, findings }))}
+        />
+      </>
     ),
     maps: () => <MapsSection clientId={clientId} content={content} edit={draft.edit} maps={maps} />,
     focus: () => (
-      <PickedList
-        id="qeeg-focus"
-        ids={FOCUS_IDS}
-        labelOf={(id) => en(`focus.${id}`, edition)}
-        picked={content.focus}
-        onChange={(focus) => draft.edit((was) => ({ ...was, focus }))}
-      />
+      <>
+        {offeredList('focus')}
+        <PickedList
+          id="qeeg-focus"
+          ids={FOCUS_IDS}
+          labelOf={(id) => en(`focus.${id}`, edition)}
+          picked={content.focus}
+          onChange={(focus) => draft.edit((was) => ({ ...was, focus }))}
+        />
+      </>
     ),
-    bands: () => <BandsSection content={content} edit={draft.edit} />,
-    connectivity: () => <ConnectivitySection content={content} edit={draft.edit} />,
+    bands: () => (
+      <>
+        {offeredRegions('bands')}
+        <BandsSection content={content} edit={draft.edit} />
+      </>
+    ),
+    connectivity: () => (
+      <>
+        {offeredRegions('connectivity')}
+        <ConnectivitySection content={content} edit={draft.edit} />
+      </>
+    ),
     dashboard: () => <DashboardSection content={content} edit={draft.edit} />,
     recommendations: () => (
-      <PickedList
-        id="qeeg-recommendations"
-        ids={RECOMMENDATION_IDS}
-        labelOf={(id) => en(`recommendation.${id}.name`, edition)}
-        picked={content.recommendations}
-        withNote
-        onChange={(recommendations) => draft.edit((was) => ({ ...was, recommendations }))}
-      />
+      <>
+        {offeredList('recommendations')}
+        <PickedList
+          id="qeeg-recommendations"
+          ids={RECOMMENDATION_IDS}
+          labelOf={(id) => en(`recommendation.${id}.name`, edition)}
+          picked={content.recommendations}
+          withNote
+          onChange={(recommendations) => draft.edit((was) => ({ ...was, recommendations }))}
+        />
+      </>
     ),
     summary: () => (
       <RichField
@@ -307,18 +444,21 @@ export function QeegEditor({
       />
     ),
     benefits: () => (
-      <PickedList
-        id="qeeg-benefits"
-        ids={BENEFIT_IDS}
-        labelOf={(id) => en(`benefit.${id}`, edition)}
-        picked={content.benefits}
-        onChange={(benefits) => draft.edit((was) => ({ ...was, benefits }))}
-      />
+      <>
+        {offeredList('benefits')}
+        <PickedList
+          id="qeeg-benefits"
+          ids={BENEFIT_IDS}
+          labelOf={(id) => en(`benefit.${id}`, edition)}
+          picked={content.benefits}
+          onChange={(benefits) => draft.edit((was) => ({ ...was, benefits }))}
+        />
+      </>
     ),
     programme: () => <ProgrammeSection content={content} edit={draft.edit} />,
     change: () =>
       content.edition === 'follow-up' ? (
-        <ChangeSection content={content} edit={draft.edit} />
+        <ChangeSection content={content} counted={counted} edit={draft.edit} />
       ) : null,
   };
 
@@ -612,10 +752,23 @@ function ComparedSection({
   content,
   candidates,
   edit,
+  onChoose,
+  asking,
+  refilling,
+  refillError,
+  onRefill,
+  onKeep,
 }: {
   content: QeegFollowUp;
   candidates: readonly ReportRow[];
   edit: Edit;
+  onChoose: (row: ReportRow) => void;
+  /** Another report chosen, waiting for her word before the prefill runs again. */
+  asking: ReportRow | null;
+  refilling: boolean;
+  refillError: string | null;
+  onRefill: (row: ReportRow) => void;
+  onKeep: () => void;
 }) {
   const { comparedWith } = content;
   const inList = candidates.some((row) => row.id === comparedWith.reportId);
@@ -636,11 +789,11 @@ function ComparedSection({
           id="qeeg-compared"
           label="Compare with"
           value={comparedWith.reportId}
+          disabled={refilling || asking !== null}
           onChange={(event) => {
             const row = candidates.find((each) => each.id === event.currentTarget.value);
             if (!row) return;
-            // The earlier side of each pair was the other report's picture.
-            edit((was) => compareWith(was, comparedFromRow(row)));
+            onChoose(row);
           }}
         >
           {candidates.map((row) => (
@@ -650,6 +803,29 @@ function ComparedSection({
           ))}
         </Select>
       ) : null}
+      {asking !== null ? (
+        <div
+          className="report-editor__sign"
+          role="group"
+          aria-label="Start again from another report"
+        >
+          <p>
+            You have already filled in part of this follow-up. Starting again from{' '}
+            {earlierLabel(asking)} replaces everything on this form with what that report brings
+            forward, and what you filled in is not kept.
+          </p>
+          <div className="report-editor__actions">
+            <Button variant="primary" onClick={() => onRefill(asking)}>
+              Start again from that report
+            </Button>
+            <Button variant="quiet" onClick={onKeep}>
+              Keep what I have
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {refilling ? <p className="small muted">Reading the earlier report.</p> : null}
+      {refillError !== null ? <Note tone="critical">{refillError}</Note> : null}
       <Select
         id="qeeg-stage"
         label="This report is"
@@ -1104,15 +1280,20 @@ function placed(table: QeegFollowUp['change']['table']): Partial<Record<MeasureI
   return rows;
 }
 
-function ChangeSection({ content, edit }: { content: QeegFollowUp; edit: Edit }) {
+function ChangeSection({
+  content,
+  counted,
+  edit,
+}: {
+  content: QeegFollowUp;
+  /** The last count of sessions the prefill gave, or null when there was none. */
+  counted: number | null;
+  edit: Edit;
+}) {
   const { change } = content;
   const setChange = (next: (was: QeegFollowUp['change']) => QeegFollowUp['change']) =>
     edit((was) => (was.edition === 'follow-up' ? { ...was, change: next(was.change) } : was));
   const tiles = Object.entries(change.tiles).sort(([, a], [, b]) => a.position - b.position);
-  const [sessionsText, setSessionsText] = useState(() =>
-    change.sessionsCompleted ? String(change.sessionsCompleted.count) : '',
-  );
-  const sessionsValid = isSessionCount(wholeNumberIn(sessionsText));
 
   return (
     <>
@@ -1181,27 +1362,9 @@ function ChangeSection({ content, edit }: { content: QeegFollowUp; edit: Edit })
             }
           />
         ) : null}
-        <Field
-          id="qeeg-sessions-completed"
-          label={en('tile.sessions_completed', 'follow-up')}
-          inputMode="numeric"
-          value={sessionsText}
-          error={
-            sessionsText.trim() !== '' && !sessionsValid
-              ? `A whole number from 1 to ${LIMITS.sessionsMost}.`
-              : undefined
-          }
-          onChange={(event) => {
-            const typed = event.currentTarget.value;
-            setSessionsText(typed);
-            const n = wholeNumberIn(typed);
-            setChange((was) => ({
-              ...was,
-              sessionsCompleted: isSessionCount(n) ? { count: n, source: 'typed' } : null,
-            }));
-          }}
-        />
       </fieldset>
+
+      <SessionsCompletedField content={content} counted={counted} edit={edit} />
 
       <fieldset className="qeeg-item">
         <legend className="qeeg-item__title">{en('heading.change_table', 'follow-up')}</legend>

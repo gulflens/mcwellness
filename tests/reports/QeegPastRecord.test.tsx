@@ -485,7 +485,14 @@ describe('a follow-up’s list of earlier reports', () => {
       recordedOn: '2026-06-01',
       createdAt: '2026-06-02T08:00:00+04:00',
     });
-    render(<QeegStart reports={[signed, past] as never} onStart={vi.fn()} onCancel={vi.fn()} />);
+    render(
+      <QeegStart
+        reports={[signed, past] as never}
+        prefill={vi.fn()}
+        onStart={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
     await user.click(screen.getByLabelText('Follow-up, compared with an earlier report'));
     const options = screen.getAllByRole('option').map((option) => option.textContent);
     expect(options).toEqual([

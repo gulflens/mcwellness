@@ -356,3 +356,28 @@
   max-inline-size: 8rem;
   block-size: auto;
 }
+
+/* What the earlier report chose, offered beside a follow-up's list (brief S). */
+.qeeg-offered {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-block: var(--s-2);
+  padding-inline-start: var(--s-4);
+  border-inline-start: var(--hairline) solid var(--rule);
+}
+
+.qeeg-offered__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qeeg-offered__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+}

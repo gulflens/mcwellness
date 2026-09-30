@@ -9,6 +9,7 @@ import { IDLE_MS, SAVE_REASONS } from '../../app/admin/reports/qeeg/useQeegDraft
 import { ReportsTab } from '../../app/admin/reports/ReportsTab';
 import { LEAD_PRACTITIONER, signedInProvider } from '../../app/admin/clients/testActors';
 import { blankFollowUp, blankInitial } from '../../domain/reports/qeeg/blank';
+import { prefillFollowUp } from '../../domain/reports/qeeg/prefill';
 import type { ComparedWith, QeegContent, QeegInitial } from '../../domain/reports/qeeg/types';
 
 /**
@@ -113,6 +114,30 @@ function mountApi({
     const call = { url, method, reason, body };
     calls.push(call);
     if (url === '/api/me') return json(LEAD_PRACTITIONER);
+    if (url.startsWith('/api/reports/qeeg/prefill?')) {
+      // A follow-up begun from the signed report (brief S): nothing chosen in it.
+      const begun = prefillFollowUp(
+        {
+          reportId: EARLIER,
+          clientId: CLIENT,
+          status: 'issued',
+          withdrawn: false,
+          erased: false,
+          reference: 'RPT-000001',
+          content: {
+            ...blankInitial(),
+            recording: { recordedOn: '2026-06-01', eyes: null, handedness: null },
+          },
+        },
+        { clientId: CLIENT, draftId: null, stage: 'follow_up', recordedOn: null },
+      );
+      if (!begun.ok) throw new Error(begun.reason);
+      return json({
+        content: begun.content,
+        offered: begun.offered,
+        sessions: { count: 0, after: '2026-06-01', before: null, through: '2026-09-30' },
+      });
+    }
     if (url === '/api/reports/draft') {
       const answer = saveAnswer?.(call);
       if (answer) return answer;

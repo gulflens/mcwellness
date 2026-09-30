@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { blankFollowUp, blankInitial } from '../../../../domain/reports/qeeg/blank';
+import { blankInitial } from '../../../../domain/reports/qeeg/blank';
 import type { QeegContent } from '../../../../domain/reports/qeeg/types';
 import type { ReportRow } from '../../../api/reports/schema';
 import { Button, Note, Select } from '../../../shell/components/Controls';
-import { comparableReports, comparedFromRow, earlierLabel } from './earlier';
+import { comparableReports, earlierLabel } from './earlier';
+import type { LoadPrefill, Prefilled } from './prefill';
 import './qeeg.css';
 
 /**
@@ -12,30 +13,53 @@ import './qeeg.css';
  * or kept past records (docs/SPEC/reports-qeeg.md section 3).
  *
  * In the flow of the tab and not a dialog, as the report editor's own
- * confirmation is: one decision, read where she already is. The report starts
- * blank, every score unset; nothing is written until its first save.
+ * confirmation is: one decision, read where she already is. A first report
+ * starts blank, every score unset.
+ *
+ * **A follow-up starts from the report it is compared with** (brief S). Once
+ * she has chosen it and starts, the prefill is asked for
+ * (`GET /api/reports/qeeg/prefill`): the earlier scores and maps, what it is
+ * compared with, the handedness and the sessions counted from the visits are
+ * brought forward, every judgement is left empty, and what she chose last
+ * time comes with it to be offered in the form. It is asked on Start and not
+ * on every change of the list, because each asking is a read of the earlier
+ * report on the trail. A refusal is said here, in its own sentence, and the
+ * form does not open. Nothing is written until the report's first save.
  */
 export function QeegStart({
   reports,
+  prefill,
   onStart,
   onCancel,
 }: {
   reports: readonly ReportRow[];
-  onStart: (start: QeegContent) => void;
+  /** Asks the server for a follow-up begun from an earlier report. */
+  prefill: LoadPrefill;
+  onStart: (start: QeegContent, prefilled: Prefilled | null) => void;
   onCancel: () => void;
 }) {
   const candidates = comparableReports(reports);
   const [edition, setEdition] = useState<'initial' | 'follow-up'>('initial');
   const [earlierId, setEarlierId] = useState(candidates[0]?.id ?? '');
+  const [asking, setAsking] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const earlier = candidates.find((row) => row.id === earlierId) ?? null;
 
-  function start(): void {
+  async function start(): Promise<void> {
     if (edition === 'initial') {
-      onStart(blankInitial());
+      onStart(blankInitial(), null);
       return;
     }
     if (earlier === null) return;
-    onStart(blankFollowUp(comparedFromRow(earlier), 'follow_up'));
+    setAsking(true);
+    setRefusal(null);
+    const answer = await prefill({ from: earlier.id });
+    setAsking(false);
+    if (!answer.ok) {
+      setRefusal(answer.sentence);
+      return;
+    }
+    onStart(answer.prefilled.content, answer.prefilled);
   }
 
   return (
@@ -73,7 +97,10 @@ export function QeegStart({
             label="Compared with"
             hint="The client’s first report is chosen to begin with."
             value={earlierId}
-            onChange={(event) => setEarlierId(event.currentTarget.value)}
+            onChange={(event) => {
+              setEarlierId(event.currentTarget.value);
+              setRefusal(null);
+            }}
           >
             {candidates.map((row) => (
               <option key={row.id} value={row.id}>
@@ -83,11 +110,13 @@ export function QeegStart({
           </Select>
         )
       ) : null}
+      {edition === 'follow-up' && refusal !== null ? <Note tone="critical">{refusal}</Note> : null}
+      {asking ? <p className="small muted">Reading the earlier report.</p> : null}
       <div className="report-editor__actions">
         <Button
           variant="primary"
-          disabled={edition === 'follow-up' && earlier === null}
-          onClick={start}
+          disabled={asking || (edition === 'follow-up' && earlier === null)}
+          onClick={() => void start()}
         >
           Start the report
         </Button>

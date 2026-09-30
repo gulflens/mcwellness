@@ -18,8 +18,9 @@ import type { BilingualRich, QeegContent } from '../../../../domain/reports/qeeg
  * **Only the server's parts come back.** A save is on the wire while she goes
  * on typing, so the answer's copy of what she typed is already old. What the
  * form takes from it is what only the server knows: the client's age and sex,
- * what the follow-up is compared with as it stands, and each earlier score,
- * the last two only while she has not chosen another report since.
+ * what the follow-up is compared with as it stands, each earlier score, and
+ * the sessions completed when they are counted from the visits, the last
+ * three only while she has not chosen another report since.
  */
 
 function cleaned(text: BilingualRich): BilingualRich {
@@ -65,7 +66,13 @@ export function withServerParts(local: QeegContent, saved: QeegContent): QeegCon
     for (const key of Object.keys(dashboard) as (keyof typeof dashboard)[]) {
       dashboard[key] = { ...dashboard[key], earlierScore: saved.dashboard[key].earlierScore };
     }
-    return { ...local, subject, comparedWith: { ...saved.comparedWith }, dashboard };
+    // A count said to be counted is the server's, worked out again at the save
+    // (brief S); a count she typed stays hers.
+    const change =
+      local.change.sessionsCompleted?.source === 'gathered'
+        ? { ...local.change, sessionsCompleted: saved.change.sessionsCompleted }
+        : local.change;
+    return { ...local, subject, comparedWith: { ...saved.comparedWith }, dashboard, change };
   }
   return { ...local, subject };
 }
