@@ -284,6 +284,9 @@ export function useQeegDraft({
           if (stamp !== null) savedAtRef.current = stamp;
           return true;
         })
+        // The door ran, whatever it threw: it says what happened itself
+        // (`useQeegMaps` catches its own faults and gives them a sentence).
+        // Caught here only so a save waiting behind it is never left hanging.
         .catch(() => true);
       inFlightRef.current = running;
       try {

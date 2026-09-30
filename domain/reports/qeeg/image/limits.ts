@@ -33,9 +33,11 @@ export const MAX_MAPS_PER_REPORT = 8;
  * Decoding is where the memory goes, and the size in pixels is known only
  * once it is done, so a file far larger than any map is refused by its bytes
  * first. Eight times the stored cap (40 MiB) is chosen because it holds the
- * largest picture the pixel cap admits written with no compression at all (a
- * 24-bit BMP of 12 million pixels is about 34.3 MiB), so no export that could
- * be taken is refused here; the stored PNG is still held to `MAX_FILE_BYTES`.
+ * largest picture the pixel cap admits written as a 24-bit BMP with no
+ * compression at all (12 million pixels is about 34.3 MiB). A 32-bit BMP of
+ * that size (about 45.8 MiB) is refused by its bytes, though its pixels would
+ * pass: an export that rare is asked for again at 24 bits or as a PNG. The
+ * stored PNG is still held to `MAX_FILE_BYTES`.
  */
 export const MAX_INPUT_BYTES = 8 * MAX_FILE_BYTES;
 
