@@ -132,6 +132,17 @@ the extra discount's reason; `net_fils` on the purchase, the credits'
 allocation, the deferred balance, revenue recognition and the books all keep
 their meaning, because every one of them reads the net **after** discount.
 
+**Free** (the owner's request of 30 September 2026, for a package or a session
+given away to promote the practice): both sale drawers offer "Free (100%)"
+beside the three choices. Nothing is typed; the extra sent is
+`largestExtraDiscount`, whatever of the list figure the price list's own
+discount leaves, so the sale always comes to nothing. The route needs no new
+rule: it is an ordinary extra discount, given by the same three roles with a
+reason, recorded as 100% when the list's discount is a percentage. Every credit
+is granted, each worth nothing, and an invoice for nought posts nothing to the
+books (round 66). A typed discount above what is left is refused with a
+sentence naming the most that may be added and pointing to Free.
+
 **On the invoice line** (`invoice_line`): `unit_net_fils` is the list figure,
 `discount_fils` and `discount_basis_points` are the discount, and the check
 becomes `net = quantity × unit − discount`, with the discount held between
