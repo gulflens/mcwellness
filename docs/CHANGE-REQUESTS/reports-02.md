@@ -122,6 +122,12 @@ door is given its own.
 
 **Why.** It is the one report route that reads bytes a caller uploaded.
 
+## 3a. The import's body limit — `app/api/create-api.ts`
+
+**What.** `POST /api/reports/qeeg/import` takes the same 512 KiB body limit
+as `POST /api/reports/draft`, beside it in the body-limit table (records
+PR 10). A past record's content is a draft's content.
+
 ## 4. The route-mount test — `tests/db/route-mounts.test.ts`
 
 **What.** The kinds a report may be gain `qeeg`; cases for the new mounts, so
@@ -154,6 +160,7 @@ for the second-language report (added 30 September, from the review of
 records PR 9), `report.twin_started` ("{actor} started this report in the
 other language", with its Arabic) and `report.twin_refused`, joined to the
 case `report.supersede_refused` and `report.deliver_refused` already share.
+`report.import_refused` joins that case too (records PR 10).
 Until then the timeline shows these actions' raw codes in both languages.
 
 ## 8. One comparison rule — `domain/shared/compare.ts` (new)
@@ -205,9 +212,13 @@ arm of the client branch becomes
 **Why.** Migration 604 grants a household no read of `report_figure`, but the
 document row each link points at is the client's and so falls under this
 policy's contact arm: a household can read its metadata (kind, size,
-digest), never the bytes. No portal route serves documents today, so nothing
-is exposed in practice. It must land before any portal screen lists a
-client's documents. Found by the review of records PR 7, 30 September.
+digest), never the bytes. Corrected 30 September by the review of records
+PR 10: the premise that no route serves a household documents was wrong.
+`/api/clients/:id/documents` and its `/link` admit a client contact, so a
+household could list and open a brain map. **Applied in the records branch
+itself** (the policy arm above, and the same exclusion in the two routes),
+not left for later. Nothing was exposed in production: `report_figure`
+rows exist only once 604 is released.
 
 **Test.** A client contact reads no `document` row of kind `report_figure`
 and still reads the client's other documents as before.
