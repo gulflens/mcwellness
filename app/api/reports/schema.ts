@@ -394,7 +394,7 @@ export const KeepImportInput = z
   .object({
     savedAt: SavedAt,
     maps: z.record(z.string(), z.unknown()),
-    leftOut: z.array(z.string().max(12)).max(64),
+    leftOut: z.array(z.string().max(12)).max(8),
   })
   .strict();
 export type KeepImportInput = z.infer<typeof KeepImportInput>;

@@ -96,4 +96,71 @@ describe('placing a past record’s pictures', () => {
     placeImportedMaps(content, { maps: { 'map-0': mapAt(0, 0) }, leftOut: ['map-1'] });
     expect(content).toEqual(copy);
   });
+
+  it('refuses more pictures, placed and left out together, than a report holds', () => {
+    const leftOut = Array.from({ length: 8 }, (_, i) => `map-${i + 1}`);
+    expect(placeImportedMaps(imported(), { maps: { 'map-0': mapAt(0, 0) }, leftOut })).toEqual({
+      ok: false,
+      field: 'leftOut',
+      reason: 'too_many_places',
+    });
+    expect(placeImportedMaps(imported(), { maps: {}, leftOut }).ok).toBe(true);
+  });
+
+  it('writes no second note for a place the reader already noted', () => {
+    // The invented file's third card is empty: the reader noted it as a place
+    // with no picture, and the keep adds nothing there.
+    const content = imported();
+    if (content.provenance.origin !== 'legacy_tool') throw new Error('not a past record');
+    const noted = content.provenance.notes.find(
+      (note) => note.code === 'map_without_image_dropped',
+    );
+    const at = noted?.at ?? 'images.map-2';
+    const withNote = noted
+      ? content
+      : {
+          ...content,
+          provenance: {
+            ...content.provenance,
+            notes: [
+              ...content.provenance.notes,
+              { code: 'map_without_image_dropped' as const, at },
+            ],
+          },
+        };
+    const placed = placeImportedMaps(withNote, { maps: {}, leftOut: [at.replace('images.', '')] });
+    if (!placed.ok || placed.content.provenance.origin !== 'legacy_tool')
+      throw new Error('refused');
+    expect(placed.content.provenance.notes.filter((note) => note.at === at)).toHaveLength(1);
+  });
+
+  it('keeps a record’s notes of places left out to twenty, then says once that more were', () => {
+    const content = imported();
+    if (content.provenance.origin !== 'legacy_tool') throw new Error('not a past record');
+    const nineteen = Array.from({ length: 19 }, (_, i) => ({
+      code: 'map_without_image_dropped' as const,
+      at: `images.map-${100 + i}`,
+    }));
+    const many = {
+      ...content,
+      provenance: {
+        ...content.provenance,
+        notes: [
+          ...content.provenance.notes.filter((n) => n.code !== 'map_without_image_dropped'),
+          ...nineteen,
+        ],
+      },
+    };
+    const placed = placeImportedMaps(many, { maps: {}, leftOut: ['map-0', 'map-1', 'map-3'] });
+    if (!placed.ok || placed.content.provenance.origin !== 'legacy_tool')
+      throw new Error('refused');
+    const notes = placed.content.provenance.notes;
+    expect(notes.filter((n) => n.code === 'map_not_brought_in')).toEqual([
+      { code: 'map_not_brought_in', at: 'images.map-0' },
+    ]);
+    expect(
+      notes.filter((n) => n.code === 'extra_positions_ignored' && n.at === 'images'),
+    ).toHaveLength(1);
+    expect(validateQeegContent(placed.content).ok).toBe(true);
+  });
 });

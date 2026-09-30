@@ -18,12 +18,20 @@
  * keys, and anything else was not the file's.
  *
  * **Notes are added, never taken away.** Every note the reader wrote stays, in
- * its order; one `map_not_brought_in` follows for each place left out, once.
+ * its order; one `map_not_brought_in` follows for each place left out, once,
+ * and none for a place the reader already noted (an empty card).
+ *
+ * **As few notes as the file can earn** (point 5). The reader hands back at
+ * most eight pictures, so the places placed and left out together are at most
+ * eight (`LIMITS.maps`). And the twenty-place limit is the RECORD's, not each
+ * writer's: the notes of places left out already on it (the reader's and any
+ * earlier) are counted, a keep adds only up to `LIMITS.placesLeftOut`, and
+ * past it the one note at `images` says that more were, if it is not there.
  *
  * Pure: no I/O. It returns a new content and changes nothing it is given.
  */
 
-import type { ImportNote, MapEntry, Ordered, QeegInitial } from '../types';
+import { LIMITS, type ImportNote, type MapEntry, type Ordered, type QeegInitial } from '../types';
 
 /** Where the browser put each picture, and which it could not bring. */
 export type ImportPlacement = {
@@ -31,11 +39,18 @@ export type ImportPlacement = {
   readonly leftOut: readonly string[];
 };
 
-export type PlacementRefusal = 'not_a_past_record' | 'not_a_place' | 'placed_and_left_out';
+export type PlacementRefusal =
+  'not_a_past_record' | 'not_a_place' | 'placed_and_left_out' | 'too_many_places';
 
 export type Placed =
   | { readonly ok: true; readonly content: QeegInitial }
   | { readonly ok: false; readonly field: string; readonly reason: PlacementRefusal };
+
+/** The notes that each name one place of the file left out. */
+const PLACE_NOTES: ReadonlySet<string> = new Set([
+  'map_without_image_dropped',
+  'map_not_brought_in',
+]);
 
 /** A picture's place in the old file, as the reader keys it. */
 const PLACE = /^map-(?:0|[1-9]\d{0,3})$/;
@@ -48,15 +63,29 @@ export function placeImportedMaps(content: QeegInitial, placement: ImportPlaceme
   for (const key of Object.keys(placement.maps)) {
     if (!PLACE.test(key)) return { ok: false, field: `maps.${key}`, reason: 'not_a_place' };
   }
+  if (new Set([...Object.keys(placement.maps), ...placement.leftOut]).size > LIMITS.maps) {
+    return { ok: false, field: 'leftOut', reason: 'too_many_places' };
+  }
   const notes: ImportNote[] = [...provenance.notes];
+  let placesNoted = notes.filter(
+    (note) => PLACE_NOTES.has(note.code) && note.at?.startsWith('images.map-') === true,
+  ).length;
   for (const [index, key] of placement.leftOut.entries()) {
     if (!PLACE.test(key)) return { ok: false, field: `leftOut.${index}`, reason: 'not_a_place' };
     if (Object.hasOwn(placement.maps, key)) {
       return { ok: false, field: `leftOut.${index}`, reason: 'placed_and_left_out' };
     }
     const at = `images.${key}`;
-    if (!notes.some((note) => note.code === 'map_not_brought_in' && note.at === at)) {
+    // A place already noted, by the reader (an empty card) or by an earlier
+    // keep, is not noted twice.
+    if (notes.some((note) => PLACE_NOTES.has(note.code) && note.at === at)) continue;
+    if (placesNoted < LIMITS.placesLeftOut) {
       notes.push({ code: 'map_not_brought_in', at });
+      placesNoted += 1;
+    } else if (
+      !notes.some((note) => note.code === 'extra_positions_ignored' && note.at === 'images')
+    ) {
+      notes.push({ code: 'extra_positions_ignored', at: 'images' });
     }
   }
   const maps = Object.fromEntries(
