@@ -1104,6 +1104,15 @@ export const V1: Readonly<Record<string, Entry>> = Object.freeze({
     'Some figures in this section are the practitioner’s approximate visual estimates, read from the brain maps shown, and the others are calculated from the two recordings of {earlier} and {later}. An estimate is not a measure of change in brain function.',
     'بعض الأرقام الواردة في هذا القسم تقديرات بصرية تقريبية من الممارس، مأخوذة من خرائط الدماغ المعروضة، والأخرى محسوبة من تسجيلي {earlier} و{later}. والتقدير ليس مقياسا للتغير في وظائف الدماغ.',
   ),
+  // Printed on a preview only, while the words of its language are a draft;
+  // the issue route refuses to sign then, so no signed page carries it. The
+  // practice approves its own words, so it names no one else. Draft wording:
+  // the Arabic is the shared draft line with the word for the lawyer taken
+  // out, for the practice's Arabic reader to confirm.
+  'note.draft_wording': both(
+    'Draft wording, in use until the practice approves a final version.',
+    'صياغة أولية، تستخدم إلى أن يعتمد المركز النسخة النهائية.',
+  ),
   'note.earlier_imported': later(
     'The earlier report was written in the practice’s previous report tool.',
     'تمت كتابة التقرير السابق باستخدام أداة التقارير السابقة لدى المركز.',

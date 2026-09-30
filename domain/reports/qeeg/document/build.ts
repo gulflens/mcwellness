@@ -49,7 +49,7 @@
  */
 
 import type { DocumentImage } from '@domain/shared/document';
-import { DRAFT_WORDING, STANDING_SENTENCES, WORDS } from '../../document/strings';
+import { STANDING_SENTENCES, WORDS } from '../../document/strings';
 import type { SignerSnapshot } from '../../types';
 import {
   BAND_IDS,
@@ -75,7 +75,7 @@ import {
 } from '../sentences';
 import { isBlank, richFor, spansOf, textFor, toParagraphs } from '../text';
 import type { CustomItem, Locale, Ordered, Picked, QeegContent } from '../types';
-import { fill, phrase } from '../wording';
+import { fill, phrase, sharedPhrase } from '../wording';
 import type { Block } from './block';
 import { changeParts } from './changePage';
 import { GAP } from './geometry';
@@ -753,11 +753,11 @@ export function buildQeegReport(input: ReportInput, drawing: Drawing, bodyHeight
     ),
   );
   if (facts.draftWording === true) {
-    // The one draft line a household meets on every text it is handed, in
-    // its own words (`strings.ts`), kept with the signature as the sentences
-    // above it are.
+    // The brain map's own draft line, which names only the practice: its
+    // approval of its own words is final. Kept with the signature as the
+    // sentences above it are. Only a preview prints it.
     parts.push(
-      part('final.draft', 'final', words('note', DRAFT_WORDING[locale]), {
+      part('final.draft', 'final', words('note', sharedPhrase('note.draft_wording', locale)), {
         marginBottom: GAP.afterParagraph,
         keep: true,
       }),

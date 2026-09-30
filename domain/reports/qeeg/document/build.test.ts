@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  COMPARISON_SENTENCE,
-  DRAFT_WORDING,
-  STANDING_SENTENCES,
-  WORDS,
-} from '../../document/strings';
+import { COMPARISON_SENTENCE, STANDING_SENTENCES, WORDS } from '../../document/strings';
 import { BAND_IDS, CONNECTIVITY_IDS } from '../catalogue/ids';
 import { sessionLabel } from '../sentences';
 import { classifyScoreChange } from '../scoreChange';
@@ -28,7 +23,7 @@ import {
   typedPercent,
 } from '../testing/reports';
 import type { CalculatedFigure, Locale, QeegContent, QeegFollowUp, QeegInitial } from '../types';
-import { phrase } from '../wording';
+import { phrase, sharedPhrase } from '../wording';
 import {
   buildQeegReport,
   footerOf,
@@ -498,8 +493,23 @@ describe('the draft-wording line', () => {
       expect(line.keep).toBe(true);
       const squeezed = (text: string) => text.replace(/\s+/g, '');
       expect(squeezed(wordsDrawn([line], drawingOf(locale))).length).toBe(
-        squeezed(DRAFT_WORDING[locale]).length,
+        squeezed(sharedPhrase('note.draft_wording', locale)).length,
       );
+    }
+  });
+
+  it('names no lawyer: the practice approves its own words', () => {
+    expect(sharedPhrase('note.draft_wording', 'en')).toBe(
+      'Draft wording, in use until the practice approves a final version.',
+    );
+    for (const locale of LOCALES) {
+      const input = { ...unsigned(fullReport(), true), locale };
+      const words = wordsDrawn(
+        [partOf(buildQeegReport(input, drawingOf(locale), BODY_HEIGHT), 'final.draft')],
+        drawingOf(locale),
+      );
+      expect(words).not.toMatch(/lawyer/i);
+      expect(words).not.toContain('محامي');
     }
   });
 

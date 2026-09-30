@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { QeegLayoutNotes } from '../../../app/api/reports/schema';
-import { DRAFT_WORDING, WORDS } from '../../../domain/reports/document/strings';
+import { WORDS } from '../../../domain/reports/document/strings';
 import type * as Pages from '../../../domain/reports/qeeg/document';
 import { QEEG_ONLY } from '../../../domain/reports/qeeg/catalogue/ids';
-import { phrase } from '../../../domain/reports/qeeg/wording';
+import { phrase, sharedPhrase } from '../../../domain/reports/qeeg/wording';
 import { extractAll } from '../../../domain/shared/document';
 import { clientDocumentKey } from '../../../domain/shared/storage';
 import { clientToWriteAbout, householdOf, pageCount, qeegSteps } from './qeeg-signing-support';
@@ -86,7 +86,9 @@ describe('the preview of a brain-map draft', () => {
     // No signer yet (section 12, point 9), so no certificate either.
     expect(text).not.toContain(WORDS.certificateNumber.en);
     // Every language of the wording is still a draft.
-    expect(text.replace(/\s+/g, '')).toContain(DRAFT_WORDING.en.replace(/\s+/g, ''));
+    const line = sharedPhrase('note.draft_wording', 'en');
+    expect(text.replace(/\s+/g, '')).toContain(line.replace(/\s+/g, ''));
+    expect(text).not.toMatch(/lawyer/i);
   });
 
   it('renders a full draft with its maps, the page count and how each map will print', async () => {
