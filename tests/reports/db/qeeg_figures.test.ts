@@ -11,7 +11,7 @@ import { blankFollowUp, blankInitial } from '../../../domain/reports/qeeg/blank'
 import type { ComparedWith, QeegInitial } from '../../../domain/reports/qeeg/types';
 import { goodPng, handPng, jpegBytes, linkFigureAsOwner, sha256Hex } from './figures-support';
 import { seedClient, seedTenant } from '../../db/helpers';
-import { SEEDED, startHarness, type Harness } from './support';
+import { refusalsOnTrail, SEEDED, startHarness, type Harness } from './support';
 
 /**
  * A brain-map report's pictures: the upload door, the remove door, the link
@@ -275,6 +275,10 @@ describe('uploading a brain map to a draft', () => {
     expect(
       (await upload(draft.report.id, await goodPng(10, 10, 4), { as: SEEDED.admin })).status,
     ).toBe(403);
+    // Written to the trail before the answer.
+    expect(
+      await refusalsOnTrail(h.owner, 'report.figure_refused', { entityId: draft.report.id }),
+    ).toEqual(['not_permitted']);
     const stranger = await newDraft(otherClientId, SEEDED.owner);
     expect((await upload(stranger.report.id, await goodPng(10, 10, 5))).status).toBe(404);
   });

@@ -12,7 +12,7 @@ import { isRecord } from '../../../domain/reports/qeeg/text';
 import type { Locale, QeegContent, QeegFollowUp } from '../../../domain/reports/qeeg/types';
 import { twinChangeIn } from '../../../domain/reports/qeeg/twin';
 import { isUuid } from '../billing/ids';
-import { logRead } from '../_middleware/audit';
+import { logAction, logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
 import { requiredReason } from './reason';
@@ -263,6 +263,20 @@ async function figuresNotOwned(
   return null;
 }
 
+/**
+ * A refusal of who is saving, written to the trail before the answer
+ * (docs/SPEC/reports-v1.md section 8), as `report.draft_refused` against the
+ * client the draft is about: a new draft has no report yet to name.
+ */
+async function logDraftRefused(db: Db, clientId: string, reason: string): Promise<void> {
+  await logAction(
+    db,
+    'report.draft_refused',
+    { type: 'client', id: clientId, clientId },
+    { reason },
+  );
+}
+
 export async function saveQeegDraft(
   c: Context<ApiEnv>,
   raw: unknown,
@@ -275,6 +289,7 @@ export async function saveQeegDraft(
   }
   const input = parsed.data;
   if (!mayDraftReport(c.get('actor'), input.clientId, now())) {
+    await logDraftRefused(c.get('db'), input.clientId, 'not_permitted');
     return c.json({ error: 'forbidden', requestId }, 403);
   }
   if ((await requiredReason(c.get('db'))) === null) {
@@ -412,6 +427,7 @@ export async function saveQeegDraft(
       today,
     });
     if (found === null) {
+      await logDraftRefused(db, input.clientId, 'not_permitted');
       return c.json({ error: 'forbidden', code: 'not_permitted', requestId }, 403);
     }
     counted = found.count;
@@ -543,6 +559,7 @@ async function writeDraft(
   const unowned = await figuresNotOwned(db, id, comparedWithId, content);
   if (unowned !== null) {
     await db.query('rollback to savepoint qeeg_draft_write');
+    if (unowned.status === 403) await logDraftRefused(db, input.clientId, unowned.body.code);
     return c.json({ ...unowned.body, requestId }, unowned.status);
   }
 

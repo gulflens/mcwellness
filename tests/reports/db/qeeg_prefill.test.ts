@@ -29,7 +29,7 @@ import {
   visitAt,
   voidVisit,
 } from './qeeg-signing-support';
-import { progressBody, SEEDED, startHarness, type Harness } from './support';
+import { progressBody, refusalsOnTrail, SEEDED, startHarness, type Harness } from './support';
 
 /**
  * A follow-up begun from an earlier report (docs/SPEC/reports-qeeg.md
@@ -318,6 +318,11 @@ describe('who may ask', () => {
     );
     expect(asHousehold.status).toBe(403);
     expect((await prefill({ clientId, from: signed.id }, SEEDED.admin)).status).toBe(403);
+    // Each written to the trail before the answer, against the client.
+    expect(await refusalsOnTrail(h.owner, 'report.prefill_refused', { clientId })).toEqual([
+      'not_permitted',
+      'not_permitted',
+    ]);
   });
 
   it('answers a practitioner on the client’s schedule, and no one who cannot reach the client', async () => {

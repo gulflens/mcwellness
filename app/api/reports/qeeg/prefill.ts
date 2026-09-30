@@ -8,7 +8,7 @@ import {
 } from '../../../../domain/reports/qeeg/prefill';
 import { countedFigure } from '../../../../domain/reports/qeeg/sessionsCompleted';
 import type { QeegContent } from '../../../../domain/reports/qeeg/types';
-import { logRead } from '../../_middleware/audit';
+import { logAction, logRead } from '../../_middleware/audit';
 import type { ApiEnv } from '../../_middleware/request-context';
 import { mayDraftReport } from '../access';
 import { practiceTimeZone } from '../gather';
@@ -50,7 +50,9 @@ import { countedSessions } from './sessionsCounted';
  * anything of it is answered, a refusal included once it is known to be this
  * client's; the client's read is logged before the count of her visits and
  * the content leave. Who may ask is who may draft (`report.draft`), so a
- * household is refused (403), as is anyone else without it.
+ * household is refused (403), as is anyone else without it, and the refusal
+ * is written to the trail first, as `report.prefill_refused` against the
+ * client asked about.
  */
 
 const Query = z
@@ -94,10 +96,22 @@ export function mountReportPrefill(api: Hono<ApiEnv>, now: () => Date = () => ne
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const input = query.data;
-    if (!mayDraftReport(c.get('actor'), input.clientId, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
     const db = c.get('db');
+    /**
+     * A refusal of who is asking, written before the answer
+     * (docs/SPEC/reports-v1.md section 8). Against the client asked about:
+     * nothing of an earlier report is known yet to be this client's.
+     */
+    const forbidden = async (): Promise<Response> => {
+      await logAction(
+        db,
+        'report.prefill_refused',
+        { type: 'client', id: input.clientId, clientId: input.clientId },
+        { reason: 'not_permitted' },
+      );
+      return c.json({ error: 'forbidden', code: 'not_permitted', requestId }, 403);
+    };
+    if (!mayDraftReport(c.get('actor'), input.clientId, now())) return forbidden();
     const refuse = (code: PrefillCode, status: 404 | 422 = 422) =>
       c.json(
         {
@@ -153,7 +167,7 @@ export function mountReportPrefill(api: Hono<ApiEnv>, now: () => Date = () => ne
     });
     if (counted === null) {
       // The database's gate and the route's read a schedule differently at its edge.
-      return c.json({ error: 'forbidden', code: 'not_permitted', requestId }, 403);
+      return forbidden();
     }
     const content = {
       ...prefill.content,

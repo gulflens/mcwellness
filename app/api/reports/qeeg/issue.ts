@@ -207,9 +207,7 @@ export async function issueQeeg(
   // asked here for the sentence, and again inside app.issue_report, which is
   // the answer that binds (issue.ts says why).
   const own = await signerFor(db, actor.userId);
-  if (!own) {
-    return c.json({ error: 'forbidden', code: 'not_a_practitioner', requestId }, 403);
-  }
+  if (!own) return refuse(403, 'not_a_practitioner');
   const answer = canIssue(await signingCredentials(db, own.practitionerId), {
     practitionerId: own.practitionerId,
     serviceTypeId: draft.service_type_id,

@@ -317,3 +317,23 @@ export function sessionBody(over: Record<string, unknown> = {}): Record<string, 
     ...over,
   };
 }
+
+/**
+ * The codes of the refusals written to the trail as `action`, about one report
+ * (`entityId`) or one client, oldest first: what a door wrote before it
+ * answered (docs/SPEC/reports-v1.md section 8).
+ */
+export async function refusalsOnTrail(
+  owner: pg.Client,
+  action: string,
+  about: { entityId: string } | { clientId: string },
+): Promise<string[]> {
+  const [column, value] =
+    'entityId' in about ? ['entity_id', about.entityId] : ['client_id', about.clientId];
+  const { rows } = await owner.query<{ reason: string | null }>(
+    `select new_values->>'reason' as reason from audit_log where action = $1 and ${column} = $2 ` +
+      'order by id',
+    [action, value],
+  );
+  return rows.map((row) => row.reason ?? '');
+}

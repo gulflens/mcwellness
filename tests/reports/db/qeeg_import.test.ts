@@ -24,7 +24,7 @@ import {
   qeegSteps,
   sent,
 } from './qeeg-signing-support';
-import { SEEDED, startHarness, type Harness } from './support';
+import { refusalsOnTrail, SEEDED, startHarness, type Harness } from './support';
 
 /**
  * Bringing in a past record from the practice's old tool (docs/SPEC/
@@ -372,12 +372,18 @@ describe('bringing a past record in', () => {
     expect(res.status).toBe(201);
   });
 
-  it('refuses a practitioner and a coordinator', async () => {
+  it('refuses a practitioner and a coordinator, each on the trail before the answer', async () => {
+    const before = await refusalsOnTrail(h.owner, 'report.import_refused', { clientId });
     for (const as of [SEEDED.practitioner, SEEDED.admin]) {
       const res = await bringIn(bodyFor(newFile()), as);
       expect(res.status, String(as)).toBe(403);
       expect(await codeOf(res)).toBe('not_permitted');
     }
+    expect(await refusalsOnTrail(h.owner, 'report.import_refused', { clientId })).toEqual([
+      ...before,
+      'not_permitted',
+      'not_permitted',
+    ]);
   });
 
   it('refuses one brought in with no reason', async () => {
@@ -590,6 +596,9 @@ describe('the maps of a past record, and keeping it', () => {
       code: 'unlinked_figure',
       field: 'maps.map-0.figureId',
     });
+    expect(
+      await refusalsOnTrail(h.owner, 'report.import_refused', { entityId: draft.report.id }),
+    ).toEqual(['unlinked_figure']);
     const unplaced = await keep(draft.report.id, { savedAt: map.savedAt, maps: {}, leftOut: [] });
     expect(unplaced.status).toBe(422);
     expect(await codeOf(unplaced)).toBe('unplaced_figures');
@@ -606,6 +615,9 @@ describe('the maps of a past record, and keeping it', () => {
     });
     expect(bad.status).toBe(400);
     expect(await bad.json()).toMatchObject({ code: 'invalid_placement', field: 'leftOut.0' });
+    expect(
+      await refusalsOnTrail(h.owner, 'report.import_refused', { entityId: draft.report.id }),
+    ).toEqual(['invalid_placement']);
     const stale = await keep(draft.report.id, {
       savedAt: draft.savedAt,
       maps: placed([map.ref]),

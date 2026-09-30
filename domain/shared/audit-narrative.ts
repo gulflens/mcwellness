@@ -672,7 +672,14 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
       );
     case 'client.update':
       return `${actor} ${joinClauses(clientClauses(event, fields, locale), locale)}`;
+    // With it, a brain-map act refused on who is asking, before any report is
+    // named (a new draft, a prefill, an import): written against the client,
+    // and said as any refusal on the record is (docs/SPEC/reports-v1.md
+    // section 8).
     case 'client.refused':
+    case 'client.report.draft_refused':
+    case 'client.report.prefill_refused':
+    case 'client.report.import_refused':
       return pick(
         t(`${actor} was refused access to this record`, `${actor} مُنع من الوصول إلى هذا السجل`),
         locale,
@@ -1143,6 +1150,7 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
     case 'report.report.deliver_refused':
     case 'report.report.twin_refused':
     case 'report.report.import_refused':
+    case 'report.report.figure_refused':
       return pick(
         t(
           `${actor} was refused an action on this report`,

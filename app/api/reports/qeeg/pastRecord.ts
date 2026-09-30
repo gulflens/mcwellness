@@ -80,7 +80,9 @@ import { linksOf, picturesOf } from './pages';
  * keep's in `X-Reason`, which the screen writes; the withdraw's in its body,
  * because a person types it (`WithdrawImportInput`), stamped on the
  * transaction by the route and kept on the row. Refusals of the keep and the
- * withdraw, once the record is found, are written as `report.import_refused`.
+ * withdraw, once the record is found, are written as `report.import_refused`,
+ * the keep's refusals of a placement or a map included; so is a refusal of
+ * who is bringing one in, against the client, before any report exists.
  */
 
 /** A past record's source never names a file: it names the format (J, ruling 3). */
@@ -215,6 +217,13 @@ async function bringIn(c: Context<ApiEnv>, now: Date): Promise<Response> {
   const db = c.get('db');
 
   if (!mayImportReport(c.get('actor'), input.clientId, now)) {
+    // Written before the answer, against the client: no report exists yet to name.
+    await logAction(
+      db,
+      'report.import_refused',
+      { type: 'client', id: input.clientId, clientId: input.clientId },
+      { reason: 'not_permitted' },
+    );
     return answer(c, 403, 'not_permitted');
   }
   if ((await requiredReason(db)) === null) {
@@ -390,7 +399,7 @@ async function keepRecord(c: Context<ApiEnv>, now: Date): Promise<Response> {
     leftOut: body.data.leftOut,
   });
   if (!placed.ok) {
-    return answer(c, 400, 'invalid_placement', { field: placed.field, reason: placed.reason });
+    return refuse(400, 'invalid_placement', { field: placed.field, reason: placed.reason });
   }
   const checked = validateQeegContent(placed.content);
   if (!checked.ok) {
@@ -405,9 +414,7 @@ async function keepRecord(c: Context<ApiEnv>, now: Date): Promise<Response> {
   const pictures = await picturesOf(db, storage, record.id, content);
   if (!pictures.ok) {
     const { code, field } = pictures.refusal;
-    return code === 'unlinked_figure'
-      ? answer(c, 400, code, { field })
-      : refuse(409, code, { field });
+    return code === 'unlinked_figure' ? refuse(400, code, { field }) : refuse(409, code, { field });
   }
   const sizes = await db.query<{ document_id: string; width_px: number; height_px: number }>(
     LINK_SIZES_SQL,
@@ -425,7 +432,7 @@ async function keepRecord(c: Context<ApiEnv>, now: Date): Promise<Response> {
             ? 'heightPx'
             : null;
     if (differs !== null) {
-      return answer(c, 400, 'figure_mismatch', { field: `${figure.path}.${differs}` });
+      return refuse(400, 'figure_mismatch', { field: `${figure.path}.${differs}` });
     }
   }
   // A picture filed and never placed would be frozen with the record for no

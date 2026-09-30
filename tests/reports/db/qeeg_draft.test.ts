@@ -12,7 +12,14 @@ import { MEASURE_IDS } from '../../../domain/reports/qeeg/catalogue/ids';
 import { blankFollowUp, blankInitial } from '../../../domain/reports/qeeg/blank';
 import type { ComparedWith, QeegInitial } from '../../../domain/reports/qeeg/types';
 import { linkFigureAsOwner } from './figures-support';
-import { progressBody, sessionBody, SEEDED, startHarness, type Harness } from './support';
+import {
+  progressBody,
+  refusalsOnTrail,
+  sessionBody,
+  SEEDED,
+  startHarness,
+  type Harness,
+} from './support';
 
 /**
  * Saving a brain-map (qEEG) draft, and reading it back (docs/SPEC/
@@ -333,6 +340,10 @@ describe('a practitioner saves a blank brain-map draft', () => {
     const res = await save({ clientId, kind: 'qeeg', content: sentInitial() }, SEEDED.admin);
     expect(res.status).toBe(403);
     expect(await reportCount()).toBe(before);
+    // Written to the trail before the answer, against the client.
+    expect(await refusalsOnTrail(h.owner, 'report.draft_refused', { clientId })).toEqual([
+      'not_permitted',
+    ]);
   });
 
   it('answers not found for a client off the practitioner’s schedule, and writes nothing', async () => {

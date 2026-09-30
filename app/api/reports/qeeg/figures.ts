@@ -60,6 +60,11 @@ import { verifyMap } from './verifyMap';
  *
  * **Every call carries a reason** (`X-Reason`), as a brain-map save does: each
  * writes rows to the trail, and the reason is written beside them.
+ *
+ * **Every refusal of the door is written before the answer**
+ * (docs/SPEC/reports-v1.md section 8), as `report.figure_refused` with its
+ * code: a caller who may not write the draft (403) and a report that is not a
+ * brain map (422).
  */
 
 const Params = z.object({ id: z.uuid() });
@@ -113,10 +118,21 @@ async function openDoor(
   }
   const actor = c.get('actor');
   const ownerOrLead = actor.roles.includes('owner') || actor.roles.includes('lead_practitioner');
+  /** Written to the trail before the answer (docs/SPEC/reports-v1.md section 8). */
+  const refuse = async (reason: string): Promise<void> => {
+    await logAction(
+      db,
+      'report.figure_refused',
+      { type: 'report', id: report.id, clientId: report.client_id },
+      { reason },
+    );
+  };
   if (!mayDraftReport(actor, report.client_id, now)) {
+    await refuse('not_permitted');
     return { ok: false, response: c.json({ error: 'forbidden', requestId }, 403) };
   }
   if (report.imported_from !== null && !ownerOrLead) {
+    await refuse('not_permitted');
     return { ok: false, response: c.json({ error: 'forbidden', requestId }, 403) };
   }
   switch (report.kind) {
@@ -124,6 +140,7 @@ async function openDoor(
       break;
     case 'session':
     case 'progress':
+      await refuse('wrong_kind');
       return {
         ok: false,
         response: c.json({ error: 'unprocessable', code: 'wrong_kind', requestId }, 422),

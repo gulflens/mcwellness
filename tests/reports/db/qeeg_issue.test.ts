@@ -23,7 +23,7 @@ import {
   qeegSteps,
   sent,
 } from './qeeg-signing-support';
-import { SEEDED, startHarness, type Harness } from './support';
+import { refusalsOnTrail, SEEDED, startHarness, type Harness } from './support';
 
 /**
  * Signing a brain-map report (docs/SPEC/reports-qeeg.md sections 9, 12 and
@@ -278,6 +278,35 @@ describe('what the issue refuses, each by its own code', () => {
     const res = await issue(draft, SEEDED.practitioner);
     expect(res.status).toBe(403);
     expect(await codeOf(res)).toBe('credential_cannot_sign');
+  });
+
+  it('refuses an owner who is no practitioner, on the trail before the answer', async () => {
+    // An owner may draft, and signs only as a practitioner. One with no
+    // practitioner record, made as the seed makes a login.
+    const userId = '0000000d-0000-4000-8000-0000000003b1';
+    const authId = '0000000d-0000-4000-8000-0000000003b2';
+    await h.owner.query(
+      'insert into app_user (id, tenant_id, auth_id, display_name) values ($1, $2, $3, $4)',
+      [userId, h.data.tenant.id, authId, 'Owner login'],
+    );
+    await h.owner.query(
+      "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'owner')",
+      [h.data.tenant.id, userId],
+    );
+    const draft = await steps.completeDraft(SEEDED.owner, { seed: 10 });
+    const res = await h.callAs(
+      'POST',
+      `/api/reports/${draft.id}/issue`,
+      authId,
+      { savedAt: draft.savedAt },
+      { 'x-reason': SIGN_REASON },
+    );
+    expect(res.status).toBe(403);
+    expect(await codeOf(res)).toBe('not_a_practitioner');
+    expect(await refusalsOnTrail(h.owner, 'report.issue_refused', { entityId: draft.id })).toEqual([
+      'not_a_practitioner',
+    ]);
+    expect((await statusOf(draft.id)).status).toBe('draft');
   });
 
   it('lets a household neither sign a draft nor see one', async () => {

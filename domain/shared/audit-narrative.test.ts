@@ -833,6 +833,12 @@ describe('brain-map reports and past records (docs/CHANGE-REQUESTS/reports-02.md
       en: 'Hazel Harbour was refused an action on this report',
       ar: 'Hazel Harbour رُفض له إجراء على هذا التقرير',
     },
+    {
+      name: 'a brain map’s door refused',
+      overrides: { action: 'report.figure_refused', newValues: { reason: 'not_permitted' } },
+      en: 'Hazel Harbour was refused an action on this report',
+      ar: 'Hazel Harbour رُفض له إجراء على هذا التقرير',
+    },
   ];
 
   for (const { name, overrides, en, ar } of cases) {
@@ -851,6 +857,23 @@ describe('brain-map reports and past records (docs/CHANGE-REQUESTS/reports-02.md
       expect(sentence).not.toMatch(/qeeg\.json|not_signed|in_comparison/);
     }
   });
+});
+
+describe('a brain-map act refused before any report is named', () => {
+  // Refused on who is asking, against the client asked about: a new draft,
+  // a prefill and an import have no report yet to name. Said as any other
+  // refusal on the record is, and never with the code.
+  for (const action of [
+    'report.draft_refused',
+    'report.prefill_refused',
+    'report.import_refused',
+  ]) {
+    it(`says ${action} on the client as a refusal on the record, in English and in Arabic`, () => {
+      const said = event({ entityType: 'client', action, newValues: { reason: 'not_permitted' } });
+      expect(narrate(said, 'en')?.sentence).toBe('Hazel Harbour was refused access to this record');
+      expect(narrate(said, 'ar')?.sentence).toBe('Hazel Harbour مُنع من الوصول إلى هذا السجل');
+    });
+  }
 });
 
 describe('the article before an entity', () => {
