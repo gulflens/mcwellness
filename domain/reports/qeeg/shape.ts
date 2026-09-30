@@ -38,6 +38,7 @@ import {
   BENEFIT_IDS,
   CALCULABLE_MEASURES,
   CONNECTIVITY_CHANGES,
+  CONNECTIVITY_IDS,
   DIMENSION_IDS,
   FINDING_IDS,
   FOCUS_IDS,
@@ -653,6 +654,27 @@ const followUpShape = z
  */
 export const TypedFigureShape = typedFigure;
 export const SessionCountShape = sessionCount;
+
+/**
+ * What a follow-up begun from an earlier report offers beside the form
+ * (`prefillFollowUp`'s `offered`): her last choices, by the same lists and
+ * rules as the content, so the form can check what the prefill answered
+ * before it offers any of it (brief S).
+ */
+export const OfferedShape = z
+  .object({
+    findings: picked(FINDING_IDS),
+    focus: picked(FOCUS_IDS),
+    recommendations: picked(RECOMMENDATION_IDS),
+    benefits: picked(BENEFIT_IDS),
+    regions: z
+      .object({
+        bands: everyOf(BAND_IDS, regions),
+        connectivity: everyOf(CONNECTIVITY_IDS, regions),
+      })
+      .strict(),
+  })
+  .strict();
 
 export const QeegInitialShape: z.ZodType<QeegInitial> = initialShape;
 export const QeegFollowUpShape: z.ZodType<QeegFollowUp> = followUpShape;
