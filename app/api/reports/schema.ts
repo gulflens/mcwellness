@@ -233,6 +233,26 @@ export const QeegDraftResponse = z.object({
 });
 export type QeegDraftResponse = z.infer<typeof QeegDraftResponse>;
 
+/**
+ * A follow-up begun from an earlier report (`GET /api/reports/qeeg/prefill`,
+ * brief S): the content to start from, what she chose last time for the form
+ * to offer, and the count of sessions with the days it ran between (`after`
+ * and `before` left out; `through` taken in, set only while the new recording
+ * has no day). `content` and `offered` are held to the domain's shapes by the
+ * form, never to this schema.
+ */
+export const QeegPrefillResponse = z.object({
+  content: z.unknown(),
+  offered: z.unknown(),
+  sessions: z.object({
+    count: z.number().int().min(0),
+    after: z.string(),
+    before: z.string().nullable(),
+    through: z.string().nullable(),
+  }),
+});
+export type QeegPrefillResponse = z.infer<typeof QeegPrefillResponse>;
+
 /** What the draft screen shows before a practitioner writes a word. */
 export const GatherResponse = z.object({
   content: z.unknown(),

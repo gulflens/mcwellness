@@ -566,13 +566,6 @@ describe('a body that carries what the route owns', () => {
           },
         },
       ],
-      [
-        'change.sessionsCompleted.source',
-        {
-          ...followUp,
-          change: { ...change, sessionsCompleted: { count: 20, source: 'gathered' } },
-        },
-      ],
     ];
     const before = await reportCount();
     for (const [field, content] of cases) {

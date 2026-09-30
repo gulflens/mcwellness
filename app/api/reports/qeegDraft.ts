@@ -17,6 +17,7 @@ import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
 import { requiredReason } from './reason';
 import { practiceTimeZone } from './gather';
+import { countedSessions } from './qeeg/sessionsCounted';
 import { QeegDraftInput, QeegDraftResponse } from './schema';
 import { asRow, readReport, type ReportRecord } from './source';
 
@@ -41,8 +42,11 @@ import { asRow, readReport, type ReportRecord } from './source';
  * from that report itself: its day, whether it was signed or brought in, its
  * reference, and whether it was the client's first, as `prefillFollowUp`
  * says, with every refusal that function names. A request that carries any of
- * those parts, a calculated figure, or a count of sessions said to be
- * gathered, is refused by name (`routeOwnedIn`), and nothing is written.
+ * those parts, or a calculated figure, is refused by name (`routeOwnedIn`),
+ * and nothing is written. A count of sessions said to be counted from the
+ * visits is counted again from them (`countedSessions`, brief S), as the
+ * earlier scores are written again from the earlier report; only a count
+ * marked typed is kept from the request.
  *
  * **A save made over a newer one is refused.** An update names the stamp of
  * the save it was made over (`savedAt`, the row's last write, to the
@@ -391,6 +395,27 @@ export async function saveQeegDraft(
   }
 
   const recordedOn = own(own(sent, 'recording'), 'recordedOn');
+  const timeZone = await practiceTimeZone(db);
+  const today = isoDateIn(now(), timeZone);
+
+  // A count of sessions said to be counted is counted again, from the visits
+  // between the two recordings (brief S). Only one marked typed is hers.
+  let counted: number | null | undefined;
+  if (
+    followUp !== null &&
+    own(own(own(sent, 'change'), 'sessionsCompleted'), 'source') === 'gathered'
+  ) {
+    counted = (
+      await countedSessions(db, {
+        clientId: input.clientId,
+        earlierDay: followUp.comparedWith.recordedOn,
+        laterDay: typeof recordedOn === 'string' ? recordedOn : null,
+        today,
+        timeZone,
+      })
+    ).count;
+  }
+
   const subject = subjectFrom(
     {
       givenNameAr: client.given_name_ar,
@@ -400,10 +425,10 @@ export async function saveQeegDraft(
     },
     {
       recordedOn: typeof recordedOn === 'string' ? recordedOn : null,
-      today: isoDateIn(now(), await practiceTimeZone(db)),
+      today,
     },
   );
-  const checked = validateQeegContent(assembleDraft(sent, { subject, followUp }));
+  const checked = validateQeegContent(assembleDraft(sent, { subject, followUp, counted }));
   if (!checked.ok) {
     return c.json(
       {

@@ -4,6 +4,7 @@ import { mountReportDeliver } from './deliver';
 import { mountReportDraft } from './draft';
 import { mountReportFigures } from './qeeg/figures';
 import { mountReportPastRecords } from './qeeg/pastRecord';
+import { mountReportPrefill } from './qeeg/prefill';
 import { mountReportTwin } from './qeeg/twin';
 import { mountReportGet } from './get';
 import { mountReportIssue } from './issue';
@@ -33,6 +34,8 @@ export function mountReports(api: Hono<ApiEnv>, now: () => Date = () => new Date
   // A fixed path, `/api/reports/qeeg/import`, beside the `:id` ones: mounted
   // before them, as the list's fixed paths are.
   mountReportPastRecords(api, now);
+  // `/api/reports/qeeg/prefill`, a fixed path, likewise before the `:id` ones.
+  mountReportPrefill(api, now);
   mountReportDraft(api, now);
   mountReportIssue(api, now);
   mountReportPreview(api, now);

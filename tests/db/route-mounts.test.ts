@@ -204,6 +204,14 @@ describe('the past record doors of a brain-map report', () => {
     }
   });
 
+  it('mounts the follow-up begun from an earlier report', async () => {
+    // A fixed path beside `/api/reports/:id`: its own check of the query
+    // answers, never the one-report route's 404.
+    const res = await call('GET', '/api/reports/qeeg/prefill', authIdOf(0));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
+  });
+
   it('mounts the other language of a signed report', async () => {
     const res = await call('POST', '/api/reports/not-a-report/twin', authIdOf(0), {});
     expect(res.status).toBe(400);
