@@ -16,6 +16,8 @@ Both are the same object and follow three rules. **A report is signed by a perso
 
 Nothing in a report describes a diagnosis, a treatment, a patient or a medical claim. A questionnaire is named as a self-report measure, a brain map as a measurement, and a change between two of them as a difference between two days.
 
+**_Amended 2026-09-29, for a third kind only:_** a **brain-map report** (`reports-qeeg.md`) is the report `assessment.md` section 3.4 points to, where what a measurement means is written by the practitioner and signed by a person. It therefore carries her reading of a brain map as well as the map. The paragraph above stands for it in every other respect, and stands unchanged for the session report and the progress report.
+
 ## 2. What exists on `main`, and what this adds
 
 | Already built | This piece adds |
@@ -55,6 +57,8 @@ The rendered PDF is a `document` of kind `report` — a kind `documentKinds.ts` 
 _The session report_ prints the visit date, the service, the practitioner, the duration, the goal area worked on, the ratings before and after side by side, the structured observations, the practitioner's short note and what to expect before the next visit. **It does not name the protocol's electrode sites, bands or thresholds.** That is the practice's own intellectual property and it means nothing to a household.
 
 _The progress report_ prints the coverage period, sessions delivered against sessions entitled, each goal with what has moved, the brain-map comparison where two or more assessments exist — the same figures and the same "not a diagnosis" sentence the comparison view shows — the practitioner's summary and what the practice suggests next. Its cover figure is the **ribbon** of `docs/DESIGN-BRIEF.md` section 5: one slice per completed session, height the visit's `signal_quality_score`, colour the dominant trained band, a hairline at each brain map, empty slices for the sessions remaining. It is the one place hue enters a report, and it is drawn from the snapshot like everything else.
+
+**_Amended 2026-09-29, for a third kind only:_** _the brain-map report_ (`reports-qeeg.md`) names the five frequency bands with their ranges, and regions of the head, and gives each band its hue on an icon and each score a status hue on a ring. **It still names no electrode site, no protocol and no training threshold.** The two paragraphs above stand unchanged for the kinds they describe. Its layout is its own, over the same writer, and its words are in one language at a time: the fixed wording of a report of several pages is not set in two languages side by side.
 
 **Bilingual, and honestly so.** Headings, labels, the identity block and every fixed sentence render in English and Arabic together, as the invoice already does. The practitioner's own narrative renders in the locale chosen at issue, because a paragraph a person wrote is not something a renderer may translate. A household wanting both gets a second report of the same coverage in the other locale — a separate report, not a version, because neither supersedes the other.
 
