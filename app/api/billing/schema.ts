@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { Discount } from '../../../domain/billing';
-import { fils } from '../../../domain/shared';
+import { largestExtraDiscount, type Discount } from '../../../domain/billing';
+import { fils, type Fils } from '../../../domain/shared';
 import { cleanText } from '../_middleware/text';
 
 /**
@@ -168,6 +168,33 @@ export function toDiscount(input: DiscountInput | null | undefined): Discount | 
     return null;
   }
   return input.kind === 'percent' ? input : { kind: 'amount', fils: fils(input.fils) };
+}
+
+/**
+ * A sale's extra discount: a share, a sum, or "free" (the owner's request of
+ * 30 September 2026, a package or a session given away to promote the
+ * practice). Free carries no figure: the route works it out with
+ * `largestExtraDiscount` against the price it actually charges on the sale's
+ * date, so a backdated sale, or a price changed while the drawer was open, is
+ * still free. Only the two sale routes accept it; a price and a bundle keep
+ * `DiscountInput`.
+ */
+export const SaleDiscountInput = z.discriminatedUnion('kind', [
+  ...DiscountInput.options,
+  z.object({ kind: z.literal('free') }),
+]);
+export type SaleDiscountInput = z.infer<typeof SaleDiscountInput>;
+
+/** The sale's extra discount as the domain wants it, free worked out against `listFils` and the standing discount. */
+export function toSaleDiscount(
+  input: SaleDiscountInput | null | undefined,
+  listFils: Fils,
+  standing: { discountFils: Fils; basisPoints: number | null },
+): Discount | null {
+  if (!input) {
+    return null;
+  }
+  return input.kind === 'free' ? largestExtraDiscount(listFils, standing) : toDiscount(input);
 }
 
 export const CreatePriceInput = z

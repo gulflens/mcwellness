@@ -229,6 +229,32 @@ describe('SellSessionDrawer', () => {
     });
   });
 
+  it('gives a session away free: nothing to pay, and free sent as a word with its reason', async () => {
+    const { requests } = mount(() => undefined, NF_SESSION_PRICE_DISCOUNTED);
+    await chooseService();
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'free' },
+    });
+    expect(screen.queryByLabelText('Discount (AED)')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Why'), {
+      target: { value: 'A first session given to promote the practice.' },
+    });
+    expect(screen.getAllByText('0.00').length).toBeGreaterThanOrEqual(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    await waitFor(() =>
+      expect(requests.some((r) => r.url === '/api/billing/session-purchases')).toBe(true),
+    );
+    const sent = requests.find((r) => r.url === '/api/billing/session-purchases')?.body as {
+      extraDiscount: { discount: unknown; reason: string };
+    };
+    expect(sent.extraDiscount).toEqual({
+      discount: { kind: 'free' },
+      reason: 'A first session given to promote the practice.',
+    });
+  });
+
   it('says the term the price carries, and nothing about an extension', async () => {
     // The term is read off the price being sold, not from a constant in the
     // code — which is what retired `SINGLE_SESSION_MONTHS`.

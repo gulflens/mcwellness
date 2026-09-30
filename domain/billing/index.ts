@@ -1,7 +1,7 @@
 export { formatFils } from './money';
 export { resolveSaleVat, resolveVat } from './vat';
 export type { Supplier, VatResolution, VatSetting, VatTreatment } from './vat';
-export { applyDiscount, combineDiscounts } from './discount';
+export { applyDiscount, combineDiscounts, largestExtraDiscount } from './discount';
 export type { AppliedDiscount, Discount } from './discount';
 export { currentPriceFor, validateNewPrice } from './price';
 export type { NewPriceApproval, NewPriceRefusal, Price } from './price';

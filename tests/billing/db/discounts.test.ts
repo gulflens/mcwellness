@@ -533,6 +533,128 @@ describe('a sale', () => {
     });
   });
 
+  it('gives a package away free: the percentages come to 100% and nothing is owed', async () => {
+    // The owner's request of 30 September 2026: a package given to promote
+    // the practice, recorded as the largest extra the list still allows.
+    const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const bundle = ((await list.json()) as PackagesResponse).packages.find(
+      (p) => p.code === 'gold-at-fifteen-off',
+    );
+    if (!bundle) throw new Error('The fifteen-per-cent bundle is missing.');
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: bundle.id,
+      clientId: h.clientId(3),
+      purchasedOn: SEED_TODAY,
+      extraDiscount: {
+        discount: { kind: 'percent', basisPoints: 8500 },
+        reason: 'Given away to promote the practice.',
+      },
+    });
+    expect(res.status).toBe(201);
+    const { purchase, entitlements } = (await res.json()) as SellPackageResponse;
+    expect(purchase).toMatchObject({
+      netFils: 0,
+      grossFils: 0,
+      discountFils: 1_215_000,
+      discountBasisPoints: 10_000,
+      discountReason: 'Given away to promote the practice.',
+    });
+    // Every credit is still granted, each worth nothing.
+    expect(entitlements).toBeGreaterThan(0);
+    expect(await creditTotal(purchase.id)).toBe(0);
+    expect((await lineFor(purchase.id))?.invoice_net_fils).toBe(0);
+  });
+
+  it('gives a package away free when the list discount is a sum', async () => {
+    const silver = await seededSilver();
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: silver.id,
+      clientId: h.clientId(3),
+      purchasedOn: SEED_TODAY,
+      extraDiscount: {
+        discount: { kind: 'amount', fils: 1_032_500 },
+        reason: 'Given away to promote the practice.',
+      },
+    });
+    expect(res.status).toBe(201);
+    const { purchase } = (await res.json()) as SellPackageResponse;
+    expect(purchase).toMatchObject({ netFils: 0, grossFils: 0, discountFils: 1_215_000 });
+    expect(await creditTotal(purchase.id)).toBe(0);
+  });
+
+  it('works out free itself when the screen sends it, against the price it charges', async () => {
+    // The screen sends { kind: 'free' } rather than a figure it worked out
+    // from today's price: a backdated sale, or a price changed while the
+    // drawer was open, is still free.
+    const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const bundle = ((await list.json()) as PackagesResponse).packages.find(
+      (p) => p.code === 'gold-at-fifteen-off',
+    );
+    if (!bundle) throw new Error('The fifteen-per-cent bundle is missing.');
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: bundle.id,
+      clientId: h.clientId(4),
+      purchasedOn: SEED_TODAY,
+      extraDiscount: { discount: { kind: 'free' }, reason: 'Given away to promote the practice.' },
+    });
+    expect(res.status).toBe(201);
+    const { purchase } = (await res.json()) as SellPackageResponse;
+    expect(purchase).toMatchObject({ netFils: 0, grossFils: 0, discountBasisPoints: 10_000 });
+
+    const silver = await seededSilver();
+    const second = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: silver.id,
+      clientId: h.clientId(4),
+      purchasedOn: SEED_TODAY,
+      extraDiscount: { discount: { kind: 'free' }, reason: 'Given away to promote the practice.' },
+    });
+    expect(second.status).toBe(201);
+    expect(((await second.json()) as SellPackageResponse).purchase).toMatchObject({
+      netFils: 0,
+      discountFils: 1_215_000,
+    });
+  });
+
+  it('refuses free from a role that may not discount', async () => {
+    const silver = await seededSilver();
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.practitioner, {
+      packageId: silver.id,
+      clientId: h.clientId(4),
+      purchasedOn: SEED_TODAY,
+      extraDiscount: {
+        discount: { kind: 'free' },
+        reason: 'A free sale from somebody who may not.',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('keeps free off the price list: a price or a bundle is never priced free by that word', async () => {
+    const priced = await h.call('POST', '/api/billing/prices', SEEDED.owner, {
+      serviceTypeId: h.serviceTypeId('consultation'),
+      listPriceFils: 70_000,
+      discount: { kind: 'free' },
+      validFrom: SEED_TODAY,
+      amendmentReason: 'A price that tries the sale-only word.',
+    });
+    expect(priced.status).toBe(400);
+  });
+
+  it('still refuses one fils more than free', async () => {
+    const silver = await seededSilver();
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: silver.id,
+      clientId: h.clientId(3),
+      purchasedOn: SEED_TODAY,
+      extraDiscount: {
+        discount: { kind: 'amount', fils: 1_032_501 },
+        reason: 'More than the price itself.',
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code?: string }).code).toBe('discount_too_large');
+  });
+
   it('refuses an extra discount without a reason', async () => {
     const silver = await seededSilver();
     const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
