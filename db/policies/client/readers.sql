@@ -94,6 +94,16 @@ create policy client_record_readers on public.consent as restrictive for select 
 -- own policies, which is what keeps it honest and is safe from SQLSTATE 42P17:
 -- consent's read policy calls two security-definer helpers and never queries
 -- `document` back.
+--
+-- And one arm narrowed on 2026-09-30 (docs/CHANGE-REQUESTS/reports-02.md
+-- request 11a, applied with records PR 10): a client contact reads no
+-- document of kind 'report_figure'. A brain map is a picture the practice
+-- files against a brain-map report (migration 604); the household is given
+-- the signed report, never the practice's working pictures behind it, and a
+-- past record's pictures (docs/SPEC/reports-qeeg.md section 11, point 4) are
+-- invisible to it altogether. The Documents route serves a household, so this
+-- is not academic: it lists and signs links to every row this policy admits.
+-- Every other document of their own client is read as before.
 drop policy if exists client_record_readers on public.document;
 create policy client_record_readers on public.document as restrictive for select to app_role using (
   case when client_id is null then
@@ -105,7 +115,8 @@ create policy client_record_readers on public.document as restrictive for select
     app.client_erasure_gate(app.client_status_for(client_id)) and (
       app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
       or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
-      or (app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id))
+      or (app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id)
+          and kind <> 'report_figure')
     )
   end
 );

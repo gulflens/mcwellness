@@ -100,6 +100,22 @@ async function mayReadDocuments(
   return { ok: view.ok, needsReason: view.needsReason };
 }
 
+/**
+ * Whether this reader is a household and nothing else: a client contact who
+ * holds no practice role. A household never reads a brain map's picture
+ * (kind `report_figure`, docs/CHANGE-REQUESTS/reports-02.md request 11a):
+ * the report it is given is the signed PDF, and a past record's pictures are
+ * invisible to it (docs/SPEC/reports-qeeg.md section 11). The read policy on
+ * `document` says so underneath (db/policies/client/readers.sql); the route
+ * says it too, as the app says every boundary twice.
+ */
+function readsAsHousehold(actor: Actor): boolean {
+  return (
+    hasRole(actor, 'client_contact') &&
+    !hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner', 'finance')
+  );
+}
+
 export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.get('/api/clients/:id/documents', async (c) => {
     const actor = c.get('actor');
@@ -152,8 +168,9 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
         "where live.client_id = d.client_id and live.purpose = 'photo_video' " +
         "and live.status = 'active')) as bytes_removed " +
         'from document d left join app_user u on u.id = d.uploaded_by ' +
-        'where d.client_id = $1 order by d.created_at desc',
-      [clientId],
+        "where d.client_id = $1 and ($2::boolean is false or d.kind <> 'report_figure') " +
+        'order by d.created_at desc',
+      [clientId, readsAsHousehold(actor)],
     );
 
     // One `list` row per document named, the same rule app/api/clients/list.ts
@@ -285,8 +302,8 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
         'where cs.text_document_id = document.id and cs.client_id = $2)) or ' +
         "(client_id is null and kind = 'erasure_letter' and exists (" +
         'select 1 from erasure_request er where er.letter_document_id = document.id ' +
-        'and er.client_id = $2)))',
-      [documentId, clientId],
+        "and er.client_id = $2))) and ($3::boolean is false or kind <> 'report_figure')",
+      [documentId, clientId, readsAsHousehold(actor)],
     );
     const row = rows[0];
     if (!row) return c.json({ error: 'not_found', requestId }, 404);
