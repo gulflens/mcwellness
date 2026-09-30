@@ -54,10 +54,6 @@ export function partTitle(partId: string, edition: Edition, locale: Locale): str
 }
 
 /** Each heading once, in the order its first part ran over. */
-export function partTitles(
-  partIds: readonly string[],
-  edition: Edition,
-  locale: Locale,
-): string[] {
+export function partTitles(partIds: readonly string[], edition: Edition, locale: Locale): string[] {
   return [...new Set(partIds.map((id) => partTitle(id, edition, locale)))];
 }
