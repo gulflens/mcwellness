@@ -13,7 +13,8 @@ import {
   practiceTimeZone,
   type SessionNarrative,
 } from './gather';
-import { DraftInput, DraftResponse, GatherResponse, VisitsResponse } from './schema';
+import { saveQeegDraft } from './qeegDraft';
+import { DraftInput, DraftKindOf, DraftResponse, GatherResponse, VisitsResponse } from './schema';
 import { asRow, readReport } from './source';
 
 /**
@@ -32,6 +33,14 @@ import { asRow, readReport } from './source';
  * field named; the gathered half is recomputed here from the record rather
  * than trusted from the request, because a figure a practitioner could retype
  * is a figure that can disagree with the record (section 4.2).
+ *
+ * **A brain map is drafted through the same path, by its own door.** The body
+ * is read for its kind first; a `qeeg` body goes to `qeegDraft.ts`, which
+ * holds what she typed to the brain map's own shape and writes the client and
+ * the comparison from the record (docs/SPEC/reports-qeeg.md section 14). The
+ * switch is exhaustive, so a kind added later is a compile error here rather
+ * than a body read as a session report's, and a save of one kind is refused
+ * on a row of another.
  *
  * **Only a draft may be updated.** An issued report is not edited: the guard
  * trigger refuses it in the database (migration 600) and this refuses it with
@@ -196,7 +205,26 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
 
   api.post('/api/reports/draft', async (c) => {
     const requestId = c.get('requestId');
-    const parsed = DraftInput.safeParse(await c.req.json().catch(() => null));
+    const raw: unknown = await c.req.json().catch(() => null);
+    // Each kind to the door that knows it. A brain map's body, its figures and
+    // its source are its own (`qeegDraft.ts`); the two older kinds gather
+    // theirs from the record below.
+    const kindOf = DraftKindOf.safeParse(raw);
+    if (!kindOf.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    switch (kindOf.data.kind) {
+      case 'qeeg':
+        return saveQeegDraft(c, raw, now);
+      case 'session':
+      case 'progress':
+        break;
+      default: {
+        const unknown: never = kindOf.data.kind;
+        return unknown;
+      }
+    }
+    const parsed = DraftInput.safeParse(raw);
     if (!parsed.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
@@ -214,6 +242,11 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
         // a 403 would confirm the report exists.
         return c.json({ error: 'not_found', requestId }, 404);
       }
+      if (existing.kind !== input.kind) {
+        // A save of one kind never lands on a report of another: the row keeps
+        // its kind, so the body would be read as what it is not.
+        return c.json({ error: 'unprocessable', code: 'wrong_kind', requestId }, 422);
+      }
       if (existing.status !== 'draft') {
         return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
       }
@@ -223,42 +256,50 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     // them is thrown away; what it carried of the narrative is kept. Both
     // kinds are gathered, so nothing a caller sent survives as a figure.
     let content: unknown;
-    if (input.kind === 'progress') {
-      if (!input.coverageFrom || !input.coverageTo) {
-        return c.json({ error: 'bad_request', code: 'coverage_required', requestId }, 400);
+    const timeZone = await practiceTimeZone(db);
+    switch (input.kind) {
+      case 'progress': {
+        if (!input.coverageFrom || !input.coverageTo) {
+          return c.json({ error: 'bad_request', code: 'coverage_required', requestId }, 400);
+        }
+        const gathered = await gatherForClient(db, {
+          clientId: input.clientId,
+          coverage: { from: input.coverageFrom, to: input.coverageTo },
+          timeZone,
+          // The pairing is `gatherProgress`'s, by goal id, and always has been:
+          // this route used to gather without it and pair by position
+          // afterwards, which was the fault.
+          narrative: narrativeOf(input.content),
+        });
+        content = gathered.content;
+        break;
       }
-      const timeZone = await practiceTimeZone(db);
-      const gathered = await gatherForClient(db, {
-        clientId: input.clientId,
-        coverage: { from: input.coverageFrom, to: input.coverageTo },
-        timeZone,
-        // The pairing is `gatherProgress`'s, by goal id, and always has been:
-        // this route used to gather without it and pair by position
-        // afterwards, which was the fault.
-        narrative: narrativeOf(input.content),
-      });
-      content = gathered.content;
-    } else {
-      // A session report follows one completed visit, and its figures come
-      // from that visit for the reason the progress report's come from the
-      // record: a figure a practitioner could retype is a figure that can
-      // disagree with it (section 4.2). Only the note and what to expect
-      // before the next visit are the person's.
-      if (!input.sessionId) {
-        return c.json({ error: 'bad_request', code: 'visit_required', requestId }, 400);
+      case 'session': {
+        // A session report follows one completed visit, and its figures come
+        // from that visit for the reason the progress report's come from the
+        // record: a figure a practitioner could retype is a figure that can
+        // disagree with it (section 4.2). Only the note and what to expect
+        // before the next visit are the person's.
+        if (!input.sessionId) {
+          return c.json({ error: 'bad_request', code: 'visit_required', requestId }, 400);
+        }
+        const gathered = await gatherSession(db, {
+          clientId: input.clientId,
+          sessionId: input.sessionId,
+          timeZone,
+          locale: input.locale,
+          narrative: sessionNarrativeOf(input.content),
+        });
+        if (!gathered) {
+          return c.json({ error: 'not_found', code: 'no_such_visit', requestId }, 404);
+        }
+        content = gathered;
+        break;
       }
-      const timeZone = await practiceTimeZone(db);
-      const gathered = await gatherSession(db, {
-        clientId: input.clientId,
-        sessionId: input.sessionId,
-        timeZone,
-        locale: input.locale,
-        narrative: sessionNarrativeOf(input.content),
-      });
-      if (!gathered) {
-        return c.json({ error: 'not_found', code: 'no_such_visit', requestId }, 404);
+      default: {
+        const unknown: never = input.kind;
+        return unknown;
       }
-      content = gathered;
     }
 
     const checked = validateContent(input.kind, content);

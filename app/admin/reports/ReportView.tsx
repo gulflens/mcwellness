@@ -1,10 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { ProgressReportContent } from '@domain/reports';
-import { DeliverResponse, ReportResponse, SupersedeResponse } from '../../api/reports/schema';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ProgressReportContent, ReportKind } from '@domain/reports';
+import {
+  DeliverResponse,
+  ReportResponse,
+  SupersedeResponse,
+  TwinResponse,
+  type ReportRow,
+} from '../../api/reports/schema';
 import type { ReportResponse as Report } from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
+import { kindLabel, mayBeSent } from './kinds';
 import { Ribbon } from './Ribbon';
+import { twinRefusalSentence } from './qeeg/refusals';
+import { TWIN_REASON } from './qeeg/useQeegSigning';
+import { languageWord, twinLines } from './qeeg/twinWords';
 
 /**
  * View and deliver (docs/SPEC/reports-v1.md section 4.3): the filed PDF
@@ -19,6 +29,13 @@ import { Ribbon } from './Ribbon';
  * **The link is fetched when a button is pressed**, never rendered into the
  * page in advance: a link that sits in the markup ends up in a screenshot, a
  * bookmark or a log.
+ *
+ * **A brain map is signed in either language, each as its own report**
+ * (docs/SPEC/reports-qeeg.md section 8). Its page says which language it is
+ * in, names its other language, says in a sentence when it is out of step
+ * with the report it was made from, and offers "Sign the other language" on a
+ * signed one that has none yet, which starts that draft and hands it to the
+ * brain-map form.
  */
 
 const REFUSALS: Record<string, string> = {
@@ -31,27 +48,60 @@ const REFUSALS: Record<string, string> = {
   no_document: 'This report has no filed document yet.',
   already_superseded: 'A newer version of this report already exists.',
   no_reason: 'Say in a sentence why a new version is needed.',
+  imported_draft: 'A past record read from the old tool is never sent: the old tool printed it.',
+  imported_record: 'A past record read from the old tool is never sent: the old tool printed it.',
 };
 
 type Contact = { id: string; label: string };
 
+/**
+ * What a correction sends, by kind. The older kinds send the body the new
+ * version starts from; a brain map starts from what was signed, and its door
+ * refuses a body that sends one (app/api/reports/qeeg/supersede.ts).
+ */
+function correctionBody(kind: ReportKind, reason: string, content: unknown): object {
+  switch (kind) {
+    case 'session':
+    case 'progress':
+      return { reason, content };
+    case 'qeeg':
+      return { reason };
+    default: {
+      const unknown: never = kind;
+      return unknown;
+    }
+  }
+}
+
 export function ReportView({
   reportId,
+  reports = [],
+  mayDraft = false,
   maySupersede,
   maySend,
   onBack,
   onSuperseded,
+  onTwinStarted,
 }: {
   reportId: string;
+  /** The client's reports, so a brain map's other language is named by its reference. */
+  reports?: readonly ReportRow[];
+  /**
+   * Whether this person may write a report for this client: who may start a
+   * brain map's other language (docs/CHANGE-REQUESTS/reports-02.md request 6).
+   */
+  mayDraft?: boolean;
   maySupersede: boolean;
   maySend: boolean;
   onBack: () => void;
+  /** The other language of a signed brain map was started as a draft: open it. */
+  onTwinStarted?: (draftId: string) => void;
   /**
    * Where the corrected draft went. The tab opens the editor on it, because a
    * correction the practitioner cannot then read over and sign is a correction
    * only the API can finish (section 4.3).
    */
-  onSuperseded?: (draftId: string, kind: 'session' | 'progress') => void;
+  onSuperseded?: (draftId: string, kind: ReportKind) => void;
 }) {
   const { apiFetch } = useAuth();
   const [report, setReport] = useState<Report | null>(null);
@@ -65,6 +115,9 @@ export function ReportView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /** Why the report could not be read, when the server gave a sentence for it. */
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const sentenceRef = useRef<string | null>(null);
 
   // Reading and setting are separate so the effect never calls setState in its
   // own body: it hands the answer to a callback, the way the record's own tabs
@@ -72,7 +125,19 @@ export function ReportView({
   const read = useCallback(async (): Promise<Report | null> => {
     try {
       const res = await apiFetch(`/api/reports/${reportId}`);
-      if (!res.ok) return null;
+      if (!res.ok) {
+        // A signed brain map whose file cannot be made again says why, in a
+        // sentence of the server's (app/api/reports/get.ts); anything else
+        // keeps the plain sentence below.
+        const body: unknown = await res.json().catch(() => null);
+        const sentence =
+          res.status === 409 && typeof body === 'object' && body !== null
+            ? (body as { sentence?: unknown }).sentence
+            : null;
+        sentenceRef.current = typeof sentence === 'string' ? sentence : null;
+        return null;
+      }
+      sentenceRef.current = null;
       return ReportResponse.parse(await res.json());
     } catch {
       return null;
@@ -82,6 +147,7 @@ export function ReportView({
   const reread = useCallback(async (): Promise<void> => {
     const next = await read();
     setReport(next);
+    setLoadError(sentenceRef.current);
     setState(next === null ? 'error' : 'ready');
   }, [read]);
 
@@ -90,6 +156,7 @@ export function ReportView({
     void read().then((next) => {
       if (!live) return;
       setReport(next);
+      setLoadError(sentenceRef.current);
       setState(next === null ? 'error' : 'ready');
     });
     return () => {
@@ -161,6 +228,33 @@ export function ReportView({
     }
   }
 
+  async function startTwin(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/reports/${reportId}/twin`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-reason': TWIN_REASON },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        setError(twinRefusalSentence(res.status, await res.json().catch(() => null)));
+        return;
+      }
+      const body = TwinResponse.parse(await res.json());
+      if (onTwinStarted) {
+        onTwinStarted(body.report.id);
+        return;
+      }
+      setNote('The other language has been started as a draft.');
+      await reread();
+    } catch {
+      setError(twinRefusalSentence(0, null));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function supersede(): Promise<void> {
     if (!report) return;
     setBusy(true);
@@ -169,7 +263,10 @@ export function ReportView({
       const res = await apiFetch(`/api/reports/${reportId}/supersede`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ reason, content: report.content }),
+        // A brain map is corrected from what was signed, and its door takes
+        // the reason alone (app/api/reports/qeeg/supersede.ts); the older
+        // kinds send the body the new version starts from.
+        body: JSON.stringify(correctionBody(report.report.kind, reason, report.content)),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { code?: string } | null;
@@ -194,10 +291,18 @@ export function ReportView({
 
   if (state === 'loading') return <Note>Loading.</Note>;
   if (state === 'error' || !report) {
-    return <Note tone="critical">That report could not be loaded.</Note>;
+    return <Note tone="critical">{loadError ?? 'That report could not be loaded.'}</Note>;
   }
 
   const row = report.report;
+  const language = languageWord(row);
+  const twinSaid = twinLines(row, reports);
+  const mayTwin =
+    mayDraft &&
+    row.kind === 'qeeg' &&
+    row.status === 'issued' &&
+    row.twinOfId === null &&
+    row.twinId === null;
   const progress =
     row.kind === 'progress' ? (report.content as ProgressReportContent | null) : null;
 
@@ -207,7 +312,13 @@ export function ReportView({
         <dt>Reference</dt>
         <dd>{row.reference ?? 'Not yet signed'}</dd>
         <dt>Kind</dt>
-        <dd>{row.kind === 'progress' ? 'Progress report' : 'Session report'}</dd>
+        <dd>{kindLabel(row.kind)}</dd>
+        {language !== null ? (
+          <>
+            <dt>Language</dt>
+            <dd>{language}</dd>
+          </>
+        ) : null}
         {row.coverageFrom && row.coverageTo ? (
           <>
             <dt>Covers</dt>
@@ -225,6 +336,20 @@ export function ReportView({
           </>
         ) : null}
       </dl>
+
+      {twinSaid.length > 0 ? (
+        <ul className="report-view__twin small">
+          {twinSaid.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
+      {row.outOfStep ? (
+        <Note tone="attention">
+          The report this one was made from has been corrected since, so this one is out of step
+          with it. Start the other language again from the corrected report once it is signed.
+        </Note>
+      ) : null}
 
       {row.status === 'superseded' ? (
         <Note tone="attention">
@@ -256,7 +381,7 @@ export function ReportView({
         </Button>
       </div>
 
-      {maySend && row.status !== 'draft' ? (
+      {maySend && mayBeSent(row.status) ? (
         <section>
           <h3 className="report-editor__heading">Send it to the household</h3>
           {contacts.length === 0 ? (
@@ -314,6 +439,22 @@ export function ReportView({
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {mayTwin ? (
+        <section className="report-editor__sign">
+          <p>
+            A brain-map report is signed in each language as a report of its own. This starts it in{' '}
+            {row.locale === 'en' ? 'Arabic' : 'English'} as a draft made from this one, with the
+            same findings, scores and maps; only that language’s versions of what was typed are
+            written there.
+          </p>
+          <div className="report-editor__actions">
+            <Button disabled={busy} onClick={() => void startTwin()}>
+              Sign the other language
+            </Button>
+          </div>
         </section>
       ) : null}
 

@@ -117,6 +117,20 @@ describe('the household’s Reports screen', () => {
     expect(await screen.findByText('Replaced by a newer version')).toBeTruthy();
   });
 
+  it('lists a brain-map report as it lists the others, in both languages', async () => {
+    // docs/SPEC/reports-qeeg.md section 19, point 11.
+    const brainMap: PortalReportsResponse = {
+      clients: HOME.clients,
+      reports: [{ ...REPORTS.reports[1]!, kind: 'qeeg' }],
+    };
+    mount(brainMap);
+    expect(await screen.findByText('Brain map report')).toBeTruthy();
+    expect(screen.queryByText('Session report')).toBeNull();
+    cleanup();
+    mount(brainMap, 'ar');
+    expect(await screen.findByText('تقرير خريطة الدماغ')).toBeTruthy();
+  });
+
   it('renders in Arabic, right to left, with no English left in the fixed words', async () => {
     mount(REPORTS, 'ar');
     expect(await screen.findByText('التقارير')).toBeTruthy();

@@ -184,6 +184,16 @@ client's `report_figure` rows before the documents they point to, under a
 **Why.** A link to a document must go before the document. It must sort above
 971, which is the highest restatement on `main`.
 
+**Noted for the trunk (30 September, records PR 10).** 903 lets an immutable
+`document` be deleted only while `app.erasure_active` names the transaction.
+That exemption now has a second user besides `app.erase_client`:
+`app.remove_report_figure` (604, section 6), when a past record is withdrawn
+(`reports-qeeg.md` section 11, point 7). It sets the marker around one
+statement that deletes the withdrawn record's own `report_figure` document,
+which no other report links, and clears it again. 903 is not edited. A later
+change to 903's exemption, or to what the marker withholds from the trail,
+reaches the withdraw too.
+
 ## 10. The household's screen — client-portal's
 
 | File | Change |

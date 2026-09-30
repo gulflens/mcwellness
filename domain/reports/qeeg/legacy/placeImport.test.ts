@@ -1,0 +1,166 @@
+import { describe, expect, it } from 'vitest';
+import { validateQeegContent } from '../shape';
+import type { MapEntry, Ordered, QeegInitial } from '../types';
+import { buildLegacyFile, readLegacyFile } from '../testing/legacyFile';
+import { placeImportedMaps } from './placeImport';
+
+/**
+ * Where a past record's pictures go once they are on the store, and what is
+ * written for a picture that could not be brought in
+ * (docs/SPEC/reports-qeeg.md section 11, point 5).
+ */
+
+const SHA = 'c'.repeat(64);
+
+function imported(): QeegInitial {
+  return readLegacyFile(buildLegacyFile(), SHA).content;
+}
+
+function mapAt(place: number, position: number): MapEntry & { position: number } {
+  return {
+    figureId: `00000009-0000-4000-8000-00000000000${place}`,
+    sha256: String(place).repeat(64),
+    widthPx: 800,
+    heightPx: 600,
+    condition: place === 0 ? 'eyes_open' : 'eyes_closed',
+    caption: null,
+    position,
+  };
+}
+
+describe('placing a past record’s pictures', () => {
+  it('writes the uploaded maps in, each under the key of its place in the file', () => {
+    const maps: Ordered<MapEntry> = { 'map-0': mapAt(0, 0), 'map-1': mapAt(1, 1) };
+    const placed = placeImportedMaps(imported(), { maps, leftOut: [] });
+    if (!placed.ok) throw new Error(placed.field);
+    expect(placed.content.maps).toEqual(maps);
+    expect(validateQeegContent(placed.content).ok).toBe(true);
+  });
+
+  it('records a picture left out as a note naming its place, never what it held', () => {
+    const before = imported();
+    const placed = placeImportedMaps(before, {
+      maps: { 'map-0': mapAt(0, 0) },
+      leftOut: ['map-1'],
+    });
+    if (!placed.ok) throw new Error(placed.field);
+    if (placed.content.provenance.origin !== 'legacy_tool') throw new Error('not a past record');
+    expect(placed.content.provenance.notes).toContainEqual({
+      code: 'map_not_brought_in',
+      at: 'images.map-1',
+    });
+    // Every note the reader wrote is still there, in its order, before the new one.
+    if (before.provenance.origin !== 'legacy_tool') throw new Error('not a past record');
+    expect(placed.content.provenance.notes.slice(0, before.provenance.notes.length)).toEqual(
+      before.provenance.notes,
+    );
+    expect(validateQeegContent(placed.content).ok).toBe(true);
+  });
+
+  it('writes one note for a place left out twice', () => {
+    const placed = placeImportedMaps(imported(), { maps: {}, leftOut: ['map-1', 'map-1'] });
+    if (!placed.ok || placed.content.provenance.origin !== 'legacy_tool')
+      throw new Error('refused');
+    expect(
+      placed.content.provenance.notes.filter((note) => note.code === 'map_not_brought_in'),
+    ).toHaveLength(1);
+  });
+
+  it('refuses a place that is not one the reader names', () => {
+    const placed = placeImportedMaps(imported(), { maps: {}, leftOut: ['signature'] });
+    expect(placed).toEqual({ ok: false, field: 'leftOut.0', reason: 'not_a_place' });
+    const keyed = placeImportedMaps(imported(), { maps: { first: mapAt(0, 0) }, leftOut: [] });
+    expect(keyed).toEqual({ ok: false, field: 'maps.first', reason: 'not_a_place' });
+  });
+
+  it('refuses a place both placed and left out', () => {
+    const placed = placeImportedMaps(imported(), {
+      maps: { 'map-0': mapAt(0, 0) },
+      leftOut: ['map-0'],
+    });
+    expect(placed).toEqual({ ok: false, field: 'leftOut.0', reason: 'placed_and_left_out' });
+  });
+
+  it('refuses a report that was not read from the old tool', () => {
+    const content = { ...imported(), provenance: { origin: 'app' as const } };
+    expect(placeImportedMaps(content, { maps: {}, leftOut: [] })).toEqual({
+      ok: false,
+      field: 'provenance',
+      reason: 'not_a_past_record',
+    });
+  });
+
+  it('changes nothing it is given', () => {
+    const content = imported();
+    const copy = structuredClone(content);
+    placeImportedMaps(content, { maps: { 'map-0': mapAt(0, 0) }, leftOut: ['map-1'] });
+    expect(content).toEqual(copy);
+  });
+
+  it('refuses more pictures, placed and left out together, than a report holds', () => {
+    const leftOut = Array.from({ length: 8 }, (_, i) => `map-${i + 1}`);
+    expect(placeImportedMaps(imported(), { maps: { 'map-0': mapAt(0, 0) }, leftOut })).toEqual({
+      ok: false,
+      field: 'leftOut',
+      reason: 'too_many_places',
+    });
+    expect(placeImportedMaps(imported(), { maps: {}, leftOut }).ok).toBe(true);
+  });
+
+  it('writes no second note for a place the reader already noted', () => {
+    // The invented file's third card is empty: the reader noted it as a place
+    // with no picture, and the keep adds nothing there.
+    const content = imported();
+    if (content.provenance.origin !== 'legacy_tool') throw new Error('not a past record');
+    const noted = content.provenance.notes.find(
+      (note) => note.code === 'map_without_image_dropped',
+    );
+    const at = noted?.at ?? 'images.map-2';
+    const withNote = noted
+      ? content
+      : {
+          ...content,
+          provenance: {
+            ...content.provenance,
+            notes: [
+              ...content.provenance.notes,
+              { code: 'map_without_image_dropped' as const, at },
+            ],
+          },
+        };
+    const placed = placeImportedMaps(withNote, { maps: {}, leftOut: [at.replace('images.', '')] });
+    if (!placed.ok || placed.content.provenance.origin !== 'legacy_tool')
+      throw new Error('refused');
+    expect(placed.content.provenance.notes.filter((note) => note.at === at)).toHaveLength(1);
+  });
+
+  it('keeps a record’s notes of places left out to twenty, then says once that more were', () => {
+    const content = imported();
+    if (content.provenance.origin !== 'legacy_tool') throw new Error('not a past record');
+    const nineteen = Array.from({ length: 19 }, (_, i) => ({
+      code: 'map_without_image_dropped' as const,
+      at: `images.map-${100 + i}`,
+    }));
+    const many = {
+      ...content,
+      provenance: {
+        ...content.provenance,
+        notes: [
+          ...content.provenance.notes.filter((n) => n.code !== 'map_without_image_dropped'),
+          ...nineteen,
+        ],
+      },
+    };
+    const placed = placeImportedMaps(many, { maps: {}, leftOut: ['map-0', 'map-1', 'map-3'] });
+    if (!placed.ok || placed.content.provenance.origin !== 'legacy_tool')
+      throw new Error('refused');
+    const notes = placed.content.provenance.notes;
+    expect(notes.filter((n) => n.code === 'map_not_brought_in')).toEqual([
+      { code: 'map_not_brought_in', at: 'images.map-0' },
+    ]);
+    expect(
+      notes.filter((n) => n.code === 'extra_positions_ignored' && n.at === 'images'),
+    ).toHaveLength(1);
+    expect(validateQeegContent(placed.content).ok).toBe(true);
+  });
+});

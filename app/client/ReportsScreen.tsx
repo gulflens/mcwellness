@@ -4,7 +4,7 @@ import { DocumentLinkResponse } from '../api/portal/schema';
 import { useAuth } from '../shell/auth/AuthContext';
 import { Note } from '../shell/components/Controls';
 import { Sections } from './Layout';
-import { PHRASES, useWords } from './i18n';
+import { PHRASES, useWords, type WordKey } from './i18n';
 import { usePortalRead } from './usePortal';
 
 /**
@@ -65,6 +65,26 @@ function ReportButton({ documentId }: { documentId: string }) {
   );
 }
 
+/**
+ * A name for each kind of report a household may hold. Exhaustive, so a kind
+ * added to the list is a compile error here rather than a brain-map report
+ * called a session report on a family's screen.
+ */
+function kindWordKey(kind: PortalReport['kind']): WordKey {
+  switch (kind) {
+    case 'session':
+      return 'sessionReport';
+    case 'progress':
+      return 'progressReport';
+    case 'qeeg':
+      return 'brainMapReport';
+    default: {
+      const unknown: never = kind;
+      return unknown;
+    }
+  }
+}
+
 function ReportRow({ report }: { report: PortalReport }) {
   const words = useWords();
   const covers =
@@ -77,7 +97,7 @@ function ReportRow({ report }: { report: PortalReport }) {
   return (
     <div className="portal__row">
       <span className="numeric">{report.reference ?? ''}</span>
-      <span>{words.t(report.kind === 'progress' ? 'progressReport' : 'sessionReport')}</span>
+      <span>{words.t(kindWordKey(report.kind))}</span>
       <span className="numeric">{covers}</span>
       <span className="numeric">{report.issuedOn ? words.date(report.issuedOn) : ''}</span>
       {report.status === 'superseded' ? (

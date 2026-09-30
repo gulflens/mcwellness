@@ -9,6 +9,7 @@ import { documentFonts } from '../billing/fonts';
 import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
+import { issueQeeg } from './qeeg/issue';
 import { practiceTimeZone } from './gather';
 import { IssueInput, IssueResponse } from './schema';
 import { asRow, documentFrom, readReport } from './source';
@@ -66,7 +67,8 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
       // as a 500 on a path a stranger can call.
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
-    const body = IssueInput.safeParse(await c.req.json().catch(() => null));
+    const raw: unknown = await c.req.json().catch(() => null);
+    const body = IssueInput.safeParse(raw);
     if (!body.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
@@ -84,8 +86,30 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
     if (!mayDraftReport(actor, draft.client_id, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
+    if (draft.status === 'imported') {
+      // A past record is kept, never signed: its fixed wording would be
+      // today's and not what the household received (docs/SPEC/reports-qeeg.md
+      // section 11, point 4). A draft being brought in is refused by the
+      // brain map's own door, below.
+      return c.json({ error: 'unprocessable', code: 'imported_record', requestId }, 422);
+    }
     if (draft.status !== 'draft') {
       return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
+    }
+    switch (draft.kind) {
+      case 'session':
+      case 'progress':
+        break;
+      case 'qeeg':
+        // A brain-map report is signed through its own door, which asks what
+        // this one cannot: its wording approved in that language, its maps
+        // present and placed, its pages not running over
+        // (docs/SPEC/reports-qeeg.md section 14).
+        return issueQeeg(c, draft, raw, now());
+      default: {
+        const unknown: never = draft.kind;
+        return unknown;
+      }
     }
 
     const timeZone = await practiceTimeZone(db);

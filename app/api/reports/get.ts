@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Hono } from 'hono';
 import { renderReport } from '../../../domain/reports/document';
+import { hasRole } from '../../../domain/shared';
 import { DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../../domain/shared/storage';
 import { isUuid } from '../billing/ids';
 import { documentFonts } from '../billing/fonts';
@@ -9,8 +10,9 @@ import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayReadReport } from './access';
 import { contactClientIds } from './household';
-import { ReportResponse } from './schema';
-import { asRow, documentFrom, readReport } from './source';
+import { ReportResponse, type ReportRow } from './schema';
+import { renderSigned, type PictureRefusal } from './qeeg/pages';
+import { asRow, documentFrom, readReport, type ReportRecord } from './source';
 
 /**
  * `GET /api/reports/:id` — one report, its delivery history, and a short-lived
@@ -32,6 +34,20 @@ import { asRow, documentFrom, readReport } from './source';
  * and the mismatch is logged with the request id and nothing else — a key and
  * a hash both name a client's document.
  *
+ * **A household reads a signed brain map as its own screen does** (final
+ * security review, finding 1). The portal's Reports screen reads a report's
+ * row — reference, kind, status, dates, version, the document — and opens the
+ * PDF through an audited link; it never reads the body
+ * (app/api/portal/reports.ts). A brain map's stored body holds what its pages
+ * never print: items she left unticked, a calculated figure's assessments,
+ * the id of the report it is compared with (which may be a past record the
+ * household must never see). So a caller who is only a household is answered
+ * the row as the portal's list reads it (`asHouseholdRow`), the link, no
+ * deliveries and `content: null`. And when the
+ * signed file is missing, the household is answered 404 with no link, as the
+ * portal's own link route answers it: re-rendering is the practice's to do,
+ * and the repair's refusals are sentences for the practice.
+ *
  * This is the same shape `app/api/billing/documents.ts` keeps, and it is what
  * the integrator asked for on the specification's own pull request: the report
  * carries `document_id` on its row *and* has billing's repair path, so the
@@ -52,6 +68,103 @@ const DELIVERIES_SQL =
 const DOCUMENT_SQL =
   'select d.id, d.storage_key, d.sha256 from document d ' +
   'where d.tenant_id = app.current_tenant_id() and d.id = $1';
+
+/**
+ * A signed report's file, rendered again from its row, or why it cannot be.
+ * Each kind by its own renderer: a brain map by its own pages, its frozen
+ * pictures and its row's snapshots (`qeeg/pages.ts`), which read the
+ * practice's logo and its footer's telephone, email and website as they
+ * stand, as billing reads an invoice's logo; a report whose practice has
+ * changed either since is then refused below, as any other whose source has
+ * moved is.
+ *
+ * **A brain map that cannot be made again is refused by name**, and no link
+ * to its missing file is handed out: a map that is gone or not what was filed
+ * (docs/SPEC/reports-qeeg.md section 9, point 6) by the field that places it;
+ * pages that would now run over; a body that no longer reads as a report.
+ */
+type RepairRefusal = PictureRefusal | { readonly code: 'document_overrun' | 'document_unreadable' };
+
+type Remade =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; refusal: RepairRefusal }
+  | { ok: false; refusal: null };
+
+/** What a person reads when a signed brain map cannot be made again for want of a map. */
+export const REPAIR_SENTENCES: Readonly<Record<RepairRefusal['code'], string>> = Object.freeze({
+  document_overrun:
+    'The file of this signed report is missing, and its pages would no longer fit as they were filed (the practice’s logo or contact lines may have changed), so the file cannot be made again.',
+  document_unreadable:
+    'The file of this signed report is missing, and what it says can no longer be read as a report, so the file cannot be made again.',
+  unlinked_figure:
+    'The signed report names a map it does not hold, so its file cannot be made again.',
+  map_missing:
+    'The file of this signed report is missing, and a map it prints can no longer be found in the store, so the file cannot be made again.',
+  map_differs:
+    'The file of this signed report is missing, and a map it prints is not the picture that was filed, so the file cannot be made again.',
+});
+
+async function remade(
+  db: Parameters<typeof renderSigned>[0],
+  storage: Parameters<typeof renderSigned>[1],
+  record: ReportRecord,
+): Promise<Remade> {
+  switch (record.kind) {
+    case 'session':
+    case 'progress': {
+      const document_ = documentFrom(record);
+      return document_
+        ? { ok: true, bytes: renderReport(document_, documentFonts()) }
+        : { ok: false, refusal: null };
+    }
+    case 'qeeg': {
+      const filed = await renderSigned(db, storage, record);
+      if (filed.ok) return { ok: true, bytes: filed.bytes };
+      switch (filed.code) {
+        case 'unlinked_figure':
+        case 'map_missing':
+        case 'map_differs':
+          return { ok: false, refusal: filed.refusal };
+        case 'overrun':
+          // A signed page that would now run over: the live logo or footer
+          // moved. Refused by name, never a link to the missing file.
+          return { ok: false, refusal: { code: 'document_overrun' } };
+        case 'not_signed':
+        case 'invalid_content':
+          return { ok: false, refusal: { code: 'document_unreadable' } };
+        default: {
+          const unknown: never = filed;
+          return unknown;
+        }
+      }
+    }
+    default: {
+      const unknown: never = record.kind;
+      return unknown;
+    }
+  }
+}
+
+/**
+ * A signed brain map's row as a household is answered it: what the portal's
+ * list reads (id, client, kind, status, reference, dates, version, the
+ * document), and the shape's neutral value for everything else the practice
+ * keeps about the row — who signed it, why it was corrected, the versions and
+ * other-language reports it is tied to, and how often it was sent.
+ */
+function asHouseholdRow(row: ReportRow): ReportRow {
+  return {
+    ...row,
+    signedByName: null,
+    supersedesId: null,
+    amendmentReason: null,
+    deliveries: 0,
+    twinOfId: null,
+    twinId: null,
+    outOfStep: false,
+    recordedOn: null,
+  };
+}
 
 export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.get('/api/reports/:id', async (c) => {
@@ -77,18 +190,24 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
     if (!mayReadReport(actor, record.client_id, { clientIds }, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
+    const ofThePractice = hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner');
+    const householdBrainMap = !ofThePractice && record.kind === 'qeeg';
 
     // Opening a report is a `read` (section 8), written whether or not there
     // is a document behind it yet.
     await logRead(db, 'report', record.id, record.client_id);
 
-    const deliveries = await db.query<{
+    type DeliveryRead = {
       id: string;
       contact_id: string;
       contact_label: string;
       channel: 'whatsapp' | 'email';
       sent_at: string;
-    }>(DELIVERIES_SQL, [reportId]);
+    };
+    // Who a report was sent to is the practice's bookkeeping, never read for a household.
+    const deliveries = householdBrainMap
+      ? { rows: [] as DeliveryRead[] }
+      : await db.query<DeliveryRead>(DELIVERIES_SQL, [reportId]);
 
     let url: string | null = null;
     const storage = c.get('storage');
@@ -100,12 +219,36 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
       const row = found.rows[0];
       if (row) {
         if (!(await storage.exists(row.storage_key))) {
+          if (householdBrainMap) {
+            // The household's answer is the portal link route's: absent.
+            return c.json({ error: 'not_found', requestId }, 404);
+          }
           // From the row and nothing else, which is what makes the repair
           // path sound: the bytes it re-renders are the bytes that were filed,
           // whatever has been corrected on the client record since.
-          const remade = documentFrom(record);
-          if (remade) {
-            const bytes = renderReport(remade, documentFonts());
+          const again = await remade(db, storage, record);
+          if (!again.ok && again.refusal !== null) {
+            // Ids and a path, never a key or a digest: both name a client's document.
+            console.error(
+              JSON.stringify({
+                requestId,
+                name: 'ReportCannotBeMadeAgain',
+                code: again.refusal.code,
+                documentId: row.id,
+              }),
+            );
+            return c.json(
+              {
+                error: 'conflict',
+                ...again.refusal,
+                sentence: REPAIR_SENTENCES[again.refusal.code],
+                requestId,
+              },
+              409,
+            );
+          }
+          if (again.ok) {
+            const { bytes } = again;
             if (createHash('sha256').update(bytes).digest('hex') !== row.sha256.toString('hex')) {
               console.error(
                 JSON.stringify({
@@ -129,8 +272,8 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
 
     return c.json(
       ReportResponse.parse({
-        report: asRow(record),
-        content: record.content,
+        report: householdBrainMap ? asHouseholdRow(asRow(record)) : asRow(record),
+        content: householdBrainMap ? null : record.content,
         deliveries: deliveries.rows.map((row) => ({
           id: row.id,
           contactId: row.contact_id,
@@ -140,6 +283,11 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
         })),
         url,
         expiresInSeconds: url === null ? null : DEFAULT_SIGNED_URL_TTL_SECONDS,
+        // What a brain-map draft's next save names, so a page opened here
+        // cannot save over one made since (app/api/reports/qeegDraft.ts).
+        // The practice's alone: a household edits nothing, and when the
+        // practice last touched a row is not theirs to read.
+        ...(ofThePractice ? { savedAt: record.saved_at } : {}),
       }),
     );
   });

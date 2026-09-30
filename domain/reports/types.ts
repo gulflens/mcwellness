@@ -23,12 +23,22 @@
 /** A calendar date as YYYY-MM-DD. Compares correctly as a string. */
 export type IsoDate = string;
 
-/** The two kinds this piece builds (section 1). */
-export const REPORT_KINDS = ['session', 'progress'] as const;
+/**
+ * The kinds a report can be: the two this piece built (section 1), and the
+ * brain-map report (`qeeg`, docs/SPEC/reports-qeeg.md, migration 602), whose
+ * body is declared in `./qeeg/` and not in `ReportContent` below. The order
+ * is the database enum's own, so the schema route answers in it.
+ */
+export const REPORT_KINDS = ['session', 'progress', 'qeeg'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
-/** Draft, then issued, and superseded when a later version replaces it (section 6). */
-export const REPORT_STATUSES = ['draft', 'issued', 'superseded'] as const;
+/**
+ * Draft, then issued, and superseded when a later version replaces it
+ * (section 6). And `imported`: a past brain-map record brought in from the old
+ * tool, kept and never signed, never sent and never shown to the household
+ * (docs/SPEC/reports-qeeg.md section 11, migration 603).
+ */
+export const REPORT_STATUSES = ['draft', 'issued', 'superseded', 'imported'] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 /** Which language the practitioner's own narrative was written in (section 5). */

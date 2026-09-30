@@ -55,8 +55,23 @@ export function canDeliver(input: {
   /** The practice's own today, as YYYY-MM-DD. */
   today: string;
 }): DeliverAnswer {
-  if (input.report.status === 'draft') {
-    return { ok: false, code: 'not_issued' };
+  // Only a signed report goes out: an issued one, or a superseded version a
+  // household may be sent the correction of. A draft is unsigned; a past
+  // record brought in from the old tool was never signed here, has no PDF,
+  // and what the household holds of it is the old tool's print
+  // (docs/SPEC/reports-qeeg.md section 11, point 4). Exhaustive, so a status
+  // added later is a compile error here rather than a document sent.
+  switch (input.report.status) {
+    case 'issued':
+    case 'superseded':
+      break;
+    case 'draft':
+    case 'imported':
+      return { ok: false, code: 'not_issued' };
+    default: {
+      const unknown: never = input.report.status;
+      return unknown;
+    }
   }
 
   // A consent that is not active, or has run out on the day of sending, is no

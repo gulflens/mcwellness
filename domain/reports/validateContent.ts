@@ -38,6 +38,29 @@ function wrongKind(kind: ReportKind, claimed: unknown): ContentRefusal {
   };
 }
 
+/**
+ * The shape per kind, or none. The brain-map report (`qeeg`) has its own rule,
+ * `domain/reports/qeeg/shape.ts`, and its own routes: answering it here would
+ * be a second answer to what a brain-map report is, and would let a route
+ * built for the two kinds save, preview or re-render one. Exhaustive, so a
+ * kind added later is a compile error here rather than a body read as a
+ * session report's.
+ */
+function shapeFor(kind: ReportKind): typeof SessionReportShape | typeof ProgressReportShape | null {
+  switch (kind) {
+    case 'session':
+      return SessionReportShape;
+    case 'progress':
+      return ProgressReportShape;
+    case 'qeeg':
+      return null;
+    default: {
+      const unknown: never = kind;
+      return unknown;
+    }
+  }
+}
+
 export function validateContent(kind: ReportKind, content: unknown): ContentAnswer {
   if (content === null || typeof content !== 'object' || Array.isArray(content)) {
     return { ok: false, field: '', message: 'A report body is a set of fields.' };
@@ -47,10 +70,14 @@ export function validateContent(kind: ReportKind, content: unknown): ContentAnsw
     return wrongKind(kind, claimed);
   }
 
-  const parsed =
-    kind === 'session'
-      ? SessionReportShape.safeParse(content)
-      : ProgressReportShape.safeParse(content);
+  const parsed = shapeFor(kind)?.safeParse(content);
+  if (parsed === undefined) {
+    return {
+      ok: false,
+      field: 'kind',
+      message: 'A brain-map report is checked by its own rule, not this one.',
+    };
+  }
   if (parsed.success) {
     return { ok: true, content: parsed.data as ReportContent };
   }

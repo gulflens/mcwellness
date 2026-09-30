@@ -158,7 +158,7 @@ function report(over: Partial<ReportDocument> = {}): ReportDocument {
     locale: 'en',
     practice: PRACTICE,
     signer: SIGNER,
-    recipient: { name: RECIPIENT_NAME, recordNumber: 'MW-000004' },
+    recipient: { name: RECIPIENT_NAME, recordNumber: 'MW-000099' },
     reference: 'RPT-000001',
     issuedOn: '2026-09-06',
     version: 1,
@@ -180,7 +180,7 @@ describe('a rendered session report', () => {
     expect(text).toContain('Synthetic Wellness Studio');
     expect(text).toContain('RPT-000001');
     expect(text).toContain(RECIPIENT_NAME);
-    expect(text).toContain('MW-000004');
+    expect(text).toContain('MW-000099');
     expect(text).toContain('6 September 2026');
   });
 

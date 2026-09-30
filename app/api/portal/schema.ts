@@ -344,7 +344,12 @@ export type AgreementsResponse = z.infer<typeof AgreementsResponse>;
 export const PortalReport = z.object({
   id: z.uuid(),
   clientId: z.uuid(),
-  kind: z.enum(['session', 'progress']),
+  // The brain-map report is listed as the others are (docs/SPEC/reports-qeeg.md
+  // section 19, point 11). A past record brought in from the old tool
+  // (`imported`) is never a household's to see (section 11, point 4): the
+  // row policy keeps it from this answer, and this list has no word for it,
+  // so one that ever reached here would be refused rather than shown.
+  kind: z.enum(['session', 'progress', 'qeeg']),
   status: z.enum(['draft', 'issued', 'superseded']),
   reference: z.string().nullable(),
   issuedOn: IsoDate.nullable(),

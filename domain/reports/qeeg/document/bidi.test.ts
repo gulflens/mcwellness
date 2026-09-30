@@ -5,7 +5,16 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { baseDirection, classify, isPlainNumber, resolve, runsOf, textOf, tokenise } from './bidi';
+import {
+  baseDirection,
+  classify,
+  isPlainNumber,
+  readingDirection,
+  resolve,
+  runsOf,
+  textOf,
+  tokenise,
+} from './bidi';
 import type { Run } from './bidi';
 import type { Direction } from './direction';
 
@@ -479,5 +488,31 @@ describe('the Arabic blocks beyond the first', () => {
       expect(classify(letter)).toBe('R');
       expect(baseDirection(`${letter} Alpha`, 'ltr')).toBe('rtl');
     }
+  });
+});
+
+describe('which way typed words read, in a report', () => {
+  it('is the report’s way when they hold a letter of its script, wherever it stands', () => {
+    expect(readingDirection('EEG ثم كلمات', 'rtl')).toBe('rtl');
+    expect(readingDirection('كلمات ثم EEG', 'rtl')).toBe('rtl');
+    expect(readingDirection('Alpha موجات', 'ltr')).toBe('ltr');
+    expect(readingDirection('موجات Alpha', 'ltr')).toBe('ltr');
+  });
+
+  it('is the way of their own letters when they hold none of the report’s script', () => {
+    expect(readingDirection('Typed in English', 'rtl')).toBe('ltr');
+    expect(readingDirection('بندق مرج', 'ltr')).toBe('rtl');
+  });
+
+  it('is the report’s way when they hold no letter at all', () => {
+    expect(readingDirection('15', 'rtl')).toBe('rtl');
+    expect(readingDirection('15', 'ltr')).toBe('ltr');
+    expect(readingDirection('', 'rtl')).toBe('rtl');
+    expect(readingDirection('( 8 – 12 )', 'ltr')).toBe('ltr');
+  });
+
+  it('does not take a figure typed on an Arabic keyboard for a letter', () => {
+    expect(readingDirection('١٥', 'ltr')).toBe('ltr');
+    expect(readingDirection('Sessions ١٥', 'rtl')).toBe('ltr');
   });
 });

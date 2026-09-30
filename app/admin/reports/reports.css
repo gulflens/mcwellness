@@ -213,3 +213,11 @@
   padding-block: var(--s-1);
   color: var(--slate);
 }
+
+/* A brain map's other language, named beneath its facts (brief Q). */
+.report-view__twin {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--slate);
+}

@@ -7,6 +7,7 @@ import { documentFonts } from '../billing/fonts';
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
+import { previewQeeg } from './qeeg/preview';
 import { practiceTimeZone } from './gather';
 import { readRecipient, readReport } from './source';
 import { signerFor, signingCredentials } from './signer';
@@ -73,6 +74,19 @@ export function mountReportPreview(api: Hono<ApiEnv>, now: () => Date = () => ne
     }
     if (!mayDraftReport(actor, record.client_id, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    switch (record.kind) {
+      case 'session':
+      case 'progress':
+        break;
+      case 'qeeg':
+        // A brain-map report has pages, pictures and notes of its own
+        // (docs/SPEC/reports-qeeg.md section 12), drawn by its own door.
+        return previewQeeg(c, record, now());
+      default: {
+        const unknown: never = record.kind;
+        return unknown;
+      }
     }
 
     const parsed = validateContent(record.kind, record.content);

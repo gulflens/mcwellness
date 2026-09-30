@@ -63,6 +63,17 @@ export type Harness = {
   ) => Promise<Response>;
   authIdOf: (index: number) => string;
   /**
+   * A request whose body is bytes rather than JSON, or that has no body: the
+   * figure door's PUT and DELETE (docs/SPEC/reports-qeeg.md section 14).
+   */
+  raw: (
+    method: 'PUT' | 'DELETE',
+    path: string,
+    seededUser: number,
+    body?: Uint8Array,
+    extra?: Record<string, string>,
+  ) => Promise<Response>;
+  /**
    * A statement run with a seeded person's own audit context — their tenant,
    * their actor id and their roles — inside a transaction that is always
    * rolled back. For asking a database door a question the routes no longer
@@ -248,6 +259,16 @@ export async function startHarness(now: () => Date): Promise<Harness> {
     async call(method, path, seededUser, body, extra) {
       return callAs(method, path, authIdOf(seededUser), body, extra);
     },
+    async raw(method, path, seededUser, body, extra) {
+      const headers: Record<string, string> = {
+        authorization: `Bearer ${await mint(authIdOf(seededUser))}`,
+        ...extra,
+      };
+      const init: RequestInit = { method, headers };
+      // A copy on its own ArrayBuffer, which is what a request body is typed to take.
+      if (body !== undefined) init.body = new Uint8Array(body);
+      return api.request(path, init);
+    },
     async close() {
       await pool.end();
       await owner.end();
@@ -295,4 +316,24 @@ export function sessionBody(over: Record<string, unknown> = {}): Record<string, 
     beforeNextVisit: 'Keep to the same bedtime.',
     ...over,
   };
+}
+
+/**
+ * The codes of the refusals written to the trail as `action`, about one report
+ * (`entityId`) or one client, oldest first: what a door wrote before it
+ * answered (docs/SPEC/reports-v1.md section 8).
+ */
+export async function refusalsOnTrail(
+  owner: pg.Client,
+  action: string,
+  about: { entityId: string } | { clientId: string },
+): Promise<string[]> {
+  const [column, value] =
+    'entityId' in about ? ['entity_id', about.entityId] : ['client_id', about.clientId];
+  const { rows } = await owner.query<{ reason: string | null }>(
+    `select new_values->>'reason' as reason from audit_log where action = $1 and ${column} = $2 ` +
+      'order by id',
+    [action, value],
+  );
+  return rows.map((row) => row.reason ?? '');
 }

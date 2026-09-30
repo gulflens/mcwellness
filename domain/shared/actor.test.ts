@@ -739,6 +739,29 @@ describe('the kit register and the day picture', () => {
     }
   });
 
+  it('lets only the owner and the lead practitioner bring in a past record from the old tool', () => {
+    // docs/CHANGE-REQUESTS/reports-02.md request 6: a record kept against the
+    // wrong client is withdrawn by the same two people, and migration 603's
+    // guard asks the same roles underneath.
+    for (const role of ['owner', 'lead_practitioner'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'report.import', clientId: CLIENT }, {}, NOW),
+        role,
+      ).toBe(true);
+    }
+    for (const role of ['practitioner', 'admin', 'finance', 'client_contact'] as const) {
+      expect(
+        canActor(
+          actor([role]),
+          { type: 'report.import', clientId: CLIENT },
+          { clientIds: [CLIENT] },
+          NOW,
+        ),
+        role,
+      ).toBe(false);
+    }
+  });
+
   it('lets the owner, an admin and the lead practitioner deliver one', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
       expect(canActor(actor([role]), { type: 'report.deliver' }, {}, NOW), role).toBe(true);

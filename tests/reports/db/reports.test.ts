@@ -654,6 +654,29 @@ describe('issuing', () => {
     });
   });
 
+  it('hands a brain-map draft to its own rules, which take no number for a body they refuse', async () => {
+    // A brain-map report is signed by its own rules, which ask for its
+    // wording and its maps (docs/SPEC/reports-qeeg.md section 14) and the
+    // save it is made over (tests/reports/db/qeeg_issue.test.ts). An empty
+    // body names none, so it is refused before anything is written.
+    const { rows: made } = await h.owner.query<{ id: string }>(
+      'insert into report (tenant_id, client_id, kind, content) ' +
+        "select tenant_id, id, 'qeeg', '{}'::jsonb from client where id = $1 returning id",
+      [h.clientId(0)],
+    );
+    const id = made[0]!.id;
+
+    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {});
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { code: string }).toMatchObject({ code: 'invalid_request' });
+
+    const { rows } = await h.owner.query<{ status: string; number: number | null }>(
+      'select status, number from report where id = $1',
+      [id],
+    );
+    expect(rows[0]).toEqual({ status: 'draft', number: null });
+  });
+
   it('refuses an id that is not a uuid with a 400, on every route that takes one', async () => {
     // Unvalidated, the path reached a uuid column and Postgres raised, which
     // the error handler answered as a 500 — on a path a stranger can call.

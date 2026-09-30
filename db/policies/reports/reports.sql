@@ -73,7 +73,12 @@ $$;
 --    child through, and hiding it in a browser while the row is still readable
 --    is the pattern this repository refuses everywhere else.
 --
---    A draft is nobody's but the practice's, ever.
+--    A draft is nobody's but the practice's, ever. So is a past record brought
+--    in from the old tool (status `imported`, docs/SPEC/reports-qeeg.md section
+--    11): it was printed once, by that tool, and is kept so a follow-up can be
+--    compared with it, never to be read here. It is left out by the same
+--    clause that leaves a draft out — the household's line names the two
+--    statuses it may read, and `imported` is neither.
 ------------------------------------------------------------------------------
 drop policy if exists report_readers on public.report;
 create policy report_readers on public.report as restrictive for select to app_role using (
@@ -95,6 +100,25 @@ create policy report_readers on public.report as restrictive for select to app_r
 --    on their own schedule. An admin reads and delivers and never drafts
 --    (section 7.1); finance is nowhere near it.
 --
+--    **Bringing a file in is the owner's and the lead practitioner's**
+--    (docs/CHANGE-REQUESTS/reports-02.md, request 6: `report.import`). A row
+--    that carries a source — a draft read from the old tool's file — is
+--    written, inserted or updated, by those two alone, so the rule is not only
+--    the route's. A practitioner drafts and edits the brain maps written here.
+--    The rule stands on both sides of an update: in USING, so a practitioner
+--    cannot reach a row that carries a source at all — not even to clear the
+--    source and turn the old file's content into an ordinary draft she could
+--    sign (section 11 forbids it) — and in WITH CHECK, so she cannot write a
+--    source onto a draft of her own. Row security answers the first by
+--    leaving the row out (the update touches nothing), the second by refusing
+--    at 42501.
+--
+--    **Never a past record in one step.** A row brought in from the old tool
+--    is saved as a draft, read over, and kept by `app.keep_imported_report`
+--    (603), which the guard lets only the owner and the lead practitioner
+--    through. Inserting one already `imported` would walk round both, so the
+--    API role may not.
+--
 --    Update: the same three. Which updates are permitted is not this policy's
 --    question — `app.guard_report_write` (600) refuses every change to an
 --    issued row but filing its PDF and marking it superseded, and it raises
@@ -107,7 +131,10 @@ create policy report_readers on public.report as restrictive for select to app_r
 drop policy if exists report_writers on public.report;
 create policy report_writers on public.report as restrictive for insert to app_role
   with check (
-    app.client_erasure_gate(app.client_status_for(client_id)) and (
+    status <> 'imported'
+    and (imported_from is null or app.actor_has_role('owner')
+         or app.actor_has_role('lead_practitioner'))
+    and app.client_erasure_gate(app.client_status_for(client_id)) and (
       app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
       or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
     )
@@ -116,13 +143,17 @@ create policy report_writers on public.report as restrictive for insert to app_r
 drop policy if exists report_amenders on public.report;
 create policy report_amenders on public.report as restrictive for update to app_role
   using (
-    app.client_erasure_gate(app.client_status_for(client_id)) and (
+    (imported_from is null or app.actor_has_role('owner')
+     or app.actor_has_role('lead_practitioner'))
+    and app.client_erasure_gate(app.client_status_for(client_id)) and (
       app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
       or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
     )
   )
   with check (
-    app.client_erasure_gate(app.client_status_for(client_id)) and (
+    (imported_from is null or app.actor_has_role('owner')
+     or app.actor_has_role('lead_practitioner'))
+    and app.client_erasure_gate(app.client_status_for(client_id)) and (
       app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
       or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
     )

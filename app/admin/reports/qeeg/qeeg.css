@@ -1,0 +1,383 @@
+/*
+  The brain-map report's form (docs/SPEC/reports-qeeg.md section 15,
+  docs/DESIGN-BRIEF.md sections 5 and 6).
+
+  The report editor's own column and vocabulary (../reports.css), with what a
+  long form of twelve sections adds: a row per section that opens it and says
+  how much is left, hairlines between them, and the ticks laid out in two
+  columns where the drawer is wide enough. Every value is a token from
+  app/shell/tokens.css and every rule is written in logical properties.
+*/
+
+.qeeg-editor__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.qeeg-editor__head p {
+  margin: 0;
+}
+
+.qeeg-sections {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.qeeg-section {
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.qeeg-section__heading {
+  margin: 0;
+  font-size: var(--t-body);
+  font-weight: var(--w-medium);
+}
+
+/* A whole row: the title, and at its far end how much is left. */
+.qeeg-section__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  inline-size: 100%;
+  min-block-size: var(--row);
+  padding-block: var(--s-2);
+  padding-inline: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.qeeg-section__toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.qeeg-section__toggle[aria-expanded='true'] {
+  color: var(--brand);
+}
+
+.qeeg-section__left {
+  margin-inline-start: auto;
+  color: var(--slate);
+  font-weight: var(--w-regular);
+  font-variant-numeric: tabular-nums;
+}
+
+.qeeg-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-block-end: var(--s-5);
+}
+
+.qeeg-section__body p {
+  margin: 0;
+}
+
+/* A band, a kind of connectivity, a dimension: a group without a box. */
+.qeeg-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  padding-block-start: var(--s-3);
+  border: none;
+  border-block-start: var(--hairline) solid var(--rule);
+  min-inline-size: 0;
+}
+
+.qeeg-item:first-child {
+  border-block-start: none;
+  padding-block-start: 0;
+}
+
+.qeeg-item__title {
+  padding: 0;
+  font-weight: var(--w-medium);
+}
+
+.qeeg-picked,
+.qeeg-picked__ticks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.qeeg-regions {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-inline-size: 0;
+}
+
+.qeeg-regions__list,
+.qeeg-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0 var(--s-4);
+}
+
+/* One of her own items, or a headline: its controls in one quiet column. */
+.qeeg-own {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-block: var(--s-2);
+  padding-inline-start: var(--s-4);
+  border-inline-start: var(--hairline) solid var(--rule);
+}
+
+.qeeg-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-3);
+}
+
+.qeeg-add .field {
+  flex: 1 1 14rem;
+}
+
+.qeeg-figure {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-inline-size: 0;
+}
+
+.qeeg-figure__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.qeeg-figure__row .field {
+  flex: 1 1 8rem;
+}
+
+.qeeg-measure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.qeeg-measure__figures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-inline-start: var(--s-6);
+}
+
+.qeeg-rich {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.qeeg-rich__tools {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.qeeg-rich__tools [aria-pressed='true'] {
+  color: var(--brand);
+}
+
+.qeeg-rich__as-set {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+}
+
+.qeeg-rich__formatted {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.qeeg-fixed {
+  color: var(--ink-2);
+}
+
+.qeeg-set-aside {
+  margin: 0;
+  padding-inline-start: var(--s-5);
+}
+
+.qeeg-start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+}
+
+.qeeg-start fieldset {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-inline-size: 0;
+}
+
+/*
+  The brain maps: a ledger row per map. The picture she has just chosen is a
+  small thumbnail at its own proportions, never cropped; the actions wrap
+  under one another when the drawer is narrow.
+*/
+.qeeg-maps td {
+  vertical-align: top;
+}
+
+.qeeg-maps__place {
+  margin: 0;
+}
+
+.qeeg-maps__thumb {
+  display: block;
+  max-inline-size: 8rem;
+  max-block-size: 6rem;
+  margin-block-start: var(--s-2);
+  border: var(--hairline) solid var(--rule);
+  object-fit: contain;
+}
+
+.qeeg-maps__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.qeeg-maps__confirm {
+  margin-block-start: var(--s-2);
+  padding-block-start: var(--s-2);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.qeeg-maps__confirm p {
+  margin: 0;
+}
+
+/*
+  Preview and Sign at the foot of the form, and what the pages told her
+  beside them (QeegSigning.tsx): a short list in the small type, one line a
+  finding, never a card.
+*/
+.qeeg-signing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.qeeg-signing__notes p {
+  margin: 0;
+}
+
+.qeeg-signing__lines,
+.qeeg-signing__missing {
+  margin: 0;
+  padding-inline-start: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+/* The signed report, read only: a label and its value on each row. */
+.qeeg-signed {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-2) var(--s-4);
+  margin: 0;
+}
+
+.qeeg-signed dt {
+  color: var(--ink-2);
+}
+
+.qeeg-signed dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The Arabic version of what she typed, beside its English (brief Q). */
+.qeeg-arabic {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1);
+}
+
+.qeeg-arabic .field {
+  align-self: stretch;
+}
+
+.qeeg-arabic p {
+  margin: 0;
+}
+
+/* The other language of a signed report: what may be written in it. */
+.qeeg-twin__texts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qeeg-twin__texts p {
+  margin: 0;
+}
+
+.qeeg-twin__english {
+  white-space: pre-wrap;
+}
+
+.qeeg-signing__language {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+/* A past record's picture, as it will be kept, beside its condition. */
+.qeeg-past__thumb {
+  display: block;
+  max-inline-size: 8rem;
+  block-size: auto;
+}
+
+/* What the earlier report chose, offered beside a follow-up's list (brief S). */
+.qeeg-offered {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-block: var(--s-2);
+  padding-inline-start: var(--s-4);
+  border-inline-start: var(--hairline) solid var(--rule);
+}
+
+.qeeg-offered__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qeeg-offered__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+}

@@ -159,10 +159,16 @@ const ENTITY: Record<string, Text> = {
   staff_profile: t('staff profile', 'ملف موظف'),
 };
 
-/** The two kinds a report can be (docs/SPEC/reports-v1.md section 1). */
+/**
+ * The kinds a report can be (docs/SPEC/reports-v1.md section 1), and the
+ * brain-map report (docs/SPEC/reports-qeeg.md; docs/CHANGE-REQUESTS/
+ * reports-02.md request 7), named as the household's portal names it
+ * (app/client/i18n/dictionary.ts `brainMapReport`).
+ */
 const REPORT_KIND: Record<string, Text> = {
   session: t('session report', 'تقرير الجلسة'),
   progress: t('progress report', 'تقرير التقدّم'),
+  qeeg: t('brain map report', 'تقرير خريطة الدماغ'),
 };
 
 /** What an instrument is, for the register's own sentences (section 6.1). */
@@ -666,7 +672,14 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
       );
     case 'client.update':
       return `${actor} ${joinClauses(clientClauses(event, fields, locale), locale)}`;
+    // With it, a brain-map act refused on who is asking, before any report is
+    // named (a new draft, a prefill, an import): written against the client,
+    // and said as any refusal on the record is (docs/SPEC/reports-v1.md
+    // section 8).
     case 'client.refused':
+    case 'client.report.draft_refused':
+    case 'client.report.prefill_refused':
+    case 'client.report.import_refused':
       return pick(
         t(`${actor} was refused access to this record`, `${actor} مُنع من الوصول إلى هذا السجل`),
         locale,
@@ -1095,8 +1108,49 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         ),
         locale,
       );
+    // A brain-map report's own acts (docs/SPEC/reports-qeeg.md sections 8, 9
+    // and 11; docs/CHANGE-REQUESTS/reports-02.md request 7). None names a
+    // map's digest, the old file's format or anything the file held: the
+    // trail's entity and client columns already say which report.
+    case 'report.report.imported':
+      return pick(
+        t(
+          `${actor} brought in a past record from the old report tool`,
+          `${actor} أدخل سجلًا سابقًا من أداة التقارير القديمة`,
+        ),
+        locale,
+      );
+    case 'report.report.import_kept':
+      return pick(t(`${actor} kept this past record`, `${actor} حفظ هذا السجل السابق`), locale);
+    case 'report.report.import_withdrawn':
+      // The reason travels in `reason`, as a replaced report's does.
+      return pick(t(`${actor} withdrew this past record`, `${actor} سحب هذا السجل السابق`), locale);
+    case 'report.report.figure_filed':
+      return pick(
+        t(`${actor} added a brain map to this report`, `${actor} أضاف خريطة دماغ إلى هذا التقرير`),
+        locale,
+      );
+    case 'report.report.figure_removed':
+      return pick(
+        t(
+          `${actor} removed a brain map from this report`,
+          `${actor} أزال خريطة دماغ من هذا التقرير`,
+        ),
+        locale,
+      );
+    case 'report.report.twin_started':
+      return pick(
+        t(
+          `${actor} started this report in the other language`,
+          `${actor} بدأ هذا التقرير باللغة الأخرى`,
+        ),
+        locale,
+      );
     case 'report.report.supersede_refused':
     case 'report.report.deliver_refused':
+    case 'report.report.twin_refused':
+    case 'report.report.import_refused':
+    case 'report.report.figure_refused':
       return pick(
         t(
           `${actor} was refused an action on this report`,

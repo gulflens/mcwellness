@@ -82,7 +82,7 @@ Rules of the shape:
 8. **Formatted text is refused, never cleaned**, when it holds anything cleaning would remove. Its marks count from its letters, and cleaning would move them. The editor cleans the summary before it saves.
 9. **The key of a typed thing is one the app makes**: a small letter, then up to thirty-one small letters, figures or hyphens, and never a name every object answers to. The keys are read as they were sent, before anything else looks at the list.
 10. **The day of the recording is a real day**, from 2000 to 2100.
-11. **What the server works out is never taken from a request**: the client, where a report came from, a calculated figure. A request that carries one is refused by the route.
+11. **What the server works out is never taken from a request**: the client, where a report came from, what it is compared with beyond its id, and a calculated figure. A request that carries one is refused by the route. The earlier scores and maps, and a number of sessions said to be counted from the visits, are shown on the form and sent back as it got them, so the server writes them afresh at every save, whatever the request carried. Only a number of sessions marked typed is kept from the request, and it is printed as recorded by the practitioner.
 12. **What counts as nothing.** Text is nothing when nothing in it would be drawn: white space, the two characters that part letters and join them, a soft hyphen, a mark with no letter to stand on. English that must not be empty is refused when it is nothing in this sense, and an Arabic of nothing is none. What is STORED still keeps the two characters of rule 7.
 13. **A follow-up is not recorded before what it is compared with.** The same day is allowed. A recording with no day yet is allowed: a draft is saved before it is filled.
 
@@ -163,12 +163,12 @@ A follow-up's own page, modelled on a one-page example the practice supplied as 
 2. **A figure says where it came from.** `typed` is the practitioner's own estimate. `calculated` is arithmetic on two recorded assessments, and records which two.
 3. **No figure is ever read off a picture.** There is no path in the code from the bytes of an image to a number, and there is not to be one.
 4. **The note follows from the source.** A page of typed figures says they are the practitioner's approximate visual estimates and not a measure of change in function. A page of calculated figures says what they were calculated from. The practitioner does not choose the note.
-5. **The server does the arithmetic.** A `calculated` figure in a request is discarded and worked out again. Only a `typed` figure is kept from the caller.
+5. **The server does the arithmetic.** While decision 5 of section 18 stands, a `calculated` figure in a request is refused by the route, as rule 11 of section 4 says, and nothing is calculated. Only a `typed` figure is kept from the caller. When the mapping software's figures can be brought in, the server will work out a calculated figure itself and still never take one from a request.
 6. **Four measures can be calculated**: delta, theta, alpha and beta, which the assessment records. High beta and the narrower bands are typed until an instrument records them.
 7. **Direction is a shape.** A figure that went down is marked by a triangle pointing down, in ink. Whether that is welcome is said in her summary and never by a colour the system chose.
 8. **The comparison's own sentence** is printed beneath the figures, as on every comparison (`assessment.md` section 3.3).
 
-Sessions completed are counted from the client's visits, and may be typed when some were elsewhere. The figure says which.
+Sessions completed are counted from the client's visits, and may be typed when some were elsewhere. The figure says which. A visit counts when it is the client's, completed and closed, and not voided, and its day (the practice's day of its check-in) falls after the earlier recording and before this one, neither day included; while this recording has no day, the count runs to today, today included. The count is of every visit in the practice, whoever asks, and is made again at every save. A count of none gives no figure. A correction keeps the figure as it was signed, and its next save counts a counted figure again.
 
 ## 11. Past records
 
@@ -179,8 +179,8 @@ Reports written in the old tool are brought in so that a follow-up can be compar
 3. **Positions become names, once.** The old file counted its ticks by position. Fixed tables turn each position into a name, and a test pins every table in full.
 4. **Kept, not signed.** A past record has the status `imported`. It is frozen. It has no reference, no signer's snapshot and no PDF, because it was printed once, by the old tool, in the old tool's words. It is invisible to the household and refused by deliver and by supersede. **It cannot be issued**: its fixed wording would be today's and not what the household received.
 5. **Honest about what it could not carry.** Each thing the reader changed or dropped is recorded as a note naming the field, never what was typed: a score the old tool defaulted, a value with no name here, colour in the summary, the picture of a signature. A picture keeps the place it had in the file, so a note can say which was left out. After twenty places left out, one note says that more were, and no more are written: a record must never earn more notes than can be kept.
-6. **The same file twice** for one client is refused.
-7. **Kept against the wrong client**, it is withdrawn by an owner or a lead practitioner, with a reason: content cleared, maps removed, the stamp kept.
+6. **The same file twice** for one client is refused. The file is known by the fingerprint of its bytes, taken in the browser. The server checks that the fingerprint is well formed and that the content repeats it; it never sees the file, so this shows the two agree, not that they came from that file. The same report saved again with different spacing is a different file.
+7. **Kept against the wrong client**, it is withdrawn by an owner or a lead practitioner, with a reason: content cleared, maps removed, the stamp kept. Removed means the pictures too, frozen as they are: they are another person's. The withdraw deletes them under the same marker an erasure uses, and only the withdrawn record's own pictures, which no other report links. A record brought in and not yet kept is withdrawn the same way.
 8. **What the old tool called a follow-up** is kept as a first-report edition that says it was a follow-up. The old tool offered only the first report's lists.
 9. **A past record is never turned into a follow-up**, and a follow-up never says it came from a file. A follow-up is written in the app, against a past record or a signed report, and compared with it.
 
@@ -268,13 +268,13 @@ All under `/api/reports`, behind the same fence and the same permissions as the 
 
 | Route | Does |
 | --- | --- |
-| `POST /draft` | saves a `qeeg` draft: gathers the client, recomputes calculated figures, validates, refuses a save made over a newer one |
+| `POST /draft` | saves a `qeeg` draft: gathers the client, refuses a calculated figure (section 18, decision 5), counts again a number of sessions said to be counted, validates, refuses a save made over a newer one |
 | `GET /:id/preview?locale=` | renders the draft in either language; prints the draft-wording line while the wording is a draft |
 | `POST /:id/issue` | refuses what is incomplete, a language still in draft, a map that is missing; gathers the client once more; signs |
 | `POST /:id/supersede` | carries what it is compared with, its twin and its maps to the new draft |
 | `PUT /:id/figures`, `DELETE /:id/figures/:figureId` | a draft's maps |
 | `POST /:id/twin` | the draft in the other language |
-| `GET /qeeg/prefill` | an empty follow-up, with the earlier scores and maps brought forward and every judgement left for her |
+| `GET /qeeg/prefill?clientId=&from=&recordedOn=&stage=&draftId=` | a follow-up begun from a signed report or a kept past record: the earlier scores and maps, what it is compared with and the handedness brought forward, the sessions counted from the visits, every judgement left for her, and what she chose last time answered beside it as `offered`, never filled in. Writes no report, and is audited as a read of the report and of the client. Each of `prefillFollowUp`'s refusals is answered by its own code and sentence, in its order, `other_client` first; a household is refused |
 | `POST /qeeg/import`, `POST /:id/keep-import`, `POST /:id/withdraw-import` | past records |
 
 ## 15. Screens

@@ -1,0 +1,748 @@
+/**
+ * The shape a stored brain-map report is held to, in either edition.
+ *
+ * **Strict, and refused by name.** Every object here is `.strict()`, as the
+ * other report kinds are (`domain/reports/shapes`): a field the renderer never
+ * reads would be a promise the document does not keep, so an unknown key is
+ * refused and named, at whatever depth it sits. A refusal carries the dotted
+ * path to the field, because a draft that will not save is a practitioner
+ * staring at a form, and "invalid" tells her nothing.
+ *
+ * **`null` is "not chosen yet".** An unfinished draft has to save, so nothing
+ * a practitioner chooses is required here. What a report needs before it can
+ * be signed is `complete.ts`'s question, asked separately.
+ *
+ * **Each edition validates against its own lists.** A first report's band is
+ * increased, reduced or within normal limits; a follow-up's band has improved,
+ * held or moved further. The two lists share no name, and each edition's shape
+ * knows only its own, so a choice made in one can never be read as the other.
+ *
+ * **What is typed is handed back clean.** Every string a person typed comes
+ * back as `clean` (`text.ts`) makes it, and its length is checked after
+ * that, so what is validated is what is stored. Rich text is refused rather
+ * than cleaned when it holds anything `clean` removes: its marks count from
+ * its letters, and cleaning would move them.
+ *
+ * **No figure is read off a picture.** A change figure says whether it was
+ * typed or calculated, a calculated one carries what it was calculated from,
+ * and only a measure the app records (`CALCULABLE_MEASURES`) can have one. A
+ * headline tile is always the practitioner's own figure.
+ */
+
+import { z } from 'zod';
+import { eachOf } from './blank';
+import {
+  APPROACH_IDS,
+  BAND_CHANGES,
+  BAND_IDS,
+  BENEFIT_IDS,
+  CALCULABLE_MEASURES,
+  CONNECTIVITY_CHANGES,
+  CONNECTIVITY_IDS,
+  DIMENSION_IDS,
+  FINDING_IDS,
+  FOCUS_IDS,
+  INITIAL_BAND_LEVELS,
+  INITIAL_CONNECTIVITY_LEVELS,
+  MEASURE_IDS,
+  NEXT_STAGE_IDS,
+  RECOMMENDATION_IDS,
+  REGION_IDS,
+  QEEG_ONLY,
+} from './catalogue/ids';
+import {
+  CONDITIONS,
+  EYES,
+  HANDEDNESS,
+  IMPORT_NOTE_CODES,
+  LIMITS,
+  SEXES,
+  STAGES,
+  type QeegContent,
+  type QeegFollowUp,
+  type QeegInitial,
+} from './types';
+import { UNCUT, clean, isBlank, isRealDay, isRecord, withoutUnseen } from './text';
+
+// ---------------------------------------------------------------------------
+// Small pieces
+// ---------------------------------------------------------------------------
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+
+/**
+ * A day, refused ONCE when it is none (RC4 note N1): a text not written
+ * `YYYY-MM-DD` is told so and nothing more, since whether it is in the
+ * calendar cannot be asked of it.
+ */
+const day = z.string().superRefine((text, ctx) => {
+  if (!ISO_DATE.test(text)) {
+    ctx.addIssue({ code: 'custom', message: 'A date is written YYYY-MM-DD.' });
+  } else if (!isRealDay(text)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'That day is not in the calendar, or not from 2000 to 2100.',
+    });
+  }
+});
+
+const whole = (least: number, most: number) => z.number().int().min(least).max(most);
+
+const scoreOrNull = whole(0, 10).nullable();
+
+/** A list chosen from `ids`, with nothing in it twice. */
+function uniqueOf<const T extends readonly [string, ...string[]]>(ids: T) {
+  return z.array(z.enum(ids)).superRefine((list, ctx) => {
+    list.forEach((value, index) => {
+      if (list.indexOf(value) < index) {
+        ctx.addIssue({ code: 'custom', path: [index], message: `${value} is chosen twice.` });
+      }
+    });
+  });
+}
+
+const regions = uniqueOf(REGION_IDS);
+
+/**
+ * A string a person typed, handed back as `clean` makes it, the rule the
+ * editor uses, and held to `least` and `most` AFTER cleaning, so what is
+ * checked is what is stored.
+ */
+function typed(most: number, least = 0, empty = 'This is never empty.') {
+  return z
+    .string()
+    .transform((value) => clean(value, UNCUT))
+    .pipe(
+      z
+        .string()
+        .max(most)
+        // Required text must draw something: a label of U+200C alone is empty.
+        .refine((value) => least === 0 || !isBlank(value), empty),
+    );
+}
+
+/** An optional Arabic: one that draws nothing once cleaned is none. */
+function typedOrNone(most: number) {
+  return typed(most)
+    .nullable()
+    .transform((value) => (value === null || isBlank(value) ? null : value));
+}
+
+/** Typed once in English, with an optional Arabic, each held to `most`. */
+const bilingual = (most: number) => z.object({ en: typed(most), ar: typedOrNone(most) }).strict();
+
+/** A label she added: never empty in English. */
+const labelText = z
+  .object({
+    en: typed(LIMITS.label, 1, 'A label she adds is never empty.'),
+    ar: typedOrNone(LIMITS.label),
+  })
+  .strict();
+
+const mark = z
+  .object({
+    from: z.number().int().min(0),
+    to: z.number().int().min(0),
+    bold: z.literal(true).optional(),
+    underline: z.literal(true).optional(),
+  })
+  .strict();
+
+const richText = (most: number) =>
+  z
+    .object({
+      text: z
+        .string()
+        .max(most)
+        .refine(
+          (text) => withoutUnseen(text).normalize('NFC') === text,
+          'Rich text holds only what the editor keeps, composed, since its marks count from it.',
+        ),
+      marks: z.array(mark).max(LIMITS.marks),
+    })
+    .strict()
+    .superRefine((rich, ctx) => {
+      let end = 0;
+      rich.marks.forEach((each, index) => {
+        const path = ['marks', index];
+        if (!(each.from < each.to && each.to <= rich.text.length)) {
+          ctx.addIssue({ code: 'custom', path, message: 'A mark lies inside the text it marks.' });
+        } else if (each.from < end) {
+          ctx.addIssue({ code: 'custom', path, message: 'Marks are in order and never overlap.' });
+        }
+        if (splitsPair(rich.text, each.from) || splitsPair(rich.text, each.to)) {
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: 'A mark begins and ends on the edge of a letter, never inside one.',
+          });
+        }
+        if (!each.bold && !each.underline) {
+          ctx.addIssue({ code: 'custom', path, message: 'A mark is bold, underlined, or both.' });
+        }
+        end = Math.max(end, each.to);
+      });
+    });
+
+/** Whether `at` falls between the two halves of a letter written as a pair. */
+function splitsPair(text: string, at: number): boolean {
+  const high = text.charCodeAt(at - 1);
+  const low = text.charCodeAt(at);
+  return high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff;
+}
+
+/**
+ * A formatted summary. An Arabic that draws nothing is handed back as
+ * none, as a plain Arabic is (`typedOrNone`), and as the page reads it anyway
+ * (`richFor`). The English is never none, so an English of nothing stays as
+ * it was given.
+ */
+const bilingualRich = (most: number) =>
+  z
+    .object({
+      en: richText(most),
+      ar: richText(most)
+        .nullable()
+        .transform((value) => (value !== null && isBlank(value.text) ? null : value)),
+    })
+    .strict();
+
+/** The keys the app makes for an ordered list's items: `c0`, `map-0`, `t1`. */
+const ORDERED_KEY = /^[a-z][a-z0-9-]{0,31}$/;
+
+/**
+ * A key the app would make, and not one every object answers to.
+ * `constructor` fits the pattern, so it is refused by name besides.
+ */
+const isOrderedKey = (key: string) => ORDERED_KEY.test(key) && !(key in Object.prototype);
+
+/**
+ * The key the app makes for a new item of an ordered list: the prefix and
+ * the first number not in use (`c0`, `c1` for her own items, `m0` for a
+ * map). One rule, here beside the rule it must satisfy, for the form, the
+ * offered suggestions and the maps alike.
+ */
+export function freeKey(taken: Readonly<Record<string, unknown>>, prefix: 'c' | 'm'): string {
+  let n = 0;
+  while (Object.hasOwn(taken, `${prefix}${n}`)) n += 1;
+  return `${prefix}${n}`;
+}
+
+/**
+ * Every key of an ordered list, read from the input AS IT WAS SENT. A record
+ * in zod passes over a key named after the prototype, so its value would be
+ * neither read nor handed back; looking at the raw keys first is what lets
+ * such a key be refused by name, with `constructor` and `toString` beside it.
+ */
+function keysAreTheApps(input: unknown, ctx: z.core.$RefinementCtx): unknown {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) return input;
+  for (const key of Object.keys(input)) {
+    if (!isOrderedKey(key)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: 'An item is kept under a short lower-case key the app makes.',
+      });
+    }
+  }
+  return input;
+}
+
+/**
+ * A list of typed things kept in order without being an array: each item
+ * under its own key, with a place from 0 to n-1, none repeated.
+ */
+function ordered<const F extends z.core.$ZodLooseShape>(fields: F, most: number) {
+  return z.preprocess(
+    keysAreTheApps,
+    z
+      .record(
+        z.string().refine(isOrderedKey),
+        z.object({ ...fields, position: z.number().int() }).strict(),
+      )
+      .superRefine((items, ctx) => {
+        const keys = Object.keys(items);
+        if (keys.length > most) {
+          ctx.addIssue({ code: 'custom', path: [], message: `At most ${most} may be kept here.` });
+        }
+        checkPositions(items, ctx);
+      }),
+  );
+}
+
+/**
+ * Places run from 0 with no gap and no repeat. Refused at the place that
+ * breaks it. Each item's place is asked for, not assumed: zod has already
+ * refused an item that has none, and such an item is passed over here.
+ */
+function checkPositions(items: Readonly<Record<string, unknown>>, ctx: z.core.$RefinementCtx) {
+  const present: Array<[string, number]> = [];
+  for (const [key, item] of Object.entries(items)) {
+    const position = isRecord(item) ? item['position'] : undefined;
+    if (typeof position === 'number') present.push([key, position]);
+  }
+  const seen = new Set<number>();
+  for (const [key, position] of present) {
+    if (position < 0 || position >= present.length || seen.has(position)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key, 'position'],
+        message: 'Places run from 0 with no gap and no repeat.',
+      });
+    }
+    seen.add(position);
+  }
+}
+
+const customItem = {
+  label: labelText,
+  note: bilingual(LIMITS.note).nullable(),
+  chosen: z.boolean(),
+};
+
+function picked<const T extends readonly [string, ...string[]]>(ids: T) {
+  return z
+    .object({ chosen: uniqueOf(ids), custom: ordered(customItem, LIMITS.customPerList) })
+    .strict();
+}
+
+const figureFields = {
+  figureId: z.uuid(),
+  sha256: z.string().regex(SHA256, 'A digest is 64 lower-case hexadecimal characters.'),
+  widthPx: z.number().int().min(1),
+  heightPx: z.number().int().min(1),
+};
+
+const figureRef = z.object(figureFields).strict();
+
+const mapFields = {
+  ...figureFields,
+  condition: z.enum(CONDITIONS).nullable(),
+  caption: bilingual(LIMITS.caption).nullable(),
+};
+
+/**
+ * Where an import note points: a dotted path as the old-file reader writes
+ * one (`findings.custom.c0.label.en`, `images.map-2`,
+ * `provenance.asPrinted`). It begins with a small letter; each part between
+ * dots is not empty and begins with a letter or a figure, and holds letters
+ * (capitals inside a name), figures, hyphens and underscores; up to 200 in
+ * all. The reader writes it, so anything else is a forged body.
+ */
+const NOTE_PATH = /^[a-z][a-zA-Z0-9_-]*(?:\.[a-zA-Z0-9][a-zA-Z0-9_-]*)*$/;
+
+const provenance = z.discriminatedUnion('origin', [
+  z.object({ origin: z.literal('app') }).strict(),
+  z
+    .object({
+      origin: z.literal('legacy_tool'),
+      format: z.literal('qeeg.json/1'),
+      sourceSha256: z.string().regex(SHA256),
+      notes: z
+        .array(
+          z
+            .object({
+              code: z.enum(IMPORT_NOTE_CODES),
+              at: z
+                .string()
+                .max(200)
+                .regex(NOTE_PATH, 'A note points at a path this app writes.')
+                .nullable(),
+            })
+            .strict(),
+        )
+        .max(500),
+      asPrinted: z
+        .object({
+          signerName: typed(LIMITS.label).nullable(),
+          signerRole: typed(LIMITS.label).nullable(),
+        })
+        .strict(),
+    })
+    .strict(),
+]);
+
+const subject = z
+  .object({
+    nameAr: typed(LIMITS.label).nullable(),
+    ageYears: whole(0, 130).nullable(),
+    sex: z.enum(SEXES).nullable(),
+  })
+  .strict();
+
+const recording = z
+  .object({
+    recordedOn: day.nullable(),
+    eyes: z.enum(EYES).nullable(),
+    handedness: z.enum(HANDEDNESS).nullable(),
+  })
+  .strict();
+
+/**
+ * A number of sessions, typed or counted: the one bound, used by the plan of
+ * either edition and the sessions completed, and asked by everything else
+ * through `isSessionCount` (the form, the count of completed visits, the
+ * old-file reader).
+ */
+const sessionCount = whole(1, LIMITS.sessionsMost);
+
+const sessions = sessionCount.nullable();
+
+/** One entry for every key of a list, each of the same shape. */
+function everyOf<K extends string, S extends z.ZodType>(keys: readonly K[], shape: S) {
+  return z.object(eachOf(keys, () => shape)).strict();
+}
+
+const common = {
+  kind: z.literal('qeeg'),
+  schema: z.literal(1),
+  wording: z.literal(1),
+  provenance,
+  subject,
+  recording,
+  findings: picked(FINDING_IDS),
+  focus: picked(FOCUS_IDS),
+  maps: ordered(mapFields, LIMITS.maps),
+  recommendations: picked(RECOMMENDATION_IDS),
+  summary: bilingualRich(LIMITS.summary),
+  benefits: picked(BENEFIT_IDS),
+};
+
+const score = z
+  .object({ score: scoreOrNull, evidence: bilingual(LIMITS.evidence).nullable() })
+  .strict();
+
+// ---------------------------------------------------------------------------
+// A first report
+// ---------------------------------------------------------------------------
+
+const initialLevel = <const T extends readonly [string, ...string[]]>(levels: T) =>
+  z.object({ level: z.enum(levels).nullable(), regions }).strict();
+
+const initialShape = z
+  .object({
+    ...common,
+    edition: z.literal('initial'),
+    stage: z.enum(STAGES),
+    bands: everyOf(BAND_IDS, initialLevel(INITIAL_BAND_LEVELS)),
+    connectivity: z
+      .object({
+        connectivity: initialLevel(INITIAL_CONNECTIVITY_LEVELS.connectivity),
+        asymmetry: initialLevel(INITIAL_CONNECTIVITY_LEVELS.asymmetry),
+        phase_lag: initialLevel(INITIAL_CONNECTIVITY_LEVELS.phase_lag),
+      })
+      .strict(),
+    dashboard: everyOf(DIMENSION_IDS, score),
+    plan: z
+      .object({
+        sessions: z.union([sessionCount, z.literal(QEEG_ONLY)]).nullable(),
+        approach: z.enum(APPROACH_IDS).nullable(),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((content, ctx) => {
+    // A brain map with no programme after it has no training approach either:
+    // a report carrying both would print an approach nobody agreed to.
+    if (content.plan.sessions === QEEG_ONLY && content.plan.approach !== null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['plan', 'approach'],
+        message: 'A brain map with no programme after it has no training approach.',
+      });
+    }
+    // The old tool had only the first report's lists, so a report brought in
+    // from it is a first report whatever the practitioner called it.
+    if (content.stage !== 'initial' && content.provenance.origin !== 'legacy_tool') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stage'],
+        message: 'A first report is at the initial stage.',
+      });
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// A follow-up
+// ---------------------------------------------------------------------------
+
+const basis = z
+  .object({
+    earlierAssessmentId: z.uuid(),
+    laterAssessmentId: z.uuid(),
+    unit: z.literal('uV2'),
+    sitesPaired: z.number().int().min(1),
+  })
+  .strict()
+  .superRefine((basis, ctx) => {
+    // A change is between two recordings; one recording beside itself is none.
+    if (basis.earlierAssessmentId === basis.laterAssessmentId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['laterAssessmentId'],
+        message: 'A figure is calculated from two different assessments.',
+      });
+    }
+  });
+
+/** The top of a range is above its bottom. */
+function rangeRises(figure: { low: number; high: number | null }, ctx: z.core.$RefinementCtx) {
+  if (figure.high !== null && figure.high <= figure.low) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['high'],
+      message: 'The top of a range is above its bottom.',
+    });
+  }
+}
+
+const percentFields = {
+  kind: z.literal('percent'),
+  direction: z.enum(['increase', 'decrease']),
+  low: whole(1, LIMITS.percentMost),
+  high: z.number().int().max(LIMITS.percentMost).nullable(),
+};
+
+const typedFields = { source: z.literal('typed'), basis: z.null() };
+const calculatedFields = { source: z.literal('calculated'), basis };
+
+/** Her own estimate: it has nothing it was calculated from. */
+const typedFigure = z.discriminatedUnion('kind', [
+  z
+    .object({ ...percentFields, ...typedFields })
+    .strict()
+    .superRefine(rangeRises),
+  z.object({ kind: z.literal('no_appreciable_change'), ...typedFields }).strict(),
+]);
+
+/** Arithmetic on two recorded assessments, which it names. */
+const calculatedFigure = z.discriminatedUnion('kind', [
+  z
+    .object({ ...percentFields, ...calculatedFields })
+    .strict()
+    .superRefine(rangeRises),
+  z.object({ kind: z.literal('no_appreciable_change'), ...calculatedFields }).strict(),
+]);
+
+/**
+ * Where a figure came from and what it was calculated from are one fact, so
+ * a calculated figure with no basis, or a typed one with a basis, is refused
+ * at `basis`.
+ */
+const changeFigure = z.discriminatedUnion('source', [typedFigure, calculatedFigure]);
+
+const tileFields = {
+  // A headline is always hers: a calculated figure is refused at `source`.
+  figure: typedFigure,
+  // A figure with no words for what it is tells a household nothing.
+  caption: z
+    .object({
+      en: typed(LIMITS.caption, 1, 'A headline always says what it is.'),
+      ar: typedOrNone(LIMITS.caption),
+    })
+    .strict(),
+};
+
+const changeRow = z
+  .object({
+    position: z.number().int(),
+    eyesOpen: changeFigure.nullable(),
+    eyesClosed: changeFigure.nullable(),
+  })
+  .strict();
+
+const CALCULABLE: ReadonlySet<string> = new Set(CALCULABLE_MEASURES);
+
+const table = z
+  .object(eachOf(MEASURE_IDS, () => changeRow.optional()))
+  .strict()
+  .superRefine((rows, ctx) => {
+    checkPositions(rows, ctx);
+    for (const [measure, row] of Object.entries(rows)) {
+      if (!row || CALCULABLE.has(measure)) continue;
+      for (const condition of ['eyesOpen', 'eyesClosed'] as const) {
+        if (row[condition]?.source === 'calculated') {
+          ctx.addIssue({
+            code: 'custom',
+            path: [measure, condition, 'source'],
+            message: 'The app records no figure for this measure to calculate from.',
+          });
+        }
+      }
+    }
+  });
+
+const pair = z.object({ earlier: figureRef.nullable(), later: figureRef.nullable() }).strict();
+
+const changeSection = z
+  .object({
+    tiles: ordered(tileFields, LIMITS.tiles),
+    sessionsCompleted: z
+      .object({ count: sessionCount, source: z.enum(['gathered', 'typed']) })
+      .strict()
+      .nullable(),
+    pairs: z.object({ eyes_open: pair, eyes_closed: pair }).strict(),
+    table,
+    summary: bilingualRich(LIMITS.summary),
+  })
+  .strict();
+
+/**
+ * A report this app signed has a printed reference; a past record from the
+ * old tool has none. Which it is decides whether `reference` may be null.
+ */
+const comparedWithFields = {
+  reportId: z.uuid(),
+  recordedOn: day,
+  relation: z.enum(['initial', 'previous']),
+};
+
+const comparedWith = z.discriminatedUnion('origin', [
+  z
+    .object({
+      ...comparedWithFields,
+      origin: z.literal('issued'),
+      reference: typed(40, 1),
+    })
+    .strict(),
+  z.object({ ...comparedWithFields, origin: z.literal('imported'), reference: z.null() }).strict(),
+]);
+
+const followUpChange = <const T extends readonly [string, ...string[]]>(changes: T) =>
+  z.object({ change: z.enum(changes).nullable(), regions }).strict();
+
+const followUpShape = z
+  .object({
+    ...common,
+    edition: z.literal('follow-up'),
+    stage: z.enum(['follow_up', 'final']),
+    // Always written in this app: the old tool had only a first report's
+    // lists, and a past record is frozen, so none is ever made a follow-up.
+    provenance: z.object({ origin: z.literal('app') }).strict(),
+    comparedWith,
+    bands: everyOf(BAND_IDS, followUpChange(BAND_CHANGES)),
+    connectivity: everyOf(
+      ['connectivity', 'asymmetry', 'phase_lag'] as const,
+      followUpChange(CONNECTIVITY_CHANGES),
+    ),
+    dashboard: everyOf(
+      DIMENSION_IDS,
+      z
+        .object({
+          score: scoreOrNull,
+          evidence: bilingual(LIMITS.evidence).nullable(),
+          earlierScore: scoreOrNull,
+        })
+        .strict(),
+    ),
+    change: changeSection,
+    plan: z.object({ sessions, next: z.enum(NEXT_STAGE_IDS).nullable() }).strict(),
+  })
+  .strict()
+  .superRefine((content, ctx) => {
+    // What has changed since an earlier recording is measured from it, so a
+    // follow-up is never recorded before it. The same day is allowed, and a
+    // draft with no day yet is saved before it is filled. Two days are
+    // compared only when both are days: one that is none has been refused
+    // for that already, and nothing more can be known of it.
+    const day = content.recording.recordedOn;
+    const earlier = content.comparedWith.recordedOn;
+    if (day !== null && isRealDay(day) && isRealDay(earlier) && day < earlier) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['recording', 'recordedOn'],
+        message: 'A follow-up is not recorded before the report it is compared with.',
+      });
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// The door
+// ---------------------------------------------------------------------------
+
+/**
+ * The piece of the shape a form holds her half-typed figure to before it
+ * joins the content (`choices.ts`), so the form asks the shape and keeps no
+ * copy of its limits. A number of sessions is asked through `isSessionCount`.
+ */
+export const TypedFigureShape = typedFigure;
+
+/**
+ * Whether a number of sessions is one a report takes: the one bound, asked
+ * by the form, the count of completed visits and the old-file reader alike.
+ */
+export function isSessionCount(count: unknown): count is number {
+  return sessionCount.safeParse(count).success;
+}
+
+/**
+ * What a follow-up begun from an earlier report offers beside the form
+ * (`prefillFollowUp`'s `offered`): her last choices, by the same lists and
+ * rules as the content, so the form can check what the prefill answered
+ * before it offers any of it (brief S).
+ */
+export const OfferedShape = z
+  .object({
+    findings: picked(FINDING_IDS),
+    focus: picked(FOCUS_IDS),
+    recommendations: picked(RECOMMENDATION_IDS),
+    benefits: picked(BENEFIT_IDS),
+    regions: z
+      .object({
+        bands: everyOf(BAND_IDS, regions),
+        connectivity: everyOf(CONNECTIVITY_IDS, regions),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const QeegInitialShape: z.ZodType<QeegInitial> = initialShape;
+export const QeegFollowUpShape: z.ZodType<QeegFollowUp> = followUpShape;
+export const QeegContentShape: z.ZodType<QeegContent> = z.discriminatedUnion('edition', [
+  initialShape,
+  followUpShape,
+]);
+
+export type ShapeRefusal = { path: string; reason: string };
+
+/** How many refusals are named, at most. */
+const MOST_REFUSALS = 50;
+
+/** Every refusal, up to fifty, each naming its field by a dotted path. */
+export function validateQeegContent(
+  input: unknown,
+): { ok: true; content: QeegContent } | { ok: false; refusals: ShapeRefusal[] } {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    return { ok: false, refusals: [{ path: '', reason: 'A report body is a set of fields.' }] };
+  }
+  const parsed = QeegContentShape.safeParse(input);
+  if (parsed.success) return { ok: true, content: parsed.data };
+
+  const refusals: ShapeRefusal[] = [];
+  for (const issue of parsed.error.issues) {
+    const path = issue.path.map(String);
+    if (issue.code === 'unrecognized_keys') {
+      // A field the shape does not know has no path of its own: it is a key
+      // on the object being read, so it is named from the issue's own list.
+      for (const key of issue.keys) {
+        refusals.push({
+          path: [...path, key].join('.'),
+          reason: 'A report body carries only the fields its edition declares.',
+        });
+      }
+    } else {
+      refusals.push({ path: path.join('.'), reason: issue.message });
+    }
+  }
+  if (refusals.length <= MOST_REFUSALS) return { ok: false, refusals };
+  // A body built to raise a refusal per entry would otherwise be answered
+  // with as many; fifty name enough to mend, and the rest are counted.
+  return {
+    ok: false,
+    refusals: [
+      ...refusals.slice(0, MOST_REFUSALS),
+      { path: '', reason: `And ${refusals.length - MOST_REFUSALS} more.` },
+    ],
+  };
+}

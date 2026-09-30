@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import { ReportsTab } from '../../app/admin/reports/ReportsTab';
@@ -10,6 +11,7 @@ import {
   PRACTITIONER,
   signedInProvider,
 } from '../../app/admin/clients/testActors';
+import { blankInitial } from '../../domain/reports/qeeg/blank';
 
 /**
  * The Reports tab, against a fake API (docs/SPEC/reports-v1.md section 4.1).
@@ -276,6 +278,115 @@ describe('the Reports tab', () => {
     expect(screen.getByRole('button', { name: 'Sign this report' })).toBeTruthy();
   });
 
+  it('corrects a signed brain-map report with a reason alone, and opens its form on the new draft', async () => {
+    const user = userEvent.setup();
+    const issued = row({ kind: 'qeeg' });
+    const sent: unknown[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/me') return json(SIGNER);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports: [issued] });
+      if (url === `/api/reports/${FIRST}`) {
+        return json({
+          report: issued,
+          content: {},
+          deliveries: [],
+          url: null,
+          expiresInSeconds: null,
+        });
+      }
+      if (url === `/api/reports/${FIRST}/supersede`) {
+        sent.push(JSON.parse(String(init?.body)));
+        return json(
+          { report: { ...issued, id: DRAFT, status: 'draft', reference: null, version: 2 } },
+          201,
+        );
+      }
+      if (url === `/api/reports/${DRAFT}`) {
+        return json({
+          report: { ...issued, id: DRAFT, status: 'draft', reference: null, version: 2 },
+          content: {
+            ...blankInitial(),
+            subject: { nameAr: null, ageYears: 9, sex: 'female' },
+            provenance: { origin: 'app' },
+          },
+          deliveries: [],
+          url: null,
+          expiresInSeconds: null,
+          savedAt: '2026-09-30T08:00:00.000000Z',
+        });
+      }
+      if (url === `/api/clients/${CLIENT}`) return json({ contacts: [] });
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    await user.click(await screen.findByRole('button', { name: 'Correct this report' }));
+    await user.type(screen.getByLabelText('Why a new version is needed'), 'A map was mislabelled.');
+    await user.click(screen.getByRole('button', { name: 'Start a new version' }));
+
+    expect(await screen.findByText('Brain-map report, first report')).toBeTruthy();
+    expect(sent).toEqual([{ reason: 'A map was mislabelled.' }]);
+  });
+
+  it('says why a signed brain map’s file cannot be made again, when the server says so', async () => {
+    const user = userEvent.setup();
+    const issued = row({ kind: 'qeeg' });
+    const sentence =
+      'The file of this signed report is missing, and a map it prints can no longer be found in the store, so the file cannot be made again.';
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(SIGNER);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports: [issued] });
+      if (url === `/api/reports/${FIRST}`) {
+        return json(
+          {
+            error: 'conflict',
+            code: 'map_missing',
+            field: 'maps.map-0.figureId',
+            figureId: '0000000d-0000-4000-8000-000000000001',
+            sentence,
+          },
+          409,
+        );
+      }
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    expect(await screen.findByText(sentence)).toBeTruthy();
+    expect(screen.queryByText('That report could not be loaded.')).toBeNull();
+  });
+
+  it('keeps the plain sentence for a report the server refuses without one', async () => {
+    const user = userEvent.setup();
+    const issued = row();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(SIGNER);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports: [issued] });
+      if (url === `/api/reports/${FIRST}`) {
+        return json({ error: 'conflict', code: 'document_bytes_differ' }, 409);
+      }
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    expect(await screen.findByText('That report could not be loaded.')).toBeTruthy();
+  });
+
   it('offers writing a report to a lead practitioner and not to finance', async () => {
     mount([], LEAD_PRACTITIONER);
     expect(await screen.findByRole('button', { name: 'Write a progress report' })).toBeTruthy();
@@ -387,5 +498,51 @@ describe('the Reports tab', () => {
       </AuthProviderBoundary>,
     );
     expect(await screen.findByText('The reports could not be loaded.')).toBeTruthy();
+  });
+});
+
+describe('past records from the old tool (docs/SPEC/reports-qeeg.md section 11)', () => {
+  const past = (over: Record<string, unknown> = {}) =>
+    row({
+      id: DRAFT,
+      kind: 'qeeg',
+      status: 'imported',
+      reference: null,
+      issuedOn: null,
+      coverageFrom: null,
+      coverageTo: null,
+      signedByName: null,
+      documentId: null,
+      pastRecord: true,
+      withdrawn: false,
+      recordedOn: '2026-03-14',
+      ...over,
+    });
+
+  it('offers bringing one in to a lead practitioner, and not to a practitioner', async () => {
+    mount([]);
+    expect(await screen.findByRole('button', { name: 'Bring in a past record' })).toBeTruthy();
+    cleanup();
+    mount([], PRACTITIONER);
+    await screen.findByRole('button', { name: 'New brain-map report' });
+    expect(screen.queryByRole('button', { name: 'Bring in a past record' })).toBeNull();
+  });
+
+  it('lists a kept one as "Past record", and a withdrawn one as withdrawn', async () => {
+    mount([past(), past({ id: SECOND, withdrawn: true })]);
+    expect(await screen.findAllByRole('button', { name: 'Past record' })).toHaveLength(2);
+    expect(screen.getByText('Withdrawn')).toBeTruthy();
+  });
+
+  it('opens a kept one read-only, never in the brain-map form', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = mount([past()]);
+    await user.click(await screen.findByRole('button', { name: 'Past record' }));
+    await waitFor(() =>
+      expect(fetchImpl.mock.calls.some(([url]) => String(url) === `/api/reports/${DRAFT}`)).toBe(
+        true,
+      ),
+    );
+    expect(screen.queryByRole('button', { name: /left to fill$/ })).toBeNull();
   });
 });

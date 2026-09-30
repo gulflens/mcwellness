@@ -32,6 +32,18 @@ describe('draftReportMessage', () => {
     expect(message.text).toContain('تقرير الجلسة');
   });
 
+  it('names a brain-map report as one, on both sides', () => {
+    const message = draftReportMessage({
+      kind: 'qeeg',
+      reference: 'RPT-000007',
+      practiceName: 'Synthetic Wellness',
+      url: URL,
+    });
+    expect(message.text).toContain('brain map report');
+    expect(message.text).toContain('تقرير خريطة الدماغ');
+    expect(message.subject).toBe('Synthetic Wellness — brain map report RPT-000007');
+  });
+
   it('says nothing about the visit, the practitioner or a figure', () => {
     // A message sits in a notification on a lock screen somebody else may be
     // looking at. The reference, the practice and the link, and nothing else.

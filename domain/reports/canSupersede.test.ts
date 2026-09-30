@@ -23,6 +23,14 @@ describe('canSupersede', () => {
     });
   });
 
+  it('refuses a past record brought in from the old tool: it was never issued', () => {
+    // docs/SPEC/reports-qeeg.md section 11, point 4.
+    expect(canSupersede({ status: 'imported', version: 1 }, REASON)).toEqual({
+      ok: false,
+      code: 'not_issued',
+    });
+  });
+
   it('refuses a version that has already been superseded', () => {
     expect(canSupersede({ status: 'superseded', version: 1 }, REASON)).toEqual({
       ok: false,

@@ -143,6 +143,16 @@ export const NOT_A_DIAGNOSIS: Phrase = {
 };
 
 /**
+ * The two standing sentences above, in the order a report prints them, under
+ * a name that says what they are for. The brain-map report prints them in
+ * place of the old tool's own closing paragraph
+ * (docs/SPEC/reports-qeeg.md section 6, point 4), and its code is held to
+ * spelling none of the words they hold, which their own names do; it reads
+ * them here.
+ */
+export const STANDING_SENTENCES: readonly Phrase[] = Object.freeze([NOT_A_CLINIC, NOT_A_DIAGNOSIS]);
+
+/**
  * The comparison's own, printed beneath the figures rather than the frame's.
  * Word for word the sentence the Compare screen carries
  * (`app/admin/assessments/copy.ts`, `NOT_A_DIAGNOSIS`), because
@@ -158,6 +168,15 @@ export const COMPARISON_NOT_A_DIAGNOSIS: Phrase = {
   en: 'This is a comparison of measurements taken on different days. It is not a diagnosis.',
   ar: 'هذه مقارنة بين قياسات أُخذت في أيام مختلفة. وهي ليست تشخيصاً.',
 };
+
+/**
+ * The comparison's own sentence above, under a name that says what it is
+ * for. A brain-map follow-up prints it beneath the figures of its page of
+ * what has changed (docs/SPEC/reports-qeeg.md section 10, point 8), and its
+ * code is held to spelling none of the words it holds, which its own name
+ * does; it reads it here, as it reads `STANDING_SENTENCES`.
+ */
+export const COMPARISON_SENTENCE: Phrase = COMPARISON_NOT_A_DIAGNOSIS;
 
 /**
  * The third line, on every copy until the wording is approved (section 10,
