@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProgressReportContent, ReportKind } from '@domain/reports';
 import { DeliverResponse, ReportResponse, SupersedeResponse } from '../../api/reports/schema';
 import type { ReportResponse as Report } from '../../api/reports/schema';
@@ -85,6 +85,9 @@ export function ReportView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /** Why the report could not be read, when the server gave a sentence for it. */
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const sentenceRef = useRef<string | null>(null);
 
   // Reading and setting are separate so the effect never calls setState in its
   // own body: it hands the answer to a callback, the way the record's own tabs
@@ -92,7 +95,19 @@ export function ReportView({
   const read = useCallback(async (): Promise<Report | null> => {
     try {
       const res = await apiFetch(`/api/reports/${reportId}`);
-      if (!res.ok) return null;
+      if (!res.ok) {
+        // A signed brain map whose file cannot be made again says why, in a
+        // sentence of the server's (app/api/reports/get.ts); anything else
+        // keeps the plain sentence below.
+        const body: unknown = await res.json().catch(() => null);
+        const sentence =
+          res.status === 409 && typeof body === 'object' && body !== null
+            ? (body as { sentence?: unknown }).sentence
+            : null;
+        sentenceRef.current = typeof sentence === 'string' ? sentence : null;
+        return null;
+      }
+      sentenceRef.current = null;
       return ReportResponse.parse(await res.json());
     } catch {
       return null;
@@ -102,6 +117,7 @@ export function ReportView({
   const reread = useCallback(async (): Promise<void> => {
     const next = await read();
     setReport(next);
+    setLoadError(sentenceRef.current);
     setState(next === null ? 'error' : 'ready');
   }, [read]);
 
@@ -110,6 +126,7 @@ export function ReportView({
     void read().then((next) => {
       if (!live) return;
       setReport(next);
+      setLoadError(sentenceRef.current);
       setState(next === null ? 'error' : 'ready');
     });
     return () => {
@@ -217,7 +234,7 @@ export function ReportView({
 
   if (state === 'loading') return <Note>Loading.</Note>;
   if (state === 'error' || !report) {
-    return <Note tone="critical">That report could not be loaded.</Note>;
+    return <Note tone="critical">{loadError ?? 'That report could not be loaded.'}</Note>;
   }
 
   const row = report.report;

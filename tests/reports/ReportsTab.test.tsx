@@ -333,6 +333,60 @@ describe('the Reports tab', () => {
     expect(sent).toEqual([{ reason: 'A map was mislabelled.' }]);
   });
 
+  it('says why a signed brain map’s file cannot be made again, when the server says so', async () => {
+    const user = userEvent.setup();
+    const issued = row({ kind: 'qeeg' });
+    const sentence =
+      'The file of this signed report is missing, and a map it prints can no longer be found in the store, so the file cannot be made again.';
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(SIGNER);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports: [issued] });
+      if (url === `/api/reports/${FIRST}`) {
+        return json(
+          {
+            error: 'conflict',
+            code: 'map_missing',
+            field: 'maps.map-0.figureId',
+            figureId: '0000000d-0000-4000-8000-000000000001',
+            sentence,
+          },
+          409,
+        );
+      }
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    expect(await screen.findByText(sentence)).toBeTruthy();
+    expect(screen.queryByText('That report could not be loaded.')).toBeNull();
+  });
+
+  it('keeps the plain sentence for a report the server refuses without one', async () => {
+    const user = userEvent.setup();
+    const issued = row();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(SIGNER);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports: [issued] });
+      if (url === `/api/reports/${FIRST}`) {
+        return json({ error: 'conflict', code: 'document_bytes_differ' }, 409);
+      }
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+    await user.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    expect(await screen.findByText('That report could not be loaded.')).toBeTruthy();
+  });
+
   it('offers writing a report to a lead practitioner and not to finance', async () => {
     mount([], LEAD_PRACTITIONER);
     expect(await screen.findByRole('button', { name: 'Write a progress report' })).toBeTruthy();
