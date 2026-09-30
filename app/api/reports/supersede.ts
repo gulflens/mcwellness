@@ -5,7 +5,8 @@ import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isUuid } from '../billing/ids';
 import { maySupersedeReport } from './access';
-import { SupersedeInput, SupersedeResponse } from './schema';
+import { supersedeQeeg } from './qeeg/supersede';
+import { QeegSupersedeInput, SupersedeInput, SupersedeResponse } from './schema';
 import { asRow, readReport } from './source';
 
 /**
@@ -50,10 +51,16 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
       // as a 500 on a path a stranger can call.
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
-    const body = SupersedeInput.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) {
+    const raw: unknown = await c.req.json().catch(() => null);
+    const body = SupersedeInput.safeParse(raw);
+    // A brain-map report is corrected from what was signed, and its body
+    // carries a reason alone; read beside the older kinds' body, so a request
+    // that is neither is refused here, before anything is read.
+    const brainMap = QeegSupersedeInput.safeParse(raw);
+    if (!body.success && !brainMap.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
+    const reason = body.success ? body.data.reason : brainMap.success ? brainMap.data.reason : '';
 
     const db = c.get('db');
     const actor = c.get('actor');
@@ -75,7 +82,7 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
 
     const answer = canSupersede(
       { status: standing.status, version: standing.version },
-      cleanText(body.data.reason, 500),
+      cleanText(reason, 500),
     );
     if (!answer.ok) {
       await logAction(
@@ -85,6 +92,26 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
         { reason: answer.code },
       );
       return c.json({ error: 'unprocessable', code: answer.code, requestId }, 422);
+    }
+
+    switch (standing.kind) {
+      case 'session':
+      case 'progress':
+        break;
+      case 'qeeg':
+        // Carried from what was signed, with its maps borrowed
+        // (docs/SPEC/reports-qeeg.md section 14).
+        if (!brainMap.success) {
+          return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+        }
+        return supersedeQeeg(c, standing, brainMap.data, answer.reason);
+      default: {
+        const unknown: never = standing.kind;
+        return unknown;
+      }
+    }
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
 
     const checked = validateContent(standing.kind, body.data.content);

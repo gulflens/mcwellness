@@ -292,6 +292,22 @@ export const SupersedeInput = z.object({
 });
 export type SupersedeInput = z.infer<typeof SupersedeInput>;
 
+/**
+ * Correcting a signed brain-map (qEEG) report: a reason, and nothing to
+ * correct it with. The new draft starts from what was signed
+ * (`app/api/reports/qeeg/supersede.ts`); `content` is named here only so a
+ * body that sends it is refused by name rather than as an unknown field, and
+ * `locale` so a body naming another language is told why.
+ */
+export const QeegSupersedeInput = z
+  .object({
+    reason: z.string(),
+    content: z.unknown().optional(),
+    locale: ReportLocaleInput.optional(),
+  })
+  .strict();
+export type QeegSupersedeInput = z.infer<typeof QeegSupersedeInput>;
+
 export const SupersedeResponse = z.object({
   /** The new draft, ready to be read over and signed. */
   report: ReportRow,

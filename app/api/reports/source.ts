@@ -45,7 +45,7 @@ export const REPORT_COLUMNS =
   // The stamp a save is made over (`savedAt`), to the microsecond the column
   // holds, so it compares equal to itself and to nothing later.
   'to_char(r.updated_at at time zone \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') as saved_at, ' +
-  'r.imported_from, r.withdrawn_at is not null as withdrawn';
+  'r.imported_from, r.withdrawn_at is not null as withdrawn, r.compared_with_id, r.twin_of_id';
 
 export type ReportRecord = {
   id: string;
@@ -83,6 +83,10 @@ export type ReportRecord = {
   imported_from: string | null;
   /** A past record withdrawn because it was kept against the wrong client. */
   withdrawn: boolean;
+  /** What a brain-map follow-up is compared with (docs/SPEC/reports-qeeg.md section 10). */
+  compared_with_id: string | null;
+  /** The same brain-map report in the other language, which this one was made from. */
+  twin_of_id: string | null;
   deliveries?: string | number;
 };
 
