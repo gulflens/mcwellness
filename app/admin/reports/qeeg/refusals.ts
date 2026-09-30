@@ -137,6 +137,9 @@ export const FIGURE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   too_many_bytes: `This map is larger than 5 MB once prepared. ${SMALLER}`,
   too_many_maps: 'A report holds eight maps. Remove one before adding another.',
   empty: 'This picture has nothing in it to place. Choose the exported map itself.',
+  file_too_large: `This file is larger than 40 MB, far more than any map needs. ${SMALLER}`,
+  cannot_prepare:
+    'This browser could not prepare the map, perhaps for want of memory. Close other tabs and try again, or use an up-to-date browser on a computer.',
   undecodable:
     'This file could not be read as a picture. Choose a map exported as a PNG, JPEG or BMP.',
   // The picture as the door checks it.
@@ -150,8 +153,10 @@ export const FIGURE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   metadata: `What arrived carried device details inside the file. ${PREPARED}`,
   unknown_chunk: `What arrived carried more than the picture. ${PREPARED}`,
   trailing_bytes: `What arrived carried data after the picture. ${PREPARED}`,
-  split_data: 'This map was damaged on the way. Try adding it again.',
-  damaged: 'This map is damaged: its data does not match its size. Export it again.',
+  // The form wrote the file and the door checked its digest first, so a
+  // picture the door cannot read whole is the form's fault, never her export's.
+  split_data: `What arrived had its picture data broken up. ${PREPARED}`,
+  damaged: `What arrived did not read as a whole picture. ${PREPARED}`,
   // The request.
   invalid_request: 'The form asked for something the server does not accept. Reload the page.',
   digest_missing: 'The map was sent without its fingerprint. Try adding it again.',
@@ -171,6 +176,11 @@ export const FIGURE_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   already_on_report:
     'This picture is already on the report. To give it another condition or place, change it in the list.',
   figure_in_use: 'This map is still used elsewhere in the report. Take it out there first.',
+  // No answer, or one the form cannot read: the door may have finished.
+  unknown_outcome:
+    'The server’s answer did not arrive, so the form cannot tell whether the map was kept. It may have been filed with the report. Reload the draft, then choose the same file again: a picture already kept is never filed twice.',
+  unknown_removal:
+    'The server’s answer did not arrive, so the form cannot tell whether the map was removed. It may have been. It is off the draft; reload the draft to see where it stands.',
 });
 
 const MAPS_FORBIDDEN = 'You are not allowed to change the maps of this client’s reports.';

@@ -161,3 +161,19 @@ describe('what the form says when a map is refused', () => {
     ).toBe(CANNOT_COMPARE['map_not_held']);
   });
 });
+
+describe('the sentences fix round 1 asked for', () => {
+  it('blames the form, not her export, for a picture the door finds damaged', () => {
+    for (const code of ['damaged', 'split_data']) {
+      expect(FIGURE_REFUSALS[code]).toMatch(/reload the page and try again\.$/);
+      expect(FIGURE_REFUSALS[code]).not.toMatch(/Export/);
+    }
+  });
+
+  it('has a sentence for an answer that never came, a picture that could not be prepared, and a file too large to read', () => {
+    expect(FIGURE_REFUSALS['unknown_outcome']).toMatch(/may have been/);
+    expect(FIGURE_REFUSALS['unknown_outcome']).not.toMatch(/not saved|could not be saved/);
+    expect(FIGURE_REFUSALS['cannot_prepare']).toBeTruthy();
+    expect(FIGURE_REFUSALS['file_too_large']).toMatch(/40 MB/);
+  });
+});
