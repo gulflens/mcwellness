@@ -3,9 +3,11 @@ import {
   callOutFeeFor,
   combineDiscounts,
   formatFils,
+  largestExtraDiscount,
   resolveVat,
   type AppliedDiscount,
   type CallOutFeeSetting,
+  type Discount,
   type VatSetting,
 } from '@domain/billing';
 import { fils } from '@domain/shared';
@@ -161,6 +163,16 @@ export function isAedAmountTooLarge(input: string): boolean {
 export type DiscountKind = 'none' | 'percent' | 'amount';
 
 /**
+ * A sale's choices: the three above, and "free" (the owner's request of 30
+ * September 2026, for a package given away to promote the practice). Free is
+ * not a figure she types: it is the largest extra the price list still
+ * allows (`largestExtraDiscount`), so the sale always comes to nothing. Only
+ * the two sale drawers offer it; the price list and the bundle catalogue keep
+ * `DiscountKind`.
+ */
+export type SaleDiscountKind = DiscountKind | 'free';
+
+/**
  * A percentage a person typed, as basis points: "15" is 1500 and "12.55" is
  * 1255. Two decimal places, which is a hundredth of a per cent — finer than
  * anybody prices in and exactly what the column holds. `null` when it is not a
@@ -247,10 +259,10 @@ export function discountBody(
 export function previewSaleDiscount(
   listFils: number,
   standing: { discountFils: number; basisPoints: number | null },
-  kind: DiscountKind,
+  kind: SaleDiscountKind,
   typed: string,
 ): AppliedDiscount | null {
-  const extra = kind === 'none' ? null : discountBody(kind, typed);
+  const extra = saleExtraDiscount(listFils, standing, kind, typed);
   if (kind !== 'none' && extra === null) {
     return null;
   }
@@ -258,15 +270,118 @@ export function previewSaleDiscount(
     return combineDiscounts(
       fils(listFils),
       { discountFils: fils(standing.discountFils), basisPoints: standing.basisPoints },
-      extra === null
-        ? null
-        : extra.kind === 'percent'
-          ? extra
-          : { kind: 'amount', fils: fils(extra.fils) },
+      extra,
     );
   } catch {
     return null;
   }
+}
+
+/**
+ * The extra discount a sale sends: what she typed, or, for "free", the
+ * largest extra the price list still allows. `null` for no discount, and for
+ * a typed value that is not a figure of its kind.
+ */
+export function saleExtraDiscount(
+  listFils: number,
+  standing: { discountFils: number; basisPoints: number | null },
+  kind: SaleDiscountKind,
+  typed: string,
+): Discount | null {
+  if (kind === 'free') {
+    try {
+      return largestExtraDiscount(fils(listFils), {
+        discountFils: fils(standing.discountFils),
+        basisPoints: standing.basisPoints,
+      });
+    } catch {
+      return null;
+    }
+  }
+  const body = kind === 'none' ? null : discountBody(kind, typed);
+  if (body === null) {
+    return null;
+  }
+  return body.kind === 'percent' ? body : { kind: 'amount', fils: fils(body.fils) };
+}
+
+/**
+ * What a sale sends as its extra discount: the typed share or sum, or simply
+ * `{ kind: 'free' }`. Free is never sent as a figure worked out here from
+ * today's price: the route works it out against the price it charges on the
+ * sale's date (`toSaleDiscount`), so a backdated sale is still free.
+ */
+export function saleDiscountBody(
+  kind: SaleDiscountKind,
+  typed: string,
+):
+  | { kind: 'percent'; basisPoints: number }
+  | { kind: 'amount'; fils: number }
+  | { kind: 'free' }
+  | null {
+  return kind === 'free' ? { kind: 'free' } : discountBody(kind, typed);
+}
+
+/** A share in basis points as a person reads it: 8500 is "85%", 1250 is "12.5%". */
+function percentWords(basisPoints: number): string {
+  return `${(basisPoints / 100).toString()}%`;
+}
+
+/**
+ * How much more a sale may give, said once under the discount: "Up to 85%
+ * more. That makes it free." `null` when the price list already gives the
+ * whole price away.
+ */
+export function saleRoomWords(
+  listFils: number,
+  standing: { discountFils: number; basisPoints: number | null },
+): string | null {
+  const room = saleExtraDiscount(listFils, standing, 'free', '');
+  if (room === null) {
+    return null;
+  }
+  if (room.kind === 'percent') {
+    return room.basisPoints === 0
+      ? null
+      : `Up to ${percentWords(room.basisPoints)} more. That makes it free.`;
+  }
+  return room.fils === 0 ? null : `Up to AED ${formatFils(room.fils)} more. That makes it free.`;
+}
+
+/**
+ * Why a typed extra discount was refused before anything was sent, when it
+ * is a real figure that is simply more than the price list leaves: it names
+ * the most she may add and points to Free. `null` when the typed value is not
+ * a figure at all, or is not too large; the caller keeps its own sentence.
+ */
+export function saleDiscountTooLargeWords(
+  listFils: number,
+  standing: { discountFils: number; basisPoints: number | null },
+  kind: SaleDiscountKind,
+  typed: string,
+): string | null {
+  if (kind !== 'percent' && kind !== 'amount') {
+    return null;
+  }
+  const typedBody = discountBody(kind, typed);
+  const room = saleExtraDiscount(listFils, standing, 'free', '');
+  if (typedBody === null || room === null) {
+    return null;
+  }
+  if (previewSaleDiscount(listFils, standing, kind, typed) !== null) {
+    return null;
+  }
+  const most =
+    room.kind === 'percent' ? percentWords(room.basisPoints) : `AED ${formatFils(room.fils)}`;
+  // Nothing off on the list: the ceiling is simply the list price.
+  if (standing.discountFils === 0) {
+    return `The most you can add is ${most}. To give it away, choose Free (100%).`;
+  }
+  const already =
+    standing.basisPoints !== null
+      ? `The price list already takes ${percentWords(standing.basisPoints)} off`
+      : `The price list already takes AED ${formatFils(standing.discountFils)} off`;
+  return `${already}, so the most you can add is ${most}. To give it away, choose Free (100%).`;
 }
 
 /**

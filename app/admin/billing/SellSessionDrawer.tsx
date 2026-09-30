@@ -22,11 +22,13 @@ import { DiscountFields } from './DiscountFields';
 import { useAttemptKey } from './attempt';
 import { useDrawer } from './useDrawer';
 import {
-  discountBody,
   formatFils,
   previewSaleDiscount,
+  saleDiscountTooLargeWords,
+  saleDiscountBody,
+  saleRoomWords,
   previewVat,
-  type DiscountKind,
+  type SaleDiscountKind,
 } from './money';
 
 /**
@@ -100,7 +102,7 @@ export function SellSessionDrawer({
   const [takingPayment, setTakingPayment] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>('transfer');
   const [reference, setReference] = useState('');
-  const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
+  const [discountKind, setDiscountKind] = useState<SaleDiscountKind>('none');
   const [discountValue, setDiscountValue] = useState('');
   const [discountReason, setDiscountReason] = useState('');
   const [discountError, setDiscountError] = useState<string | undefined>();
@@ -158,6 +160,17 @@ export function SellSessionDrawer({
       : price.vatFils > 0
         ? previewVat(applied.netFils, price.vatRateBasisPoints)
         : { vatFils: 0, grossFils: applied.netFils };
+  // A sale given away free: nothing changes hands, so no payment is asked
+  // for (the route refuses a payment of nothing).
+  const nothingToPay = charged !== null && charged.grossFils === 0;
+  // Whatever the price list still leaves to give; null when it already gives
+  // the whole price, and then Free is not offered.
+  const room = price
+    ? saleRoomWords(price.listPriceFils, {
+        discountFils: price.discountFils,
+        basisPoints: price.discountBasisPoints,
+      })
+    : null;
   // Always exactly one credit: this is the package drawer's shape for a
   // package of one, not a quantity a person chooses.
   const credits = 1;
@@ -182,9 +195,15 @@ export function SellSessionDrawer({
     setServiceError(undefined);
     if (discountKind !== 'none' && applied === null) {
       setDiscountError(
-        discountKind === 'percent'
-          ? 'Enter a percentage between 0 and 100, such as 5.'
-          : DISCOUNT_TOO_LARGE_MESSAGE,
+        saleDiscountTooLargeWords(
+          price.listPriceFils,
+          { discountFils: price.discountFils, basisPoints: price.discountBasisPoints },
+          discountKind,
+          discountValue,
+        ) ??
+          (discountKind === 'percent'
+            ? 'Enter a percentage between 0 and 100, such as 5.'
+            : DISCOUNT_TOO_LARGE_MESSAGE),
       );
       return;
     }
@@ -195,7 +214,7 @@ export function SellSessionDrawer({
       return;
     }
     setReasonError(undefined);
-    const extra = discountBody(discountKind, discountValue);
+    const extra = saleDiscountBody(discountKind, discountValue);
 
     setBusy(true);
     try {
@@ -204,7 +223,7 @@ export function SellSessionDrawer({
         clientId: client.id,
         purchasedOn,
         ...(extra ? { extraDiscount: { discount: extra, reason: trimmedReason } } : {}),
-        ...(takingPayment
+        ...(takingPayment && !nothingToPay
           ? {
               payment: {
                 method,
@@ -384,6 +403,8 @@ export function SellSessionDrawer({
             kind={discountKind}
             value={discountValue}
             error={discountError}
+            offerFree={room !== null}
+            hint={room}
             onChange={(next) => {
               setDiscountKind(next.kind);
               setDiscountValue(next.value);
@@ -407,17 +428,19 @@ export function SellSessionDrawer({
             />
           )}
 
-          <label className="checkbox" htmlFor="sell-session-taking-payment">
-            <input
-              id="sell-session-taking-payment"
-              type="checkbox"
-              checked={takingPayment}
-              onChange={(e) => setTakingPayment(e.target.checked)}
-            />
-            <span>Money has changed hands</span>
-          </label>
+          {nothingToPay ? null : (
+            <label className="checkbox" htmlFor="sell-session-taking-payment">
+              <input
+                id="sell-session-taking-payment"
+                type="checkbox"
+                checked={takingPayment}
+                onChange={(e) => setTakingPayment(e.target.checked)}
+              />
+              <span>Money has changed hands</span>
+            </label>
+          )}
 
-          {takingPayment ? (
+          {takingPayment && !nothingToPay ? (
             <>
               <Select
                 id="sell-session-method"

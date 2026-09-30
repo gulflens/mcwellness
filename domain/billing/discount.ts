@@ -148,3 +148,35 @@ export function combineDiscounts(
   }
   return { listFils, discountFils, netFils: fils(listFils - discountFils), basisPoints: null };
 }
+
+/**
+ * The most a sale may still add to the price list's own discount: whatever
+ * of the list figure the standing discount has not taken. It is also what
+ * "free" means at a sale (the owner's request of 30 September 2026: a
+ * package given away to promote the practice), because `combineDiscounts`
+ * with this extra always leaves nothing to pay.
+ *
+ * When the standing discount is a percentage the rest is a percentage too,
+ * so the two combine into one share of the list and a free sale reads 100%
+ * on the invoice. When it is a sum, the rest is a sum.
+ */
+export function largestExtraDiscount(
+  listFils: Fils,
+  standing: { discountFils: Fils; basisPoints: number | null },
+): Discount {
+  checkList(listFils);
+  if (
+    !Number.isSafeInteger(standing.discountFils) ||
+    standing.discountFils < 0 ||
+    standing.discountFils > listFils
+  ) {
+    throw new RangeError(
+      `The price list's own discount of ${standing.discountFils} fils is not a whole sum between nothing and the list figure of ${listFils}`,
+    );
+  }
+  if (standing.basisPoints !== null) {
+    checkBasisPoints(standing.basisPoints);
+    return { kind: 'percent', basisPoints: BASIS_POINTS_IN_WHOLE - standing.basisPoints };
+  }
+  return { kind: 'amount', fils: fils(listFils - standing.discountFils) };
+}

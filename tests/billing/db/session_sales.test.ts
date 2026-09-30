@@ -345,6 +345,27 @@ describe('POST /api/billing/session-purchases', () => {
     expect(payment.rows[0]?.amount_fils).toBe(85_000);
   });
 
+  it('gives a session away free, worked out on the server against the price it charges', async () => {
+    // The seeded session price, whatever its own discount: free is the rest
+    // of the list, worked out by the route rather than sent as a figure.
+    const res = await h.call(
+      'POST',
+      '/api/billing/session-purchases',
+      SEEDED.owner,
+      sale({
+        clientId: h.clientId(6),
+        extraDiscount: {
+          discount: { kind: 'free' },
+          reason: 'A first session given to promote the practice.',
+        },
+      }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as SellSessionResponse;
+    expect(body.netFils).toBe(0);
+    expect(body.grossFils).toBe(0);
+  });
+
   it('answers three presses at once the same way, and sells once', async () => {
     // Not a retry after an answer: three requests in flight together, as
     // tests/billing/db/idempotency.test.ts's own "three presses at once"

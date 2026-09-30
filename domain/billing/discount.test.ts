@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fils } from '../shared';
-import { applyDiscount, combineDiscounts } from './discount';
+import { applyDiscount, combineDiscounts, largestExtraDiscount } from './discount';
 
 /**
  * The specification for a discount (docs/SPEC/billing.md section 2.4, the
@@ -161,6 +161,77 @@ describe('combineDiscounts', () => {
     ).toThrow(RangeError);
     expect(() =>
       combineDiscounts(fils(70_000), { discountFils: fils(70_001), basisPoints: null }, null),
+    ).toThrow(RangeError);
+  });
+});
+
+describe('largestExtraDiscount', () => {
+  it('gives the rest of the percentage when the standing discount is one, so Silver at 15% can take 85% more', () => {
+    expect(
+      largestExtraDiscount(fils(1_215_000), { discountFils: fils(182_250), basisPoints: 1500 }),
+    ).toEqual({ kind: 'percent', basisPoints: 8500 });
+  });
+
+  it('gives the rest of the list figure as a sum when the standing discount is a sum', () => {
+    expect(
+      largestExtraDiscount(fils(70_000), { discountFils: fils(5_000), basisPoints: null }),
+    ).toEqual({
+      kind: 'amount',
+      fils: 65_000,
+    });
+  });
+
+  it('gives the whole list when there is no standing discount', () => {
+    expect(
+      largestExtraDiscount(fils(70_000), { discountFils: fils(0), basisPoints: null }),
+    ).toEqual({
+      kind: 'amount',
+      fils: 70_000,
+    });
+  });
+
+  it('gives the whole percentage when the standing discount is nought per cent', () => {
+    expect(largestExtraDiscount(fils(70_000), { discountFils: fils(0), basisPoints: 0 })).toEqual({
+      kind: 'percent',
+      basisPoints: 10_000,
+    });
+  });
+
+  it('gives nothing more when the standing discount already takes the whole list', () => {
+    expect(
+      largestExtraDiscount(fils(70_000), { discountFils: fils(70_000), basisPoints: 10_000 }),
+    ).toEqual({ kind: 'percent', basisPoints: 0 });
+  });
+
+  it('makes the sale free: combined with the standing discount, nothing is left to pay', () => {
+    const cases: Array<[number, { discountFils: number; basisPoints: number | null }]> = [
+      [1_215_000, { discountFils: 182_250, basisPoints: 1500 }],
+      [1_997_500, { discountFils: 399_500, basisPoints: 2000 }],
+      [70_001, { discountFils: 10_500, basisPoints: 1500 }],
+      [70_000, { discountFils: 12_345, basisPoints: null }],
+      [0, { discountFils: 0, basisPoints: null }],
+    ];
+    for (const [list, standing] of cases) {
+      const s = { discountFils: fils(standing.discountFils), basisPoints: standing.basisPoints };
+      const applied = combineDiscounts(fils(list), s, largestExtraDiscount(fils(list), s));
+      expect(applied.netFils).toBe(0);
+      expect(applied.discountFils).toBe(list);
+    }
+  });
+
+  it('keeps a percentage on the invoice when both are percentages, so a free sale reads 100%', () => {
+    const s = { discountFils: fils(182_250), basisPoints: 1500 };
+    expect(
+      combineDiscounts(fils(1_215_000), s, largestExtraDiscount(fils(1_215_000), s)).basisPoints,
+    ).toBe(10_000);
+  });
+
+  it('refuses a standing discount that is not one the list could carry', () => {
+    expect(() =>
+      largestExtraDiscount(fils(70_000), { discountFils: fils(80_000), basisPoints: null }),
+    ).toThrow(RangeError);
+    expect(() =>
+      largestExtraDiscount(fils(70_000), { discountFils: fils(0), basisPoints: 12_000 }),
     ).toThrow(RangeError);
   });
 });
