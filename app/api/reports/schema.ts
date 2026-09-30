@@ -238,6 +238,47 @@ export type VisitsResponse = z.infer<typeof VisitsResponse>;
 export const IssueInput = z.object({});
 export type IssueInput = z.infer<typeof IssueInput>;
 
+/**
+ * Signing a brain-map (qEEG) draft. It still names no signer: the person
+ * signing is the one signed in, as for every report. It names the save it is
+ * made over (`savedAt`), so what is signed is the version on her screen and
+ * not one saved since in another tab (docs/SPEC/reports-qeeg.md section 14).
+ * Strict: a field the route does not take is refused, not ignored.
+ */
+export const QeegIssueInput = z.object({ savedAt: SavedAt }).strict();
+export type QeegIssueInput = z.infer<typeof QeegIssueInput>;
+
+/**
+ * What a brain-map report's preview tells the editor of its pages
+ * (docs/SPEC/reports-qeeg.md section 12, point 10), in the preview's
+ * `x-report-layout` header and in the body of a refusal to produce the file.
+ */
+export const QeegLayoutNotes = z.object({
+  pages: z.number().int().min(0),
+  dashboardScale: z.number(),
+  /** The id of every part that runs over. */
+  overflowing: z.array(z.string()),
+  /** Every character no face draws, as `U+` and its code point. */
+  unprintable: z.array(z.string()),
+  maps: z.array(
+    z.object({
+      figureId: z.string(),
+      dpi: z.number(),
+      quality: z.enum(['good', 'fair', 'poor']),
+    }),
+  ),
+  pairs: z.array(
+    z.object({
+      figureId: z.string(),
+      condition: z.string(),
+      side: z.enum(['earlier', 'later']),
+      dpi: z.number(),
+      quality: z.enum(['good', 'fair', 'poor']),
+    }),
+  ),
+});
+export type QeegLayoutNotes = z.infer<typeof QeegLayoutNotes>;
+
 export const IssueResponse = z.object({
   report: ReportRow,
 });
