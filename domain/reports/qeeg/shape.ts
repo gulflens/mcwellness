@@ -381,7 +381,9 @@ const recording = z
 
 /**
  * A number of sessions, typed or counted: the one bound, used by the plan of
- * either edition, the sessions completed and the form (`SessionCountShape`).
+ * either edition and the sessions completed, and asked by everything else
+ * through `isSessionCount` (the form, the count of completed visits, the
+ * old-file reader).
  */
 const sessionCount = whole(1, LIMITS.sessionsMost);
 
@@ -660,12 +662,11 @@ const followUpShape = z
 // ---------------------------------------------------------------------------
 
 /**
- * The two pieces of the shape a form holds her half-typed numbers to before
- * they join the content (`choices.ts`), so the form asks the shape and keeps
- * no copy of its limits.
+ * The piece of the shape a form holds her half-typed figure to before it
+ * joins the content (`choices.ts`), so the form asks the shape and keeps no
+ * copy of its limits. A number of sessions is asked through `isSessionCount`.
  */
 export const TypedFigureShape = typedFigure;
-export const SessionCountShape = sessionCount;
 
 /**
  * Whether a number of sessions is one a report takes: the one bound, asked
