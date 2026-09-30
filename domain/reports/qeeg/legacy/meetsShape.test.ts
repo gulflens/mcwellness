@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateQeegContent } from '../shape';
-import { IMPORT_NOTE_CODES } from '../types';
+import { IMPORT_NOTE_CODES, KEEP_NOTE_CODES } from '../types';
 import { LEGACY_SUBJECT_KEY } from './keys';
 import { readLegacyReport } from './read';
 
@@ -274,7 +274,10 @@ describe('what the old-file reader hands back meets the shape', () => {
     const read = readLegacyReport(file, SHA);
     if (!read.ok) throw new Error(read.reason);
     expect([...new Set(read.notes.map((note) => note.code))].sort()).toEqual(
-      [...IMPORT_NOTE_CODES].sort(),
+      // Every code but the ones written when a record is kept, not read.
+      IMPORT_NOTE_CODES.filter((code) => !(KEEP_NOTE_CODES as readonly string[]).includes(code))
+        .slice()
+        .sort(),
     );
     expectMeetsShape(file);
   });

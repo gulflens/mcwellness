@@ -198,7 +198,17 @@ export const IMPORT_NOTE_CODES = Object.freeze([
   'map_label_kept_as_caption',
   'map_without_image_dropped',
   'text_shortened',
+  /**
+   * A picture the file held that was not brought in: the browser could not
+   * make it into a map the report takes, or the store refused it. Written by
+   * the import's keep (`legacy/placeImport.ts`), never by the reader, at
+   * `images.` and the picture's place in the file.
+   */
+  'map_not_brought_in',
 ] as const);
+
+/** The notes written when a past record is kept, not when its file is read. */
+export const KEEP_NOTE_CODES = Object.freeze(['map_not_brought_in'] as const);
 export type ImportNoteCode = (typeof IMPORT_NOTE_CODES)[number];
 
 /** Something the importer changed or could not carry, and where. Never what was typed. */
