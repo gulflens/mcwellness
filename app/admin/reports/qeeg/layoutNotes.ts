@@ -1,3 +1,4 @@
+import { partTitles } from '../../../../domain/reports/qeeg/document/partTitle';
 import { mapsInOrder } from '../../../../domain/reports/qeeg/maps';
 import type { QeegContent } from '../../../../domain/reports/qeeg/types';
 import type { QeegLayoutNotes } from '../../../api/reports/schema';
@@ -55,7 +56,8 @@ export function layoutLines(notes: QeegLayoutNotes, content: QeegContent): strin
       : 'The dashboard fits its page at full size.',
   );
   if (notes.overflowing.length > 0) {
-    lines.push(`Runs past the foot of its page: ${notes.overflowing.join(', ')}.`);
+    const titles = partTitles(notes.overflowing, content.edition, 'en');
+    lines.push(`Runs past the foot of its page: ${titles.join(', ')}.`);
   }
   if (notes.unprintable.length > 0) {
     const more = notes.unprintableMore > 0 ? ` and ${notes.unprintableMore} more` : '';

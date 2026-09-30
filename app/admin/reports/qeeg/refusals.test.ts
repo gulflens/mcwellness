@@ -314,9 +314,18 @@ describe('what the form says when a preview, a signature or a correction is refu
     );
   });
 
-  it('names what ran over, by the part of the report', () => {
+  it('names what ran over by the heading it prints under, never by a part id', () => {
     expect(previewRefusalSentence(422, { code: 'overrun', parts: ['summary.1'] })).toBe(
-      `${PREVIEW_REFUSALS['overrun']} It ran over at: summary.1.`,
+      `${PREVIEW_REFUSALS['overrun']} It ran over under: Summary.`,
+    );
+    expect(
+      issueRefusalSentence(
+        422,
+        { code: 'overrun', parts: ['approach.text', 'recommendation.2'] },
+        { edition: 'follow-up' },
+      ),
+    ).toBe(
+      `${ISSUE_REFUSALS['overrun']} It ran over under: Next Stage of Training, Personalised Recommendations.`,
     );
   });
 

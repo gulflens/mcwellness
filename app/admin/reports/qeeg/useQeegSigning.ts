@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Missing } from '../../../../domain/reports/qeeg/types';
+import type { Edition, Missing } from '../../../../domain/reports/qeeg/types';
 import {
   IssueResponse,
   QeegLayoutNotes,
@@ -79,6 +79,11 @@ function codeOf(body: unknown): string {
   return typeof code === 'string' ? code : '';
 }
 
+/** The edition on screen, whose headings a refusal names. */
+function editionOf(draft: QeegDraft): Edition {
+  return draft.content?.edition ?? 'initial';
+}
+
 export function useQeegSigning(draft: QeegDraft): Signing {
   const { apiFetch } = useAuth();
   const [previewing, setPreviewing] = useState(false);
@@ -121,7 +126,9 @@ export function useQeegSigning(draft: QeegDraft): Signing {
             setNotes(layout.success ? layout.data : null);
             forget();
             setPreviewUrl(null);
-            setPreviewError(previewRefusalSentence(res.status, body));
+            setPreviewError(
+              previewRefusalSentence(res.status, body, { edition: editionOf(draft) }),
+            );
             return null;
           }
           const header = res.headers.get('x-report-layout');
@@ -166,7 +173,7 @@ export function useQeegSigning(draft: QeegDraft): Signing {
               const layout = QeegLayoutNotes.safeParse((body as { layout?: unknown }).layout);
               if (layout.success) setNotes(layout.data);
             }
-            setSignError(issueRefusalSentence(res.status, body));
+            setSignError(issueRefusalSentence(res.status, body, { edition: editionOf(draft) }));
             return null;
           }
           const answer = IssueResponse.parse(await res.json());

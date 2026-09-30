@@ -1,3 +1,5 @@
+import { partTitles } from '../../../../domain/reports/qeeg/document/partTitle';
+import type { Edition } from '../../../../domain/reports/qeeg/types';
 import { SECTION_TITLES, sectionOfField } from './sections';
 
 /**
@@ -378,6 +380,7 @@ function doorSentence(
   body: unknown,
   fallback: string,
   forbidden: string,
+  edition: Edition,
 ): string {
   const refusal = asRefusal(body);
   const code = codeIn(refusal);
@@ -395,7 +398,9 @@ function doorSentence(
   }
   const extra = body as { parts?: unknown; figures?: unknown };
   if (code === 'overrun' && Array.isArray(extra.parts) && extra.parts.length > 0) {
-    return `${base} It ran over at: ${extra.parts.join(', ')}.`;
+    // By the heading it prints under, never by the layout's own part id.
+    const ids = extra.parts.filter((part): part is string => typeof part === 'string');
+    return `${base} It ran over under: ${partTitles(ids, edition, 'en').join(', ')}.`;
   }
   if (code === 'unplaced_figures' && Array.isArray(extra.figures)) {
     const count = extra.figures.length;
@@ -408,32 +413,47 @@ function doorSentence(
   return base;
 }
 
-export function issueRefusalSentence(status: number, body: unknown): string {
+export function issueRefusalSentence(
+  status: number,
+  body: unknown,
+  { edition = 'initial' }: { edition?: Edition } = {},
+): string {
   return doorSentence(
     ISSUE_REFUSALS,
     status,
     body,
     SIGN_FALLBACK,
     'You are not allowed to sign reports for this client.',
+    edition,
   );
 }
 
-export function previewRefusalSentence(status: number, body: unknown): string {
+export function previewRefusalSentence(
+  status: number,
+  body: unknown,
+  { edition = 'initial' }: { edition?: Edition } = {},
+): string {
   return doorSentence(
     PREVIEW_REFUSALS,
     status,
     body,
     PREVIEW_FALLBACK,
     'You are not allowed to preview reports for this client.',
+    edition,
   );
 }
 
-export function supersedeRefusalSentence(status: number, body: unknown): string {
+export function supersedeRefusalSentence(
+  status: number,
+  body: unknown,
+  { edition = 'initial' }: { edition?: Edition } = {},
+): string {
   return doorSentence(
     SUPERSEDE_REFUSALS,
     status,
     body,
     SUPERSEDE_FALLBACK,
     'Only the owner and the lead practitioner may correct a signed report.',
+    edition,
   );
 }

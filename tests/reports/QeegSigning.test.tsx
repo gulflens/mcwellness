@@ -262,9 +262,10 @@ describe('Preview', () => {
     });
     await user.click(await screen.findByRole('button', { name: 'Preview' }));
     expect(
-      await screen.findByText(`${PREVIEW_REFUSALS['overrun']} It ran over at: summary.1.`),
+      await screen.findByText(`${PREVIEW_REFUSALS['overrun']} It ran over under: Summary.`),
     ).toBeTruthy();
-    expect(screen.getByText('Runs past the foot of its page: summary.1.')).toBeTruthy();
+    expect(screen.getByText('Runs past the foot of its page: Summary.')).toBeTruthy();
+    expect(screen.queryByText(/summary\.1/)).toBeNull();
     expect(opened).not.toHaveBeenCalled();
     expect(screen.queryByRole('link', { name: 'Open the preview again' })).toBeNull();
   });

@@ -59,10 +59,13 @@ describe('what the form says of the pages beside the Preview button', () => {
     );
   });
 
-  it('names what runs over', () => {
-    expect(layoutLines(notes({ overflowing: ['summary.1', 'benefits.list'] }), content)).toContain(
-      'Runs past the foot of its page: summary.1, benefits.list.',
+  it('names what runs over by the heading it prints under, never by a part id', () => {
+    const lines = layoutLines(
+      notes({ overflowing: ['summary.1', 'summary.2', 'benefits.list'] }),
+      content,
     );
+    expect(lines).toContain('Runs past the foot of its page: Summary, Potential Benefits.');
+    expect(lines.join(' ')).not.toMatch(/summary\.1|benefits\.list/);
   });
 
   it('names each character the typeface cannot draw, by its code point', () => {
