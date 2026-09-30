@@ -12,7 +12,9 @@
  * evidence, summary, number of sessions or later map is filled in, because
  * each is a judgement made anew and signed under her name. `subject` stays
  * empty: the server gathers it from the client's record. So the follow-up is
- * missing exactly what a blank one is missing.
+ * missing what a blank one is missing, less the handedness when the earlier
+ * report gave one. The sessions completed are not this function's: the route
+ * counts them from the client's visits (`sessionsCompleted.ts`, brief S).
  *
  * **What she chose last time is offered, never filled in.** `offered` is
  * handed over beside the content, for the form to show as a suggestion she
