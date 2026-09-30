@@ -305,6 +305,23 @@ export function saleExtraDiscount(
   return body.kind === 'percent' ? body : { kind: 'amount', fils: fils(body.fils) };
 }
 
+/**
+ * What a sale sends as its extra discount: the typed share or sum, or simply
+ * `{ kind: 'free' }`. Free is never sent as a figure worked out here from
+ * today's price: the route works it out against the price it charges on the
+ * sale's date (`toSaleDiscount`), so a backdated sale is still free.
+ */
+export function saleDiscountBody(
+  kind: SaleDiscountKind,
+  typed: string,
+):
+  | { kind: 'percent'; basisPoints: number }
+  | { kind: 'amount'; fils: number }
+  | { kind: 'free' }
+  | null {
+  return kind === 'free' ? { kind: 'free' } : discountBody(kind, typed);
+}
+
 /** A share in basis points as a person reads it: 8500 is "85%", 1250 is "12.5%". */
 function percentWords(basisPoints: number): string {
   return `${(basisPoints / 100).toString()}%`;
@@ -356,6 +373,10 @@ export function saleDiscountTooLargeWords(
   }
   const most =
     room.kind === 'percent' ? percentWords(room.basisPoints) : `AED ${formatFils(room.fils)}`;
+  // Nothing off on the list: the ceiling is simply the list price.
+  if (standing.discountFils === 0) {
+    return `The most you can add is ${most}. To give it away, choose Free (100%).`;
+  }
   const already =
     standing.basisPoints !== null
       ? `The price list already takes ${percentWords(standing.basisPoints)} off`

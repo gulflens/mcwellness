@@ -25,7 +25,7 @@ import {
   formatFils,
   previewSaleDiscount,
   saleDiscountTooLargeWords,
-  saleExtraDiscount,
+  saleDiscountBody,
   saleRoomWords,
   previewVat,
   type SaleDiscountKind,
@@ -160,6 +160,17 @@ export function SellSessionDrawer({
       : price.vatFils > 0
         ? previewVat(applied.netFils, price.vatRateBasisPoints)
         : { vatFils: 0, grossFils: applied.netFils };
+  // A sale given away free: nothing changes hands, so no payment is asked
+  // for (the route refuses a payment of nothing).
+  const nothingToPay = charged !== null && charged.grossFils === 0;
+  // Whatever the price list still leaves to give; null when it already gives
+  // the whole price, and then Free is not offered.
+  const room = price
+    ? saleRoomWords(price.listPriceFils, {
+        discountFils: price.discountFils,
+        basisPoints: price.discountBasisPoints,
+      })
+    : null;
   // Always exactly one credit: this is the package drawer's shape for a
   // package of one, not a quantity a person chooses.
   const credits = 1;
@@ -203,12 +214,7 @@ export function SellSessionDrawer({
       return;
     }
     setReasonError(undefined);
-    const extra = saleExtraDiscount(
-      price.listPriceFils,
-      { discountFils: price.discountFils, basisPoints: price.discountBasisPoints },
-      discountKind,
-      discountValue,
-    );
+    const extra = saleDiscountBody(discountKind, discountValue);
 
     setBusy(true);
     try {
@@ -217,7 +223,7 @@ export function SellSessionDrawer({
         clientId: client.id,
         purchasedOn,
         ...(extra ? { extraDiscount: { discount: extra, reason: trimmedReason } } : {}),
-        ...(takingPayment
+        ...(takingPayment && !nothingToPay
           ? {
               payment: {
                 method,
@@ -397,15 +403,8 @@ export function SellSessionDrawer({
             kind={discountKind}
             value={discountValue}
             error={discountError}
-            offerFree
-            hint={
-              price
-                ? saleRoomWords(price.listPriceFils, {
-                    discountFils: price.discountFils,
-                    basisPoints: price.discountBasisPoints,
-                  })
-                : null
-            }
+            offerFree={room !== null}
+            hint={room}
             onChange={(next) => {
               setDiscountKind(next.kind);
               setDiscountValue(next.value);
@@ -429,17 +428,19 @@ export function SellSessionDrawer({
             />
           )}
 
-          <label className="checkbox" htmlFor="sell-session-taking-payment">
-            <input
-              id="sell-session-taking-payment"
-              type="checkbox"
-              checked={takingPayment}
-              onChange={(e) => setTakingPayment(e.target.checked)}
-            />
-            <span>Money has changed hands</span>
-          </label>
+          {nothingToPay ? null : (
+            <label className="checkbox" htmlFor="sell-session-taking-payment">
+              <input
+                id="sell-session-taking-payment"
+                type="checkbox"
+                checked={takingPayment}
+                onChange={(e) => setTakingPayment(e.target.checked)}
+              />
+              <span>Money has changed hands</span>
+            </label>
+          )}
 
-          {takingPayment ? (
+          {takingPayment && !nothingToPay ? (
             <>
               <Select
                 id="sell-session-method"

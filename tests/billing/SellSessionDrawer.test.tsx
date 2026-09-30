@@ -229,7 +229,7 @@ describe('SellSessionDrawer', () => {
     });
   });
 
-  it('gives a session away free: nothing to pay, and the rest of the list sent with its reason', async () => {
+  it('gives a session away free: nothing to pay, and free sent as a word with its reason', async () => {
     const { requests } = mount(() => undefined, NF_SESSION_PRICE_DISCOUNTED);
     await chooseService();
     await findClient();
@@ -249,9 +249,8 @@ describe('SellSessionDrawer', () => {
     const sent = requests.find((r) => r.url === '/api/billing/session-purchases')?.body as {
       extraDiscount: { discount: unknown; reason: string };
     };
-    // AED 700 list, less the list's own AED 50: the AED 650 left.
     expect(sent.extraDiscount).toEqual({
-      discount: { kind: 'amount', fils: 65_000 },
+      discount: { kind: 'free' },
       reason: 'A first session given to promote the practice.',
     });
   });

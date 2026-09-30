@@ -190,6 +190,13 @@ describe('largestExtraDiscount', () => {
     });
   });
 
+  it('gives the whole percentage when the standing discount is nought per cent', () => {
+    expect(largestExtraDiscount(fils(70_000), { discountFils: fils(0), basisPoints: 0 })).toEqual({
+      kind: 'percent',
+      basisPoints: 10_000,
+    });
+  });
+
   it('gives nothing more when the standing discount already takes the whole list', () => {
     expect(
       largestExtraDiscount(fils(70_000), { discountFils: fils(70_000), basisPoints: 10_000 }),
