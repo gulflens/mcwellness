@@ -3647,3 +3647,35 @@ asked before each upload and held the host.
 - The host's install keeps hitting npm's "reading 'edgesOut'" error and
   succeeding on its own `--legacy-peer-deps` retry. It reported 0
   vulnerabilities on both passes.
+
+## What was done on 2026-10-07: a policy step, not a pass — a household's login reads only what it needs (round 77)
+
+**About 19:20 UTC (23:20 +04, 6 October): main `8daaf6e4`, PR 251.**
+
+**Why.** The round 76 review found a gap in the database, though not in what
+any screen showed. A household login (`client_contact`) could read every
+sign-in row of the practice at the database, including other households'
+contacts and the staff, with names, emails and phones. The routes never
+showed it.
+
+**What.** `db/policies/core/household_reach.sql` adds a restrictive read
+policy and a restrictive write policy on eight tables. A login whose only
+role is household contact now reads:
+- its own `app_user` and `user_role` rows;
+- the `service_type` rows on its own visits;
+- its own `tenant` row;
+- nothing from `practitioner`, `credential`, `goal_category` or
+  `scheduling_setting`.
+
+It writes none of them. A staff member who is also a household contact is
+unaffected.
+
+**How it was applied.** There is no migration and no build. The policy file
+(sha256 `373cad2f8f174b8e…`) went to staging and then production, wrapped in
+a transaction. Both databases hold the same 16 policies with identical
+definitions, and both stay at 131 migrations. Health and deep health answer
+200.
+
+**Left open for the operator.** A household can still read its own
+practice's whole `tenant` row, including bank, licence and TRN details. None
+of it is personal data.
