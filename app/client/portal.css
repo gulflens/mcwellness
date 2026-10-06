@@ -315,6 +315,22 @@
 }
 
 /* The review line: a sentence and two quiet answers, no heading, no rule. */
+/* The practice's announcements (section 3.1, amended 2026-10-06): a title and
+   a paragraph each, quietly, with no colour and no card. */
+.portal__announcement {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.portal__announcement h3 {
+  margin: 0;
+}
+
+.portal__announcement p {
+  margin: 0;
+}
+
 .portal__review {
   display: flex;
   flex-direction: column;
