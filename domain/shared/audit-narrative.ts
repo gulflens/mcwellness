@@ -121,6 +121,8 @@ const ENTITY: Record<string, Text> = {
   portal_invite: t('portal invitation', 'دعوة البوابة'),
   portal_request: t('portal request', 'طلب من البوابة'),
   portal_review_prompt: t('review line', 'سطر التقييم'),
+  // The practice's announcements (section 3.10, migration 705).
+  announcement: t('announcement', 'الإعلان'),
   // The practitioner's phone (docs/SPEC/practitioner-phone.md section 10).
   // `drive_estimate` is deliberately absent: two location ids, an hour and a
   // duration are not a sentence anybody reads, so it takes the generic
@@ -832,6 +834,37 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
             locale,
           )
         : pick(t(`${actor} changed a portal request`, `${actor} غيّر طلب البوابة`), locale);
+    // The practice's announcements (docs/SPEC/client-portal.md section 3.10,
+    // migration 705). The row trigger's insert and update and the route's
+    // own two acts say the same things; a correction names what it corrects.
+    case 'announcement.insert':
+    case 'announcement.portal.announcement.published':
+      return event.newValues?.supersedesId || event.newValues?.supersedes_id
+        ? pick(
+            t(`${actor} published a correction of an announcement`, `${actor} نشر تصحيحًا لإعلان`),
+            locale,
+          )
+        : pick(
+            t(
+              `${actor} published an announcement on the households’ portal`,
+              `${actor} نشر إعلانًا على بوابة الأسر`,
+            ),
+            locale,
+          );
+    case 'announcement.update':
+    case 'announcement.portal.announcement.withdrawn':
+      return pick(
+        t(
+          `${actor} withdrew an announcement from the households’ portal`,
+          `${actor} سحب إعلانًا من بوابة الأسر`,
+        ),
+        locale,
+      );
+    case 'announcement.read':
+      return pick(
+        t(`${actor} read an announcement on the portal`, `${actor} قرأ إعلانًا على البوابة`),
+        locale,
+      );
     case 'portal_request.read':
     case 'portal_request.list':
       return pick(t(`${actor} read a portal request`, `${actor} اطّلع على طلب من البوابة`), locale);

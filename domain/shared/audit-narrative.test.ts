@@ -88,6 +88,49 @@ const CASES: { name: string; event: AuditEvent; en: string; ar: string }[] = [
     en: 'The household said not now to leaving a review',
     ar: 'قالت الأسرة ليس الآن لترك تقييم',
   },
+  // The practice's announcements (docs/SPEC/client-portal.md section 3.10,
+  // migration 705). Names no household, so it reads on the practice's own
+  // feed and never on a client's timeline.
+  {
+    name: 'publishing an announcement',
+    event: event({ entityType: 'announcement' }),
+    en: 'Hazel Harbour published an announcement on the households’ portal',
+    ar: 'Hazel Harbour نشر إعلانًا على بوابة الأسر',
+  },
+  {
+    name: 'publishing a correction of one',
+    event: event({
+      entityType: 'announcement',
+      action: 'portal.announcement.published',
+      newValues: { supersedesId: '00000008-0000-4000-8000-000000000002' },
+    }),
+    en: 'Hazel Harbour published a correction of an announcement',
+    ar: 'Hazel Harbour نشر تصحيحًا لإعلان',
+  },
+  {
+    name: 'withdrawing one',
+    event: event({
+      entityType: 'announcement',
+      action: 'update',
+      changedFields: ['withdrawn_at', 'withdrawn_by'],
+    }),
+    en: 'Hazel Harbour withdrew an announcement from the households’ portal',
+    ar: 'Hazel Harbour سحب إعلانًا من بوابة الأسر',
+  },
+  {
+    name: 'a household reading one',
+    event: event({
+      entityType: 'announcement',
+      action: 'read',
+      actor: {
+        id: '00000002-0000-4000-8000-000000000002',
+        name: 'Saffron Dune',
+        roles: ['client_contact'],
+      },
+    }),
+    en: 'Saffron Dune read an announcement on the portal',
+    ar: 'Saffron Dune قرأ إعلانًا على البوابة',
+  },
   {
     name: 'the office marking a request handled',
     event: event({
