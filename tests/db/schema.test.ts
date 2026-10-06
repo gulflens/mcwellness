@@ -136,6 +136,8 @@ describe('core schema', () => {
       'practitioner',
       'finance',
       'client_contact',
+      // Round 76, migration 974 (docs/SPEC/dispatch.md section 15.12).
+      'helper',
     ]);
     expect(await enumValues('emirate')).toEqual(['DXB', 'AUH', 'SHJ', 'AJM', 'UAQ', 'RAK', 'FUJ']);
     expect(await enumValues('consent_method')).toEqual([

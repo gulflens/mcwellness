@@ -59,7 +59,9 @@ applied.
     untouched and pass.
 12. **`tests/accounting/access.test.ts`** (accounting's): `'helper'` added to
     its role list and its `Record<Role, …>` table (read, write and owner all
-    false), which the type now requires.
+    false), which the type now requires; and **`tests/db/schema.test.ts`**
+    (the trunk's): `'helper'` appended to the `role_kind` closed set it holds
+    the database to.
 
 ## Proposed, not applied
 
