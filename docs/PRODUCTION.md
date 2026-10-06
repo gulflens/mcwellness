@@ -3530,3 +3530,52 @@ members who help should share.
   until they are signed.
 - A progress report counts every visit of the client.
 - An installed window loads the new version after Cmd+R.
+
+## What was done on 2026-10-06: the forty-fifth and forty-sixth live passes — live location, and a brain-map report asks the household's agreements
+
+Two passes, each made after main's own CI passed on its merge commit. The
+second session on this machine was asked before each and held the host.
+
+**Forty-fifth, 19:00 UTC (23:00 +04): main `6576db49`, PR 242 (piece
+twenty-five, live location).**
+- A practitioner can share their position during their working day. Three
+  things must all hold:
+  - they have accepted the practice's notice (`docs/CONSENT/staff/location.en.md`,
+    version 1.1, approved 6 October 2026);
+  - their own switch is on;
+  - the shift is open.
+- The board and the day map show the last position of each person sharing.
+- Positions are deleted after two days by an hourly job, and never after
+  21:00 Dubai.
+- Migrations 211 (`bcc3407d3aa800672122f3357f7ac0b65c687ec8f8526fcc50e6c65074fa4473`)
+  and 212 (`caf53b70c370506310d62e49fe070cabb3c91230bc09c7360005e24d6264ed52`)
+  and `db/policies/dispatch/location.sql` went from the files, each wrapped
+  with its ledger row, to staging and then production.
+- Both databases are at 125, and both hold 9 policies and 6 triggers on the
+  location tables.
+- Archive 7,704,310 bytes, build `01a11296`. The entry moved to
+  `index-D1z5YSDZ.js` in 60 s, and the old entry answers 404.
+- `/api/location/sharing` answers 401 without a session (404 before). The
+  board and day-map chunks call the location routes. Health and deep health
+  200.
+- The host's `npm install` first stopped on an npm internal error ("reading
+  'edgesOut'"), then went through on its own `--legacy-peer-deps` retry.
+
+**Forty-sixth, 19:17 UTC (23:17 +04): main `57fd7c47`, PR 245 (round 74).**
+- A brain-map report can no longer be drafted, brought in from a past
+  record, made in the other language, or corrected while the client lacks
+  any of these:
+  - an active agreement to take part;
+  - the practice holding brain data;
+  - for a child, or a client whose birth date is not known, a guardian's
+    agreement.
+- An expiry counts from its moment, not from the start of the practice's
+  day.
+- Each refusal is written to the trail before the 409 answer. The check runs
+  only after the client is known to be visible, so a client the caller
+  cannot see is still answered 404.
+- No migration (both databases stay at 125). Archive 7,708,602 bytes, build
+  `01a112a6`. The entry moved to `index-BAu0vVYY.js` in 75 s.
+- The rebuilt clients chunk carries the new sentence ("…agreed to everything
+  a brain-map report needs…"). The old entry answered 200 from the edge for
+  a few seconds, then 404. Health and deep health 200.
