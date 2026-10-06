@@ -3,6 +3,11 @@
 **Date:** 24 September 2026. **Status:** design approved by the operator ("go
 but respect my colors and simplicity", 01:58 +04); building as trunk round 65.
 
+**Re-dressed 7 October 2026:** the structure below stands. The colours
+(the solid violet bands, white on violet, and the `CARD`/`EDGE`/`PILL` tints)
+are replaced by the practice's softer dress, and the receipt gains a one-line
+table. See `2026-10-07-soft-documents-design.md`.
+
 ## Why
 
 The operator designed the invoice again and asked that the platform's own

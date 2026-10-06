@@ -38,6 +38,8 @@ function numbersOf(op: LayoutOp): number[] {
       return [op.x, op.y, op.width, op.dy ?? 0, op.thickness ?? 0];
     case 'image':
       return [op.x, op.y, op.width, op.height];
+    case 'shade':
+      return [op.x, op.y, op.width, op.height, op.from.x, op.from.y, op.to.x, op.to.y];
     case 'path':
       return [
         ...op.segments.flatMap((segment) => segment.slice(1) as number[]),
@@ -273,6 +275,8 @@ describe('what the review of the rectangle found the tests did not hold', () => 
         return op.rgb ? [op.rgb] : [];
       case 'image':
         return [];
+      case 'shade':
+        return [op.from.rgb, op.to.rgb];
       case 'path':
         return [op.fill?.rgb, op.stroke?.rgb].filter((rgb) => rgb !== undefined);
       case 'rect':

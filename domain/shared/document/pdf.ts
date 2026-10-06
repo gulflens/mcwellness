@@ -13,8 +13,11 @@
  * filled and stroked rectangle, square or rounded, the operator's invoice
  * design is drawn with. And, for the brain-map report (trunk round 67,
  * docs/CHANGE-REQUESTS/reports-02.md request 1): a path of lines and curves,
- * an optional bold Arabic face, and smooth resampling on an image. No colour
- * spaces beyond that one operator, no forms, no transparency, no compression.
+ * an optional bold Arabic face, and smooth resampling on an image. And, for
+ * the money documents' softer dress of 7 October 2026 (docs/superpowers/specs/
+ * 2026-10-07-soft-documents-design.md), one smooth shading: two colours fading
+ * into each other along a line, inside a box (`shade`). No colour spaces
+ * beyond red-green-blue, no forms, no transparency, no compression.
  * `package.json` is the shared zone
  * (docs/SPEC/OWNERSHIP.md), so a dependency here is a change request and a
  * standing supply-chain surface on the one path that renders a client's
@@ -229,7 +232,35 @@ export type Op =
       stroke?: Stroke;
       /** Fill by the even-odd rule, so an inner ring is a hole. Absent is non-zero winding. */
       evenOdd?: boolean;
+    }
+  | {
+      /**
+       * A wash: `from.rgb` at the point `from`, fading evenly into `to.rgb` at
+       * the point `to`, and carrying on in the end colours beyond either —
+       * painted only inside the box `x`, `y` (bottom-left), `width`,
+       * `height`. The page ground of the money documents' design of 7 October
+       * 2026.
+       *
+       * PDF's own axial shading (`/ShadingType 2`) driven by a linear
+       * interpolation between the two colours (`/FunctionType 2`, `/N 1`),
+       * painted with `sh` inside a clip to the box. A wash whose axis has no
+       * length, whose box is empty, or which carries a number that is not
+       * finite draws nothing, as a path does.
+       */
+      kind: 'shade';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      from: ShadeStop;
+      to: ShadeStop;
     };
+
+/** One end of a wash's axis: where it is, in page points, and its colour there. */
+export type ShadeStop = { x: number; y: number; rgb: readonly [number, number, number] };
+
+/** The shade op on its own. */
+export type ShadeOp = Extract<Op, { kind: 'shade' }>;
 
 export type Page = { ops: Op[] };
 
@@ -397,6 +428,7 @@ function contentOf(
   resourceOf: Map<FontSlot, string>,
   used: Used,
   imageOf: ReadonlyMap<string, string>,
+  shadeOf: ReadonlyMap<string, string>,
 ): string {
   const out: string[] = [];
   // What the writer has already told the reader the fill is, as the operator
@@ -509,6 +541,19 @@ function contentOf(
     if (op.kind === 'path') {
       const line = pathLine(op);
       if (line !== null) out.push(line);
+      continue;
+    }
+
+    if (op.kind === 'shade') {
+      const dictionary = shadingOf(op);
+      const resource = dictionary === null ? undefined : shadeOf.get(dictionary);
+      if (!resource) continue;
+      // Clipped to its box and painted inside its own q/Q: the clip and
+      // whatever the shading leaves set die at the Q, and `sh` touches no
+      // fill, so `fill` above still describes what the text was last told.
+      out.push(
+        `q ${num(op.x)} ${num(op.y)} ${num(op.width)} ${num(op.height)} re W n /${resource} sh Q`,
+      );
       continue;
     }
 
@@ -650,6 +695,28 @@ function pathLine(op: PathOp): string | null {
   return parts.join(' ');
 }
 
+/**
+ * A wash as the shading dictionary a page's resources declare it by, or null
+ * when there is nothing sound to paint. The dictionary is also the wash's
+ * identity: two ops that would write the same one share one resource name.
+ */
+function shadingOf(op: ShadeOp): string | null {
+  const numbers = [op.x, op.y, op.width, op.height, op.from.x, op.from.y, op.to.x, op.to.y];
+  if (!numbers.every((n) => Number.isFinite(n) && Math.abs(n) < 1e21)) return null;
+  if (op.width <= 0 || op.height <= 0) return null;
+  // An axis of no length has no direction for the colour to change along;
+  // readers disagree about what to paint, so nothing is.
+  if (num(op.from.x) === num(op.to.x) && num(op.from.y) === num(op.to.y)) return null;
+  const colour = (rgb: readonly [number, number, number]): string =>
+    `[${rgb.map((channel) => num(clamp01(channel))).join(' ')}]`;
+  return (
+    '<< /ShadingType 2 /ColorSpace /DeviceRGB ' +
+    `/Coords [${num(op.from.x)} ${num(op.from.y)} ${num(op.to.x)} ${num(op.to.y)}] ` +
+    `/Function << /FunctionType 2 /Domain [0 1] /C0 ${colour(op.from.rgb)} /C1 ${colour(op.to.rgb)} /N 1 >> ` +
+    '/Extend [true true] >>'
+  );
+}
+
 // --------------------------------------------------------------------------
 // The file
 // --------------------------------------------------------------------------
@@ -731,8 +798,22 @@ export function renderPdf(
   }
   const imageOf = new Map<string, string>(drawn.map((name, index) => [name, `Im${index + 1}`]));
 
+  // The washes, by the dictionary each writes, named in the order they are
+  // first drawn — so the same wash on every page of a long invoice is one name.
+  const shadings: string[] = [];
+  for (const page of pages) {
+    for (const op of page.ops) {
+      if (op.kind !== 'shade') continue;
+      const dictionary = shadingOf(op);
+      if (dictionary !== null && !shadings.includes(dictionary)) shadings.push(dictionary);
+    }
+  }
+  const shadeOf = new Map<string, string>(
+    shadings.map((dictionary, index) => [dictionary, `Sh${index + 1}`]),
+  );
+
   const used: Used = new Map();
-  const contents = pages.map((page) => contentOf(page, fonts, resourceOf, used, imageOf));
+  const contents = pages.map((page) => contentOf(page, fonts, resourceOf, used, imageOf, shadeOf));
 
   // Only the faces this document actually drew with. A receipt in English sets
   // no Arabic, and embedding the Arabic face anyway put ninety kilobytes of
@@ -771,6 +852,13 @@ export function renderPdf(
     drawn.length === 0
       ? ''
       : ` /XObject << ${drawn.map((name) => `/${imageOf.get(name)} ${imageObject.get(name)} 0 R`).join(' ')} >>`;
+  // Direct dictionaries, not objects: a wash adds no object, so a document
+  // that draws one numbers the rest exactly as it would without it — and a
+  // document that draws none has no key at all.
+  const shadingResources =
+    shadings.length === 0
+      ? ''
+      : ` /Shading << ${shadings.map((dictionary) => `/${shadeOf.get(dictionary)} ${dictionary}`).join(' ')} >>`;
 
   push('<< /Type /Catalog /Pages 2 0 R >>');
   push(
@@ -783,7 +871,7 @@ export function renderPdf(
     const contentNumber = pageObjectAt + index * 2 + 1;
     push(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(PAGE_WIDTH)} ${num(PAGE_HEIGHT)}] ` +
-        `/Resources << /Font << ${fontResources} >>${imageResources} >> ` +
+        `/Resources << /Font << ${fontResources} >>${imageResources}${shadingResources} >> ` +
         `/Contents ${contentNumber} 0 R >>`,
     );
     const stream = contents[index] ?? '';

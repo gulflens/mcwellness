@@ -49,7 +49,17 @@ import {
   VIOLET,
 } from './sheet';
 
-export { CARD, clampForDocument, EDGE, PILL, Sheet, VIOLET } from './sheet';
+export {
+  clampForDocument,
+  LAVENDER,
+  LAVENDER_EDGE,
+  Sheet,
+  VIOLET,
+  WASH_FROM,
+  WASH_TO,
+  wash,
+  WHITE,
+} from './sheet';
 export type { Block, BlockName } from './page';
 
 /**
