@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   STAFF_ROLES,
   STAFF_ROLE_OPENS,
+  canArchive,
   canEditProfile,
   canReactivate,
+  canRestore,
   canResetPassword,
   canSuspend,
   canSwitchRole,
@@ -21,10 +23,63 @@ describe('the roles Settings › Team may grant', () => {
 });
 
 describe('an archived sign-in', () => {
-  it('does not come back; a suspended one does', () => {
+  it('does not come back through Reactivate; a suspended one does', () => {
     expect(canReactivate('archived')).toBe(false);
     expect(canReactivate('suspended')).toBe(true);
     expect(canReactivate('active')).toBe(false);
+  });
+});
+
+describe('archiving a colleague', () => {
+  const me = '00000002-0000-4000-8000-000000000010';
+  const them = '00000002-0000-4000-8000-000000000011';
+
+  it('is allowed for an active or a suspended colleague who is not an owner', () => {
+    for (const status of ['active', 'suspended'] as const) {
+      expect(
+        canArchive({ actorUserId: me, targetUserId: them, targetRoles: ['practitioner'], status }),
+      ).toBeNull();
+    }
+  });
+
+  it('is refused on your own row, before anything else is said', () => {
+    expect(
+      canArchive({ actorUserId: me, targetUserId: me, targetRoles: ['owner'], status: 'active' }),
+    ).toBe('not_yourself');
+  });
+
+  it('is refused on an owner', () => {
+    expect(
+      canArchive({
+        actorUserId: me,
+        targetUserId: them,
+        targetRoles: ['owner', 'finance'],
+        status: 'active',
+      }),
+    ).toBe('locked');
+  });
+
+  it('is refused on somebody already archived', () => {
+    expect(
+      canArchive({
+        actorUserId: me,
+        targetUserId: them,
+        targetRoles: ['admin'],
+        status: 'archived',
+      }),
+    ).toBe('already_archived');
+  });
+});
+
+describe('restoring a colleague', () => {
+  const me = '00000002-0000-4000-8000-000000000010';
+  const them = '00000002-0000-4000-8000-000000000011';
+
+  it('brings back an archived colleague and nobody else, never yourself', () => {
+    expect(canRestore({ actorUserId: me, targetUserId: them, status: 'archived' })).toBe(true);
+    expect(canRestore({ actorUserId: me, targetUserId: them, status: 'suspended' })).toBe(false);
+    expect(canRestore({ actorUserId: me, targetUserId: them, status: 'active' })).toBe(false);
+    expect(canRestore({ actorUserId: me, targetUserId: me, status: 'archived' })).toBe(false);
   });
 });
 

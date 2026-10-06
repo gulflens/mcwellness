@@ -1310,6 +1310,23 @@ describe('staff management (round 58, docs/superpowers/specs/2026-09-21-team-pro
     ).toBe('Hazel Harbour رُفض له إصدار كلمة مرور مؤقتة لموظف');
   });
 
+  it('says a colleague was archived and restored, naming nobody and no reason', () => {
+    // Migration 977's two doors write these by name; the reason is in the
+    // trail's own column and the person is its entity, so neither is repeated.
+    expect(
+      narrate(event({ entityType: 'app_user', action: 'staff_archived' }), 'en')?.sentence,
+    ).toBe('Hazel Harbour archived a colleague');
+    expect(
+      narrate(event({ entityType: 'app_user', action: 'staff_archived' }), 'ar')?.sentence,
+    ).toBe('Hazel Harbour أرشف موظفًا');
+    expect(
+      narrate(event({ entityType: 'app_user', action: 'staff_restored' }), 'en')?.sentence,
+    ).toBe('Hazel Harbour restored an archived colleague');
+    expect(
+      narrate(event({ entityType: 'app_user', action: 'staff_restored' }), 'ar')?.sentence,
+    ).toBe('Hazel Harbour أعاد موظفًا من الأرشيف');
+  });
+
   it('reads a staff profile as a sentence and never as a table name', () => {
     // Opening a profile logs a read of the row as well as of the person (round
     // 58's final review, F2). There is no case of its own for it — the generic
