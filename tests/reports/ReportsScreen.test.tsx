@@ -35,6 +35,7 @@ const REPORTS: PortalReportsResponse = {
       coverageTo: '2026-09-01',
       version: 2,
       documentId: DOCUMENT,
+      title: null,
     },
     {
       id: SECOND,
@@ -47,6 +48,7 @@ const REPORTS: PortalReportsResponse = {
       coverageTo: null,
       version: 1,
       documentId: null,
+      title: null,
     },
   ],
 };
@@ -129,6 +131,27 @@ describe('the household’s Reports screen', () => {
     cleanup();
     mount(brainMap, 'ar');
     expect(await screen.findByText('تقرير خريطة الدماغ')).toBeTruthy();
+  });
+
+  it('lists an uploaded report by its title, in both languages, and opens it', async () => {
+    // A PDF the practice made in another tool (migration 608): its title is
+    // the practice's own words for it, shown as typed in either language.
+    const uploaded: PortalReportsResponse = {
+      clients: HOME.clients,
+      reports: [{ ...REPORTS.reports[0]!, kind: 'external', title: 'Brain map, initial' }],
+    };
+    const { calls } = mount(uploaded);
+    expect(await screen.findByText('Brain map, initial')).toBeTruthy();
+    expect(screen.getByText('Uploaded report')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open' }));
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === `/api/portal/reports/${DOCUMENT}/link`)).toBe(true),
+    );
+    cleanup();
+    mount(uploaded, 'ar');
+    expect(await screen.findByText('Brain map, initial')).toBeTruthy();
+    expect(screen.getByText('تقرير مرفوع')).toBeTruthy();
+    expect(screen.queryByText('Uploaded report')).toBeNull();
   });
 
   it('renders in Arabic, right to left, with no English left in the fixed words', async () => {

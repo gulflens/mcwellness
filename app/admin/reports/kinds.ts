@@ -26,6 +26,10 @@ export function kindWord(kind: ReportKind): string {
       return 'Progress';
     case 'qeeg':
       return 'Brain map';
+    case 'external':
+      // A PDF made in another tool and uploaded here (migration 608). Named
+      // for how it came, because what it is, its own pages say.
+      return 'Uploaded';
     default: {
       const unknown: never = kind;
       return unknown;
@@ -84,7 +88,29 @@ export function editorKindFor(kind: ReportKind): 'session' | 'progress' | null {
     case 'progress':
       return kind;
     case 'qeeg':
+    case 'external':
       return null;
+    default: {
+      const unknown: never = kind;
+      return unknown;
+    }
+  }
+}
+
+/**
+ * Whether a signed report of this kind is corrected here ("Correct this
+ * report"). Every kind written here is; an uploaded PDF is not, because
+ * nothing here can write that PDF again — a correction of one is a new
+ * upload, and the server refuses the other way (`external_report`).
+ */
+export function isCorrectedHere(kind: ReportKind): boolean {
+  switch (kind) {
+    case 'session':
+    case 'progress':
+    case 'qeeg':
+      return true;
+    case 'external':
+      return false;
     default: {
       const unknown: never = kind;
       return unknown;

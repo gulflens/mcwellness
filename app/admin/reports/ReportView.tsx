@@ -10,7 +10,7 @@ import {
 import type { ReportResponse as Report } from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
-import { kindLabel, mayBeSent } from './kinds';
+import { isCorrectedHere, kindLabel, mayBeSent } from './kinds';
 import { Ribbon } from './Ribbon';
 import { twinRefusalSentence } from './qeeg/refusals';
 import { TWIN_REASON } from './qeeg/useQeegSigning';
@@ -65,6 +65,9 @@ function correctionBody(kind: ReportKind, reason: string, content: unknown): obj
     case 'progress':
       return { reason, content };
     case 'qeeg':
+    case 'external':
+      // An uploaded report is never offered a correction (`isCorrectedHere`);
+      // the reason alone, so the server's own refusal is what answers.
       return { reason };
     default: {
       const unknown: never = kind;
@@ -305,6 +308,7 @@ export function ReportView({
     row.twinId === null;
   const progress =
     row.kind === 'progress' ? (report.content as ProgressReportContent | null) : null;
+  const uploaded = row.kind === 'external';
 
   return (
     <div className="report-view">
@@ -313,6 +317,12 @@ export function ReportView({
         <dd>{row.reference ?? 'Not yet signed'}</dd>
         <dt>Kind</dt>
         <dd>{kindLabel(row.kind)}</dd>
+        {row.title !== null ? (
+          <>
+            <dt>Title</dt>
+            <dd>{row.title}</dd>
+          </>
+        ) : null}
         {language !== null ? (
           <>
             <dt>Language</dt>
@@ -327,8 +337,17 @@ export function ReportView({
             </dd>
           </>
         ) : null}
-        <dt>Signed by</dt>
-        <dd>{row.signedByName ?? 'Not yet signed'}</dd>
+        {uploaded ? (
+          <>
+            <dt>Date on the report</dt>
+            <dd>{row.issuedOn ?? ''}</dd>
+          </>
+        ) : (
+          <>
+            <dt>Signed by</dt>
+            <dd>{row.signedByName ?? 'Not yet signed'}</dd>
+          </>
+        )}
         {row.version > 1 ? (
           <>
             <dt>Version</dt>
@@ -336,6 +355,13 @@ export function ReportView({
           </>
         ) : null}
       </dl>
+
+      {uploaded ? (
+        <Note>
+          Uploaded as a PDF made in another tool, and not signed in this app. It is opened and sent
+          exactly as it was uploaded; the reference above is this app’s and is not printed on it.
+        </Note>
+      ) : null}
 
       {twinSaid.length > 0 ? (
         <ul className="report-view__twin small">
@@ -458,7 +484,7 @@ export function ReportView({
         </section>
       ) : null}
 
-      {maySupersede && row.status === 'issued' ? (
+      {maySupersede && row.status === 'issued' && isCorrectedHere(row.kind) ? (
         <section className="report-editor__sign">
           {superseding ? (
             <>

@@ -4,6 +4,7 @@ import { Button, Note } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
 import type { ReportRow } from '../../api/reports/schema';
 import type { QeegContent } from '../../../domain/reports/qeeg/types';
+import { ExternalUpload } from './ExternalUpload';
 import { editorKindFor, kindWord, statusTone, statusWord } from './kinds';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
@@ -50,6 +51,12 @@ import './reports.css';
  * the same two. One brought in and not yet kept opens the import again, to be
  * finished with the same file.
  *
+ * **A report made in another tool** is uploaded from here as its PDF
+ * ("Upload a PDF report", `ExternalUpload.tsx`, docs/SPEC/reports-v1.md
+ * section 12) by whoever may write one. It is filed issued, listed as
+ * "Uploaded" with its title beneath its reference, and opens in the viewer
+ * with Open and Send like any signed report.
+ *
  * **A draft opens in the editor, not the viewer.** Every row used to open in
  * `ReportView`, which offers a draft no edit, no preview and no signature — so
  * a saved draft, and every correction started by "Correct this report", could
@@ -93,6 +100,9 @@ function Row({
         </button>
         {beneath && report.amendmentReason ? (
           <span className="reports__reason small">Replaced: {report.amendmentReason}</span>
+        ) : null}
+        {report.title !== null ? (
+          <span className="reports__reason small">{report.title}</span>
         ) : null}
         {twinLines(report, reports).map((line) => (
           <span key={line} className="reports__reason small">
@@ -152,6 +162,8 @@ export function ReportsTab({
   const [startingQeeg, setStartingQeeg] = useState(false);
   /** Bringing in a past record from the old tool; `resuming` when one was left as a draft. */
   const [importing, setImporting] = useState<{ resuming: boolean } | null>(null);
+  /** Uploading a PDF made in another tool. */
+  const [uploading, setUploading] = useState(false);
   /** The past record open read-only. */
   const [pastId, setPastId] = useState<string | null>(null);
   /** The brain-map report being written: a draft to open, or a blank to start. */
@@ -200,6 +212,21 @@ export function ReportsTab({
           }}
         />
       </>
+    );
+  }
+
+  if (uploading) {
+    return (
+      <ExternalUpload
+        clientId={clientId}
+        onDone={(id) => {
+          // Straight onto the report it filed, where Open and Send are.
+          setUploading(false);
+          setOpenId(id);
+          void refetch();
+        }}
+        onCancel={() => setUploading(false)}
+      />
     );
   }
 
@@ -284,6 +311,11 @@ export function ReportsTab({
               setDraftId(id);
               setWriting(superseded);
               return;
+            case 'external':
+              // Never corrected here (the view offers no correction, and the
+              // server refuses one); named so a kind added later is a compile
+              // error rather than a draft opened in the wrong form.
+              return;
             default: {
               const unknown: never = superseded;
               return unknown;
@@ -342,6 +374,7 @@ export function ReportsTab({
           </Button>
           <Button onClick={() => setWriting('session')}>Write a session report</Button>
           <Button onClick={() => setStartingQeeg(true)}>New brain-map report</Button>
+          <Button onClick={() => setUploading(true)}>Upload a PDF report</Button>
           {mayImport ? (
             <Button onClick={() => setImporting({ resuming: false })}>
               Bring in a past record

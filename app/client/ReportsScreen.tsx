@@ -18,7 +18,8 @@ import { usePortalRead } from './usePortal';
  * for this household's — which is why this screen is as plain as it is.
  *
  * **The body never travels.** The reference, the kind, what it covers and when
- * it was issued; the report itself opens through a short-lived signed link
+ * it was issued — and, for a PDF the practice made in another tool and
+ * uploaded, the title it gave it (migration 608); the report itself opens through a short-lived signed link
  * fetched when the button is pressed, exactly as the money screen opens an
  * invoice. A link rendered into the page in advance is a link that ends up in
  * a screenshot, a bookmark or a log.
@@ -78,6 +79,8 @@ function kindWordKey(kind: PortalReport['kind']): WordKey {
       return 'progressReport';
     case 'qeeg':
       return 'brainMapReport';
+    case 'external':
+      return 'uploadedReport';
     default: {
       const unknown: never = kind;
       return unknown;
@@ -98,6 +101,9 @@ function ReportRow({ report }: { report: PortalReport }) {
     <div className="portal__row">
       <span className="numeric">{report.reference ?? ''}</span>
       <span>{words.t(kindWordKey(report.kind))}</span>
+      {/* An uploaded report's title, the practice's own words for it, shown as
+          typed in whichever language the portal is read in. */}
+      {report.title !== null ? <span>{report.title}</span> : null}
       <span className="numeric">{covers}</span>
       <span className="numeric">{report.issuedOn ? words.date(report.issuedOn) : ''}</span>
       {report.status === 'superseded' ? (

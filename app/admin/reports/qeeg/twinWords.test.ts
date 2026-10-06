@@ -34,6 +34,7 @@ function row(over: Partial<ReportRow> = {}): ReportRow {
     pastRecord: false,
     withdrawn: false,
     recordedOn: null,
+    title: null,
     ...over,
   };
 }
