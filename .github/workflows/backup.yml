@@ -86,10 +86,14 @@ jobs:
       - name: Dump the production database
         run: |
           set -euo pipefail
+          # --exclude-table-data keeps the shape of practitioner_position and
+          # none of its rows: a practitioner's positions are kept two days
+          # (docs/SPEC/dispatch.md section 15), and this dump is kept ninety.
+          # tests/dispatch/backup-leaves-positions-out.test.ts holds it there.
           name="mcwellness-$(date --utc +%Y-%m-%d).sql.gz"
           echo "NAME=$name" >> "$GITHUB_ENV"
           docker run --rm --env PGURL="$BACKUP_DATABASE_URL" postgres:17 \
-            sh -c 'pg_dump --no-owner --schema=public --schema=app "$PGURL"' \
+            sh -c 'pg_dump --no-owner --schema=public --schema=app --exclude-table-data=public.practitioner_position "$PGURL"' \
             | gzip --best > "$name"
           # An empty dump is a failure wearing a success's clothes.
           size=$(wc -c < "$name")

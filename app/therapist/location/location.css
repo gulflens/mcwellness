@@ -1,0 +1,120 @@
+/*
+  "Share my location while I work" on the practitioner's day
+  (docs/SPEC/dispatch.md section 15). Tokens only, logical properties only
+  (.claude/rules/ui.md). Class names of its own — `.location-*` — because the
+  check-in screen owns `.switch` and the settings screen `.access-switch`, and
+  code-split stylesheets with one name between them leave load order deciding.
+*/
+
+/* The band: the whole time sharing is on, at the top of the day. Calm, never
+   an alert (docs/DESIGN-BRIEF.md 6.1): a surface with the practice's own
+   violet down its leading edge, which is the interface's accent and not one
+   of the three status hues. */
+.location-band {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-inline-start: var(--s-1) solid var(--brand);
+  border-radius: var(--r-2);
+  background: var(--surface);
+}
+
+.location-band__line {
+  margin: 0;
+  font-weight: var(--w-medium);
+}
+
+.location-band__stop {
+  align-self: flex-start;
+  min-block-size: var(--tap);
+}
+
+.location-share {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.location-share__more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.location-share__more .button {
+  min-block-size: var(--tap);
+}
+
+/*
+  The switch: a button with role="switch", so it is focusable and answers
+  Space and Enter because it is a button. The track is drawn with ::after and
+  the thumb with ::before, from the inline end, so it mirrors for Arabic with
+  no second rule. It is only ever drawn off: on, the band replaces it.
+*/
+.location-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  inline-size: 100%;
+  min-block-size: var(--tap);
+  padding-inline: var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.location-switch:focus-visible {
+  box-shadow: var(--focus);
+}
+
+.location-switch::after {
+  content: '';
+  flex: none;
+  inline-size: var(--s-12);
+  block-size: var(--s-6);
+  border: var(--hairline) solid var(--ink-2);
+  border-radius: calc(var(--s-6) / 2);
+  background: var(--surface);
+}
+
+.location-switch::before {
+  content: '';
+  position: absolute;
+  inset-inline-end: calc(var(--s-3) + var(--s-12) - var(--s-4) - var(--s-1));
+  inline-size: var(--s-4);
+  block-size: var(--s-4);
+  border-radius: 50%;
+  background: var(--ink-2);
+}
+
+/* The notice, read in full before the first "I agree". */
+.location-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.location-notice__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.location-notice__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.location-notice__actions .button {
+  inline-size: 100%;
+  min-block-size: var(--tap);
+}

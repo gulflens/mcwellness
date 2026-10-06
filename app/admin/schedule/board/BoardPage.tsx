@@ -7,12 +7,14 @@ import {
   type BoardPractitioner,
   type BoardVisit,
 } from '../../../api/appointments/schema';
+import { SharedPositionsResponse, type SharedPosition } from '../../../api/location/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { Note, PageHeader } from '../../../shell/components/Controls';
 import { StatusChip, type StatusTone } from '../../../shell/components/StatusChip';
 import { formatDay, formatWindow, practiceDay } from '../windows';
 import { ReassignDrawer } from './ReassignDrawer';
 import { blockOf, daySpan, gridColumns, hourLabels, laneRows } from './columns';
+import { describePosition } from './positions';
 import './board.css';
 
 /**
@@ -78,6 +80,15 @@ const NO_LATENESS =
   'Running late cannot be worked out on this deployment: no drive estimates are configured.';
 
 const LOAD_ERROR = 'The board could not be loaded. Try again.';
+
+/**
+ * How often the board asks again where the people sharing are (docs/SPEC/
+ * dispatch.md section 15): the same two minutes a phone sends at, so a
+ * position on the board is never much older than the phone's last one. Only
+ * on today's board and only while the board is in front of somebody; each
+ * read leaves a row on the trail saying who looked.
+ */
+const POSITIONS_REFRESH_MS = 120_000;
 
 /**
  * The day the address asks for, or the practice's own today when it asks for
@@ -153,6 +164,35 @@ export function BoardPage() {
     from: BoardPractitioner;
     to: string | null;
   } | null>(null);
+
+  // Live location: only on today's board, because a position is where
+  // somebody is now and the board of another day has no now in it.
+  const today = date === practiceDay(new Date());
+  const [positions, setPositions] = useState<Map<string, SharedPosition> | null>(null);
+  useEffect(() => {
+    if (!today) return;
+    let live = true;
+    const read = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void apiFetch('/api/location/positions')
+        .then(async (res) => {
+          if (!res.ok) throw new Error('unavailable');
+          return SharedPositionsResponse.parse(await res.json()).positions;
+        })
+        .then((list) => {
+          if (live) setPositions(new Map(list.map((p) => [p.practitionerId, p])));
+        })
+        .catch(() => {
+          if (live) setPositions(null);
+        });
+    };
+    read();
+    const timer = setInterval(read, POSITIONS_REFRESH_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [apiFetch, today, reads]);
 
   useEffect(() => {
     let live = true;
@@ -254,7 +294,23 @@ export function BoardPage() {
                   pickUp(event.dataTransfer.getData('text/plain'), practitioner);
                 }}
               >
-                <h2 className="board__name">{practitioner.displayName}</h2>
+                <div className="board__who">
+                  <h2 className="board__name">{practitioner.displayName}</h2>
+                  {today && positions !== null ? (
+                    <span className="board__where small muted">
+                      {describePosition(positions.get(practitioner.practitionerId))}
+                      {positions.has(practitioner.practitionerId) ? (
+                        <>
+                          {' '}
+                          {/* A plain anchor: the day map is its own document,
+                              with the wider policy a browser map needs
+                              (docs/SPEC/route-planning.md section 8). */}
+                          <a href={`/admin/schedule/map?date=${date}`}>See it on the day map</a>
+                        </>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </div>
                 <div className="board__lane">
                   {practitioner.visits.length === 0 ? (
                     <span className="board__idle small muted">Nothing on</span>
