@@ -129,6 +129,7 @@ export type Action =
   | { type: 'portal.request.handle' }
   | { type: 'portal.access.manage' }
   | { type: 'portal.announcement.write' }
+  | { type: 'portal.push.send' }
   | { type: 'kit.manage' }
   | { type: 'staff.manage' }
   | { type: 'staff.access.manage' }
@@ -457,6 +458,13 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // you or an admin, in Settings"). The practice's own words in front of
       // every adult household, so the owner and an admin, as Settings is, and
       // db/policies/portal/announcement.sql refuses the row beneath this.
+      return hasRole(actor, 'owner', 'admin');
+    case 'portal.push.send':
+      // Sending a phone notification to the households — an announcement or
+      // an offer — and reading the record of every one sent (the push memo's
+      // decision 3: "written by you or an admin, in Settings ... and sent from
+      // there"). The owner and an admin, as Settings is;
+      // db/policies/portal/push.sql refuses the rows beneath this.
       return hasRole(actor, 'owner', 'admin');
     // The team LIST, for the owner and an admin, and nothing else — every act
     // on a colleague went to staff.access.manage below on 21 September 2026.
