@@ -364,6 +364,22 @@ describe('selling a Silver package', () => {
     expect(res.status).toBe(403);
   });
 
+  it('refuses a sale dated before its prices start, and names the first date that would sell', async () => {
+    // Every price is there, only from SEED_TODAY: the refusal is the date,
+    // not a missing price, and writes nothing (the next test's invoice is
+    // still the first).
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: silverId,
+      clientId: h.clientId(0),
+      purchasedOn: '2026-08-18',
+    });
+    expect(res.status).toBe(422);
+    expect((await res.json()) as { code?: string; earliestOn?: string }).toMatchObject({
+      code: 'no_price_on_date',
+      earliestOn: SEED_TODAY,
+    });
+  });
+
   it('writes the purchase, the invoice and eighteen credits in one go', async () => {
     const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
       packageId: silverId,

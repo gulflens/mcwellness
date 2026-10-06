@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { termWords } from '@domain/billing';
+import { displayFromIso } from '@domain/shared';
 import { isoDateIn } from '@domain/shared/actor';
 import {
   PAYMENT_METHODS,
@@ -63,10 +64,25 @@ const FORBIDDEN_MESSAGE = "You don't have permission to sell a package.";
 const NOT_FOUND_MESSAGE = 'That package or client is no longer available. Refresh and try again.';
 const NOT_SELLABLE_MESSAGE =
   'This package cannot be sold until every service in it has a price. Set the missing price first.';
+const NOT_ALLOCATABLE_MESSAGE =
+  'Every service in this package is priced at nothing, so its price cannot be shared between them. Give at least one service a price first.';
 const GENERIC_MESSAGE = 'The sale could not be recorded. Try again.';
 const IN_FUTURE_MESSAGE = 'A sale cannot be dated in the future. Choose today or an earlier date.';
 const DISCOUNT_TOO_LARGE_MESSAGE = 'The discount is larger than the list price.';
 const NO_DISCOUNT_PERMISSION_MESSAGE = "You don't have permission to give an extra discount.";
+
+/**
+ * A sale dated before the prices it needs had started. Every price exists,
+ * only later than the date chosen, so the words are about the date — never
+ * "set the missing price", which sent the owner looking for a price that was
+ * already there (a sale dated 18/08 against prices from September).
+ */
+function noPriceOnDateMessage(purchasedOn: string, earliestOn: string): string {
+  return (
+    `No price was in force on ${displayFromIso(purchasedOn)}. Prices for this package start ` +
+    `on ${displayFromIso(earliestOn)} — choose that date or later.`
+  );
+}
 
 export function SellPackageDrawer({
   bundle,
@@ -92,6 +108,14 @@ export function SellPackageDrawer({
   const [discountError, setDiscountError] = useState<string | undefined>();
   const [reasonError, setReasonError] = useState<string | undefined>();
   const [clientError, setClientError] = useState<string | undefined>();
+  const [dateError, setDateError] = useState<string | undefined>();
+  /**
+   * The first date the sale route will sell this package on, once it has
+   * said so. Not known before: the catalogue carries only the price in force
+   * today, and an earlier price may well cover an earlier date, so guessing
+   * from it would refuse a backdated sale that would have gone through.
+   */
+  const [earliestOn, setEarliestOn] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /**
@@ -159,6 +183,16 @@ export function SellPackageDrawer({
       return;
     }
     setClientError(undefined);
+    if (!purchasedOn) {
+      // DateField empties the value for a date below its minimum.
+      setDateError(
+        earliestOn
+          ? `Choose ${displayFromIso(earliestOn)} or later.`
+          : 'Enter the date it was bought.',
+      );
+      return;
+    }
+    setDateError(undefined);
     if (!price) {
       setFormError(NOT_SELLABLE_MESSAGE);
       return;
@@ -235,7 +269,18 @@ export function SellPackageDrawer({
         return;
       }
       if (res.status === 422) {
-        setFormError(NOT_SELLABLE_MESSAGE);
+        const body = (await res.json().catch(() => null)) as {
+          code?: string;
+          earliestOn?: string;
+        } | null;
+        if (body?.code === 'no_price_on_date' && body.earliestOn) {
+          setEarliestOn(body.earliestOn);
+          setFormError(noPriceOnDateMessage(purchasedOn, body.earliestOn));
+        } else {
+          setFormError(
+            body?.code === 'not_allocatable' ? NOT_ALLOCATABLE_MESSAGE : NOT_SELLABLE_MESSAGE,
+          );
+        }
         return;
       }
       if (res.status === 400) {
@@ -296,7 +341,12 @@ export function SellPackageDrawer({
             id="sell-purchased-on"
             label="Bought on"
             value={purchasedOn}
-            onChange={setPurchasedOn}
+            onChange={(next) => {
+              setPurchasedOn(next);
+              setDateError(undefined);
+            }}
+            min={earliestOn ?? undefined}
+            error={dateError}
           />
 
           <div className="price-preview">
