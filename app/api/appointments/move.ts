@@ -200,11 +200,7 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
         clientAppointments: context.clientAppointments,
         practitionerCredentials: context.assigneeCapabilities,
         clientActive: context.client.status === 'active',
-        requiredConsentPurposes: requiredConsentPurposes(
-          appointment.delivery_mode,
-          context.client.date_of_birth,
-          context.on,
-        ),
+        requiredConsentPurposes: requiredConsentPurposes(),
         activeConsentPurposes: context.activeConsentPurposes,
       },
     );

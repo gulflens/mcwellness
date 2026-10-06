@@ -233,11 +233,7 @@ export function mountAppointmentReorder(
           clientAppointments: fresh.clientAppointments,
           practitionerCredentials: fresh.assigneeCapabilities,
           clientActive: fresh.client.status === 'active',
-          requiredConsentPurposes: requiredConsentPurposes(
-            appointment.delivery_mode,
-            fresh.client.date_of_birth,
-            fresh.on,
-          ),
+          requiredConsentPurposes: requiredConsentPurposes(),
           activeConsentPurposes: fresh.activeConsentPurposes,
         },
       );

@@ -52,7 +52,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 ## 6. Rules (pure functions in `domain/scheduling`, each tested)
 
 1. `checkConflicts(appointment, context)` → `{ blocking[], warnings[] }`
-   - **Blocking:** practitioner overlap (including travel buffer); client overlap; practitioner lacks valid `credential.can_execute_session` for `service_type` on that date; client not `active`; required consents not active; kit assigned to practitioner has calibration overdue on that date; window outside practitioner working hours.
+   - **Blocking:** practitioner overlap (including travel buffer); client overlap; practitioner lacks valid `credential.can_execute_session` for `service_type` on that date; client not `active`; required consents not active (since the operator's decision of 6 October 2026 a booking requires none: the household signs at the first visit, and the check-in refuses the visit until it has); kit assigned to practitioner has calibration overdue on that date; window outside practitioner working hours.
    - **Warnings:** session spacing — fewer than `service_type.min_gap_hours` since client's last completed session of same type (default 20h), or more than `max_sessions_per_week` (default 3); zero entitlement balance; prayer-time overlap for a practitioner flagged as observing; drive time from previous stop exceeds buffer; different practitioner from client's last 3 sessions (continuity).
 2. `travelBufferMinutes(fromLocation, toLocation, departAt, estimates)` — estimate + 10, min 15, max 90. Estimates come from a cached matrix; the function never calls the network.
 3. `windowFor(start)` → `{ start, end: start + 45min }`.

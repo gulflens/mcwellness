@@ -607,81 +607,29 @@ describe('POST /api/appointments', () => {
 });
 
 describe('POST /api/appointments: consent', () => {
-  const windowStart = '2026-09-10T07:00:00.000Z';
-
-  it('is refused with 409 when participation is not active', async () => {
-    const res = await call(AUTH.ownerA, 'POST', '/api/appointments', {
-      clientId: CLIENT_MISSING_PARTICIPATION,
-      practitionerId: MORE_IDS.practitionerA,
-      serviceTypeId: MORE_IDS.serviceTypeA,
-      locationId: LOCATION_MISSING_PARTICIPATION,
-      deliveryMode: 'home',
-      windowStart,
-    });
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as ConflictResponse;
-    expect(
-      body.issues.some(
-        (i) => i.code === 'consent_missing' && i.message.includes('(participation)'),
-      ),
-    ).toBe(true);
-  });
-
-  it('is refused with 409 when home_visit is not active, for a home visit', async () => {
-    const res = await call(AUTH.ownerA, 'POST', '/api/appointments', {
-      clientId: CLIENT_MISSING_HOME_VISIT,
-      practitionerId: MORE_IDS.practitionerA,
-      serviceTypeId: MORE_IDS.serviceTypeA,
-      locationId: LOCATION_MISSING_HOME_VISIT,
-      deliveryMode: 'home',
-      windowStart,
-    });
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as ConflictResponse;
-    expect(
-      body.issues.some((i) => i.code === 'consent_missing' && i.message.includes('(home_visit)')),
-    ).toBe(true);
-    expect(
-      body.issues.some(
-        (i) => i.code === 'consent_missing' && i.message.includes('(participation)'),
-      ),
-    ).toBe(false);
-  });
-
-  it('is refused with 409 when minor_participation is not active for a client under 18', async () => {
-    const res = await call(AUTH.ownerA, 'POST', '/api/appointments', {
-      clientId: CLIENT_MINOR,
-      practitionerId: MORE_IDS.practitionerA,
-      serviceTypeId: MORE_IDS.serviceTypeA,
-      locationId: LOCATION_MINOR,
-      deliveryMode: 'home',
-      windowStart,
-    });
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as ConflictResponse;
-    expect(
-      body.issues.some(
-        (i) => i.code === 'consent_missing' && i.message.includes('(minor_participation)'),
-      ),
-    ).toBe(true);
-  });
-
-  it('fails closed and requires minor_participation when no date of birth is on file', async () => {
-    const res = await call(AUTH.ownerA, 'POST', '/api/appointments', {
-      clientId: CLIENT_NULL_DOB,
-      practitionerId: MORE_IDS.practitionerA,
-      serviceTypeId: MORE_IDS.serviceTypeA,
-      locationId: LOCATION_NULL_DOB,
-      deliveryMode: 'home',
-      windowStart,
-    });
-    expect(res.status).toBe(409);
-    const body = (await res.json()) as ConflictResponse;
-    expect(
-      body.issues.some(
-        (i) => i.code === 'consent_missing' && i.message.includes('(minor_participation)'),
-      ),
-    ).toBe(true);
+  // The operator's decision of 6 October 2026 (the practice's request of
+  // 29 September): a household signs its consents when the practitioner meets
+  // them at the first visit, so booking needs none. The visit itself is still
+  // refused at check-in until they are signed (domain/session canCheckIn).
+  it('books a client whose consents are not yet signed, each in its own window', async () => {
+    const cases: Array<[string, string, string]> = [
+      [CLIENT_MISSING_PARTICIPATION, LOCATION_MISSING_PARTICIPATION, '2026-09-10T07:00:00.000Z'],
+      [CLIENT_MISSING_HOME_VISIT, LOCATION_MISSING_HOME_VISIT, '2026-09-10T09:00:00.000Z'],
+      [CLIENT_MINOR, LOCATION_MINOR, '2026-09-10T11:00:00.000Z'],
+      [CLIENT_NULL_DOB, LOCATION_NULL_DOB, '2026-09-10T13:00:00.000Z'],
+    ];
+    for (const [clientId, locationId, windowStart] of cases) {
+      const res = await call(AUTH.ownerA, 'POST', '/api/appointments', {
+        clientId,
+        practitionerId: MORE_IDS.practitionerA,
+        serviceTypeId: MORE_IDS.serviceTypeA,
+        locationId,
+        deliveryMode: 'home',
+        windowStart,
+      });
+      const body = res.status === 201 ? null : await res.text();
+      expect([res.status, body], clientId).toEqual([201, null]);
+    }
   });
 });
 
