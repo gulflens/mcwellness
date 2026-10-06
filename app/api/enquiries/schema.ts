@@ -85,6 +85,14 @@ export const EnquiryListResponse = z.object({
 });
 export type EnquiryListResponse = z.infer<typeof EnquiryListResponse>;
 
+/**
+ * How many enquiries are waiting for somebody to handle them, for the rail's
+ * badge. A number and nothing else: nobody is named, so asking for it reads
+ * nobody and logs nothing, which is why the badge asks this and not the list.
+ */
+export const EnquiryCountResponse = z.object({ new: count });
+export type EnquiryCountResponse = z.infer<typeof EnquiryCountResponse>;
+
 export const DismissBody = z.object({
   reason: z.string().trim().min(1).max(200),
   /** Chosen by the person dismissing: spam, a wrong number, somebody who asked to be forgotten. */

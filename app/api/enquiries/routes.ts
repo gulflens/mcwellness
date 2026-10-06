@@ -25,6 +25,7 @@ import {
   ConvertResponse,
   DismissBody,
   DismissResponse,
+  EnquiryCountResponse,
   EnquiryListResponse,
   type Enquiry,
 } from './schema';
@@ -185,6 +186,26 @@ function toWire(row: Row): Enquiry {
 }
 
 export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
+  /**
+   * How many are waiting, for the console rail's badge (it asks on every
+   * navigation and every couple of minutes). The same three roles as the list
+   * and the same row security beneath, but a count names nobody: it reads no
+   * person, so it logs no read — where asking the list that often would write
+   * a read of every waiting person into the trail each time.
+   */
+  api.get('/api/enquiries/count', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    if (!canActor(actor, { type: 'enquiry.list' }, {}, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const { rows } = await db.query<{ n: number }>(
+      "select count(*)::int as n from enquiry e where e.status = 'new'",
+    );
+    return c.json(EnquiryCountResponse.parse({ new: rows[0]?.n ?? 0 }));
+  });
+
   api.get('/api/enquiries', async (c) => {
     const actor = c.get('actor');
     const db = c.get('db');
