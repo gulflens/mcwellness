@@ -425,7 +425,7 @@ driving alone between houses is where they should be. Never for pay, hours,
 performance or any decision about the person; nothing reads a position but
 the board and the day map.
 
-**15.2 The notice.** `docs/CONSENT/staff/location.en.md`, version `1.1` (fix round 1, 15.10),
+**15.2 The notice.** `docs/CONSENT/staff/location.en.md`, version `1.2` since round 76 (15.12; `1.1` from fix round 1, 15.10),
 English only (staff screens are English only). Purpose, what is collected,
 when, who sees it, two days, what it is never used for, and how to stop. The
 operator's approval of 6 October 2026 stands as the practice's signature; the
@@ -740,8 +740,15 @@ day map a labelled pin of its own beside the practitioner's, never a stop and
 never in the extent. Settings › Team has a Helpers section (add, revoke after
 one confirmation) and leaves helpers out of the staff table.
 
-*The notice.* Unchanged at 1.1, and a helper accepts it as it stands. Its
-words are a practitioner's ("the people who visit households", "your working
-day is read from your own visits", "Share my location while I work"), so a
-version 1.2 written for helpers too is proposed in dispatch-03 and waits on
-the operator's approval; it is not bumped here.
+*The notice, version 1.2* (approved by the operator on 6 October 2026,
+dispatch-03 item 13). Version 1.1's words were a practitioner's; 1.2 adds five
+changes for helpers: the introduction names the family members who help; the
+switch is named both ways; a helper's working day is the practitioner's they
+go with, and none when nobody is named; helpers see no position, theirs
+included, and a helper's is shown beside the practitioner, marked, by first
+name; and what revoking a helper does. `STAFF_LOCATION_NOTICE_VERSION` is
+`1.2`, and migration `214` replaces `app.staff_location_notice_version()`
+(212 is merged). Every standing consent to 1.1 then pauses sharing — the route
+refuses positions as `notice_changed`, the database refuses them beneath it,
+and the board shows nothing — until the person accepts 1.2, which withdraws
+the 1.1 consent and records the new one (`tests/dispatch/db/notice-change.test.ts`).

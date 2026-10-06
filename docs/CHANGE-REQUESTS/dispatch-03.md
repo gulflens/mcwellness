@@ -70,9 +70,14 @@ applied.
 
 ## Proposed, not applied
 
-13. **The notice, version 1.2** (`docs/CONSENT/staff/location.en.md`, the
-    stream's path, but a wording change needs the operator's approval and is
-    not bumped here). Version 1.1 is written for a practitioner. A helper
+13. **The notice, version 1.2 — APPROVED by the operator on 6 October 2026,
+    exactly as proposed, and DONE in the branch** (`docs/CONSENT/staff/location.en.md`,
+    `app/therapist/location/notice.ts` regenerated, `STAFF_LOCATION_NOTICE_VERSION`
+    at `1.2`, migration `214_location_notice_1_2.sql` replacing
+    `app.staff_location_notice_version()`, and `tests/dispatch/db/notice-change.test.ts`
+    proving a standing 1.1 consent pauses sharing until 1.2 is accepted). The
+    words below are applied as written; the file keeps its own straight
+    quotation marks around the switch's name. As proposed: Version 1.1 is written for a practitioner. A helper
     accepts it today as it stands, and three of its sentences are not true of
     them. Proposed changes, each marked:
     - *Introduction.* "The practice's notice to the people who visit
