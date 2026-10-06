@@ -68,6 +68,49 @@ describe('starting the session report from the visit', () => {
     expect(await sessionReportsFor(visit)).toBe(1);
   });
 
+  it('writes one draft when the button is pressed twice at once', async () => {
+    // Two presses at once — a double click, or the practitioner on her phone
+    // and the owner at the desk. Each must hold the visit while it looks for
+    // a draft and writes one, or both look, both find nothing and both write.
+    // Today the trail's own chain happens to queue the two requests, so the
+    // race cannot be produced from outside; what is proved is that the door
+    // takes the visit's lock and waits on it, which is what holds whatever
+    // else changes.
+    await h.onSchedule(11, SEEDED.practitioner);
+    const visit = await h.completedVisit(11, SEEDED.practitioner);
+    await h.owner.query('begin');
+    await h.owner.query("select pg_advisory_xact_lock(hashtext('session-draft:' || $1::text))", [
+      visit,
+    ]);
+    const presses = [SEEDED.owner, SEEDED.practitioner].map((user) =>
+      h.call('POST', '/api/reports/session-draft', user, { sessionId: visit }),
+    );
+    try {
+      const deadline = Date.now() + 4_000;
+      for (;;) {
+        // The activity view is read once per transaction unless cleared.
+        await h.owner.query('select pg_stat_clear_snapshot()');
+        const { rows } = await h.owner.query<{ n: number }>(
+          'select count(*)::int as n from pg_locks l join pg_stat_activity a on a.pid = l.pid ' +
+            "where a.application_name = 'mcwellness-api' and l.locktype = 'advisory' " +
+            'and not l.granted',
+        );
+        if ((rows[0]?.n ?? 0) >= 1) break;
+        if (Date.now() > deadline) throw new Error('No press waited on the visit.');
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    } finally {
+      await h.owner.query('rollback');
+    }
+    const answers = await Promise.all(presses);
+    expect(answers.map((res) => res.status).sort()).toEqual([200, 201]);
+    const ids = await Promise.all(
+      answers.map(async (res) => ((await res.json()) as DraftResponse).report.id),
+    );
+    expect(ids[0]).toBe(ids[1]);
+    expect(await sessionReportsFor(visit)).toBe(1);
+  });
+
   it('opens a signed one too, rather than starting the visit over', async () => {
     const visit = await h.completedVisit(6);
     const drafted = (await (

@@ -104,6 +104,9 @@ const SESSION_REPORT_SQL =
   "and kind = 'session' and status in ('draft', 'issued') and content->>'sessionId' = $2 " +
   'order by created_at desc, id desc limit 1';
 
+const SESSION_DRAFT_LOCK_SQL =
+  "select pg_advisory_xact_lock(hashtext('session-draft:' || $1::text))";
+
 const UPDATE_SQL =
   'update report set locale = $2::locale, service_type_id = $3, coverage_from = $4::date, ' +
   'coverage_to = $5::date, content = $6::jsonb ' +
@@ -426,6 +429,11 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     // carries the visit's figures and the household's goal (section 8).
     await logRead(db, 'client', clientId, clientId);
 
+    // One visit, one draft, however many presses arrive at once: a double
+    // click, or the practitioner and the office finishing the same visit. The
+    // lock is held to the commit, so a second press waits here and then finds
+    // the first one's draft below instead of writing its own.
+    await db.query(SESSION_DRAFT_LOCK_SQL, [sessionId]);
     const existing = await db.query<{ id: string }>(SESSION_REPORT_SQL, [clientId, sessionId]);
     const existingId = existing.rows[0]?.id;
     if (existingId) {
