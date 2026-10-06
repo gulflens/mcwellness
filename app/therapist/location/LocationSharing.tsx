@@ -50,6 +50,14 @@ type Geolocation = Pick<globalThis.Geolocation, 'getCurrentPosition'>;
 export type LocationSharingProps = {
   /** The browser's own geolocation unless a test says otherwise. */
   geolocation?: Geolocation | null;
+  /**
+   * The console's mode (docs/SPEC/dispatch.md section 15.11): only the
+   * withdraw section, for somebody who can no longer share but still has a
+   * standing consent or an "on" switch, and nothing at all for anybody else.
+   * It never sends: an eligible lead's position is never read from a console
+   * tab, only from their own day.
+   */
+  withdrawOnly?: boolean;
 };
 
 function browserGeolocation(): Geolocation | null {
@@ -60,7 +68,20 @@ function documentVisible(): boolean {
   return typeof document === 'undefined' || document.visibilityState !== 'hidden';
 }
 
-export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
+/**
+ * The date the person agreed, on their own sharing screen whenever the
+ * agreement stands: the notice tells them it is there, so an agreement they
+ * did not give — the owner can reset a password — would show.
+ */
+function AgreedOn({ givenAt }: { givenAt: string }) {
+  return (
+    <p className="small numeric">
+      You agreed on {displayFromIso(isoDateIn(new Date(givenAt), PRACTICE_TIME_ZONE))}.
+    </p>
+  );
+}
+
+export function LocationSharing({ geolocation, withdrawOnly = false }: LocationSharingProps = {}) {
   const { apiFetch } = useAuth();
   const [status, setStatus] = useState<LocationMeResponse | null>(null);
   const [reading, setReading] = useState(false);
@@ -102,6 +123,7 @@ export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
   // Sending needs a consent to the notice in force: after the notice changes,
   // sharing is paused until the person reads and agrees to the new one.
   const sending =
+    !withdrawOnly &&
     status !== null &&
     status.eligible &&
     status.consent !== null &&
@@ -175,6 +197,7 @@ export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
   );
 
   if (status === null) return null;
+  if (withdrawOnly && status.eligible) return null;
 
   if (!status.eligible) {
     // Somebody whose role or practitioner row has changed can share nothing,
@@ -264,12 +287,7 @@ export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
         <p className="location-band__line" role="status">
           You are sharing your location with the office while you work.
         </p>
-        {status.consent ? (
-          <p className="small numeric">
-            You agreed on{' '}
-            {displayFromIso(isoDateIn(new Date(status.consent.givenAt), PRACTICE_TIME_ZONE))}.
-          </p>
-        ) : null}
+        {status.consent ? <AgreedOn givenAt={status.consent.givenAt} /> : null}
         <p className="small">
           {status.shiftOpen
             ? 'It is sent every two minutes while this app is open, and kept two days.'
@@ -313,6 +331,7 @@ export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
       <p id="location-share-off" className="small muted">
         Off. The office does not see where you are.
       </p>
+      {status.consent ? <AgreedOn givenAt={status.consent.givenAt} /> : null}
       {problem ? <Note tone="critical">{problem}</Note> : null}
       {status.consent !== null ? (
         <div className="location-share__more">

@@ -67,10 +67,10 @@ are simply waiting to be deleted. Positions are never copied into the
 practice's audit record, and the practice's own weekly backup leaves positions
 out.
 
-The company that hosts the practice's database also keeps its own daily copies
-of the whole system, for its own backup period, so that the system can be
-restored after a fault. A position can sit in those copies until they age out.
-They are not read for anything else.
+Separately, the database host's daily backups, kept for 7 days on the practice's
+plan, are copies of the whole system kept so that it can be restored after a
+fault. A position can sit in those backups until they age out. They are not
+read for anything else.
 
 The practice's audit record does keep, for at least five years, when you
 agreed or withdrew, each time you turned sharing on or off, and who looked at
@@ -107,5 +107,6 @@ to sharing your location as this page describes. Nobody else can press it for
 you, and nobody — the owner included — can turn sharing on for you. The owner
 can reset your password, so could in principle sign in as you; a password
 reset is written in the practice's audit record, and the date you agreed is
-always on your own screen, so an agreement you did not give would show. The practice approved this notice on 6 October
-2026, and that approval stands as its signature.
+shown on your own sharing screen whenever your agreement stands, so an
+agreement you did not give would show. The practice approved this notice on
+6 October 2026, and that approval stands as its signature.

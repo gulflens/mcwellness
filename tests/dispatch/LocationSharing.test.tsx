@@ -141,7 +141,12 @@ describe('the notice', () => {
     expect(flat).toContain('9 in the evening');
     expect(flat).toContain('wherever you set off from');
     expect(flat).toContain('at least five years');
-    expect(flat).toContain('daily copies');
+    expect(flat).toContain(
+      "the database host's daily backups, kept for 7 days on the practice's plan",
+    );
+    expect(flat).toContain('shown on your own sharing screen whenever your agreement stands');
+    // Hard-wrapped like every other wording file: no line runs past 80.
+    for (const line of text.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80);
     expect(flat).toContain('weekly backup leaves positions out');
     expect(flat).toContain('Settings › Practice');
     expect(flat).not.toMatch(/@[a-z0-9-]+\.[a-z]/i);
@@ -205,6 +210,11 @@ describe('the switch', () => {
     mount({ ...OFF, consent: { ...AGREED, noticeVersion: '1.0' } });
     fireEvent.click(await screen.findByRole('switch'));
     expect(await screen.findByRole('button', { name: 'I agree, share my location' })).toBeTruthy();
+  });
+
+  it('shows the date of agreement with the switch off too, whenever the agreement stands', async () => {
+    mount({ ...OFF, consent: AGREED });
+    expect(await screen.findByText('You agreed on 06/10/2026.')).toBeTruthy();
   });
 
   it('withdraws the agreement in one press', async () => {
