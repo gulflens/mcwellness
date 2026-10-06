@@ -1,3 +1,8 @@
 engineStrict: true
 allowBuilds:
   esbuild: true
+# concurrently pins shell-quote to exactly 1.9.0, which carries
+# GHSA-pqg4-j6r4-53mv (fixed in 1.11.0). The same floor is in package.json's
+# `overrides` for npm, which is what the host installs with; keep the two equal.
+overrides:
+  shell-quote: ^1.11.0
