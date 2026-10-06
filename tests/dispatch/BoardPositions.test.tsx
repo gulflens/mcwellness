@@ -51,6 +51,7 @@ const POSITIONS: SharedPositionsResponse = {
       ageMinutes: 4,
     },
   ],
+  helpers: [],
 };
 
 function json(body: unknown, status = 200): Response {

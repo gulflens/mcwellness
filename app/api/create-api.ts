@@ -59,6 +59,7 @@ import {
 } from './reports/qeeg/figureSchema';
 import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
 import { mountKit } from './kit/routes';
+import { helperFence } from './location/helperFence';
 import { mountLocation } from './location/routes';
 import { mountRouting } from './routing/day';
 import { mountSessions } from './sessions/checkin';
@@ -490,6 +491,10 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   });
 
   api.use('/api/*', withRequestContext(deps));
+  // Just inside the fence: a helper reaches their own location and who they
+  // are, and is answered 403 everywhere else before any route reads a byte of
+  // the request (docs/SPEC/dispatch.md section 15.12; dispatch-03).
+  api.use('/api/*', helperFence);
   // After the fence, like identityKeys and unlike storage: no route ahead of
   // authentication asks how long a drive takes, and the seam's key must not be
   // reachable from one that does.
