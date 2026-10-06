@@ -79,6 +79,12 @@ $$;
 --    compared with it, never to be read here. It is left out by the same
 --    clause that leaves a draft out — the household's line names the two
 --    statuses it may read, and `imported` is neither.
+--
+--    An uploaded report (kind `external`, migration 608) needs no line of its
+--    own: it is filed `issued`, so a guardian reads it as any issued report
+--    of their client, and every arm here is asked of it unchanged. Its title
+--    sits in `content`, on this row, so the portal reads it without joining
+--    any table the household's reach leaves out.
 ------------------------------------------------------------------------------
 drop policy if exists report_readers on public.report;
 create policy report_readers on public.report as restrictive for select to app_role using (
@@ -119,6 +125,14 @@ create policy report_readers on public.report as restrictive for select to app_r
 --    through. Inserting one already `imported` would walk round both, so the
 --    API role may not.
 --
+--    **Never an uploaded report by hand.** A PDF made in another tool is
+--    filed already issued, with its document, through
+--    `app.file_external_report` (608), which asks the same three roles and the
+--    same reach as this policy and writes the document row a practitioner may
+--    not write herself. A direct insert of one would skip the number, the
+--    snapshots and the document, so the API role may not (`kind <>
+--    'external'`), as it may not insert a past record already kept.
+--
 --    Update: the same three. Which updates are permitted is not this policy's
 --    question — `app.guard_report_write` (600) refuses every change to an
 --    issued row but filing its PDF and marking it superseded, and it raises
@@ -132,6 +146,7 @@ drop policy if exists report_writers on public.report;
 create policy report_writers on public.report as restrictive for insert to app_role
   with check (
     status <> 'imported'
+    and kind <> 'external'
     and (imported_from is null or app.actor_has_role('owner')
          or app.actor_has_role('lead_practitioner'))
     and app.client_erasure_gate(app.client_status_for(client_id)) and (

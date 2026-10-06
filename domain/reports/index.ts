@@ -39,6 +39,13 @@ export type {
   ProgressNarrative,
   VisitRow,
 } from './gatherProgress';
+export {
+  checkExternalUpload,
+  EXTERNAL_REPORT_MAX_BYTES,
+  EXTERNAL_TITLE_MAX,
+  externalTitleOf,
+} from './external';
+export type { ExternalUploadAnswer, ExternalUploadRefusal } from './external';
 export { draftReportMessage } from './message';
 export { observationWords } from './observationWords';
 export type { DraftedReportMessage, SendableReport } from './message';

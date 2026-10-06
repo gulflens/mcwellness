@@ -46,6 +46,10 @@ const WHAT: Record<ReportKind, Record<ReportLocale, string>> = {
   // The practice's own words for it on the wording sheet: خريطة الدماغ is
   // what the brain-map report's pages call the assessment.
   qeeg: { en: 'brain map report', ar: 'تقرير خريطة الدماغ' },
+  // A PDF made in another tool says what it is on its own pages; the message
+  // calls it a report and no more, so it never names a kind it cannot vouch
+  // for (migration 608). The Arabic wants a reader's check.
+  external: { en: 'report', ar: 'تقرير' },
 };
 
 export function draftReportMessage(report: SendableReport): DraftedReportMessage {
