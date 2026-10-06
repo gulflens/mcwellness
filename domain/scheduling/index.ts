@@ -74,6 +74,9 @@ export {
   SHIFT_STATUSES,
   SHIFT_TAIL_MINUTES,
   STAFF_LOCATION_NOTICE_VERSION,
+  firstNameOf,
+  helperShiftOpen,
+  helperShiftWindow,
   mayWritePosition,
   positionAgeMinutes,
   positionsCutoff,
@@ -81,6 +84,7 @@ export {
   shiftWindow,
 } from './locationSharing';
 export type {
+  Accompaniment,
   DayBounds,
   PositionRefusal,
   SharingFacts,

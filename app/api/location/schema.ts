@@ -20,6 +20,12 @@ export const LocationMeResponse = z.object({
   sharingOn: z.boolean(),
   /** Whether the shift is open now, so the band can say whether anything is being sent. */
   shiftOpen: z.boolean(),
+  /**
+   * Sent to a helper alone (docs/SPEC/dispatch.md section 15.12): the first
+   * name of the practitioner they accompany now, or null when they accompany
+   * nobody. Absent for everybody else, so a practitioner's answer is as it was.
+   */
+  accompanies: z.string().nullable().optional(),
 });
 export type LocationMeResponse = z.infer<typeof LocationMeResponse>;
 
@@ -60,5 +66,25 @@ export const SharedPosition = z.object({
 });
 export type SharedPosition = z.infer<typeof SharedPosition>;
 
-export const SharedPositionsResponse = z.object({ positions: z.array(SharedPosition) });
+/**
+ * A helper's last position, as the board reads it (section 15.12): marked as
+ * a helper's, by first name, and placed beside the practitioner they
+ * accompany. Never their own row on the board: a helper has no visits.
+ */
+export const SharedHelperPosition = z.object({
+  accompaniesPractitionerId: z.uuid(),
+  firstName: z.string(),
+  latitude: z.number(),
+  longitude: z.number(),
+  accuracyMetres: z.number(),
+  recordedAt: z.iso.datetime(),
+  ageMinutes: z.number().int().min(0),
+});
+export type SharedHelperPosition = z.infer<typeof SharedHelperPosition>;
+
+export const SharedPositionsResponse = z.object({
+  positions: z.array(SharedPosition),
+  /** Defaulted so an answer from before helpers existed still parses. */
+  helpers: z.array(SharedHelperPosition).default([]),
+});
 export type SharedPositionsResponse = z.infer<typeof SharedPositionsResponse>;

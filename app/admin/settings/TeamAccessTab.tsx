@@ -35,7 +35,7 @@ import { Button, Note } from '../../shell/components/Controls';
  */
 
 /**
- * The five codes a refusal can carry (`TEAM_REFUSALS`), each as one sentence.
+ * The six codes a refusal can carry (`TEAM_REFUSALS`), each as one sentence.
  * The server sends the code and never the words: a sentence a person reads is
  * this screen's to write, and it must not change with a database's wording.
  */
@@ -44,6 +44,8 @@ const REFUSALS: Record<string, string> = {
   last_role: 'A person keeps at least one role. To shut somebody out, suspend them.',
   not_yourself: 'Your own access is not yours to change. Ask the other owner.',
   not_a_working_role: 'That is not a role this screen switches.',
+  helper_holds_no_other_role:
+    'A helper holds no other role. To make them a colleague, revoke them as a helper and add them as a person.',
   conflict: 'Somebody else changed this person’s access just now. Reload and try again.',
 };
 

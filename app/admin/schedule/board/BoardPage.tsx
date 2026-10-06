@@ -7,14 +7,18 @@ import {
   type BoardPractitioner,
   type BoardVisit,
 } from '../../../api/appointments/schema';
-import { SharedPositionsResponse, type SharedPosition } from '../../../api/location/schema';
+import {
+  SharedPositionsResponse,
+  type SharedHelperPosition,
+  type SharedPosition,
+} from '../../../api/location/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { Note, PageHeader } from '../../../shell/components/Controls';
 import { StatusChip, type StatusTone } from '../../../shell/components/StatusChip';
 import { formatDay, formatWindow, practiceDay } from '../windows';
 import { ReassignDrawer } from './ReassignDrawer';
 import { blockOf, daySpan, gridColumns, hourLabels, laneRows } from './columns';
-import { describePosition } from './positions';
+import { describeHelperPosition, describePosition } from './positions';
 import './board.css';
 
 /**
@@ -169,6 +173,8 @@ export function BoardPage() {
   // somebody is now and the board of another day has no now in it.
   const today = date === practiceDay(new Date());
   const [positions, setPositions] = useState<Map<string, SharedPosition> | null>(null);
+  // Helpers who share, by the practitioner each accompanies (section 15.12).
+  const [helpers, setHelpers] = useState<Map<string, SharedHelperPosition[]>>(new Map());
   useEffect(() => {
     if (!today) return;
     let live = true;
@@ -177,13 +183,23 @@ export function BoardPage() {
       void apiFetch('/api/location/positions')
         .then(async (res) => {
           if (!res.ok) throw new Error('unavailable');
-          return SharedPositionsResponse.parse(await res.json()).positions;
+          return SharedPositionsResponse.parse(await res.json());
         })
-        .then((list) => {
-          if (live) setPositions(new Map(list.map((p) => [p.practitionerId, p])));
+        .then((answer) => {
+          if (!live) return;
+          setPositions(new Map(answer.positions.map((p) => [p.practitionerId, p])));
+          const byPractitioner = new Map<string, SharedHelperPosition[]>();
+          for (const helper of answer.helpers) {
+            const list = byPractitioner.get(helper.accompaniesPractitionerId) ?? [];
+            byPractitioner.set(helper.accompaniesPractitionerId, [...list, helper]);
+          }
+          setHelpers(byPractitioner);
         })
         .catch(() => {
-          if (live) setPositions(null);
+          if (live) {
+            setPositions(null);
+            setHelpers(new Map());
+          }
         });
     };
     read();
@@ -310,6 +326,16 @@ export function BoardPage() {
                       ) : null}
                     </span>
                   ) : null}
+                  {today && positions !== null
+                    ? (helpers.get(practitioner.practitionerId) ?? []).map((helper) => (
+                        <span
+                          key={helper.firstName + helper.recordedAt}
+                          className="board__where board__where--helper small muted"
+                        >
+                          {describeHelperPosition(helper)}
+                        </span>
+                      ))
+                    : null}
                 </div>
                 <div className="board__lane">
                   {practitioner.visits.length === 0 ? (

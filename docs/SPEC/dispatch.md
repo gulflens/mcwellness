@@ -425,7 +425,7 @@ driving alone between houses is where they should be. Never for pay, hours,
 performance or any decision about the person; nothing reads a position but
 the board and the day map.
 
-**15.2 The notice.** `docs/CONSENT/staff/location.en.md`, version `1.1` (fix round 1, 15.10),
+**15.2 The notice.** `docs/CONSENT/staff/location.en.md`, version `1.2` since round 76 (15.12; `1.1` from fix round 1, 15.10),
 English only (staff screens are English only). Purpose, what is collected,
 when, who sees it, two days, what it is never used for, and how to stop. The
 operator's approval of 6 October 2026 stands as the practice's signature; the
@@ -603,7 +603,8 @@ and `tests/dispatch/narrative.test.ts`.
   anybody outside a laptop, so 1.1 replaces it in the same file.
 - **Not this round:** family members who help can share only with a
   practitioner role and row, which also opens the client list (review finding
-  8). It waits on the operator.
+  8). It waits on the operator. *Answered on 6 October 2026 (option 3): the
+  helper role, section 15.12.*
 
 **15.11 Fix round 2, 6 October 2026** (the re-review of the same day).
 
@@ -629,3 +630,125 @@ and `tests/dispatch/narrative.test.ts`.
 - **The uae-compliance skill** scopes "nothing deletes on a timer" and the
   audit log's "every read and write" to the records they concern, naming the
   staff-position exception.
+
+**15.12 The helper, round 76** (6 October 2026; branch `round-76/helper-role`;
+migrations `213` and core `974`; `docs/CHANGE-REQUESTS/dispatch-03.md`).
+
+*Why.* The practice has one practitioner, and members of her family help on
+the day: they drive and carry kit. Until now one of them could share their
+location only with a practitioner's role and row, which also opened the client
+list (15.10, review finding 8). On 6 October 2026 the operator chose option 3:
+a narrow role. Live location goes live for the practitioner first; the helper
+follows.
+
+*What a helper is.* A seventh role, `helper` (`role_kind`, migration `974`,
+alone in its file because an enum value cannot be used in the transaction that
+adds it, and both the runner and the live pass wrap each migration in its own).
+A helper signs in, reads and accepts the same notice, turns their own sharing
+on and off, and sends positions while the practitioner they accompany is
+working. **A helper sees no client, no visit, no address, no money, no report
+and no other person's position** — their own included: the board's read
+answers them 403.
+
+*Grants nothing by itself.* Every policy and function keyed on a role names the
+roles it admits, so none admits `helper`; `canActor` names it in no action
+(`tests/dispatch/helper-actor.test.ts` is keyed on every action type). Three
+walls stand beneath that:
+
+1. **The database floor** (`db/policies/core/helper_reach.sql`): two
+   restrictive policies on every table in `public`, re-applied on every
+   migrate, which bind a person holding the helper role and no other. Such a
+   person reads their own sign-in row and role, their own consent and switch,
+   and whom they accompany; they write their own consent, switch, positions
+   and the audit rows a route writes under their name; nothing else. Without
+   it a helper read every sign-in row in the practice — households' contacts
+   included — the catalogue, credentials and practitioners, through tables
+   whose only rule is the practice's own. `tests/dispatch/db/helper-reach.test.ts`
+   walks every public table of a seeded practice as a helper.
+2. **The fence** (`app/api/location/helperFence.ts`, mounted just inside the
+   request context): a helper is answered 403 on every path but `/api/me`,
+   `/api/me/password-changed` and the five location paths, before any route
+   reads the request. Without it over thirty routes answered a helper 400 or
+   415 (input checked before caller), and `GET /api/reports/schema`, a static
+   shape holding no data, answered 200. `tests/dispatch/db/helper-routes.test.ts` walks every
+   mounted route as a helper and expects 403 or 404 elsewhere.
+3. **The screens** (`app/shell/routing.ts`, `App.tsx`): a helper lands on
+   `/help` and is sent back there from the console, the day and the portal.
+
+*Whom a helper accompanies* (migration `213`, `helper_accompaniment`). The
+owner names one practitioner per helper (Team access is the owner's alone,
+the operator's rule of 21 September 2026, confirmed for helpers on 6 October). Append-only and audited,
+in `staff_consent`'s shape: one standing row per helper; ending one stamps
+`ended_at` and `ended_by` once and nothing else moves; a change of practitioner
+ends the old row and writes a new one. The API role holds select and nothing
+else: the two doors are `app.name_helper(user, practitioner)` (makes the person
+a helper if they are not yet, and names or renames whom they go with) and
+`app.revoke_helper(user)` (ends the accompaniment, deletes their positions,
+suspends their sign-in, keeps the role row so they are still listed). Both ask
+whether the caller is an owner, of `user_role`, not of the
+session's claimed roles (923's reasoning). A helper holds no working role, and a person with one is never made a
+helper: the trigger `app.guard_helper_alone` on `user_role`, enabled always,
+refuses the row for every writer, the table's owner included; the role
+switch and the colleague invite refuse it first with the code
+`helper_holds_no_other_role`. `app.name_helper` also refuses a household
+contact. Read by the board's three
+roles and the helper themselves.
+
+*Positions.* In `practitioner_position`, with a nullable `user_id` and a check
+that exactly one of `practitioner_id` and `user_id` is set — chosen over a
+separate table because the two-day purge, the server's own `recorded_at`
+(212), the audit exemption the table names on itself and the backup that keeps
+none of its rows then hold for a helper without being restated. A helper's row
+is written only for the caller (`app.helper_position_writable`: their own
+`user_id`, an accompaniment standing, consent to the notice in force and their
+own switch on), read only by the board's three roles, only while they
+accompany somebody and share (`app.helper_position_visible`), and only the
+latest (`app.latest_helper_position_id`). A withdrawal deletes a helper's
+positions at once (`app.forget_own_positions`, replaced). The table keeps its
+name; its comment says it holds helpers too.
+
+*The shift.* A helper has no visits and none is invented. Their shift is the
+shift of the practitioner they accompany: `helperShiftWindow` in
+`domain/scheduling/locationSharing.ts` feeds that practitioner's day to the
+same `shiftWindow`, and no accompaniment means no shift. The day reaches the
+route through `app.accompanied_day(start, end)`: window times, length, state
+and close time, never a household or a place. Consent and the switch are the
+helper's own (`staff_consent` and `location_sharing` were per person already).
+Every rule of 15.3 to 15.11 holds: nobody writes for anybody else; the 21:00
+cap; the database stamps `recorded_at`; off and withdrawal stop at once and
+are never refused; two days, then deleted.
+
+*Routes.* The five location routes, unchanged in shape: `GET /api/location/me`
+answers a helper `accompanies` (the accompanied practitioner's first name, or
+null), and nobody else that field. `GET /api/location/positions` answers a
+second list, `helpers`, each with `accompaniesPractitionerId`, `firstName` and
+the position and age, read and logged exactly as a practitioner's.
+Settings › Team: `GET`, `POST /api/team/helpers` and `PUT`, `DELETE
+/api/team/helpers/:id`, the list for the owner and an admin (`staff.manage`), every change for the
+owner alone (`staff.helper.manage`). A new helper is made as a colleague is — a sign-in
+by email, a temporary password shown once, the sign-in taken back if the rows
+fail — then named. Sign-in by telephone is not offered: the seam makes email
+sign-ins, and a telephone one needs the provider's SMS sending, an unapproved
+vendor.
+
+*Screens.* A helper's one page, "Share my location while I help": the notice
+the first time, the switch, "You are helping <first name>.", and "Your
+location is (not) being shared now." — plus signing out and changing the
+password they were handed. The board shows a line under the practitioner they
+accompany, "Helper <first name>: location shared 3 min ago, within 9 m"; the
+day map a labelled pin of its own beside the practitioner's, never a stop and
+never in the extent. Settings › Team has a Helpers section (add, revoke after
+one confirmation) and leaves helpers out of the staff table.
+
+*The notice, version 1.2* (approved by the operator on 6 October 2026,
+dispatch-03 item 13). Version 1.1's words were a practitioner's; 1.2 adds five
+changes for helpers: the introduction names the family members who help; the
+switch is named both ways; a helper's working day is the practitioner's they
+go with, and none when nobody is named; helpers see no position, theirs
+included, and a helper's is shown beside the practitioner, marked, by first
+name; and what revoking a helper does. `STAFF_LOCATION_NOTICE_VERSION` is
+`1.2`, and migration `214` replaces `app.staff_location_notice_version()`
+(212 is merged). Every standing consent to 1.1 then pauses sharing — the route
+refuses positions as `notice_changed`, the database refuses them beneath it,
+and the board shows nothing — until the person accepts 1.2, which withdraws
+the 1.1 consent and records the new one (`tests/dispatch/db/notice-change.test.ts`).

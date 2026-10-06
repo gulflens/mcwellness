@@ -30,8 +30,13 @@ import type { AppointmentStatus } from './status';
  * driven to.
  */
 
-/** The version of the notice a consent must name (docs/CONSENT/staff/location.en.md). */
-export const STAFF_LOCATION_NOTICE_VERSION = '1.1';
+/**
+ * The version of the notice a consent must name (docs/CONSENT/staff/location.en.md).
+ * 1.2 since round 76 (approved 6 October 2026): the notice speaks to helpers
+ * too. The database's copy is `app.staff_location_notice_version()`, replaced
+ * by migration 214.
+ */
+export const STAFF_LOCATION_NOTICE_VERSION = '1.2';
 
 /** How long a position is kept before the hourly job deletes it: two days. */
 export const POSITION_RETENTION_HOURS = 48;
@@ -150,4 +155,47 @@ export function positionsCutoff(now: Date): Date {
 /** Whole minutes since a position was recorded; never negative. */
 export function positionAgeMinutes(recordedAt: Date, now: Date): number {
   return Math.max(0, Math.floor((now.getTime() - recordedAt.getTime()) / MINUTE));
+}
+
+/**
+ * Whom a helper accompanies now: a member of the practitioner's family who
+ * drives and carries kit on the day (round 76, docs/SPEC/dispatch.md section
+ * 15.12). Null when nobody — never named, or the accompaniment was revoked.
+ */
+export type Accompaniment = { practitionerId: string } | null;
+
+/**
+ * A helper's shift. A helper has no visits of their own, and none is invented
+ * for them: their working day is the day of the practitioner they accompany,
+ * read by the same rule as that practitioner's own (`shiftWindow`), fed that
+ * practitioner's visits. No accompaniment, no shift — whatever anybody's day
+ * holds.
+ */
+export function helperShiftWindow(
+  accompaniment: Accompaniment,
+  accompaniedDay: readonly ShiftStop[],
+  bounds: DayBounds,
+): ShiftWindow | null {
+  if (accompaniment === null) return null;
+  return shiftWindow(accompaniedDay, bounds);
+}
+
+/** Whether a helper's shift is open at `now`, on the same terms as `shiftOpen`. */
+export function helperShiftOpen(
+  accompaniment: Accompaniment,
+  accompaniedDay: readonly ShiftStop[],
+  bounds: DayBounds,
+  now: Date,
+): boolean {
+  if (accompaniment === null) return false;
+  return shiftOpen(accompaniedDay, bounds, now);
+}
+
+/**
+ * The first word of a display name. A helper's page names the practitioner
+ * they accompany by first name only, and so does the board beside a helper's
+ * position: enough to recognise somebody they know, and no more.
+ */
+export function firstNameOf(displayName: string): string {
+  return displayName.trim().split(/\s+/)[0] ?? '';
 }

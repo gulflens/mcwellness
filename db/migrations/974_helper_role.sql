@@ -1,0 +1,48 @@
+-- 974_helper_role.sql
+-- A seventh role, `helper`: a member of the practitioner's family who drives
+-- and carries kit on the day, signs in, and shares their own location while
+-- they help (round 76; the operator's option 3 of 6 October 2026;
+-- docs/SPEC/dispatch.md section 15.12).
+--
+-- **The role grants nothing by itself.** Every policy and function in this
+-- schema that is keyed on a role names the roles it admits (`app.actor_has_role
+-- ('owner')`, `role in (...)`), so a value nobody names is admitted by none of
+-- them. What a helper may reach is written where it is granted, and nowhere
+-- else: their own consent, switch and positions (db/policies/dispatch/
+-- location.sql), whom they accompany (213_helper_accompaniment.sql), and the
+-- floor that keeps a helper out of every other table, including the ones that
+-- have no rule but the practice's (db/policies/core/helper_reach.sql).
+--
+-- **Why this file holds one statement and nothing else.** `alter type ... add
+-- value` may run inside a transaction block from PostgreSQL 12 onwards, but
+-- the value it adds cannot be USED in that same transaction: a cast, a
+-- comparison with the enum or a row written with it fails with "unsafe use of
+-- new value" until the transaction commits. Both places this file is applied
+-- wrap each migration in its own `begin ... commit` — the runner
+-- (db/runner/apply.ts) and the hand-applied live pass — so the value is added
+-- here, committed with this file, and first used by the policy files, which
+-- the runner applies after every migration has committed.
+--
+-- For the same reason no migration uses the enum literal: 213 sorts before
+-- this file on a fresh database and is applied first, so its functions compare
+-- `role::text = 'helper'`, which is valid whether or not the value exists yet.
+--
+-- `if not exists`, so a database that somehow already holds the value (a
+-- rehearsal on a copy) applies this file as a no-op rather than failing.
+--
+-- Needs: 020 (role_kind)
+
+alter type public.role_kind add value if not exists 'helper';
+
+-- rollback:
+--   PostgreSQL cannot drop a value from an enum. The value is inert while no
+--   row holds it, so the rollback is to remove every row that does and leave
+--   the value in place:
+--     select app.revoke_helper(user_id) ...   -- or, as the owner of the database:
+--     delete from public.user_role where role::text = 'helper';
+--   Removing the value itself means recreating the type: create a new
+--   role_kind without it, `alter table public.user_role alter column role type`
+--   the new type `using role::text::<new type>`, re-create
+--   app.revoke_staff_role(uuid, role_kind) against it, and drop the old type.
+--   Delete db/policies/core/helper_reach.sql first, as the runner re-applies
+--   every policy file on each migrate.

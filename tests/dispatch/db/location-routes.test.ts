@@ -181,7 +181,7 @@ describe('the practitioner, before consenting', () => {
   it('is told they can share, have not consented, and are on shift', async () => {
     expect(await me(AUTH.practitionerA)).toEqual({
       eligible: true,
-      noticeVersion: '1.1',
+      noticeVersion: '1.2',
       consent: null,
       sharingOn: false,
       shiftOpen: true,
@@ -213,7 +213,7 @@ describe('somebody with no day of their own', () => {
     for (const sub of [AUTH.ownerA, AUTH.adminA, AUTH_FINANCE, AUTH.contactA]) {
       expect((await me(sub)).eligible, sub).toBe(false);
       expect(
-        (await call(sub, 'POST', '/api/location/consent', { noticeVersion: '1.1' })).status,
+        (await call(sub, 'POST', '/api/location/consent', { noticeVersion: '1.2' })).status,
         sub,
       ).toBe(403);
       expect((await call(sub, 'PUT', '/api/location/sharing', { on: true })).status, sub).toBe(403);
@@ -225,11 +225,11 @@ describe('somebody with no day of their own', () => {
 describe('consenting, sharing and the board', () => {
   it('records the consent, turns sharing on, and writes a position on shift', async () => {
     const res = await call(AUTH.practitionerA, 'POST', '/api/location/consent', {
-      noticeVersion: '1.1',
+      noticeVersion: '1.2',
     });
     expect(res.status).toBe(204);
     const now = await me(AUTH.practitionerA);
-    expect(now.consent?.noticeVersion).toBe('1.1');
+    expect(now.consent?.noticeVersion).toBe('1.2');
     expect(now.sharingOn).toBe(true);
     expect((await call(AUTH.practitionerA, 'POST', '/api/location/positions', A_FIX)).status).toBe(
       204,
@@ -290,7 +290,7 @@ describe('consenting, sharing and the board', () => {
 
   it('refuses a position from somebody with consent and no shift today', async () => {
     expect(
-      (await call(AUTH_IDLE, 'POST', '/api/location/consent', { noticeVersion: '1.1' })).status,
+      (await call(AUTH_IDLE, 'POST', '/api/location/consent', { noticeVersion: '1.2' })).status,
     ).toBe(204);
     const res = await call(AUTH_IDLE, 'POST', '/api/location/positions', A_FIX);
     expect(res.status).toBe(409);
@@ -358,7 +358,7 @@ describe('withdrawal always works, and a stale notice pauses sharing', () => {
     await owner.query("update practitioner set status = 'inactive' where id = $1", [IDLE]);
 
     expect((await me(AUTH_IDLE)).eligible).toBe(false);
-    expect((await me(AUTH_IDLE)).consent?.noticeVersion).toBe('1.1');
+    expect((await me(AUTH_IDLE)).consent?.noticeVersion).toBe('1.2');
     expect((await call(AUTH_IDLE, 'PUT', '/api/location/sharing', { on: false })).status).toBe(204);
     expect((await call(AUTH_IDLE, 'POST', '/api/location/consent/withdraw', {})).status).toBe(204);
     expect(await me(AUTH_IDLE)).toMatchObject({ consent: null, sharingOn: false });
@@ -375,7 +375,7 @@ describe('withdrawal always works, and a stale notice pauses sharing', () => {
     // Practitioner A agrees again, then the practice's notice moves on: their
     // consent now names an older version than the one in force.
     expect(
-      (await call(AUTH.practitionerA, 'POST', '/api/location/consent', { noticeVersion: '1.1' }))
+      (await call(AUTH.practitionerA, 'POST', '/api/location/consent', { noticeVersion: '1.2' }))
         .status,
     ).toBe(204);
     expect((await call(AUTH.practitionerA, 'POST', '/api/location/positions', A_FIX)).status).toBe(
@@ -394,7 +394,7 @@ describe('withdrawal always works, and a stale notice pauses sharing', () => {
 
     const status = await me(AUTH.practitionerA);
     expect(status.consent?.noticeVersion).toBe('1.0');
-    expect(status.noticeVersion).toBe('1.1');
+    expect(status.noticeVersion).toBe('1.2');
     const res = await call(AUTH.practitionerA, 'POST', '/api/location/positions', A_FIX);
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ code: 'notice_changed' });

@@ -29,6 +29,7 @@ import { readTargetRoles } from './target';
 const REFUSAL_STATUS: Record<(typeof TEAM_REFUSALS)[number], 400 | 409> = {
   locked: 409,
   last_role: 409,
+  helper_holds_no_other_role: 409,
   not_yourself: 400,
   not_a_working_role: 400,
   conflict: 409,

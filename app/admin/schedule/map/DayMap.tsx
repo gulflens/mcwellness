@@ -59,6 +59,13 @@ export type DayMapProps = {
    * the coordinator's pan and zoom away every two minutes.
    */
   here?: { point: { lat: number; lng: number }; label: string } | null;
+  /**
+   * Helpers going with this practitioner who are sharing, each drawn as a
+   * label of its own beside them (docs/SPEC/dispatch.md section 15.12), on
+   * the same terms as `here`: drawn by the app, never a stop, never in the
+   * extent.
+   */
+  alongside?: readonly { point: { lat: number; lng: number }; label: string }[];
 };
 
 /**
@@ -89,7 +96,14 @@ function token(name: string): string | undefined {
   return value === '' ? undefined : value;
 }
 
-export function DayMap({ maps, day, selectedId, onSelect, here = null }: DayMapProps) {
+export function DayMap({
+  maps,
+  day,
+  selectedId,
+  onSelect,
+  here = null,
+  alongside = [],
+}: DayMapProps) {
   const canvas = useRef<HTMLDivElement | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [projection, setProjection] = useState<Projection | null>(null);
@@ -195,6 +209,21 @@ export function DayMap({ maps, day, selectedId, onSelect, here = null }: DayMapP
               );
             })()
           : null}
+        {alongside.map((helper) => {
+          const position = at(helper.point);
+          if (position === null) return null;
+          return (
+            <span
+              key={helper.label}
+              className="daymap__here daymap__here--helper"
+              role="img"
+              aria-label={helper.label}
+              style={{ left: position.left, top: position.top }}
+            >
+              {helper.label}
+            </span>
+          );
+        })}
         {(day?.stops ?? []).map((stop, index) => {
           const position = at(stop.point);
           if (position === null) return null;
