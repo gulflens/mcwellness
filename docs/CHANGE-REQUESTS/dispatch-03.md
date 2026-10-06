@@ -135,6 +135,12 @@ applied.
     the staff included. The routes refuse it, so nothing is shown; the floor
     beneath is missing. Not fixed here: it is the portal's and the trunk's,
     and a restrictive `app_user` policy for households needs its own review.
+    **Done in trunk round 77** (branch `round-77/household-user-floor`):
+    `db/policies/core/household_reach.sql` binds a person stamped with
+    `client_contact` alone on all eight tables, a policy file and no
+    migration (976 unused); `tests/db/household-reach.test.ts` walks every
+    table as a household and as a colleague who is one.
+    `docs/CHANGE-REQUESTS/trunk-round-77.md` has the rulings.
 
 ## Fix round 1 (6 October 2026, the coordinator's word)
 
