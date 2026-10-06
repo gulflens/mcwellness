@@ -14,14 +14,19 @@ import { loadConsentTexts, purposesOf } from './consent-text';
  * is taken, so none is agreed to. Its superseded wording is kept under
  * `docs/CONSENT/superseded/`, out of the loader's reach, because consents
  * recorded on staging name it.
+ *
+ * `marketing` joined on 6 October 2026, when the practice approved the
+ * marketing consent (docs/CONSENT/marketing.en.md and .ar.md, version 1.0):
+ * the one consent a household gives and withdraws itself, on its own portal,
+ * under Agreements (docs/OPERATOR/2026-09-17-push-notifications.md, decision 1).
  */
-const PURPOSES = ['health_data', 'home_visit', 'minor_participation', 'participation'];
+const PURPOSES = ['health_data', 'home_visit', 'marketing', 'minor_participation', 'participation'];
 
 describe('the consent wording files', () => {
   const texts = loadConsentTexts();
 
-  it('gives four purposes in two languages, and nothing else', () => {
-    expect(texts).toHaveLength(8);
+  it('gives five purposes in two languages, and nothing else', () => {
+    expect(texts).toHaveLength(10);
     expect([...new Set(texts.map((text) => text.purpose))].sort()).toEqual(PURPOSES);
     for (const purpose of PURPOSES) {
       const languages = texts.filter((text) => text.purpose === purpose).map((t) => t.locale);
@@ -30,7 +35,7 @@ describe('the consent wording files', () => {
   });
 
   it('offers no wording for a purpose the practice has retired', () => {
-    for (const retired of ['photo_video', 'research', 'marketing']) {
+    for (const retired of ['photo_video', 'research']) {
       expect(texts.some((text) => text.purpose === retired)).toBe(false);
     }
   });
@@ -53,12 +58,16 @@ describe('the consent wording files', () => {
         'home_visit.ar': '1.1',
         'health_data.en': '1.1',
         'health_data.ar': '1.2',
+        // Approved by the practice on 2026-10-06, both languages at once.
+        'marketing.en': '1.0',
+        'marketing.ar': '1.0',
       };
       expect(text.version, `${text.purpose}.${text.locale}`).toBe(
         expected[`${text.purpose}.${text.locale}`],
       );
       // Approved by the practice's legal advisor on 2026-09-09, subject to the
-      // four changes this round carries (docs/CONSENT/README.md).
+      // four changes this round carries (docs/CONSENT/README.md); the
+      // marketing consent by the practice on 2026-10-06.
       expect(text.status).toBe('approved');
     }
   });
@@ -69,9 +78,9 @@ describe('the consent wording files', () => {
       expect(text.bytes.toString('utf8').startsWith('---\n')).toBe(true);
       expect(text.bytes.byteLength).toBeGreaterThan(200);
     }
-    // Four files behind eight texts: the agreement is one page shown for three
-    // purposes, so three of the eight share its bytes by design.
-    expect(new Set(texts.map((text) => text.sha256Hex)).size).toBe(4);
+    // Six files behind ten texts: the agreement is one page shown for three
+    // purposes, so three of the ten share its bytes by design.
+    expect(new Set(texts.map((text) => text.sha256Hex)).size).toBe(6);
   });
 
   it('reads them in the same order every time, so the seeded ids never move', () => {
@@ -85,6 +94,8 @@ describe('the consent wording files', () => {
       'agreement.en.md',
       'health-data.ar.md',
       'health-data.en.md',
+      'marketing.ar.md',
+      'marketing.en.md',
     ]);
   });
 
