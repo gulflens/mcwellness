@@ -5,12 +5,13 @@ import { Button, Note } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { Table, type Column } from '../../shell/components/Table';
 import { ReasonDrawer } from './ReasonDrawer';
+import { ViewDrawer } from './ViewDrawer';
 import { formatDate, formatFils } from './money';
 import { eventWords, JOURNAL_KIND_WORDS } from './words';
 
 /**
  * The journal, newest first (docs/SPEC/accounting.md section 5.2). Opening an
- * entry shows its lines beneath it; an entry that has not already been reversed
+ * entry shows its lines in a drawer beside it; an entry that has not already been reversed
  * can be, with a reason. Nothing here edits anything: the journal is written
  * once, and a correction is a new entry.
  */
@@ -22,7 +23,16 @@ const REVERSAL_REFUSALS: Record<string, string> = {
   not_found: 'This entry is no longer in the journal. Reload and try again.',
 };
 
+const OPEN_REFUSED =
+  'This entry could not be opened. Try again, or sign in again if it keeps happening.';
+
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; response: EntriesResponse };
+
+/** The entry opened in the drawer, and how far reading it has got. */
+type Opened = {
+  row: EntryRow;
+  read: { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; response: EntryResponse };
+};
 
 export function JournalSection({
   canWrite,
@@ -38,7 +48,7 @@ export function JournalSection({
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [openEntry, setOpenEntry] = useState<EntryResponse | null>(null);
+  const [opened, setOpened] = useState<Opened | null>(null);
   const [reversing, setReversing] = useState<EntryRow | null>(null);
 
   const load = useCallback(() => {
@@ -63,14 +73,20 @@ export function JournalSection({
 
   const openOne = useCallback(
     (row: EntryRow) => {
+      // The drawer opens at once; the read fills it, or says it failed. A
+      // later answer for an entry no longer open is dropped.
+      setOpened({ row, read: { kind: 'loading' } });
+      const settle = (read: Opened['read']) =>
+        setOpened((current) => (current?.row.id === row.id ? { row, read } : current));
       void apiFetch(`/api/accounting/entries/${row.id}`)
         .then(async (res) => {
           if (!res.ok) {
+            settle({ kind: 'error' });
             return;
           }
-          setOpenEntry(EntryResponse.parse(await res.json()));
+          settle({ kind: 'ready', response: EntryResponse.parse(await res.json()) });
         })
-        .catch(() => undefined);
+        .catch(() => settle({ kind: 'error' }));
     },
     [apiFetch],
   );
@@ -137,33 +153,12 @@ export function JournalSection({
         </>
       ) : null}
 
-      {openEntry ? (
-        <section className="entry-lines" aria-label={`Lines of ${openEntry.entry.reference}`}>
-          <Table
-            caption={`${openEntry.entry.reference}: ${openEntry.entry.memo}`}
-            columns={[
-              { key: 'code', header: 'Account', render: (line) => line.accountCode },
-              { key: 'name', header: 'Name', render: (line) => line.accountName },
-              {
-                key: 'debit',
-                header: 'Debit (AED)',
-                numeric: true,
-                align: 'end',
-                render: (line) => formatFils(line.debitFils),
-              },
-              {
-                key: 'credit',
-                header: 'Credit',
-                numeric: true,
-                align: 'end',
-                render: (line) => formatFils(line.creditFils),
-              },
-            ]}
-            rows={openEntry.lines}
-            rowKey={(line) => `${openEntry.entry.id}-${line.lineNo}`}
-            empty="This entry has no lines."
-          />
-        </section>
+      {opened ? (
+        <ViewDrawer id="journal-entry" title={opened.row.reference} onClose={() => setOpened(null)}>
+          {opened.read.kind === 'loading' ? <Note>Reading the entry.</Note> : null}
+          {opened.read.kind === 'error' ? <Note tone="critical">{OPEN_REFUSED}</Note> : null}
+          {opened.read.kind === 'ready' ? <EntryLines response={opened.read.response} /> : null}
+        </ViewDrawer>
       ) : null}
 
       {reversing ? (
@@ -177,11 +172,43 @@ export function JournalSection({
           onClose={() => setReversing(null)}
           onDone={() => {
             setReversing(null);
-            setOpenEntry(null);
+            setOpened(null);
             onReloaded();
           }}
         />
       ) : null}
     </>
+  );
+}
+
+/** One entry's lines, as the drawer shows them. */
+function EntryLines({ response }: { response: EntryResponse }) {
+  return (
+    <section className="entry-lines" aria-label={`Lines of ${response.entry.reference}`}>
+      <Table
+        caption={`${response.entry.reference}: ${response.entry.memo}`}
+        columns={[
+          { key: 'code', header: 'Account', render: (line) => line.accountCode },
+          { key: 'name', header: 'Name', render: (line) => line.accountName },
+          {
+            key: 'debit',
+            header: 'Debit (AED)',
+            numeric: true,
+            align: 'end',
+            render: (line) => formatFils(line.debitFils),
+          },
+          {
+            key: 'credit',
+            header: 'Credit',
+            numeric: true,
+            align: 'end',
+            render: (line) => formatFils(line.creditFils),
+          },
+        ]}
+        rows={response.lines}
+        rowKey={(line) => `${response.entry.id}-${line.lineNo}`}
+        empty="This entry has no lines."
+      />
+    </section>
   );
 }
