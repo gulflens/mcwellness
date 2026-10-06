@@ -15,16 +15,30 @@ describe('the practice-local day and hour', () => {
 });
 
 describe('what falls due between two ticks', () => {
+  it('deletes positions older than two days on every change of the hour, as the sweep does', () => {
+    // Piece twenty-five (docs/SPEC/dispatch.md section 15): a practitioner's
+    // positions are kept two days, and an hourly delete keeps that promise to
+    // within the hour.
+    expect(dueJobs(dubai('2026-10-06', 10, 0), dubai('2026-10-06', 10, 59))).not.toContain(
+      'location-positions',
+    );
+    expect(dueJobs(dubai('2026-10-06', 10, 59), dubai('2026-10-06', 11, 0))).toContain(
+      'location-positions',
+    );
+  });
+
   it('sweeps erasure files on every change of the hour, and not within one', () => {
     expect(dueJobs(dubai('2026-09-10', 10, 0), dubai('2026-09-10', 10, 59))).toEqual([]);
     expect(dueJobs(dubai('2026-09-10', 10, 59), dubai('2026-09-10', 11, 0))).toEqual([
       'erasure-files',
+      'location-positions',
     ]);
   });
 
   it('posts the books on the first tick at or after three in the morning, once', () => {
     expect(dueJobs(dubai('2026-09-10', 2, 59), dubai('2026-09-10', 3, 0))).toEqual([
       'erasure-files',
+      'location-positions',
       'post-books',
     ]);
     // The next tick inside the same hour does neither again.
@@ -32,21 +46,25 @@ describe('what falls due between two ticks', () => {
     // And the following hour sweeps without posting.
     expect(dueJobs(dubai('2026-09-10', 3, 59), dubai('2026-09-10', 4, 0))).toEqual([
       'erasure-files',
+      'location-positions',
     ]);
   });
 
   it('does not post for a process that started later in the day, until the next morning', () => {
     expect(dueJobs(dubai('2026-09-10', 10, 0), dubai('2026-09-10', 11, 0))).toEqual([
       'erasure-files',
+      'location-positions',
     ]);
     // Asleep across midnight and woken at half past three: both are due.
     expect(dueJobs(dubai('2026-09-10', 23, 30), dubai('2026-09-11', 3, 30))).toEqual([
       'erasure-files',
+      'location-positions',
       'post-books',
     ]);
     // Asleep from before three until after: the posting is still owed.
     expect(dueJobs(dubai('2026-09-11', 1, 0), dubai('2026-09-11', 9, 0))).toEqual([
       'erasure-files',
+      'location-positions',
       'post-books',
     ]);
   });

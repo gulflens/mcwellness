@@ -2,6 +2,8 @@
 
 Written 8 September 2026 by Claude for the operator. **Approved by the operator on 10 September 2026** ("Build the dispatcher", decision 11 of `docs/OPERATOR/2026-09-10-decisions.md`), defaults standing; the board (piece twenty-two) is built first, and the live-location piece stays off by default until the practitioner's own consent page and the notice it needs exist.
 
+**Status, 6 October 2026:** piece twenty-two (the board) is live. Piece twenty-five (live location) is **built** on branch `round-73/live-location`, the operator having switched it on that day: the notice (`docs/CONSENT/staff/location.en.md`, approved by the operator as the practice's signature) and each person's own consent page now exist, and sharing stays off for each person until they turn it on in their own app (`docs/SPEC/dispatch.md` section 15). Pieces twenty-three and twenty-four are outside this branch.
+
 At 14:06 the operator wrote: *"i need my admin to have control as a dispatcher
 coordinating the sessions and communicating changes to the practioner on the
 route."*

@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
+import { positionsCutoff } from '@domain/scheduling';
 import { postPendingEvents } from './accounting/poster';
 import { describeSweep, sweepErasureFiles } from './clients/erasure-file-sweep';
 import type { ServerStorageProvider } from './_middleware/storage';
 
 /**
- * The two jobs the practice needs run without anybody remembering to, run
+ * The jobs the practice needs run without anybody remembering to, run
  * from inside the API process (trunk round 39, 2026-09-10; the completeness
  * audit's item 5). Until now they were `pnpm job:post-books` and
  * `pnpm job:erasure-files`, each wanting the owner's connection string and a
@@ -31,14 +32,22 @@ import type { ServerStorageProvider } from './_middleware/storage';
  * the Books page posts on open, so nothing is missed — and never runs a job
  * twice for one boundary. The CLI entries stay for a person at a keyboard.
  *
+ * **A third, from piece twenty-five** (docs/SPEC/dispatch.md section 15):
+ * every change of the hour deletes the practitioners' positions older than
+ * two days, the limit the plan promised them. It is the one job here that
+ * deletes on a timer, and it is about staff, not about a household: rule 8's
+ * "nothing deletes on a timer" is the household record's retention floor and
+ * is untouched by it.
+ *
  * Nothing here logs an id, a household or a figure beyond a count.
  */
 
-export type JobName = 'post-books' | 'erasure-files';
+export type JobName = 'post-books' | 'erasure-files' | 'location-positions';
 
 export const JOB_REASONS: Record<JobName, string> = {
   'post-books': 'nightly posting',
   'erasure-files': 'erasure file sweep',
+  'location-positions': 'two-day position limit',
 };
 
 /**
@@ -50,6 +59,8 @@ export const JOB_REASONS: Record<JobName, string> = {
 export const JOB_ROLES: Record<JobName, string> = {
   'post-books': 'finance',
   'erasure-files': 'admin',
+  // app.purge_practitioner_positions (migration 211) admits the office alone.
+  'location-positions': 'admin',
 };
 
 export const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -89,6 +100,9 @@ export function localDayHour(at: Date, zone = PRACTICE_TIME_ZONE): { day: string
  * Which jobs fall due between the previous tick and this one. Pure.
  *
  * - `erasure-files`: the hour changed (or the day did).
+ * - `location-positions`: the same — every change of the hour deletes the
+ *   positions older than two days (docs/SPEC/dispatch.md section 15), so the
+ *   promise "kept two days" is kept to within the hour.
  * - `post-books`: this tick is at or after the posting hour, and the previous
  *   one was before it (earlier the same day, or any earlier day).
  */
@@ -96,7 +110,9 @@ export function dueJobs(previous: Date, now: Date, zone = PRACTICE_TIME_ZONE): J
   const before = localDayHour(previous, zone);
   const at = localDayHour(now, zone);
   const due: JobName[] = [];
-  if (before.day !== at.day || before.hour !== at.hour) due.push('erasure-files');
+  if (before.day !== at.day || before.hour !== at.hour) {
+    due.push('erasure-files', 'location-positions');
+  }
   const wasBeforePosting = before.day !== at.day || before.hour < POSTING_HOUR;
   if (at.hour >= POSTING_HOUR && wasBeforePosting) due.push('post-books');
   return due;
@@ -107,6 +123,8 @@ export type SchedulerDeps = {
   storage: ServerStorageProvider;
   /** One line per practice per run; the console by default. Never an id. */
   log?: (line: string) => void;
+  /** The clock the position limit is measured from; the machine's by default. */
+  now?: () => Date;
 };
 
 const CONTEXT_SQL =
@@ -151,6 +169,16 @@ export async function runJob(name: JobName, deps: SchedulerDeps): Promise<void> 
           log(
             `Scheduler: practice ${ordinal}, posted ${report.posted}, unknown ${report.unknown}.`,
           );
+        } else if (name === 'location-positions') {
+          // Idempotent by construction: a second run in the same hour finds
+          // nothing older than the cutoff left to delete.
+          const cutoff = positionsCutoff((deps.now ?? (() => new Date()))());
+          const { rows } = await client.query<{ deleted: number }>(
+            'select app.purge_practitioner_positions($1) as deleted',
+            [cutoff],
+          );
+          await client.query('commit');
+          log(`Scheduler: practice ${ordinal}, ${rows[0]?.deleted ?? 0} old positions deleted.`);
         } else {
           const swept = await sweepErasureFiles(client, deps.storage);
           await client.query('commit');
@@ -197,7 +225,7 @@ export function startScheduler(
     try {
       const at = now();
       for (const job of dueJobs(previous, at, zone)) {
-        await runJob(job, deps);
+        await runJob(job, { ...deps, now });
       }
       previous = at;
     } finally {
