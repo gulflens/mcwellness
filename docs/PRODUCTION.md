@@ -3579,3 +3579,71 @@ twenty-five, live location).**
 - The rebuilt clients chunk carries the new sentence ("…agreed to everything
   a brain-map report needs…"). The old entry answered 200 from the edge for
   a few seconds, then 404. Health and deep health 200.
+
+## What was done on 2026-10-06: the forty-seventh and forty-eighth live passes — phone notifications and the helper
+
+Two more passes the same evening. Each was made after main's own CI passed
+on its merge commit. A second session on this machine (mcwellness-a8) was
+asked before each upload and held the host.
+
+**Forty-seventh, 20:11 UTC (00:11 +04, 7 October): main `e64e6f8b`, PR 247
+(round 75).**
+- The adult on the household portal gives or withdraws the marketing
+  consent: offers on their phone. Only the adult's own portal switch counts
+  as that consent.
+- The portal has a "Turn on notifications" step.
+- Settings › Notifications holds the Send screen: announcements to every
+  subscribed adult, offers only to adults whose consent is active, at most
+  two offers a calendar month. Every message is kept on record.
+- Web push is sealed and signed with Node's own crypto, so there is no new
+  dependency. It reaches only the three registered push services.
+- Migrations 706
+  (`173f710b17b2e0e550e07499d01cdca319ac6bc4b3424ad27bd13eb2b3a4852c`), 707
+  (`8867cac939b955082cbd8be3a1fe4d1cc375c308daf9d279be7a8d075776490d`) and
+  975 (`d1e7eb810a2bdc159ab683b9c337717964ac269ac1048c91ecb2e1c1b85dee77`).
+  975 drops the push keys from the audit trail and deletes a closed
+  household's devices on erasure. These three and `db/policies/portal/push.sql`
+  went from the files to staging and then production.
+- Both databases are at 128, with identical push policies (11), triggers (8)
+  and function bodies.
+- Archive 7,795,045 bytes, build `01a112d7`. The entry moved to
+  `index-BZOj8IMt.js` and the old entry answers 404.
+- `NotificationsPage-*.js` is served, and the service worker carries the
+  notification handler.
+- **Not switched on:**
+  - Push stays off until the operator sets `PUSH_VAPID_PUBLIC_KEY`,
+    `PUSH_VAPID_PRIVATE_KEY` and `PUSH_VAPID_SUBJECT` on the host.
+    `pnpm push:keys` makes a key pair. The host's settings are a full
+    replace, so the whole set is needed.
+  - The marketing wording 1.0 (English and Arabic) is filed on staging,
+    with a document row and a bucket object whose sha256 matches. It is not
+    yet filed on production. Until it is, the portal shows a note in place
+    of the offers switch.
+
+**Forty-eighth, 20:38 UTC (00:38 +04, 7 October): main `70842d62`, PR 248
+(round 76).**
+- The helper: a family member who helps the practitioner on the day.
+  - Their only reach is their own location, shared while the practitioner
+    they accompany is working.
+  - The owner alone names and revokes a helper.
+  - A trigger refuses a helper any working role.
+- The staff location notice is at version 1.2, approved on 6 October 2026,
+  with five sentences for helpers. A standing 1.1 consent pauses sharing
+  until 1.2 is read and accepted.
+- Migration 974
+  (`7c9a6b2b94f4754674d94563f34dea1db6133147a5a6b96d01e010ec0d20d47a`, the
+  role value alone) was committed on its own first. Then came 213
+  (`25f31b90a2745dc212bf6d3fe12df7a9f5279a8fa549d00fac893e60e8e4c558`), 214
+  (`d4898cdca0dbaf533438b07667c4bd031921742679f17135093b55d4a063b58b`),
+  `db/policies/core/helper_reach.sql` and `db/policies/dispatch/location.sql`,
+  on staging and then production.
+- Both databases are at 131, with identical policy (383) and trigger (287)
+  counts, identical function bodies, notice version 1.2 and the `helper`
+  role.
+- Archive 7,839,222 bytes, build `01a112f0`. The entry moved to
+  `index-DvRcmZiz.js` in 60 s, and the old entry answers 404.
+- `HelperPage-*.js` carries "Share my location while I help". Health and deep
+  health return 200.
+- The host's install keeps hitting npm's "reading 'edgesOut'" error and
+  succeeding on its own `--legacy-peer-deps` retry. It reported 0
+  vulnerabilities on both passes.
