@@ -101,7 +101,8 @@ create policy board_reads_last_position on public.practitioner_position as restr
 -- who show a helper's position beside the practitioner they go with, and by
 -- the helper themselves. Written by nobody through the API role: the table
 -- grants it select alone, and `app.name_helper` and `app.revoke_helper` are
--- the two doors, each asking whether the caller is the owner or an admin.
+-- the two doors, each asking whether the caller is an owner — Team access is
+-- the owner's alone (the operator's rule of 21 September 2026).
 drop policy if exists tenant_isolation on public.helper_accompaniment;
 create policy tenant_isolation on public.helper_accompaniment for all to app_role
   using (tenant_id = app.current_tenant_id())

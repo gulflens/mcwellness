@@ -261,7 +261,8 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     return c.json(InviteResponse.parse({ userId: id.data, temporaryPassword: password }));
   });
 
-  // Helpers (round 76): the owner's and an admin's, through 213's two doors.
+  // Helpers (round 76): an admin reads the list; every change is the owner's
+  // alone, through 213's two doors.
   // Ahead of the profile, whose `/api/team/:id` would otherwise answer
   // `/api/team/helpers` as a colleague with a malformed id.
   mountTeamHelpers(api, { authAdmin: options.authAdmin, now });
