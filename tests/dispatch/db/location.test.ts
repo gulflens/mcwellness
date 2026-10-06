@@ -562,6 +562,32 @@ describe('fix round 1: the database floor', () => {
     });
   });
 
+  it("stamps the server's clock for any writer but the table's owner, not only the API role", async () => {
+    await rolledBack(owner, async () => {
+      // A role granted insert some day after this one — not app_role, and not
+      // the owner. It bypasses row security so only the stamp is under test.
+      await owner.query('create role zz_position_writer bypassrls');
+      await owner.query('grant insert on practitioner_position to zz_position_writer');
+      await owner.query('grant zz_position_writer to current_user with set true');
+      await owner.query('set local role zz_position_writer');
+      await owner.query(POSITION, [
+        IDS.tenantA,
+        SHARER,
+        25.3,
+        55.27,
+        new Date(Date.now() + 24 * 3_600_000),
+        SHARER_USER,
+      ]);
+      await owner.query('reset role');
+      const { rows } = await owner.query<{ drift: number }>(
+        'select abs(extract(epoch from recorded_at - now()))::int as drift ' +
+          'from practitioner_position where latitude = 25.3',
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.drift).toBeLessThan(5);
+    });
+  });
+
   it('refuses a position and hides the last one when the consent names an older notice', async () => {
     await rolledBack(owner, async () => {
       await owner.query(

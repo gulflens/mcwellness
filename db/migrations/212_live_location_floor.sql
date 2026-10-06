@@ -6,9 +6,10 @@
 -- 1. **`recorded_at` is the server's.** The API's role holds insert on every
 --    column of `practitioner_position`, so a writer could stamp a position in
 --    the past (rewriting history) or in the future (escaping the two-day
---    delete and showing as "latest" indefinitely). A row written by the API's
---    role (`app_role`) now takes `now()`, whatever it sent. The table's owner
---    — a restore from a dump, a data step — keeps what it writes.
+--    delete and showing as "latest" indefinitely). A row written by any role
+--    but the table's owner — the API's `app_role` today, and any role granted
+--    insert later — now takes `now()`, whatever it sent. The table's owner (a
+--    restore from a dump, a data step) keeps what it writes.
 -- 2. **The purge also deletes any position stamped in the future**, so no row
 --    can outlive the two days by its stamp, however it got there.
 -- 3. **A consent counts only for the notice in force.** `staff_consent` names
@@ -60,7 +61,11 @@ language plpgsql
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  if current_user = 'app_role' then
+  -- Keyed on the owner rather than on app_role by name, so a role granted
+  -- insert some later day is stamped too (fix round 2).
+  if current_user <> (select pg_get_userbyid(c.relowner)
+                         from pg_class c
+                        where c.oid = tg_relid) then
     new.recorded_at := now();
   end if;
   return new;
