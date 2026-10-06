@@ -361,6 +361,7 @@ which is **not** the client `consent` table, that being `client_id`-scoped by
 its own schema — as a small `staff_consent` table with the same shape: the
 wording shown, the version, when, and how to withdraw. The piece cannot be
 switched on for anybody until the practitioner has consented in their own app.
+**Built 6 October 2026: section 15.**
 
 ## 13. Seed, tests, done when
 
@@ -407,3 +408,151 @@ from 2026-09-10; the walk keeps them because neither is a thing a test sees.
 `app/shell/App.tsx`; the sentence in `domain/shared/audit-narrative.ts`; and
 `docs/SPEC/scheduling-manual.md` sections 4 and 10, which say today that a
 dispatch board is out of scope.
+
+## Part D — piece twenty-five, where they are
+
+## 15. Live location, consent-first
+
+*Built 6 October 2026, on the operator's word of the same day switching the
+piece on: the practice has one practitioner and family members who help, and
+they are the people whose location would be shared. Branch
+`round-73/live-location`, migration `211`.*
+
+**15.1 What it is for.** Whoever coordinates the day sees, on today's board
+and on the day map, where each person who chose to share was when their phone
+last sent, and how long ago that was. For dispatch, and for knowing a person
+driving alone between houses is where they should be. Never for pay, hours,
+performance or any decision about the person; nothing reads a position but
+the board and the day map.
+
+**15.2 The notice.** `docs/CONSENT/staff/location.en.md`, version `1.0`,
+English only (staff screens are English only). Purpose, what is collected,
+when, who sees it, two days, what it is never used for, and how to stop. The
+operator's approval of 6 October 2026 stands as the practice's signature; the
+person's own "I agree" in their own app is theirs. The file sits in a `staff/`
+folder rather than at `docs/CONSENT/staff-location.en.md`, because the client
+wording loader (`db/seed/consent-text.ts`) files every top-level `.md` there as
+a client `consent_text` document whose purpose must be a client
+`consent_purpose`, and a staff notice is neither. The screen imports the file
+as it is, so the words read are the words approved; a test holds its version
+to `STAFF_LOCATION_NOTICE_VERSION` and its promises about the working day to
+the rule's own constants.
+
+**15.3 The rule.** `domain/scheduling/locationSharing.ts`, pure.
+`mayWritePosition` admits a position only when all three hold, and refuses
+naming the first that does not, in the order the person would have to put
+them right: `no_consent`, `notice_changed` (a consent to an earlier notice is
+not a consent to this one), `sharing_off`, `off_shift`.
+
+**What a shift is.** The practice has no clock-in, and none was invented.
+`shiftWindow` reads the shift from the practitioner's own visits that day —
+the statuses that are stops on their own day sheet: confirmed, checked in,
+completed and nobody home. It opens 90 minutes before the first visit's
+window opens (the drive to the first door) and closes 30 minutes after the
+last visit closed, or, if nobody closed it, 30 minutes after it could at the
+latest have ended (window end plus the service's length). While the
+practitioner is checked in at a door with the session still open it stays open.
+It is clipped to the practice day — never before midnight, never past it — and
+a day with no such visit has no shift at all, so a day off shares nothing.
+Both figures are named constants and the notice says them in words.
+
+**15.4 Data** (migration `211`).
+
+| Table | What | Audit |
+|---|---|---|
+| `staff_consent` | the person's consent: purpose (`staff_consent_purpose`, today only `location_sharing`), the notice version, given, withdrawn. One standing per person and purpose; a withdrawal stamps `withdrawn_at` once and nothing else on the row may change (`app.guard_staff_consent`); a later consent is a new row | `audited: no client` |
+| `location_sharing` | the person's own switch | `audited: no client` |
+| `practitioner_position` | practitioner, when, latitude, longitude, accuracy in metres | **none, by decision** |
+
+`practitioner_position` carries no audit trigger and says so on itself
+(`comment on table … 'unaudited by decision …'`); `tests/db/schema.test.ts`,
+which fails any table in `public` without the trigger, admits it by that
+comment exactly as it admits `enquiry`. The reason is the plan's: the trail
+keeps a row's contents five years, and a two-day limit would mean nothing if
+every position were also kept there. `tests/db/audit.test.ts` classifies only
+tables that carry the trigger, so it needs nothing.
+
+**Who reads and writes** (`db/policies/dispatch/location.sql`):
+
+- the consent and the switch: a person writes only their own (`user_id` is the
+  caller's), the owner included; a person reads their own, and the owner and an
+  admin read everybody's, so the practice can answer who agreed to what;
+- a position: written only for the caller's own working practitioner row while
+  their consent stands and their switch is on (`app.position_writable`); the
+  shift is the route's to check, because what a shift is is a business rule;
+- read by the owner, an admin and the lead practitioner alone, only for
+  somebody sharing now (`app.position_visible`), and only the last row
+  (`app.latest_position_id`). A practitioner — the person themselves included —
+  finance and a household read nothing.
+
+Nobody holds `delete` on any of the three. Positions leave only through
+`app.forget_own_positions` (the person's own, on withdrawal) and
+`app.purge_practitioner_positions` (the office's, for the job).
+
+**15.5 Routes.**
+
+| Route | Who | Answers / refuses |
+|---|---|---|
+| `GET /api/location/me` | anybody signed in | `{ eligible, noticeVersion, consent, sharingOn, shiftOpen }`; `eligible: false` for somebody without a practitioner or lead role and a working practitioner row of their own |
+| `POST /api/location/consent` `{ noticeVersion }` | the person | 204, consent recorded and sharing on; 409 `notice_changed`; 403 not eligible; 400 |
+| `POST /api/location/consent/withdraw` | the person | 204: consent withdrawn, switch off, every position of theirs deleted at once; 403 |
+| `PUT /api/location/sharing` `{ on }` | the person | 204; turning on 409 `no_consent` / `notice_changed`; off always; 403; 400 |
+| `POST /api/location/positions` `{ latitude, longitude, accuracyMetres }` | the person | 204; 409 `position_refused` with `code` one of the four refusals; 403; 400 |
+| `GET /api/location/positions` | owner, admin, lead (`appointment.board.read`) | the last position of everybody sharing now, recorded today, with its age in minutes; 403 otherwise |
+
+No route takes a person's id. A consent, a withdrawal and every turn of the
+switch are audited under the person with a reason of the route's own. The
+board's read writes one `read` row per position shown, `entity_type`
+`practitioner_position`, `client_id` null, no values: who looked, and at whose
+last position, never where.
+
+**15.6 The practitioner's app.** On Today, under the heading:
+"Share my location while I work", a real switch (`role="switch"`), off until
+the person turns it on. The first time, and whenever the notice has changed
+since they agreed, turning it on shows the notice in full with "I agree, share
+my location" and "Not now". While sharing is on a band stands at the top of
+the day, says so, says whether anything is being sent ("Nothing is sent
+outside your working day" when the shift is closed), and carries "Stop
+sharing". Off is applied on the screen before the request leaves, so the
+sender stops on that render. Once agreed, "Withdraw my agreement" is one press.
+
+**Sending.** The phone's own position (`navigator.geolocation`, which sends
+nothing to a vendor) is read and sent at once and then every two minutes,
+only while sharing is on, the shift is open and the app is visible. A hidden
+app sends nothing; there is no background tracking. A refusal from the server
+makes the screen ask again where it stands. A phone that will not give its
+position gets a calm note saying nothing is being sent.
+
+**15.7 The board and the day map.** The board loads no third-party script
+and keeps the console's strict policy (4.1), so it has no map of its own. On
+today's board each row says "Location shared 4 min ago, within 12 m" with a
+plain anchor to the day map, or "Sharing off" rather than pretending to know;
+another day's board asks for nothing. The day map draws the shown
+practitioner's last position as a label of its own ("Last shared 4 min ago"),
+never a numbered stop, drawn by the app like every other pin so the coordinate
+is in no request Google receives, and never refits the map. Both read again
+every two minutes while visible.
+
+**Vendors.** The browser's geolocation sends nothing to a vendor. The day map's
+Google Maps row in `docs/COMPLIANCE/approved-vendors.md` already says the pins
+are drawn by the app and Google receives the viewport; a staff position is
+handled the same way. The change request proposes one sentence making that
+explicit for a staff position.
+
+**15.8 The job.** `location-positions` in `app/api/scheduler.ts`, due on every
+change of the hour like the erasure sweep, run as `admin` per practice through
+`app.purge_practitioner_positions(positionsCutoff(now))`: everything recorded
+more than 48 hours ago is deleted, nothing younger, and a second run in the
+same hour deletes nothing. It is the one job that deletes on a timer, and it
+concerns staff rather than a household; CLAUDE.md rule 8 is the household
+record's retention floor and is untouched.
+
+**15.9 Tests.** `domain/scheduling/locationSharing.test.ts` (the rule and the
+shift); `tests/dispatch/db/location.test.ts` (nobody switches on for anybody,
+the owner included; refused without consent; the board reads only the last;
+a household, finance and the practitioners themselves read nothing; the job;
+no audit row); `tests/dispatch/db/location-routes.test.ts` (every route and
+refusal); `tests/dispatch/LocationSharing.test.tsx` (the switch, the notice,
+the band, sending and stopping); `tests/dispatch/BoardPositions.test.tsx`,
+`tests/dispatch/DayMapPosition.test.tsx`, `tests/dispatch/positions.test.ts`
+and `tests/dispatch/narrative.test.ts`.
