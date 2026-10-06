@@ -64,6 +64,7 @@ import {
 } from './reports/qeeg/figureSchema';
 import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
 import { mountKit } from './kit/routes';
+import { mountLocation } from './location/routes';
 import { mountRouting } from './routing/day';
 import { mountSessions } from './sessions/checkin';
 
@@ -585,6 +586,9 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // is answered to somebody with no session.
   mountAssessments(api, deps.now);
   mountRouting(api, deps.now);
+  // Live location for the dispatcher (docs/SPEC/dispatch.md section 15;
+  // docs/CHANGE-REQUESTS/dispatch-02.md item 4).
+  mountLocation(api, deps.now);
   // After the fence. A report is rendered by the server, so this group reads
   // no bytes a caller uploaded (docs/CHANGE-REQUESTS/reports-01.md item 2)
   // but one: a brain-map draft's picture, the raw-body door above

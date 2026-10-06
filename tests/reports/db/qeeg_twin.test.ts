@@ -263,6 +263,36 @@ describe('what "Sign the other language" refuses, each by its own code', () => {
     expect(rows[0]?.n).toBe('0');
   });
 
+  it('refuses while the household has not agreed to the practice holding brain data', async () => {
+    // Round 74: the other language is a new brain-map draft.
+    const first = await signedReport(11);
+    const { rows } = await h.owner.query<{ id: string }>(
+      "update consent set status = 'withdrawn', withdrawn_at = now() " +
+        "where client_id = $1 and purpose = 'health_data' and status = 'active' returning id",
+      [clientId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    try {
+      const res = await twin(first.id);
+      expect(res.status).toBe(409);
+      expect(await codeOf(res)).toMatchObject({
+        code: 'consent_missing',
+        missing: ['consent_missing_health_data'],
+      });
+      expect(await refusedFor(first.id)).toContain('consent_missing');
+      const { rows: made } = await h.owner.query<{ n: string }>(
+        'select count(*)::text as n from report where twin_of_id = $1',
+        [first.id],
+      );
+      expect(made[0]?.n).toBe('0');
+    } finally {
+      await h.owner.query(
+        "update consent set status = 'active', withdrawn_at = null where id = any($1::uuid[])",
+        [rows.map((row) => row.id)],
+      );
+    }
+  });
+
   it('answers a practitioner off her schedule as not there', async () => {
     const first = await signedReport(6);
     const res = await twin(first.id, SEEDED.otherPractitioner);

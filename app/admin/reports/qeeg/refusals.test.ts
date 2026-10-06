@@ -36,6 +36,7 @@ describe('what the form says when a save is refused', () => {
       'locale_fixed',
       'cannot_compare',
       'stale_draft',
+      'consent_missing',
     ];
     for (const code of codes) expect(DRAFT_REFUSALS[code]).toBeTruthy();
     expect(new Set(codes.map((code) => DRAFT_REFUSALS[code])).size).toBe(codes.length);

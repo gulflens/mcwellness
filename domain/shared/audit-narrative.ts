@@ -163,6 +163,12 @@ const ENTITY: Record<string, Text> = {
   // into the middle of an Arabic sentence. `ملف موظف` is the phrase this file's
   // five staff sentences already use.
   staff_profile: t('staff profile', 'ملف موظف'),
+  // Live location for the dispatcher (docs/SPEC/dispatch.md section 15). A
+  // position's own row is never in the trail; a board read of one is, by id,
+  // and says that somebody looked at a shared location — never where it was.
+  staff_consent: t('staff consent', 'موافقة موظف'),
+  location_sharing: t('location sharing', 'مشاركة الموقع'),
+  practitioner_position: t('shared location', 'الموقع المُشارَك'),
 };
 
 /**

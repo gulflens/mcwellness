@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { Outlet } from 'react-router';
+import { LocationSharing } from '../therapist/location/LocationSharing';
 import {
   canOpenAnnouncements,
   canOpenNotifications,
@@ -226,6 +227,11 @@ export function AdminLayout({ actorName }: { actorName: string }) {
          * once it has arrived, and a second message in front of it would say
          * the same thing twice.
          */}
+        {/* Somebody moved to an office role who once agreed to share their
+            location can still withdraw from here (docs/SPEC/dispatch.md
+            section 15.11). Nothing at all for anybody else, and never a
+            sender: positions are only ever sent from the person's own day. */}
+        <LocationSharing withdrawOnly />
         <Suspense fallback={null}>
           <Outlet />
         </Suspense>

@@ -290,6 +290,36 @@ describe('what a correction carries, and what it refuses', () => {
     expect(await refusedFor(standing.id)).toContain('route_owned');
   });
 
+  it('refuses while the household has not agreed to the practice holding brain data', async () => {
+    // Round 74: a correction is a new brain-map draft.
+    const standing = await signed(12);
+    const { rows } = await h.owner.query<{ id: string }>(
+      "update consent set status = 'withdrawn', withdrawn_at = now() " +
+        "where client_id = $1 and purpose = 'health_data' and status = 'active' returning id",
+      [clientId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    try {
+      const res = await supersede(standing.id);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        code: 'consent_missing',
+        missing: ['consent_missing_health_data'],
+      });
+      expect(await refusedFor(standing.id)).toContain('consent_missing');
+      const { rows: made } = await h.owner.query<{ n: string }>(
+        'select count(*)::text as n from report where supersedes_id = $1',
+        [standing.id],
+      );
+      expect(made[0]?.n).toBe('0');
+    } finally {
+      await h.owner.query(
+        "update consent set status = 'active', withdrawn_at = null where id = any($1::uuid[])",
+        [rows.map((row) => row.id)],
+      );
+    }
+  });
+
   it('refuses another language: each language is its own report', async () => {
     const standing = await signed(5);
     const res = await supersede(standing.id, { locale: 'ar' });

@@ -3,6 +3,7 @@ import { canOpenPractitioners } from '../shell/adminAccess';
 import { useAuth } from '../shell/auth/AuthContext';
 import { Button, Note } from '../shell/components/Controls';
 import { describeRoles, homeFor } from '../shell/routing';
+import { LocationSharing } from './location/LocationSharing';
 import './TodayLanding.css';
 
 /**
@@ -47,6 +48,10 @@ export function TodayLanding() {
           There is no day of visits for this account. Visits belong to practitioners; the console is
           where the rest of the practice's work lives.
         </Note>
+        {/* Somebody who once agreed to share their location and can no longer
+            share it must still be able to withdraw (docs/SPEC/dispatch.md
+            section 15.10). Renders nothing for anybody who never agreed. */}
+        <LocationSharing />
         {hasConsole ? (
           <Button onClick={() => navigate('/admin/clients')}>Admin console</Button>
         ) : null}
