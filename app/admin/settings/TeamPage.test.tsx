@@ -114,6 +114,15 @@ function mount(
         201,
       );
     }
+    // Restoring an archived person from their row, answered as the API does,
+    // and the list then reads them back as active.
+    if (url.endsWith('/restore') && method === 'POST') {
+      posts.push({ url, body: JSON.parse(String(init?.body)) });
+      members = members.map((m) =>
+        url === `/api/team/${m.id}/restore` ? { ...m, status: 'active' } : m,
+      );
+      return json({ ok: true });
+    }
     if (url === `/api/team/${ADMIN.id}` && method === 'GET') {
       return json(ADMIN_PROFILE);
     }
@@ -135,7 +144,59 @@ function mount(
   return { posts, gets };
 }
 
+/** Somebody who has left: archived, kept, and out of the list until asked for. */
+const ARCHIVED: TeamMember = {
+  id: '00000002-0000-4000-8000-000000000030',
+  displayName: 'Fern Bay',
+  email: 'fern@example.com',
+  status: 'archived',
+  roles: ['practitioner'],
+  isYou: false,
+  locked: false,
+  jobTitle: null,
+};
+
 describe('TeamPage', () => {
+  it('hides archived people until Show archived is switched on, then offers an owner Restore', async () => {
+    const { posts, gets } = mount({ members: [OWNER, ADMIN, ARCHIVED] });
+    expect(await screen.findByText('Iris Harbour')).toBeTruthy();
+    expect(screen.queryByText('Fern Bay')).toBeNull();
+
+    const show = screen.getByRole('switch', { name: 'Show archived (1)' });
+    expect(show.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(show);
+    expect(show.getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByText('Fern Bay')).toBeTruthy();
+    expect(screen.getByText('Archived')).toBeTruthy();
+    // An archived row is restored from the row, and is not opened: the drawer's
+    // switches are not a door anybody should find open on somebody who left.
+    expect(screen.queryByRole('button', { name: 'Open Fern Bay' })).toBeNull();
+
+    const reads = gets.filter((url) => url === '/api/team').length;
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Fern Bay' }));
+    await waitFor(() =>
+      expect(gets.filter((url) => url === '/api/team').length).toBeGreaterThan(reads),
+    );
+    expect(posts).toEqual([{ url: `/api/team/${ARCHIVED.id}/restore`, body: {} }]);
+    expect(await screen.findByRole('button', { name: 'Open Fern Bay' })).toBeTruthy();
+  });
+
+  it('lets an admin see the archived people and offers them no Restore', async () => {
+    mount({
+      members: [{ ...OWNER, isYou: false }, { ...ADMIN, isYou: true }, ARCHIVED],
+      myRoles: ['admin'],
+    });
+    fireEvent.click(await screen.findByRole('switch', { name: 'Show archived (1)' }));
+    expect(screen.getByText('Fern Bay')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Restore Fern Bay' })).toBeNull();
+  });
+
+  it('offers no Show archived switch when nobody is archived', async () => {
+    mount();
+    expect(await screen.findByText('Iris Harbour')).toBeTruthy();
+    expect(screen.queryByRole('switch', { name: /Show archived/ })).toBeNull();
+  });
+
   it('lists the staff with their roles and job titles, and offers an owner one Open on every row', async () => {
     mount();
     expect(await screen.findByText('Iris Harbour')).toBeTruthy();

@@ -67,9 +67,13 @@ function mount(
     roleRefusal?: { status: number; error: string };
     /** Every read after this many answers 500: the re-read that does not land. */
     readsBeforeFailing?: number;
+    /** What `POST /api/team/:id/archive` answers instead of `{ ok: true }`. */
+    archiveRefusal?: { status: number; body: unknown };
   } = {},
 ) {
   const calls: Call[] = [];
+  /** The `X-Reason` each write carried, by URL: the reason never rides in the body. */
+  const reasons = new Map<string, string | null>();
   let reads = 0;
   const profile: TeamProfile = { ...THEIR_PROFILE, ...options.profile };
   const onClose = vi.fn();
@@ -85,6 +89,7 @@ function mount(
         contentType: headers.get('content-type'),
         body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
       });
+      reasons.set(url, headers.get('x-reason'));
     }
     if (url === '/api/me') {
       return json({
@@ -113,6 +118,13 @@ function mount(
     if (url.endsWith('/status')) {
       return json({ ok: true });
     }
+    if (url.endsWith('/archive')) {
+      const refused = options.archiveRefusal;
+      return refused ? json(refused.body, refused.status) : json({ ok: true });
+    }
+    if (url.endsWith('/restore')) {
+      return json({ ok: true });
+    }
     if (url.endsWith('/password')) {
       return json({ userId: profile.id, temporaryPassword: '<shown-once-0002>' });
     }
@@ -123,7 +135,7 @@ function mount(
       <TeamMemberDrawer memberId={profile.id} onClose={onClose} onChanged={onChanged} />
     </AuthProviderBoundary>,
   );
-  return { calls, onClose, onChanged, readCount: () => reads };
+  return { calls, reasons, onClose, onChanged, readCount: () => reads };
 }
 
 /** Waits for the profile to have loaded, which every case below starts from. */
@@ -458,6 +470,100 @@ describe('TeamMemberDrawer', () => {
       contentType: 'application/json',
       body: { status: 'suspended' },
     });
+  });
+
+  it('archives a colleague only with a typed reason, sent as X-Reason, and offers Restore after', async () => {
+    const { calls, reasons, onChanged } = mount({ profile: { roles: ['practitioner'] } });
+    await opened();
+    await onAccess();
+    fireEvent.click(screen.getByRole('button', { name: 'Archive this person' }));
+    // The step says what is about to happen before anything is sent.
+    expect(screen.getByText(/They can no longer sign in/)).toBeTruthy();
+    const confirm = screen.getByRole('button', { name: 'Archive Iris Harbour' });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Reason'), {
+      target: { value: 'Left the practice at the end of the month' },
+    });
+    expect((confirm as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Restore' })).toBeTruthy());
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        url: `/api/team/${THEM}/archive`,
+        contentType: 'application/json',
+        body: {},
+      },
+    ]);
+    expect(reasons.get(`/api/team/${THEM}/archive`)).toBe(
+      'Left the practice at the end of the month',
+    );
+    expect(onChanged).toHaveBeenCalled();
+    // Archived is not suspended: Reactivate is not the way back, Restore is.
+    expect(screen.queryByRole('button', { name: 'Suspend' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reactivate' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New temporary password' })).toBeNull();
+  });
+
+  it('says how many future visits to reassign first, and links to the first one’s day on the board', async () => {
+    mount({
+      profile: { roles: ['practitioner'] },
+      archiveRefusal: {
+        status: 409,
+        body: {
+          error: 'future_visits',
+          requestId: 'r',
+          visits: [
+            {
+              appointmentId: '00000002-0000-4000-8000-000000000021',
+              windowStart: '2026-10-08T06:00:00.000Z',
+            },
+            {
+              appointmentId: '00000002-0000-4000-8000-000000000022',
+              windowStart: '2026-10-09T06:00:00.000Z',
+            },
+          ],
+        },
+      },
+    });
+    await opened();
+    await onAccess();
+    fireEvent.click(screen.getByRole('button', { name: 'Archive this person' }));
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Moving abroad' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Iris Harbour' }));
+    expect(await screen.findByText(/Reassign 2 future visits first/)).toBeTruthy();
+    const link = screen.getByRole('link', { name: /Open the board/ });
+    expect(link.getAttribute('href')).toBe('/admin/schedule/board?date=2026-10-08');
+    // Nothing changed, so the person is still offered Suspend.
+    expect(screen.getByRole('button', { name: 'Suspend' })).toBeTruthy();
+  });
+
+  it('restores an archived colleague, after which Suspend is offered again', async () => {
+    const { calls } = mount({ profile: { roles: ['practitioner'], status: 'archived' } });
+    await opened();
+    await onAccess();
+    expect(screen.getByText(/Archived\. They cannot sign in/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Archive this person' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Suspend' })).toBeTruthy());
+    expect(calls[0]).toEqual({
+      method: 'POST',
+      url: `/api/team/${THEM}/restore`,
+      contentType: 'application/json',
+      body: {},
+    });
+  });
+
+  it('offers no archive on an owner’s row or on the reader’s own', async () => {
+    mount({ profile: { roles: ['owner', 'lead_practitioner'], locked: true } });
+    await opened();
+    await onAccess();
+    expect(screen.queryByRole('button', { name: 'Archive this person' })).toBeNull();
+    cleanup();
+    mount({ profile: { roles: ['admin', 'finance'], isYou: true, id: ME } });
+    await opened();
+    await onAccess();
+    expect(screen.queryByRole('button', { name: 'Archive this person' })).toBeNull();
   });
 
   it('closes on Escape', async () => {
