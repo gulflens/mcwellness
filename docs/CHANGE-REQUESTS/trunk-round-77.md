@@ -77,6 +77,15 @@ These are the real reads, from every query `app/api/portal/**` and
    household writing nothing here. Every portal write that touches one of
    these tables (redeeming an invite, which links the sign-in) is a security
    definer function, so row security never applies to it.
+   The write tests prove the new policy and not the older guards. Inside a
+   rolled-back transaction they drop the older guard and show that
+   `household_reach_write` alone refuses the write. Then they drop the new
+   policy too and show that the same write succeeds.
+6. **The `tenant` read arm narrows nothing.** It is
+   `id = app.current_tenant_id()`, which is tenant isolation. It is kept so
+   the table's rule is stated beside its seven neighbours. The test's
+   `tenant` expectation passes on main without the policy, so it is only a
+   regression guard.
 
 ### Proof
 

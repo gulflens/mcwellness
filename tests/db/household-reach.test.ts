@@ -60,6 +60,9 @@ const EXPECTED: Record<(typeof EIGHT)[number], string[]> = {
   goal_category: [],
   scheduling_setting: [],
   // Her practice's own row: its name, its WhatsApp number, its time zone.
+  // The policy's arm here is `id = app.current_tenant_id()`, which is exactly
+  // tenant isolation: this expectation passes on main without the new policy
+  // and is kept only as a regression guard, not as proof of a narrowing.
   tenant: [IDS.tenantA],
 };
 
@@ -337,47 +340,112 @@ describe('the colleague who is also a household contact (migration 968)', () => 
   });
 });
 
+/**
+ * One write as the mother, with chosen guards taken away first. The older
+ * guards are dropped as the table owner inside the test's own transaction and
+ * come back with its rollback, so each case below can show that
+ * `household_reach_write` refuses the write alone — and, with that policy
+ * dropped too, that the same write goes through, so the refusal is the
+ * policy's and not something else's.
+ */
+async function writeWithout(
+  guards: readonly string[],
+  sql: string,
+  params: readonly unknown[],
+): Promise<{ rowCount: number } | { code: string }> {
+  await owner.query('begin');
+  try {
+    for (const guard of guards) await owner.query(guard);
+    await owner.query('set local role app_role');
+    await owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_roles', 'client_contact', true), " +
+        "set_config('app.actor_id', $2, true)",
+      [IDS.tenantA, PORTAL.motherUser],
+    );
+    try {
+      const result = await owner.query(sql, [...params]);
+      return { rowCount: result.rowCount ?? 0 };
+    } catch (error) {
+      return { code: (error as { code?: string }).code ?? 'unknown' };
+    }
+  } finally {
+    await owner.query('rollback');
+  }
+}
+
+const dropOwnPolicy = (table: string) => `drop policy household_reach_write on public.${table}`;
+
 describe('what a household writes to the eight tables', () => {
-  it("cannot change its practice's own row", async () => {
-    await asActor(PORTAL.motherUser, 'client_contact', async () => {
-      await expect(
-        owner.query("update tenant set legal_name = 'Synthetic Renamed' where id = $1", [
-          IDS.tenantA,
-        ]),
-      ).rejects.toMatchObject({ code: '42501' });
+  it("is refused its practice's own row by household_reach_write alone", async () => {
+    const sql = "update tenant set legal_name = 'Synthetic Renamed' where id = $1";
+    // The older guard: migration 905's trigger refuses a household as well.
+    const older = ['alter table public.tenant disable trigger guard_tenant_identity'];
+    expect(await writeWithout([], sql, [IDS.tenantA])).toEqual({ code: '42501' });
+    expect(await writeWithout(older, sql, [IDS.tenantA])).toEqual({ code: '42501' });
+    expect(await writeWithout([...older, dropOwnPolicy('tenant')], sql, [IDS.tenantA])).toEqual({
+      rowCount: 1,
     });
   });
 
-  it("changes no sign-in row, its own or anybody else's", async () => {
-    await asActor(PORTAL.motherUser, 'client_contact', async () => {
-      for (const id of [PORTAL.motherUser, PORTAL.admin, PORTAL.adultUser]) {
-        const changed = await owner.query(
-          "update app_user set display_name = 'Synthetic Renamed' where id = $1",
-          [id],
-        );
-        expect(changed.rowCount, id).toBe(0);
-      }
-    });
+  it("is refused its own sign-in row by household_reach_write alone, and reaches nobody else's through the new policies", async () => {
+    const sql = "update app_user set display_name = 'Synthetic Renamed' where id = $1";
+    // The older guard: role_guard.sql's admin_updates_only hides every row from
+    // an update by anybody but the owner or an admin, so on main these answer
+    // "nothing to update".
+    const older = ['drop policy admin_updates_only on public.app_user'];
+    for (const id of [PORTAL.motherUser, PORTAL.admin]) {
+      expect(await writeWithout([], sql, [id]), id).toEqual({ rowCount: 0 });
+    }
+    // Without it, the new policies alone: her own row is refused by
+    // household_reach_write's check, and nobody else's row is reachable at all
+    // (household_reach_read and household_reach_write both hide it).
+    expect(await writeWithout(older, sql, [PORTAL.motherUser])).toEqual({ code: '42501' });
+    expect(await writeWithout(older, sql, [PORTAL.admin])).toEqual({ rowCount: 0 });
+    // And with them gone too the writes go through, so neither answer was vacuous.
+    expect(
+      await writeWithout([...older, dropOwnPolicy('app_user')], sql, [PORTAL.motherUser]),
+    ).toEqual({ rowCount: 1 });
+    expect(
+      await writeWithout(
+        [
+          ...older,
+          dropOwnPolicy('app_user'),
+          'drop policy household_reach_read on public.app_user',
+        ],
+        sql,
+        [PORTAL.admin],
+      ),
+    ).toEqual({ rowCount: 1 });
   });
 
-  it('cannot add a role, a service or a goal category', async () => {
-    for (const [sql, params] of [
-      [
-        "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'client_contact')",
-        [IDS.tenantA, PORTAL.adultUser],
-      ],
-      [
-        'insert into service_type (tenant_id, code, name, duration_minutes, delivery_modes) ' +
+  it('is refused a new role, service or goal category by household_reach_write alone', async () => {
+    const cases = [
+      {
+        table: 'user_role',
+        sql: "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'client_contact')",
+        params: [IDS.tenantA, PORTAL.finance],
+      },
+      {
+        table: 'service_type',
+        sql:
+          'insert into service_type (tenant_id, code, name, duration_minutes, delivery_modes) ' +
           "values ($1, 'synthetic-new', 'Synthetic new', 30, '{studio}')",
-        [IDS.tenantA],
-      ],
-      [
-        "insert into goal_category (tenant_id, code, name) values ($1, 'synthetic', 'Synthetic')",
-        [IDS.tenantA],
-      ],
-    ] as const) {
-      await asActor(PORTAL.motherUser, 'client_contact', async () => {
-        await expect(owner.query(sql, [...params]), sql).rejects.toMatchObject({ code: '42501' });
+        params: [IDS.tenantA],
+      },
+      {
+        table: 'goal_category',
+        sql: "insert into goal_category (tenant_id, code, name) values ($1, 'synthetic', 'Synthetic')",
+        params: [IDS.tenantA],
+      },
+    ] as const;
+    for (const { table, sql, params } of cases) {
+      // The older guard on each: admin_inserts_only (role_guard.sql for
+      // user_role and service_type, client/writers.sql for goal_category).
+      const older = [`drop policy admin_inserts_only on public.${table}`];
+      expect(await writeWithout([], sql, params), table).toEqual({ code: '42501' });
+      expect(await writeWithout(older, sql, params), table).toEqual({ code: '42501' });
+      expect(await writeWithout([...older, dropOwnPolicy(table)], sql, params), table).toEqual({
+        rowCount: 1,
       });
     }
   });

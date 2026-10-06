@@ -30,7 +30,10 @@
 --                       Home reads their code for the review line), decided by
 --                       `app.actor_is_contact_of` exactly as its visits are;
 --   tenant              its practice's own row (the name, the WhatsApp number,
---                       the review page and the time zone);
+--                       the review page and the time zone). This arm is the
+--                       same as tenant isolation and narrows nothing; it is
+--                       kept so the table's rule is stated with its seven
+--                       neighbours, and the test holds it as a regression guard;
 --   practitioner,
 --   credential,
 --   goal_category,
@@ -45,6 +48,9 @@
 --
 -- tests/db/household-reach.test.ts walks every table in `public` as a
 -- household and as the colleague who is one, and holds these policies' presence.
+-- Its write cases drop the older guards (role_guard.sql's policies, migration
+-- 905's tenant trigger) inside a rolled-back transaction, so they prove that
+-- household_reach_write refuses each write alone.
 
 do $$
 declare
