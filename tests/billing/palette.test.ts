@@ -93,6 +93,8 @@ function coloursOf(op: Op): { rgb: Rgb[]; grey: number[] } {
     }
     case 'image':
       return { rgb: [], grey: [] };
+    case 'shade':
+      return { rgb: [op.from.rgb, op.to.rgb], grey: [] };
     case 'path': {
       // The money documents draw no path; if one ever does, its paint is
       // held to the same palette. A paint that names neither is ink.
