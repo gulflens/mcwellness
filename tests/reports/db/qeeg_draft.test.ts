@@ -483,6 +483,99 @@ describe('the client’s details come from the record', () => {
     expect(await reportCount()).toBe(before);
   });
 
+  it('refuses a brain-map draft while the household has not agreed to the practice holding brain data', async () => {
+    // Round 74: a brain-map report holds health data, so the household's
+    // agreements are asked at the moment of writing.
+    const { rows } = await h.owner.query<{ id: string }>(
+      "update consent set status = 'withdrawn', withdrawn_at = now() " +
+        "where client_id = $1 and purpose = 'health_data' and status = 'active' returning id",
+      [clientId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    try {
+      const res = await save({ clientId, kind: 'qeeg', locale: 'en', content: sentInitial() });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        code: 'consent_missing',
+        missing: ['consent_missing_health_data'],
+      });
+      // Written to the trail before the answer, against the client.
+      expect(await refusalsOnTrail(h.owner, 'report.draft_refused', { clientId })).toContain(
+        'consent_missing_health_data',
+      );
+    } finally {
+      await h.owner.query(
+        "update consent set status = 'active', withdrawn_at = null where id = any($1::uuid[])",
+        [rows.map((row) => row.id)],
+      );
+    }
+  });
+
+  it('refuses a brain-map draft once an agreement expired, even earlier the same day', async () => {
+    // An expiry is a moment, not a date: one that passed a minute ago no
+    // longer counts, though the practice's day has not turned.
+    const { rows } = await h.owner.query<{ id: string; expires_at: string | null }>(
+      "select id, expires_at::text from consent where client_id = $1 and purpose = 'participation' " +
+        "and status = 'active'",
+      [clientId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    // A minute before the route's own clock: the same day in Dubai.
+    const aMinuteAgo = new Date(NOW().getTime() - 60_000).toISOString();
+    await h.owner.query(
+      'update consent set expires_at = $2::timestamptz where id = any($1::uuid[])',
+      [rows.map((row) => row.id), aMinuteAgo],
+    );
+    try {
+      const res = await save({ clientId, kind: 'qeeg', locale: 'en', content: sentInitial() });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        code: 'consent_missing',
+        missing: ['consent_missing_participation'],
+      });
+    } finally {
+      for (const row of rows) {
+        await h.owner.query('update consent set expires_at = $2::timestamptz where id = $1', [
+          row.id,
+          row.expires_at,
+        ]);
+      }
+    }
+  });
+
+  it('asks a guardian’s agreement for a child, and for a client whose birth date is not known', async () => {
+    const { rows } = await h.owner.query<{ born: string | null }>(
+      "select to_char(date_of_birth, 'YYYY-MM-DD') as born from client where id = $1",
+      [clientId],
+    );
+    const born = rows[0]?.born ?? null;
+    const guardian = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from consent where client_id = $1 and purpose = 'minor_participation' " +
+        "and status = 'active'",
+      [clientId],
+    );
+    expect(guardian.rows[0]?.n).toBe('0');
+    try {
+      for (const date of ['2016-03-10', null]) {
+        await h.owner.query('update client set date_of_birth = $2::date where id = $1', [
+          clientId,
+          date,
+        ]);
+        const res = await save({ clientId, kind: 'qeeg', locale: 'en', content: sentInitial() });
+        expect(res.status, String(date)).toBe(409);
+        expect(await res.json()).toMatchObject({
+          code: 'consent_missing',
+          missing: ['consent_missing_minor_participation'],
+        });
+      }
+    } finally {
+      await h.owner.query('update client set date_of_birth = $2::date where id = $1', [
+        clientId,
+        born,
+      ]);
+    }
+  });
+
   it('counts the age on the day of the recording, and gathers again on every save', async () => {
     const first = await created(
       sentInitial({ recording: { recordedOn: '2026-04-01', eyes: null, handedness: null } }),
@@ -492,7 +585,9 @@ describe('the client’s details come from the record', () => {
     // The record is corrected between two saves: the next save says so.
     const person = h.data.clients[clientIndex];
     if (!person) throw new Error('The seed is not what it was.');
-    await h.owner.query("update client set date_of_birth = '2016-01-15' where id = $1", [clientId]);
+    // An adult's date, so the age changes and no guardian's agreement is
+    // needed: a minor's brain-map report asks one (round 74).
+    await h.owner.query("update client set date_of_birth = '2000-01-15' where id = $1", [clientId]);
     try {
       const res = await save({
         id: first.report.id,
@@ -505,7 +600,7 @@ describe('the client’s details come from the record', () => {
       });
       expect(res.status).toBe(200);
       const again = (await res.json()) as QeegDraftResponse;
-      expect((again.content as QeegInitial).subject.ageYears).toBe(10);
+      expect((again.content as QeegInitial).subject.ageYears).toBe(26);
     } finally {
       await h.owner.query('update client set date_of_birth = $1 where id = $2', [
         person.dateOfBirth,

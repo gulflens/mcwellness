@@ -386,6 +386,30 @@ describe('bringing a past record in', () => {
     ]);
   });
 
+  it('refuses a past record while the household has not agreed to the practice holding brain data', async () => {
+    // Round 74: a past record holds health data too.
+    const { rows } = await h.owner.query<{ id: string }>(
+      "update consent set status = 'withdrawn', withdrawn_at = now() " +
+        "where client_id = $1 and purpose = 'health_data' and status = 'active' returning id",
+      [clientId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    try {
+      const res = await bringIn(bodyFor(newFile()));
+      expect(res.status).toBe(409);
+      expect(await codeOf(res)).toBe('consent_missing');
+      // Written to the trail before the answer, against the client.
+      expect(await refusalsOnTrail(h.owner, 'report.import_refused', { clientId })).toContain(
+        'consent_missing_health_data',
+      );
+    } finally {
+      await h.owner.query(
+        "update consent set status = 'active', withdrawn_at = null where id = any($1::uuid[])",
+        [rows.map((row) => row.id)],
+      );
+    }
+  });
+
   it('refuses one brought in with no reason', async () => {
     const res = await bringIn(bodyFor(newFile()), SEEDED.owner, {});
     expect(res.status).toBe(400);
