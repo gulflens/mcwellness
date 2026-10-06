@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { displayFromIso, isoDateIn } from '@domain/shared';
+import { PRACTICE_TIME_ZONE } from '@domain/scheduling';
 import { LocationMeResponse } from '../../api/location/schema';
 import { ConsentText } from '../../admin/clients/ConsentText';
 import { useAuth } from '../../shell/auth/AuthContext';
@@ -97,7 +99,16 @@ export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
     };
   }, [reload]);
 
-  const sending = status !== null && status.sharingOn && status.shiftOpen && visible;
+  // Sending needs a consent to the notice in force: after the notice changes,
+  // sharing is paused until the person reads and agrees to the new one.
+  const sending =
+    status !== null &&
+    status.eligible &&
+    status.consent !== null &&
+    status.consent.noticeVersion === status.noticeVersion &&
+    status.sharingOn &&
+    status.shiftOpen &&
+    visible;
 
   // The sender. Its cleanup is what "off stops at once" rests on: the moment
   // sharing is off, the shift has closed or the app is hidden, the timer is
@@ -163,7 +174,32 @@ export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
     [apiFetch, reload],
   );
 
-  if (status === null || !status.eligible) return null;
+  if (status === null) return null;
+
+  if (!status.eligible) {
+    // Somebody whose role or practitioner row has changed can share nothing,
+    // but an agreement they gave is still theirs to take back, and an "on"
+    // switch theirs to turn off (fix round 1, finding 5). Withdrawing does
+    // both. Nothing at all for somebody who never agreed.
+    if (status.consent === null && !status.sharingOn) return null;
+    return (
+      <section className="location-share" aria-label="Location sharing">
+        <p>This account can no longer share its location.</p>
+        <p className="small muted">
+          Withdrawing your agreement switches sharing off and deletes every position still held.
+        </p>
+        {problem ? <Note tone="critical">{problem}</Note> : null}
+        <div className="location-share__more">
+          <Button
+            disabled={busy}
+            onClick={() => void write('/api/location/consent/withdraw', 'POST', {})}
+          >
+            Withdraw my agreement
+          </Button>
+        </div>
+      </section>
+    );
+  }
 
   const agreed = status.consent !== null && status.consent.noticeVersion === status.noticeVersion;
 
@@ -199,12 +235,41 @@ export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
     );
   }
 
+  if (status.sharingOn && !agreed) {
+    return (
+      <section className="location-band" aria-label="Location sharing">
+        <p className="location-band__line" role="status">
+          Sharing is paused: the notice has changed since you agreed.
+        </p>
+        <p className="small">Nothing is sent until you read the new notice and agree to it.</p>
+        {problem ? <Note tone="critical">{problem}</Note> : null}
+        <div className="location-share__more">
+          <Button variant="primary" onClick={() => setReading(true)}>
+            Read the new notice
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={() => void write('/api/location/sharing', 'PUT', { on: false })}
+          >
+            Stop sharing
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
   if (status.sharingOn) {
     return (
       <section className="location-band" aria-label="Location sharing">
         <p className="location-band__line" role="status">
           You are sharing your location with the office while you work.
         </p>
+        {status.consent ? (
+          <p className="small numeric">
+            You agreed on{' '}
+            {displayFromIso(isoDateIn(new Date(status.consent.givenAt), PRACTICE_TIME_ZONE))}.
+          </p>
+        ) : null}
         <p className="small">
           {status.shiftOpen
             ? 'It is sent every two minutes while this app is open, and kept two days.'

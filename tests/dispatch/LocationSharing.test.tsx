@@ -53,12 +53,12 @@ type Status = {
 
 const OFF: Status = {
   eligible: true,
-  noticeVersion: '1.0',
+  noticeVersion: '1.1',
   consent: null,
   sharingOn: false,
   shiftOpen: true,
 };
-const AGREED = { noticeVersion: '1.0', givenAt: '2026-10-06T06:00:00.000Z' };
+const AGREED = { noticeVersion: '1.1', givenAt: '2026-10-06T06:00:00.000Z' };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -136,6 +136,15 @@ describe('the notice', () => {
     for (const never of ['pay', 'hours', 'how well you are doing your job']) {
       expect(flat.toLowerCase()).toContain(never);
     }
+    // Fix round 1: what the first version left out or got wrong.
+    expect(flat).not.toContain('what happened yesterday');
+    expect(flat).toContain('9 in the evening');
+    expect(flat).toContain('wherever you set off from');
+    expect(flat).toContain('at least five years');
+    expect(flat).toContain('daily copies');
+    expect(flat).toContain('weekly backup leaves positions out');
+    expect(flat).toContain('Settings › Practice');
+    expect(flat).not.toMatch(/@[a-z0-9-]+\.[a-z]/i);
   });
 });
 
@@ -182,7 +191,7 @@ describe('the switch', () => {
       await screen.findByText('You are sharing your location with the office while you work.'),
     ).toBeTruthy();
     const consent = fetchImpl.mock.calls.find(([url]) => String(url) === '/api/location/consent');
-    expect(JSON.parse(String(consent?.[1]?.body))).toEqual({ noticeVersion: '1.0' });
+    expect(JSON.parse(String(consent?.[1]?.body))).toEqual({ noticeVersion: '1.1' });
   });
 
   it('turns straight on for somebody who has already agreed to this notice', async () => {
@@ -193,7 +202,7 @@ describe('the switch', () => {
   });
 
   it('shows the notice again when the notice has changed since they agreed', async () => {
-    mount({ ...OFF, consent: { ...AGREED, noticeVersion: '0.9' } });
+    mount({ ...OFF, consent: { ...AGREED, noticeVersion: '1.0' } });
     fireEvent.click(await screen.findByRole('switch'));
     expect(await screen.findByRole('button', { name: 'I agree, share my location' })).toBeTruthy();
   });
@@ -213,6 +222,25 @@ describe('the switch', () => {
 });
 
 describe('the band', () => {
+  it('says when the person agreed, so an agreement they did not give would show', async () => {
+    mount({ ...OFF, consent: AGREED, sharingOn: true });
+    expect(await screen.findByText('You agreed on 06/10/2026.')).toBeTruthy();
+  });
+
+  it('says sharing is paused and offers the new notice when the notice has changed', async () => {
+    const { fetchImpl } = mount({
+      ...OFF,
+      consent: { ...AGREED, noticeVersion: '1.0' },
+      sharingOn: true,
+    });
+    expect(
+      await screen.findByText('Sharing is paused: the notice has changed since you agreed.'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Read the new notice' }));
+    expect(await screen.findByRole('button', { name: 'I agree, share my location' })).toBeTruthy();
+    expect(positionsSent(fetchImpl)).toBe(0);
+  });
+
   it('is there the whole time sharing is on, and carries the way to stop', async () => {
     mount({ ...OFF, consent: AGREED, sharingOn: true });
     expect(
@@ -225,6 +253,30 @@ describe('the band', () => {
   it('says nothing is sent outside the working day', async () => {
     const { fetchImpl } = mount({ ...OFF, consent: AGREED, sharingOn: true, shiftOpen: false });
     expect(await screen.findByText('Nothing is sent outside your working day.')).toBeTruthy();
+    expect(positionsSent(fetchImpl)).toBe(0);
+  });
+});
+
+describe('somebody who can no longer share', () => {
+  it('can still withdraw an agreement they gave, and switch off', async () => {
+    const { fetchImpl } = mount({
+      ...OFF,
+      eligible: false,
+      shiftOpen: false,
+      consent: AGREED,
+      sharingOn: true,
+    });
+    expect(await screen.findByText('This account can no longer share its location.')).toBeTruthy();
+    expect(screen.queryByRole('switch')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw my agreement' }));
+    await waitFor(() =>
+      expect(
+        fetchImpl.mock.calls.some(([url]) => String(url) === '/api/location/consent/withdraw'),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('This account can no longer share its location.')).toBeNull(),
+    );
     expect(positionsSent(fetchImpl)).toBe(0);
   });
 });
