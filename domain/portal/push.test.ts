@@ -246,6 +246,7 @@ describe('pushPayload', () => {
       body: 'الاستوديو مغلق يوم الخميس. تستمر الزيارات المنزلية كما هي محجوزة.',
       url: '/portal',
       stopUrl: null,
+      stopLabel: null,
     });
   });
 
@@ -255,6 +256,8 @@ describe('pushPayload', () => {
     expect(offer.body.endsWith('To stop offers, turn the switch off under Agreements.')).toBe(true);
     const arabic = pushPayload(draft({ kind: 'offer' }), 'ar');
     expect(arabic.stopUrl).toBe('/portal/agreements#offers');
+    expect(offer.stopLabel).toBe('Stop offers');
+    expect(arabic.stopLabel).toBe('إيقاف العروض');
     expect(arabic.body.endsWith('لإيقاف العروض، أطفئ المفتاح ضمن الموافقات.')).toBe(true);
     expect(arabic.dir).toBe('rtl');
   });

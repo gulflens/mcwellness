@@ -70,6 +70,7 @@ export type { AppointmentStatus, SplittableVisit, VisitOutcome, VisitSplit } fro
 export { marketingConsentOfferedTo, marketingStanding } from './marketing';
 export type { MarketingConsentRow, MarketingStanding } from './marketing';
 export {
+  OFFER_STOP_ACTION,
   OFFER_STOP_LINE,
   OFFER_STOP_URL,
   OFFERS_PER_MONTH,

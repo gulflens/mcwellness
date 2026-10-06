@@ -181,6 +181,9 @@ export const OFFER_STOP_LINE: Bilingual = {
   ar: 'لإيقاف العروض، أطفئ المفتاح ضمن الموافقات.',
 };
 
+/** The stop as an action on the notification itself, where the phone shows actions. */
+export const OFFER_STOP_ACTION: Bilingual = { en: 'Stop offers', ar: 'إيقاف العروض' };
+
 /** Where a notification opens, and where an offer's stop leads: the switch itself. */
 export const PUSH_OPENS = '/portal';
 export const OFFER_STOP_URL = '/portal/agreements#offers';
@@ -198,6 +201,7 @@ export type PushPayload = {
   body: string;
   url: string;
   stopUrl: string | null;
+  stopLabel: string | null;
 };
 
 export function pushPayload(draft: PushDraft, locale: 'en' | 'ar'): PushPayload {
@@ -212,5 +216,6 @@ export function pushPayload(draft: PushDraft, locale: 'en' | 'ar'): PushPayload 
     body: offer ? `${body}\n${OFFER_STOP_LINE[locale]}` : body,
     url: PUSH_OPENS,
     stopUrl: offer ? OFFER_STOP_URL : null,
+    stopLabel: offer ? OFFER_STOP_ACTION[locale] : null,
   };
 }
