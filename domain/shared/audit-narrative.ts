@@ -123,6 +123,10 @@ const ENTITY: Record<string, Text> = {
   portal_review_prompt: t('review line', 'سطر التقييم'),
   // The practice's announcements (section 3.10, migration 705).
   announcement: t('announcement', 'الإعلان'),
+  // Phone notifications (sections 3.11 and 3.12, migration 707).
+  push_message: t('notification', 'الإشعار'),
+  push_recipient: t('notification’s recipients', 'مستلمو الإشعار'),
+  push_subscription: t('phone’s notifications', 'إشعارات الهاتف'),
   // The practitioner's phone (docs/SPEC/practitioner-phone.md section 10).
   // `drive_estimate` is deliberately absent: two location ids, an hour and a
   // duration are not a sentence anybody reads, so it takes the generic
@@ -221,6 +225,7 @@ const METHOD: Record<string, Text> = {
   app_signature: t('by signature in the app', 'بالتوقيع في التطبيق'),
   paper_scan: t('from a scanned paper form', 'من نموذج ورقي ممسوح'),
   verbal_witnessed: t('verbally, witnessed', 'شفهيًا بحضور شاهد'),
+  portal_switch: t('with the switch on their own portal', 'بالمفتاح في بوابته الخاصة'),
 };
 
 const RELATIONSHIP: Record<string, Text> = {
@@ -871,6 +876,69 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
     case 'announcement.read':
       return pick(
         t(`${actor} read an announcement on the portal`, `${actor} قرأ إعلانًا على البوابة`),
+        locale,
+      );
+    // Phone notifications and the marketing switch (docs/SPEC/client-portal.md
+    // sections 3.5, 3.11 and 3.12; migrations 706 and 707). Ids alone: never
+    // a word of what was sent, never a device's address.
+    case 'push_message.insert':
+    case 'push_message.portal.push.sent':
+      return event.newValues?.kind === 'offer'
+        ? pick(
+            t(
+              `${actor} sent an offer to the households’ phones`,
+              `${actor} أرسل عرضًا إلى هواتف الأسر`,
+            ),
+            locale,
+          )
+        : pick(
+            t(
+              `${actor} sent a notification to the households’ phones`,
+              `${actor} أرسل إشعارًا إلى هواتف الأسر`,
+            ),
+            locale,
+          );
+    case 'push_message.update':
+    case 'push_message.portal.push.delivered':
+      return pick(
+        t('A notification was delivered to the households’ phones', 'سُلِّم إشعار إلى هواتف الأسر'),
+        locale,
+      );
+    case 'push_recipient.insert':
+      return pick(
+        t(`${actor} recorded who a notification went to`, `${actor} سجّل من أُرسل إليهم إشعار`),
+        locale,
+      );
+    case 'push_recipient.read':
+    case 'push_recipient.list':
+      return pick(
+        t(`${actor} read who a notification went to`, `${actor} اطّلع على من أُرسل إليهم إشعار`),
+        locale,
+      );
+    case 'push_subscription.insert':
+    case 'push_subscription.portal.push.subscribed':
+      return pick(
+        t(`${actor} turned notifications on for a phone`, `${actor} فعّل الإشعارات على هاتف`),
+        locale,
+      );
+    case 'push_subscription.portal.push.unsubscribed':
+      return pick(
+        t(`${actor} turned notifications off for a phone`, `${actor} أوقف الإشعارات على هاتف`),
+        locale,
+      );
+    case 'push_subscription.delete':
+      return pick(
+        t('A phone left the practice’s notifications', 'خرج هاتف من إشعارات المركز'),
+        locale,
+      );
+    case 'consent.portal.marketing.given':
+      return pick(
+        t(`${actor} turned offers on, on the portal`, `${actor} فعّل العروض من البوابة`),
+        locale,
+      );
+    case 'consent.portal.marketing.withdrawn':
+      return pick(
+        t(`${actor} turned offers off, on the portal`, `${actor} أوقف العروض من البوابة`),
         locale,
       );
     case 'portal_request.read':

@@ -5,13 +5,24 @@ import { mountPortalAgreements } from './agreements';
 import { mountPortalAnnouncements } from './announcements';
 import { mountPortalFamily } from './family';
 import { mountPortalHome } from './home';
+import { mountPortalMarketing } from './marketing';
 import { mountPortalMoney } from './money';
+import { mountPortalPush } from './push';
+import { pushSenderOff, type PushSender } from './push/sender';
 import { mountPortalReports } from './reports';
 import { mountPortalReviewPrompt } from './review-prompt';
 import { mountPortalVisits } from './visits';
 
 export { mountPortalDoor, type PortalDoorOptions } from './door';
 export { authAdminFromEnv, fakeAuthAdmin, type AuthAdminProvider } from './auth-admin';
+export { pushSender, pushSenderFromEnv, pushSenderOff, type PushSender } from './push/sender';
+
+/**
+ * What the portal needs from the deployment: the invite route's two settings,
+ * and the phone notifications' sender — on with the practice's key pair, off
+ * cleanly without it (push/sender.ts).
+ */
+export type PortalOptions = PortalAccessOptions & { push?: PushSender };
 
 /**
  * Every portal route that needs a session (docs/SPEC/client-portal.md section
@@ -31,7 +42,7 @@ export { authAdminFromEnv, fakeAuthAdmin, type AuthAdminProvider } from './auth-
 export function mountPortal(
   api: Hono<ApiEnv>,
   now: () => Date = () => new Date(),
-  options: PortalAccessOptions = {},
+  options: PortalOptions = {},
 ): void {
   mountPortalHome(api, now);
   mountPortalVisits(api, now);
@@ -48,4 +59,10 @@ export function mountPortal(
   // The practice's announcements on every household's home (section 3.10,
   // amended 2026-10-06): Settings writes them, Home reads them.
   mountPortalAnnouncements(api, now);
+  // The marketing consent on Agreements, given and withdrawn by the adult
+  // themselves (the push memo's decision 1, migration 706).
+  mountPortalMarketing(api, now);
+  // Phone notifications: the household's step and the practice's Send screen
+  // (decisions 2 and 3, migration 707).
+  mountPortalPush(api, now, options.push ?? pushSenderOff());
 }

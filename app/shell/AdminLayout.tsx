@@ -3,6 +3,7 @@ import { Outlet } from 'react-router';
 import { LocationSharing } from '../therapist/location/LocationSharing';
 import {
   canOpenAnnouncements,
+  canOpenNotifications,
   canOpenAudit,
   canOpenBilling,
   canOpenBoard,
@@ -105,6 +106,7 @@ function visiblePages(section: RailSection, actor: Actor, now: Date): RailSectio
       practitioners: canOpenPractitioners(actor, now),
       team: canOpenTeam(actor, now),
       announcements: canOpenAnnouncements(actor, now),
+      notifications: canOpenNotifications(actor, now),
     };
     return { ...section, children: section.children?.filter((page) => open[page.key]) };
   }

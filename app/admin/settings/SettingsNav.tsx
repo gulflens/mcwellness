@@ -2,6 +2,7 @@ import { NavLink } from 'react-router';
 import { useAuth } from '../../shell/auth/AuthContext';
 import {
   canOpenAnnouncements,
+  canOpenNotifications,
   canOpenPractitioners,
   canOpenSettings,
   canOpenTeam,
@@ -51,6 +52,13 @@ export function SettingsNav() {
       to: '/admin/settings/announcements',
       label: 'Announcements',
       open: canOpenAnnouncements(session.actor, now),
+    },
+    {
+      // The Send screen: phone notifications to the households (trunk change
+      // request client-portal-07, 2026-10-06).
+      to: '/admin/settings/notifications',
+      label: 'Notifications',
+      open: canOpenNotifications(session.actor, now),
     },
   ].filter((link) => link.open);
 

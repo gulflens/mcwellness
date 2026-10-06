@@ -121,6 +121,17 @@ export function canOpenAnnouncements(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `portal.push.send` (app/api/portal/push.ts) — who may open Settings ›
+ * Notifications, the Send screen: the owner and an admin, the push memo's
+ * decision 3 ("written by you or an admin, in Settings ... and sent from
+ * there"); db/policies/portal/push.sql refuses the rows beneath both
+ * (docs/SPEC/client-portal.md section 3.12).
+ */
+export function canOpenNotifications(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'portal.push.send' }, {}, now);
+}
+
+/**
  * Matches `kit.manage` (app/api/kit/routes.ts) — who may open Settings › Kit.
  * The owner, an admin and the lead practitioner: the three who decide what the
  * practice's equipment register says, and `db/policies/session/kit.sql` refuses

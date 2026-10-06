@@ -117,6 +117,73 @@ const CASES: { name: string; event: AuditEvent; en: string; ar: string }[] = [
     en: 'Hazel Harbour withdrew an announcement from the households’ portal',
     ar: 'Hazel Harbour سحب إعلانًا من بوابة الأسر',
   },
+  // Phone notifications and the marketing switch (the push memo's decisions
+  // 1 to 3; migrations 706 and 707). Each names no household's record: they
+  // read on the practice's own feed, by the person, and never their content.
+  {
+    name: 'sending a notification',
+    event: event({
+      entityType: 'push_message',
+      action: 'portal.push.sent',
+      newValues: { kind: 'announcement' },
+    }),
+    en: 'Hazel Harbour sent a notification to the households’ phones',
+    ar: 'Hazel Harbour أرسل إشعارًا إلى هواتف الأسر',
+  },
+  {
+    name: 'sending an offer',
+    event: event({ entityType: 'push_message', newValues: { kind: 'offer' } }),
+    en: 'Hazel Harbour sent an offer to the households’ phones',
+    ar: 'Hazel Harbour أرسل عرضًا إلى هواتف الأسر',
+  },
+  {
+    name: 'the delivery of one',
+    event: event({ entityType: 'push_message', action: 'portal.push.delivered' }),
+    en: 'A notification was delivered to the households’ phones',
+    ar: 'سُلِّم إشعار إلى هواتف الأسر',
+  },
+  {
+    name: 'recording who one went to',
+    event: event({ entityType: 'push_recipient' }),
+    en: 'Hazel Harbour recorded who a notification went to',
+    ar: 'Hazel Harbour سجّل من أُرسل إليهم إشعار',
+  },
+  {
+    name: 'reading who one went to',
+    event: event({ entityType: 'push_recipient', action: 'list' }),
+    en: 'Hazel Harbour read who a notification went to',
+    ar: 'Hazel Harbour اطّلع على من أُرسل إليهم إشعار',
+  },
+  {
+    name: 'a person turning notifications on for a phone',
+    event: event({ entityType: 'push_subscription', action: 'portal.push.subscribed' }),
+    en: 'Hazel Harbour turned notifications on for a phone',
+    ar: 'Hazel Harbour فعّل الإشعارات على هاتف',
+  },
+  {
+    name: 'a person turning them off',
+    event: event({ entityType: 'push_subscription', action: 'portal.push.unsubscribed' }),
+    en: 'Hazel Harbour turned notifications off for a phone',
+    ar: 'Hazel Harbour أوقف الإشعارات على هاتف',
+  },
+  {
+    name: 'a phone leaving the notifications',
+    event: event({ entityType: 'push_subscription', action: 'delete' }),
+    en: 'A phone left the practice’s notifications',
+    ar: 'خرج هاتف من إشعارات المركز',
+  },
+  {
+    name: 'turning offers on, on the portal',
+    event: event({ entityType: 'consent', action: 'portal.marketing.given' }),
+    en: 'Hazel Harbour turned offers on, on the portal',
+    ar: 'Hazel Harbour فعّل العروض من البوابة',
+  },
+  {
+    name: 'turning offers off, on the portal',
+    event: event({ entityType: 'consent', action: 'portal.marketing.withdrawn' }),
+    en: 'Hazel Harbour turned offers off, on the portal',
+    ar: 'Hazel Harbour أوقف العروض من البوابة',
+  },
   {
     name: 'a household reading one',
     event: event({

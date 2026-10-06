@@ -41,6 +41,7 @@ describe('the pages a rail section lists', () => {
       'practitioners',
       'team',
       'announcements',
+      'notifications',
     ]);
     expect(pagesOf(OWNER, 'schedule')).toContain('board');
   });

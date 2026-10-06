@@ -67,3 +67,33 @@ export {
   visitsFor,
 } from './visits';
 export type { AppointmentStatus, SplittableVisit, VisitOutcome, VisitSplit } from './visits';
+export { marketingConsentOfferedTo, marketingStanding } from './marketing';
+export type { MarketingConsentRow, MarketingStanding } from './marketing';
+export {
+  OFFER_STOP_ACTION,
+  OFFER_STOP_LINE,
+  OFFER_STOP_URL,
+  OFFERS_PER_MONTH,
+  PUSH_BODY_MAX,
+  PUSH_KINDS,
+  PUSH_OPENS,
+  PUSH_TITLE_MAX,
+  checkPushMessage,
+  offersLeft,
+  pushAudience,
+  pushEndpointAllowed,
+  pushPayload,
+  pushRecipients,
+  pushWarnings,
+} from './push';
+export type {
+  PushCandidate,
+  PushDraft,
+  PushField,
+  PushKind,
+  PushPayload,
+  PushProblem,
+  PushReach,
+  PushRecipient,
+  PushWarning,
+} from './push';
