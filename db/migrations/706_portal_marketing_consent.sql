@@ -39,7 +39,7 @@
 -- (app/api/portal/push.ts). Nothing is cached anywhere.
 --
 -- Needs: 060 (consent, consent_method, contact, client, document), 095
--- (app.current_actor_id, app.actor_has_role), 099, 705
+-- (app.actor_has_role), 099, 100 (app.current_actor_id), 705
 -- (app.actor_reads_announcements).
 --
 -- **And the wording's columns, which arrive later in the numbering.**
