@@ -15,7 +15,14 @@ import {
   type SessionNarrative,
 } from './gather';
 import { saveQeegDraft } from './qeegDraft';
-import { DraftInput, DraftKindOf, DraftResponse, GatherResponse, VisitsResponse } from './schema';
+import {
+  DraftInput,
+  DraftKindOf,
+  DraftResponse,
+  GatherResponse,
+  SessionDraftInput,
+  VisitsResponse,
+} from './schema';
 import { asRow, readReport } from './source';
 
 /**
@@ -42,6 +49,16 @@ import { asRow, readReport } from './source';
  * switch is exhaustive, so a kind added later is a compile error here rather
  * than a body read as a session report's, and a save of one kind is refused
  * on a row of another.
+ *
+ * **A session report can also be started from the visit**
+ * (`POST /api/reports/session-draft`), at the end of the visit flow on the
+ * practitioner's phone. It names the visit and nothing else, and it is
+ * idempotent on the visit where the general door is not: `POST
+ * /api/reports/draft` without an id always writes a new row, which is right
+ * for a person at the record choosing to write, and wrong for a button on a
+ * phone that may be tapped twice or come back to. So it opens the visit's
+ * current report — a draft, or a signed one — when there is one, and writes a
+ * draft only when there is none.
  *
  * **Only a draft may be updated.** An issued report is not edited: the guard
  * trigger refuses it in the database (migration 600) and this refuses it with
@@ -70,6 +87,22 @@ const INSERT_SQL =
   'coverage_from, coverage_to, content, created_by) values (' +
   'app.current_tenant_id(), $1, $2::report_kind, $3::locale, $4, $5::date, $6::date, $7::jsonb, ' +
   'app.current_actor_id()) returning id';
+
+// The visit, read under the caller's own row rules: a practitioner reaches
+// their own visits and the office every one. Completed only, because that is
+// the only visit a session report may follow (gather.ts's VISIT_COLUMNS).
+const SESSION_CLIENT_SQL =
+  'select client_id from session where tenant_id = app.current_tenant_id() and id = $1 ' +
+  "and status = 'completed'";
+
+// The visit's current session report, if it has one: the newest that has not
+// been replaced by a corrected version. Matched on the visit id the report's
+// own content carries (`SessionReportContent.sessionId`), which is written
+// from the record by gatherSession and never from a request.
+const SESSION_REPORT_SQL =
+  'select id from report where tenant_id = app.current_tenant_id() and client_id = $1 ' +
+  "and kind = 'session' and status in ('draft', 'issued') and content->>'sessionId' = $2 " +
+  'order by created_at desc, id desc limit 1';
 
 const UPDATE_SQL =
   'update report set locale = $2::locale, service_type_id = $3, coverage_from = $4::date, ' +
@@ -365,6 +398,73 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
       DraftResponse.parse({ report: asRow(record), content: record.content }),
       input.id ? 200 : 201,
     );
+  });
+
+  api.post('/api/reports/session-draft', async (c) => {
+    const requestId = c.get('requestId');
+    const parsed = SessionDraftInput.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const { sessionId } = parsed.data;
+    const db = c.get('db');
+    const visit = await db.query<{ client_id: string }>(SESSION_CLIENT_SQL, [sessionId]);
+    const clientId = visit.rows[0]?.client_id;
+    if (!clientId) {
+      // Not there, not completed, or not one this person can reach: the same
+      // answer for all three, as the general door gives a visit it cannot read.
+      return c.json({ error: 'not_found', code: 'no_such_visit', requestId }, 404);
+    }
+    if (!mayDraftReport(c.get('actor'), clientId, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    // A read, before the answer, as gather-session writes one: the answer
+    // carries the visit's figures and the household's goal (section 8).
+    await logRead(db, 'client', clientId, clientId);
+
+    const existing = await db.query<{ id: string }>(SESSION_REPORT_SQL, [clientId, sessionId]);
+    const existingId = existing.rows[0]?.id;
+    if (existingId) {
+      const record = await readReport(db, existingId);
+      if (record) {
+        return c.json(DraftResponse.parse({ report: asRow(record), content: record.content }));
+      }
+    }
+
+    // None yet: the general door's own session path, with nothing written by
+    // a person — the note and what to expect before the next visit are left
+    // for the editor, which opens on this draft next.
+    const content = await gatherSession(db, {
+      clientId,
+      sessionId,
+      timeZone: await practiceTimeZone(db),
+      locale: 'en',
+    });
+    if (!content) {
+      return c.json({ error: 'not_found', code: 'no_such_visit', requestId }, 404);
+    }
+    const checked = validateContent('session', content);
+    if (!checked.ok) {
+      return c.json(
+        { error: 'bad_request', code: 'invalid_content', field: checked.field, requestId },
+        400,
+      );
+    }
+    const written = await db.query<{ id: string }>(INSERT_SQL, [
+      clientId,
+      'session',
+      'en',
+      null,
+      null,
+      null,
+      JSON.stringify(checked.content),
+    ]);
+    const id = written.rows[0]?.id;
+    const record = id ? await readReport(db, id) : null;
+    if (!record) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    return c.json(DraftResponse.parse({ report: asRow(record), content: record.content }), 201);
   });
 }
 

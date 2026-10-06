@@ -546,3 +546,87 @@ describe('past records from the old tool (docs/SPEC/reports-qeeg.md section 11)'
     expect(screen.queryByRole('button', { name: /left to fill$/ })).toBeNull();
   });
 });
+
+/**
+ * Arriving from the end of a visit (the session report started on the
+ * practitioner's phone, `POST /api/reports/session-draft`): the tab opens on
+ * the report it was handed, the way a click on its row would have.
+ */
+describe('opening on the report a visit started', () => {
+  const sessionDraft = row({
+    id: DRAFT,
+    kind: 'session',
+    status: 'draft',
+    reference: null,
+    signedByName: null,
+    coverageFrom: null,
+    coverageTo: null,
+  });
+  const sessionContent = {
+    kind: 'session',
+    sessionId: '00000003-0000-4000-8000-000000000001',
+    visitDate: '2026-09-01',
+    serviceName: 'Neurofeedback session',
+    serviceNameAr: null,
+    practitionerName: 'Hazel Harbour',
+    durationMinutes: 50,
+    goalArea: null,
+    ratings: [],
+    observationChips: [],
+    tolerance: null,
+    engagement: null,
+    note: 'Started from the visit.',
+    beforeNextVisit: '',
+  };
+
+  function mountOpening(openReportId: string, reports: unknown[], me: unknown = SIGNER) {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(me);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports });
+      if (url === `/api/reports/${DRAFT}`) {
+        return json({
+          report: sessionDraft,
+          content: sessionContent,
+          deliveries: [],
+          url: null,
+          expiresInSeconds: null,
+        });
+      }
+      if (url.startsWith('/api/reports/visits')) {
+        return json({
+          visits: [
+            {
+              id: sessionContent.sessionId,
+              on: '2026-09-01',
+              serviceName: 'Neurofeedback session',
+              practitionerName: 'Hazel Harbour',
+              durationMinutes: 50,
+            },
+          ],
+        });
+      }
+      if (url.startsWith('/api/reports/gather-session')) {
+        return json({ content: { ...sessionContent, note: '' }, brainMapsRead: false });
+      }
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} openReportId={openReportId} />
+      </AuthProviderBoundary>,
+    );
+    return fetchImpl;
+  }
+
+  it('opens the session draft in the editor without a click', async () => {
+    mountOpening(DRAFT, [sessionDraft]);
+    await waitFor(() => expect(screen.getByDisplayValue('Started from the visit.')).toBeTruthy());
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('shows the list as usual when the report is not among this client’s', async () => {
+    mountOpening('00000006-0000-4000-8000-0000000000ee', [row()]);
+    expect(await screen.findByText('RPT-000001')).toBeTruthy();
+  });
+});

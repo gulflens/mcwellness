@@ -154,6 +154,17 @@ export const DraftResponse = z.object({
 export type DraftResponse = z.infer<typeof DraftResponse>;
 
 /**
+ * Starting the session report for one visit from the end of the visit itself
+ * (`POST /api/reports/session-draft`). Only the visit is named: the client is
+ * the visit's own, resolved by the server, so the phone that ran the visit
+ * never needs a client id it does not otherwise hold. Answered with a
+ * `DraftResponse` — 201 for a draft just written, 200 for the visit's report
+ * already there, a draft or a signed one.
+ */
+export const SessionDraftInput = z.object({ sessionId: z.uuid() });
+export type SessionDraftInput = z.infer<typeof SessionDraftInput>;
+
+/**
  * Only the kind, read first, so `POST /api/reports/draft` can hand the body to
  * the door that knows it: the two gathered kinds to `DraftInput`, a brain map
  * to `QeegDraftInput`.

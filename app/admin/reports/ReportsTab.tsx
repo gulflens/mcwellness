@@ -56,6 +56,13 @@ import './reports.css';
  * be finished only through the API. A draft row lands in the editor loaded
  * with what was saved, and a supersede hands its corrected draft straight
  * there, which is what section 4.3 describes.
+ *
+ * **It can open on one report.** `openReportId` is the report a visit just
+ * started from the practitioner's phone (`POST /api/reports/session-draft`,
+ * reached through the client page's router state): the tab opens it the way a
+ * click on its row would — a draft in the editor, anything signed in the
+ * viewer — once, and then behaves as it always has. An id that is not among
+ * this client's reports opens nothing.
  */
 
 function coverageOf(report: ReportRow): string {
@@ -120,8 +127,11 @@ function Row({
 export function ReportsTab({
   clientId,
   erased = false,
+  openReportId = null,
 }: {
   clientId: string;
+  /** A report to open as soon as the list has loaded; see above. */
+  openReportId?: string | null;
   /**
    * Whether this record has been erased. Passed rather than read back from the
    * server, because the drawer knows it one act before the record does
@@ -152,6 +162,8 @@ export function ReportsTab({
     prefilled: Prefilled | null;
   } | null>(null);
   const loadPrefill = usePrefill(clientId);
+  /** Which `openReportId` has been acted on, so it is opened once and not again. */
+  const [openedFrom, setOpenedFrom] = useState<string | null>(null);
 
   const mayWrite = canDraftReports(actor, now, clientId) && !erased;
   const maySupersede = canSupersedeReports(actor, now, clientId) && !erased;
@@ -307,6 +319,16 @@ export function ReportsTab({
       return;
     }
     setOpenId(report.id);
+  }
+
+  // The report handed in, opened once the list it belongs to is here. Set
+  // during render rather than in an effect, React's own pattern for state that
+  // follows a prop: the first paint is already the opened report, never the
+  // table for a moment first.
+  if (openReportId !== null && openedFrom !== openReportId) {
+    setOpenedFrom(openReportId);
+    const handed = state.reports.find((report) => report.id === openReportId);
+    if (handed) open(handed);
   }
 
   const chains = inChains(state.reports);
