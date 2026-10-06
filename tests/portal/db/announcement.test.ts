@@ -296,7 +296,7 @@ describe('never edited in place: withdrawn, once, and nothing else', () => {
         CHECK_VIOLATION,
       );
       await expectCode(
-        "update announcement set visible_until = current_date + 30 where id = $1",
+        'update announcement set visible_until = current_date + 30 where id = $1',
         [A.current],
         CHECK_VIOLATION,
       );

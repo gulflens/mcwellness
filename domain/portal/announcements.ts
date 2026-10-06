@@ -67,11 +67,7 @@ export type AnnouncementDraft = {
 
 export type AnnouncementField = 'titleEn' | 'titleAr' | 'bodyEn' | 'bodyAr' | 'visibleUntil';
 export type AnnouncementProblemCode =
-  | 'empty'
-  | 'too_long'
-  | 'medical_word'
-  | 'before_from'
-  | 'in_the_past';
+  'empty' | 'too_long' | 'medical_word' | 'before_from' | 'in_the_past';
 export type AnnouncementProblem = { field: AnnouncementField; code: AnnouncementProblemCode };
 
 /** One of the signed-in person's contact rows, with its client's date of birth. */
@@ -193,10 +189,7 @@ function checkText(
 }
 
 /** Everything wrong with an announcement about to be published, or nothing. */
-export function checkAnnouncement(
-  draft: AnnouncementDraft,
-  today: IsoDate,
-): AnnouncementProblem[] {
+export function checkAnnouncement(draft: AnnouncementDraft, today: IsoDate): AnnouncementProblem[] {
   const problems: AnnouncementProblem[] = [];
   checkText('titleEn', draft.title.en, ANNOUNCEMENT_TITLE_MAX, problems);
   checkText('titleAr', draft.title.ar, ANNOUNCEMENT_TITLE_MAX, problems);

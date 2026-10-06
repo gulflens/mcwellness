@@ -150,7 +150,11 @@ describe('announcementsFor', () => {
 
   it(`shows at most ${ANNOUNCEMENTS_SHOWN}`, () => {
     const rows = [IDS.a, IDS.b, IDS.c, IDS.d].map((id, index) =>
-      row({ id, publishedOn: `2026-10-0${index + 1}`, publishedAt: `2026-10-0${index + 1}T08:00Z` }),
+      row({
+        id,
+        publishedOn: `2026-10-0${index + 1}`,
+        publishedAt: `2026-10-0${index + 1}T08:00Z`,
+      }),
     );
     const shown = announcementsFor(rows, [MOTHER], TODAY);
     expect(shown).toHaveLength(ANNOUNCEMENTS_SHOWN);
@@ -299,8 +303,8 @@ describe('announcementState', () => {
   });
 
   it('names a withdrawn one withdrawn, whatever its days say', () => {
-    expect(
-      announcementState(row({ withdrawn: true, visibleFrom: '2026-10-08' }), TODAY),
-    ).toBe('withdrawn');
+    expect(announcementState(row({ withdrawn: true, visibleFrom: '2026-10-08' }), TODAY)).toBe(
+      'withdrawn',
+    );
   });
 });

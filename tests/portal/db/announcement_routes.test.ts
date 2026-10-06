@@ -45,7 +45,7 @@ async function seed(id: string, daysAgo: number, extra = ''): Promise<void> {
       `values ($1, $2, 'News ${daysAgo}', 'خبر', 'Practice news.', 'خبر من المركز.', ` +
       `now() - interval '${daysAgo} days', $3, ` +
       (extra === 'withdrawn' ? 'now(), $3, ' : 'null, null, ') +
-      (extra === 'future' ? "current_date + 10)" : 'null)'),
+      (extra === 'future' ? 'current_date + 10)' : 'null)'),
     [id, IDS.tenantA, IDS.ownerA],
   );
 }
