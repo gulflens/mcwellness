@@ -30,8 +30,13 @@ import type { AppointmentStatus } from './status';
  * driven to.
  */
 
-/** The version of the notice a consent must name (docs/CONSENT/staff/location.en.md). */
-export const STAFF_LOCATION_NOTICE_VERSION = '1.1';
+/**
+ * The version of the notice a consent must name (docs/CONSENT/staff/location.en.md).
+ * 1.2 since round 76 (approved 6 October 2026): the notice speaks to helpers
+ * too. The database's copy is `app.staff_location_notice_version()`, replaced
+ * by migration 214.
+ */
+export const STAFF_LOCATION_NOTICE_VERSION = '1.2';
 
 /** How long a position is kept before the hourly job deletes it: two days. */
 export const POSITION_RETENTION_HOURS = 48;

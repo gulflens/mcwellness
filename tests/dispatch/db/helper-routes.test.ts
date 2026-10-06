@@ -209,7 +209,7 @@ describe("the helper's own location", () => {
   it('is told whom they accompany, by first name, and that the shift is open', async () => {
     expect(await me(helper.authId)).toEqual({
       eligible: true,
-      noticeVersion: '1.1',
+      noticeVersion: '1.2',
       consent: null,
       sharingOn: false,
       shiftOpen: true,
@@ -225,7 +225,7 @@ describe("the helper's own location", () => {
 
   it('agrees for themselves, which turns sharing on, and sends a position', async () => {
     expect(
-      (await h.callAs('POST', '/api/location/consent', helper.authId, { noticeVersion: '1.1' }))
+      (await h.callAs('POST', '/api/location/consent', helper.authId, { noticeVersion: '1.2' }))
         .status,
     ).toBe(204);
     expect((await me(helper.authId)).sharingOn).toBe(true);

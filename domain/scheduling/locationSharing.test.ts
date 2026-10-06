@@ -168,8 +168,8 @@ describe('mayWritePosition', () => {
     });
   });
 
-  it('is at version 1.1 of the notice', () => {
-    expect(STAFF_LOCATION_NOTICE_VERSION).toBe('1.1');
+  it('is at version 1.2 of the notice, approved 6 October 2026 for helpers too', () => {
+    expect(STAFF_LOCATION_NOTICE_VERSION).toBe('1.2');
   });
 
   it('refuses a consent given to a notice that has since changed', () => {

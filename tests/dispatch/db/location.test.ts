@@ -63,7 +63,7 @@ async function outcome(sql: string, params: unknown[] = []): Promise<string> {
 
 const GIVE =
   'insert into staff_consent (tenant_id, user_id, purpose, notice_version, created_by) ' +
-  "values ($1, $2, 'location_sharing', '1.1', $2)";
+  "values ($1, $2, 'location_sharing', '1.2', $2)";
 const SWITCH_ON =
   'insert into location_sharing (tenant_id, user_id, sharing_on, created_by) values ($1, $2, true, $2)';
 const POSITION =

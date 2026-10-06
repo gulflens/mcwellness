@@ -64,7 +64,7 @@ const HELPER_POSITION =
 async function seedSharing(userId: string): Promise<void> {
   await owner.query(
     'insert into staff_consent (tenant_id, user_id, purpose, notice_version, created_by) ' +
-      "values ($1, $2, 'location_sharing', '1.1', $2)",
+      "values ($1, $2, 'location_sharing', '1.2', $2)",
     [IDS.tenantA, userId],
   );
   await owner.query(

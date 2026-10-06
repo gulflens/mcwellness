@@ -93,7 +93,7 @@ beforeAll(async () => {
   // A practitioner sharing, so the staff tables hold somebody else's rows.
   await owner.query(
     'insert into staff_consent (tenant_id, user_id, purpose, notice_version) ' +
-      "values ($1, $2, 'location_sharing', '1.1')",
+      "values ($1, $2, 'location_sharing', '1.2')",
     [SEED_TENANT_ID, practitioner.user_id],
   );
   await owner.query(
@@ -120,7 +120,7 @@ beforeAll(async () => {
   );
   await owner.query(
     'insert into staff_consent (tenant_id, user_id, purpose, notice_version) ' +
-      "values ($1, $2, 'location_sharing', '1.1')",
+      "values ($1, $2, 'location_sharing', '1.2')",
     [SEED_TENANT_ID, HELPER_USER],
   );
   await owner.query(
