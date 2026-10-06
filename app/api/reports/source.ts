@@ -4,7 +4,7 @@ import type {
   ReportKind,
   ReportStatus,
 } from '../../../domain/reports';
-import { validateContent } from '../../../domain/reports';
+import { externalTitleOf, validateContent } from '../../../domain/reports';
 import type { Db } from '../_middleware/request-context';
 import type { ReportRow } from './schema';
 
@@ -180,6 +180,7 @@ export function asRow(record: ReportRecord): ReportRow {
       record.recorded_on !== null && /^\d{4}-\d{2}-\d{2}$/.test(record.recorded_on)
         ? record.recorded_on
         : null,
+    title: externalTitleOf(record.kind, record.content),
   };
 }
 

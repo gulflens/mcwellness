@@ -148,7 +148,8 @@ describe('GET /api/reports', () => {
     const body = (await res.json()) as { kinds: string[] };
     // The brain-map report is a kind like the others (docs/CHANGE-REQUESTS/reports-02.md,
     // request 4).
-    expect(body.kinds).toEqual(['session', 'progress', 'qeeg']);
+    // As is an uploaded PDF (migration 607, docs/SPEC/reports-v1.md section 12).
+    expect(body.kinds).toEqual(['session', 'progress', 'qeeg', 'external']);
   });
 });
 

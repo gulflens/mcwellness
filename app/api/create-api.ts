@@ -50,9 +50,12 @@ import {
 import { mountPractice } from './practice/routes';
 import { mountPractitioners } from './practitioners/routes';
 import { mountTeam } from './team/routes';
+import { EXTERNAL_REPORT_MAX_BYTES } from '../../domain/reports/external';
 import { mountReports } from './reports/routes';
 import {
   REPORT_DRAFT_BODY_LIMIT_BYTES,
+  EXTERNAL_REPORT_PATH,
+  EXTERNAL_REPORT_TIMEOUT_MS,
   REPORT_DRAFT_PATH,
   REPORT_IMPORT_PATH,
 } from './reports/schema';
@@ -150,7 +153,17 @@ function isFigureUpload(method: string, path: string): boolean {
   return method === 'PUT' && FIGURE_PATH.test(path);
 }
 /**
- * The paths exempt from `jsonOnly`: the three raw-body doors, and the website's
+ * The fourth, from 2026-10-06: a report the practice made in another tool,
+ * uploaded as its PDF (app/api/reports/external.ts, docs/SPEC/reports-v1.md
+ * section 12). Twenty megabytes and two minutes, its own numbers
+ * (`EXTERNAL_REPORT_MAX_BYTES`, `EXTERNAL_REPORT_TIMEOUT_MS`), matched by
+ * method and path together as the others are.
+ */
+function isExternalReportUpload(method: string, path: string): boolean {
+  return method === 'POST' && path === EXTERNAL_REPORT_PATH;
+}
+/**
+ * The paths exempt from `jsonOnly`: the four raw-body doors, and the website's
  * enquiry door, which arrives form-encoded by `sendBeacon` because that is the
  * one shape a browser sends without a preflight (app/api/enquiries/door.ts).
  */
@@ -158,6 +171,7 @@ function isRawUpload(method: string, path: string): boolean {
   return (
     isEquipmentExportUpload(method, path) ||
     isFigureUpload(method, path) ||
+    isExternalReportUpload(method, path) ||
     (method === 'POST' && path === ENQUIRY_DOOR_PATH)
   );
 }
@@ -198,6 +212,7 @@ export const ASSESSMENT_FILE_TIMEOUT_MS = 420_000;
 export function requestTimeoutMs(method: string, path: string): number {
   if (isEquipmentExportUpload(method, path)) return ASSESSMENT_FILE_TIMEOUT_MS;
   if (isFigureUpload(method, path)) return FIGURE_TIMEOUT_MS;
+  if (isExternalReportUpload(method, path)) return EXTERNAL_REPORT_TIMEOUT_MS;
   return REQUEST_TIMEOUT_MS;
 }
 const MINUTE = 60_000;
@@ -367,8 +382,17 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
         413,
       ),
   });
+  // An uploaded report's PDF: twenty megabytes, refused before a byte is read.
+  const externalReportBodyLimit = bodyLimit({
+    maxSize: EXTERNAL_REPORT_MAX_BYTES,
+    onError: (c) =>
+      c.json({ error: 'payload_too_large', code: 'too_many_bytes', requestId: null }, 413),
+  });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
+    if (isExternalReportUpload(c.req.method, c.req.path)) {
+      return externalReportBodyLimit(c, next);
+    }
     // A past record brought in carries the same body a draft does: a whole
     // brain map, in both languages (app/api/reports/qeeg/pastRecord.ts).
     if (
@@ -387,20 +411,24 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   const ordinaryTimeout = timeout(REQUEST_TIMEOUT_MS, timedOut);
   const assessmentFileTimeout = timeout(ASSESSMENT_FILE_TIMEOUT_MS, timedOut);
   const figureTimeout = timeout(FIGURE_TIMEOUT_MS, timedOut);
+  const externalReportTimeout = timeout(EXTERNAL_REPORT_TIMEOUT_MS, timedOut);
   api.use('/api/*', async (c, next) => {
     switch (requestTimeoutMs(c.req.method, c.req.path)) {
       case ASSESSMENT_FILE_TIMEOUT_MS:
         return assessmentFileTimeout(c, next);
       case FIGURE_TIMEOUT_MS:
         return figureTimeout(c, next);
+      case EXTERNAL_REPORT_TIMEOUT_MS:
+        return externalReportTimeout(c, next);
       default:
         return ordinaryTimeout(c, next);
     }
   });
-  // Three paths carry a file rather than JSON, and they are the only three: the
+  // Four paths carry a file rather than JSON, and they are the only four: the
   // equipment's own export, against a measurement (app/api/assessments/file.ts)
-  // and against the visit it was produced at (app/api/sessions/export.ts), and
-  // a brain-map draft's picture (app/api/reports/qeeg/figures.ts).
+  // and against the visit it was produced at (app/api/sessions/export.ts), a
+  // brain-map draft's picture (app/api/reports/qeeg/figures.ts), and a report
+  // made in another tool, as its PDF (app/api/reports/external.ts).
   // Each refuses any media type but the ones it names, checks the bytes
   // against the type, and verifies the digest the caller declared. The setup
   // photograph had a door of this kind until 2026-09-09; the practice takes

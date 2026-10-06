@@ -369,7 +369,9 @@ export const PortalReport = z.object({
   // (`imported`) is never a household's to see (section 11, point 4): the
   // row policy keeps it from this answer, and this list has no word for it,
   // so one that ever reached here would be refused rather than shown.
-  kind: z.enum(['session', 'progress', 'qeeg']),
+  // And an uploaded report (`external`, migration 608): a PDF the practice
+  // made in another tool, issued when it was filed and listed as any other.
+  kind: z.enum(['session', 'progress', 'qeeg', 'external']),
   status: z.enum(['draft', 'issued', 'superseded']),
   reference: z.string().nullable(),
   issuedOn: IsoDate.nullable(),
@@ -377,6 +379,12 @@ export const PortalReport = z.object({
   coverageTo: IsoDate.nullable(),
   version: z.number().int().min(1),
   documentId: z.uuid().nullable(),
+  /**
+   * An uploaded report's title, which is how the household tells one PDF
+   * from another: the practice's words for it, not the report's body. Null on
+   * every other kind, whose kind word and dates already say what it is.
+   */
+  title: z.string().nullable().default(null),
 });
 export type PortalReport = z.infer<typeof PortalReport>;
 

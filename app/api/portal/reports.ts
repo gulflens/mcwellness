@@ -53,7 +53,10 @@ const REPORTS_SQL =
   "to_char(r.issued_on, 'YYYY-MM-DD') as issued_on, " +
   "to_char(r.coverage_from, 'YYYY-MM-DD') as coverage_from, " +
   "to_char(r.coverage_to, 'YYYY-MM-DD') as coverage_to, " +
-  'r.version, r.document_id ' +
+  'r.version, r.document_id, ' +
+  // An uploaded report's title, from the row itself: nothing here joins a
+  // table the household's reach does not include (migration 608).
+  "case when r.kind::text = 'external' then r.content ->> 'title' end as title " +
   'from report r ' +
   'where r.tenant_id = app.current_tenant_id() and r.client_id = any($1::uuid[]) ' +
   'order by r.issued_on desc nulls last, r.created_at desc, r.id';
@@ -68,7 +71,7 @@ const DOCUMENT_SQL =
 type PortalReportRow = {
   id: string;
   client_id: string;
-  kind: 'session' | 'progress' | 'qeeg';
+  kind: 'session' | 'progress' | 'qeeg' | 'external';
   status: 'draft' | 'issued' | 'superseded';
   reference: string | null;
   issued_on: string | null;
@@ -76,6 +79,7 @@ type PortalReportRow = {
   coverage_to: string | null;
   version: number;
   document_id: string | null;
+  title: string | null;
 };
 
 /** The reports this household may be shown, for every client on its record. */
@@ -123,6 +127,7 @@ export function mountPortalReports(api: Hono<ApiEnv>, now: () => Date = () => ne
           coverageTo: row.coverage_to,
           version: row.version,
           documentId: row.document_id,
+          title: row.title,
         })),
       }),
     );

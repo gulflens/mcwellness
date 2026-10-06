@@ -264,6 +264,10 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
       case 'session':
       case 'progress':
         break;
+      case 'external':
+        // An uploaded PDF is filed, issued, through its own door and is never
+        // a draft (`external.ts`, migration 608).
+        return c.json({ error: 'bad_request', code: 'external_report', requestId }, 400);
       default: {
         const unknown: never = kindOf.data.kind;
         return unknown;

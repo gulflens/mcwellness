@@ -64,10 +64,11 @@ export type Harness = {
   authIdOf: (index: number) => string;
   /**
    * A request whose body is bytes rather than JSON, or that has no body: the
-   * figure door's PUT and DELETE (docs/SPEC/reports-qeeg.md section 14).
+   * figure door's PUT and DELETE (docs/SPEC/reports-qeeg.md section 14), and
+   * the uploaded report's POST (docs/SPEC/reports-v1.md section 12).
    */
   raw: (
-    method: 'PUT' | 'DELETE',
+    method: 'PUT' | 'DELETE' | 'POST',
     path: string,
     seededUser: number,
     body?: Uint8Array,
@@ -99,6 +100,14 @@ export type Harness = {
   practitionerIdOf: (seededUser: number) => string;
   close: () => Promise<void>;
 };
+
+/**
+ * A bearer header for any login, seeded or written by the test itself — for a
+ * raw-body request as a person the seed does not hold (a finance-only login).
+ */
+export async function bearerFor(authId: string): Promise<string> {
+  return `Bearer ${await mint(authId)}`;
+}
 
 async function mint(sub: string): Promise<string> {
   return new SignJWT({ role: 'authenticated' })

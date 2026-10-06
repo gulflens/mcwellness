@@ -78,12 +78,17 @@ const DOCUMENT_SQL =
  * changed either since is then refused below, as any other whose source has
  * moved is.
  *
+ * **An uploaded report cannot be made again at all** (migration 608): it was
+ * made in another tool. A missing one is refused by name, with the way to put
+ * it back.
+ *
  * **A brain map that cannot be made again is refused by name**, and no link
  * to its missing file is handed out: a map that is gone or not what was filed
  * (docs/SPEC/reports-qeeg.md section 9, point 6) by the field that places it;
  * pages that would now run over; a body that no longer reads as a report.
  */
-type RepairRefusal = PictureRefusal | { readonly code: 'document_overrun' | 'document_unreadable' };
+type RepairRefusal =
+  PictureRefusal | { readonly code: 'document_overrun' | 'document_unreadable' | 'upload_missing' };
 
 type Remade =
   | { ok: true; bytes: Uint8Array }
@@ -102,6 +107,8 @@ export const REPAIR_SENTENCES: Readonly<Record<RepairRefusal['code'], string>> =
     'The file of this signed report is missing, and a map it prints can no longer be found in the store, so the file cannot be made again.',
   map_differs:
     'The file of this signed report is missing, and a map it prints is not the picture that was filed, so the file cannot be made again.',
+  upload_missing:
+    'The uploaded file of this report is missing from the store, and an upload cannot be made again here. Upload the same PDF again for this client to put it back.',
 });
 
 async function remade(
@@ -138,6 +145,11 @@ async function remade(
         }
       }
     }
+    case 'external':
+      // Made in another tool, so nothing here can make it again. The same
+      // bytes uploaded again for the same client are handed back to this
+      // report and put back in the store (app/api/reports/external.ts).
+      return { ok: false, refusal: { code: 'upload_missing' } };
     default: {
       const unknown: never = record.kind;
       return unknown;
@@ -219,8 +231,9 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
       const row = found.rows[0];
       if (row) {
         if (!(await storage.exists(row.storage_key))) {
-          if (householdBrainMap) {
-            // The household's answer is the portal link route's: absent.
+          if (householdBrainMap || (!ofThePractice && record.kind === 'external')) {
+            // The household's answer is the portal link route's: absent. An
+            // upload is put back by the practice, never from here.
             return c.json({ error: 'not_found', requestId }, 404);
           }
           // From the row and nothing else, which is what makes the repair

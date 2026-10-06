@@ -78,8 +78,21 @@ export const ReportRow = z.object({
    * follow-up's list of earlier reports is ordered by (brief R, item 8).
    */
   recordedOn: z.string().nullable().default(null),
+  /**
+   * An uploaded report's title, as the uploader gave it (migration 608), or
+   * null: for every other kind, and for one an erasure emptied. Defaulted, as
+   * the fields above are.
+   */
+  title: z.string().nullable().default(null),
 });
 export type ReportRow = z.infer<typeof ReportRow>;
+
+/**
+ * `POST /api/reports/external` answers the report it filed (201), or the one
+ * the same bytes were already filed as for this client (200).
+ */
+export const ExternalUploadResponse = z.object({ report: ReportRow });
+export type ExternalUploadResponse = z.infer<typeof ExternalUploadResponse>;
 
 export const ReportListResponse = z.object({ reports: z.array(ReportRow) });
 export type ReportListResponse = z.infer<typeof ReportListResponse>;
@@ -235,6 +248,20 @@ export type QeegDraftInput = z.infer<typeof QeegDraftInput>;
  */
 export const REPORT_DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
 export const REPORT_DRAFT_PATH = '/api/reports/draft';
+
+/**
+ * The uploaded report's door (app/api/reports/external.ts): its body is the
+ * PDF, raw, capped at `EXTERNAL_REPORT_MAX_BYTES` (domain/reports/external.ts).
+ */
+export const EXTERNAL_REPORT_PATH = '/api/reports/external';
+/**
+ * Two minutes. Twenty megabytes inside 120 seconds asks about 1.4 Mbit/s of
+ * the link — the figure the assessment door was first sized at for the same
+ * twenty megabytes (app/api/create-api.ts) — which an ordinary fixed or
+ * mobile connection clears; the ordinary ten seconds would ask 16 Mbit/s all
+ * the way through.
+ */
+export const EXTERNAL_REPORT_TIMEOUT_MS = 120_000;
 
 /** A brain-map draft as saved, with the stamp its next save must name. */
 export const QeegDraftResponse = z.object({

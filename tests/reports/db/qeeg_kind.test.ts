@@ -160,7 +160,8 @@ describe('the new kind and the new status', () => {
       'select enum_range(null::report_kind)::text as kinds, ' +
         'enum_range(null::report_status)::text as statuses',
     );
-    expect(rows[0]?.kinds).toBe('{session,progress,qeeg}');
+    // And `external`, the uploaded PDF (migration 607), which came after.
+    expect(rows[0]?.kinds).toBe('{session,progress,qeeg,external}');
     expect(rows[0]?.statuses).toBe('{draft,issued,superseded,imported}');
   });
 
