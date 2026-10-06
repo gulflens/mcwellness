@@ -19,15 +19,17 @@ export {
   ANNOUNCEMENT_BODY_MAX,
   ANNOUNCEMENT_STATES,
   ANNOUNCEMENT_TITLE_MAX,
-  ANNOUNCEMENT_VOCABULARY,
   ANNOUNCEMENTS_SHOWN,
-  announcementState,
+  announcementStates,
+  announcementWarnings,
+  correctionTakesOverNow,
   announcementsFor,
   announcementsVisibleTo,
   checkAnnouncement,
   isCurrentOn,
-  speaksMedically,
 } from './announcements';
+export { normaliseForCheck, wellnessWords } from './announcementWords';
+export type { WellnessFindings } from './announcementWords';
 export type {
   AnnouncementDraft,
   AnnouncementField,
@@ -36,6 +38,7 @@ export type {
   AnnouncementRow,
   AnnouncementState,
   AnnouncementViewer,
+  AnnouncementWarning,
   Bilingual,
 } from './announcements';
 export type { ReportClient, ReportContact } from './reports';

@@ -3,12 +3,13 @@ import {
   ANNOUNCEMENT_BODY_MAX,
   ANNOUNCEMENT_TITLE_MAX,
   ANNOUNCEMENTS_SHOWN,
-  announcementState,
+  announcementStates,
+  announcementWarnings,
+  correctionTakesOverNow,
   announcementsFor,
   announcementsVisibleTo,
   checkAnnouncement,
   isCurrentOn,
-  speaksMedically,
   type AnnouncementDraft,
   type AnnouncementRow,
 } from './announcements';
@@ -42,6 +43,7 @@ function row(overrides: Partial<AnnouncementRow> = {}): AnnouncementRow {
     publishedOn: '2026-10-01',
     publishedAt: '2026-10-01T08:00:00.000Z',
     withdrawn: false,
+    supersedesId: null,
     ...overrides,
   };
 }
@@ -180,39 +182,6 @@ describe('announcementsFor', () => {
   });
 });
 
-describe('speaksMedically', () => {
-  it('finds a medical word in English, whatever its ending', () => {
-    for (const text of [
-      'A new treatment room',
-      'Our therapist joins',
-      'Fewer symptoms',
-      'A cure for stress',
-      'Our clinic is open',
-      'Diagnosis in a day',
-      'For every patient',
-    ]) {
-      expect(speaksMedically(text), text).toBe(true);
-    }
-  });
-
-  it('finds one in Arabic', () => {
-    for (const text of ['علاج جديد', 'عيادة الاستوديو', 'تشخيص سريع', 'للمرضى']) {
-      expect(speaksMedically(text), text).toBe(true);
-    }
-  });
-
-  it('passes the ordinary words of practice news', () => {
-    for (const text of [
-      'The studio is closed for Eid. Sessions resume on Monday.',
-      'A new practitioner has joined the practice.',
-      'الاستوديو مغلق في العيد. تستأنف الجلسات يوم الاثنين.',
-      'طبيعي',
-    ]) {
-      expect(speaksMedically(text), text).toBe(false);
-    }
-  });
-});
-
 describe('checkAnnouncement', () => {
   it('accepts an announcement written in both languages', () => {
     expect(checkAnnouncement(draft(), TODAY)).toEqual([]);
@@ -258,7 +227,7 @@ describe('checkAnnouncement', () => {
   it('refuses a medical word in any of the four texts', () => {
     const problems = checkAnnouncement(
       draft({
-        title: { en: 'New treatment hours', ar: 'ساعات جديدة' },
+        title: { en: 'New therapy hours', ar: 'ساعات جديدة' },
         body: { en: 'Same sessions.', ar: 'علاج في المنزل' },
       }),
       TODAY,
@@ -289,22 +258,102 @@ describe('checkAnnouncement', () => {
   });
 });
 
-describe('announcementState', () => {
-  it('names a standing announcement current while households see it', () => {
-    expect(announcementState(row(), TODAY)).toBe('current');
+describe('announcementStates', () => {
+  it('names a standing announcement the home shows current', () => {
+    expect(announcementStates([row()], TODAY)[IDS.a]).toBe('current');
+  });
+
+  it('names a fourth current one current but not shown, because three newer are', () => {
+    const rows = [IDS.a, IDS.b, IDS.c, IDS.d].map((id, index) =>
+      row({
+        id,
+        publishedOn: `2026-10-0${index + 1}`,
+        publishedAt: `2026-10-0${index + 1}T08:00Z`,
+      }),
+    );
+    const states = announcementStates(rows, TODAY);
+    expect(states[IDS.a]).toBe('current_not_shown');
+    expect([states[IDS.b], states[IDS.c], states[IDS.d]]).toEqual([
+      'current',
+      'current',
+      'current',
+    ]);
   });
 
   it('names one whose first day has not come scheduled', () => {
-    expect(announcementState(row({ visibleFrom: '2026-10-08' }), TODAY)).toBe('scheduled');
+    expect(announcementStates([row({ visibleFrom: '2026-10-08' })], TODAY)[IDS.a]).toBe(
+      'scheduled',
+    );
   });
 
   it('names one whose last day has gone ended', () => {
-    expect(announcementState(row({ visibleUntil: '2026-10-05' }), TODAY)).toBe('ended');
+    expect(announcementStates([row({ visibleUntil: '2026-10-05' })], TODAY)[IDS.a]).toBe('ended');
   });
 
   it('names a withdrawn one withdrawn, whatever its days say', () => {
-    expect(announcementState(row({ withdrawn: true, visibleFrom: '2026-10-08' }), TODAY)).toBe(
-      'withdrawn',
+    expect(
+      announcementStates([row({ withdrawn: true, visibleFrom: '2026-10-08' })], TODAY)[IDS.a],
+    ).toBe('withdrawn');
+  });
+
+  it('names one whose correction has begun replaced, and one whose correction waits current', () => {
+    const begun = announcementStates(
+      [row({ id: IDS.a }), row({ id: IDS.b, supersedesId: IDS.a, visibleFrom: '2026-10-05' })],
+      TODAY,
     );
+    expect(begun[IDS.a]).toBe('replaced');
+    expect(begun[IDS.b]).toBe('current');
+    const waiting = announcementStates(
+      [row({ id: IDS.a }), row({ id: IDS.b, supersedesId: IDS.a, visibleFrom: '2026-10-09' })],
+      TODAY,
+    );
+    expect(waiting[IDS.a]).toBe('current');
+    expect(waiting[IDS.b]).toBe('scheduled');
+  });
+});
+
+describe('a correction with a first day still to come', () => {
+  it('takes over at once when it has no first day, or its first day has come', () => {
+    expect(correctionTakesOverNow({ visibleFrom: null }, TODAY)).toBe(true);
+    expect(correctionTakesOverNow({ visibleFrom: TODAY }, TODAY)).toBe(true);
+    expect(correctionTakesOverNow({ visibleFrom: '2026-10-09' }, TODAY)).toBe(false);
+  });
+
+  it('leaves the old one shown until its first day, and hides it from that day', () => {
+    const rows = [
+      row({ id: IDS.a }),
+      row({ id: IDS.b, supersedesId: IDS.a, visibleFrom: '2026-10-09', publishedOn: TODAY }),
+    ];
+    expect(announcementsFor(rows, [MOTHER], '2026-10-08').map((a) => a.id)).toEqual([IDS.a]);
+    expect(announcementsFor(rows, [MOTHER], '2026-10-09').map((a) => a.id)).toEqual([IDS.b]);
+  });
+
+  it('leaves the old one shown when its waiting correction is withdrawn', () => {
+    const rows = [
+      row({ id: IDS.a }),
+      row({ id: IDS.b, supersedesId: IDS.a, visibleFrom: '2026-10-09', withdrawn: true }),
+    ];
+    expect(announcementsFor(rows, [MOTHER], '2026-10-10').map((a) => a.id)).toEqual([IDS.a]);
+  });
+});
+
+describe('announcementWarnings', () => {
+  it('names each ambiguous word and the field it is in, for the writer to confirm', () => {
+    expect(
+      announcementWarnings(
+        draft({
+          title: { en: 'A treat for Eid', ar: 'هدية العيد' },
+          body: { en: 'Thank you for being patient.', ar: 'من أجل راحتك النفسية.' },
+        }),
+      ),
+    ).toEqual([
+      { field: 'titleEn', term: 'treat' },
+      { field: 'bodyEn', term: 'patient' },
+      { field: 'bodyAr', term: 'نفسي' },
+    ]);
+  });
+
+  it('names nothing in ordinary practice news', () => {
+    expect(announcementWarnings(draft())).toEqual([]);
   });
 });
