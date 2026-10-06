@@ -3370,3 +3370,74 @@ connection, recorded in round 66 as not mended.
 **For the owner.** The Books page opens. A session given free shows on its
 invoice as before and appears nowhere in the books, because it moved no
 money.
+
+## What was done on 2026-09-30: the fortieth live pass — the brain-map report, a free sale, and the void reason
+
+**On the operator's word.** On 30 September at about 19:35 +04 the operator
+approved the brain-map wording in both languages, answered that a brain map
+with no programme hides the whole training recommendation, and said to go
+live without a further local walk. Three pull requests were merged one at a
+time, each with both checks run again against the main of that moment:
+#235 (round 68, migration 973), #237 (round 69, "Free (100%)" at a sale) and
+#236 (the brain-map report, with the approval and the hidden section as its
+last commits). Main's own CI passed on the last merge, `aa30d107`.
+
+**The databases, 115 to 121 on both.** 973 was applied through the Supabase
+connector, staging then production. 602 to 605 and 972 were applied **from
+the files**, through `supabase db query --linked --file`, each file wrapped in
+`begin`/`commit` with its `schema_migration` row and its sha256: 602 on
+staging went through the connector first, everything else from the file.
+Production's linked folder is `~/.mcwellness-go-live`; a copy pointed at
+staging (only `.temp/project-ref` changed) is `~/.mcwellness-go-live-staging`.
+Applying from the file is the better route for a long migration: nothing is
+retyped.
+
+| File | sha256 |
+| --- | --- |
+| `973_void_reason_is_never_missing.sql` | `4fbe5d9c33a8d0429a546d1e57c0b130de2e10470e33372b8a405c5a513cf78f` |
+| `602_report_qeeg_kind.sql` | `fe84d52e969cad584ecf288743317d333d5928ef9bfe0918add6fc2bece70849` |
+| `603_report_qeeg_rules.sql` | `a3f19982146c306fefed247d418e5c6c1e50ff9459eadee82b382bc4d457c4a4` |
+| `604_report_figure.sql` | `9094de97628405e9271cad20780548a33e423ec6e6a41f1783a9cfe75cd1fd01` |
+| `605_completed_session_count.sql` | `8368c10ebe4add7170e062fa1196ca076279ba0d05d45366f0d589716d81bd69` |
+| `972_erasure_reaches_report_figures.sql` | `2fa9aa499b189f7e1ecf05fa3d28a6d1ab247532dcaec2d7fa55466d172fb07e` |
+
+The three policy files the pass changed (`db/policies/client/readers.sql`,
+`db/policies/reports/figures.sql`, `db/policies/reports/reports.sql`) were
+applied again whole, in one transaction, on each database.
+
+**The fingerprint.** Constraints, indexes and triggers of the touched tables,
+their policies, the `app` functions that name a report plus `erase_client` and
+`completed_session_count`, and the two report enums: **production equals a
+database built fresh from main's files on every one.** Staging equals it on
+all but the functions, and there only in four old bodies (`issue_report`,
+`file_report_document`, `guard_report_delivery_write`,
+`actor_may_read_reports_of`, from 600, 601 and 955), whose comments were left
+out when earlier passes typed them in by hand; the code is the same.
+`app.verify_audit_chain()` answered null on production.
+
+**The build.** The host's build list read first: the last build was the
+thirty-ninth pass's, nothing unrecorded after it. Archive
+`mcwellness-aa30d107.tar.gz`, 7,604,210 bytes; TUS create 201, PATCH 204 with
+`upload-offset` equal to the size, the keys read by `curl` from a file of mode
+0600 deleted in the same command. Build `01a0f396` with the stored settings.
+The entry moved from `index-BrjtYHAd.js` to `index-BxM-r_Wl.js` about 105
+seconds later; health 200 in 0.45 s, deep 200 in 0.46 s; no restart.
+
+**Proved to be this build, by content.** Crawling every chunk the entry
+reaches: "Free (100%)" and "That makes it free" in `money-*` and
+`BillingPage-*`; "Not applicable / QEEG only" in `ClientsPage-*`. The old
+entry and a nonsense asset name both answer 404. Read again on 1 October: the
+same entry served, "Free (100%)" present, health 200.
+
+**For the owner.**
+- A practitioner can write, preview and sign a brain-map report, first or
+  follow-up, add up to eight brain-map pictures, sign it in Arabic as well,
+  and bring in a past record from the old tool.
+- With "Not applicable / QEEG only" the report leaves the whole training
+  recommendation out.
+- A package or a session can be sold "Free (100%)": the invoice shows the list
+  price, a 100% discount and nothing to pay.
+- An installed window loads the new version after Cmd+R.
+
+**Not walked.** No report and no free sale has yet been made on the live site;
+the first real one is the first use.
