@@ -30,6 +30,8 @@ import './portal.css';
 
 const STATE: Record<OfficeAnnouncement['state'], { label: string; tone: StatusTone }> = {
   current: { label: 'Shown now', tone: 'ok' },
+  current_not_shown: { label: 'Current, not shown', tone: 'attention' },
+  replaced: { label: 'Replaced by its correction', tone: 'neutral' },
   scheduled: { label: 'Scheduled', tone: 'attention' },
   ended: { label: 'Ended', tone: 'neutral' },
   withdrawn: { label: 'Withdrawn', tone: 'neutral' },
@@ -83,8 +85,17 @@ export function AnnouncementsPage() {
     {
       key: 'state',
       header: 'On the portal',
-      fit: true,
-      render: (row) => <StatusChip label={STATE[row.state].label} tone={STATE[row.state].tone} />,
+      render: (row) => (
+        <>
+          <StatusChip label={STATE[row.state].label} tone={STATE[row.state].tone} />
+          {row.state === 'current_not_shown' ? (
+            <span className="small muted announcements__why">
+              Three newer announcements are shown; this one returns when one of them ends or is
+              withdrawn.
+            </span>
+          ) : null}
+        </>
+      ),
     },
     {
       key: 'shown',
@@ -106,9 +117,13 @@ export function AnnouncementsPage() {
       header: 'Actions',
       align: 'end',
       render: (row) =>
-        row.state === 'current' || row.state === 'scheduled' ? (
+        row.state === 'current' ||
+        row.state === 'current_not_shown' ||
+        row.state === 'scheduled' ? (
           <span className="portal-access__row-actions">
-            <Button onClick={() => setOpen({ kind: 'write', correcting: row })}>Correct</Button>
+            {row.correctedById === null ? (
+              <Button onClick={() => setOpen({ kind: 'write', correcting: row })}>Correct</Button>
+            ) : null}
             <Button
               variant="quiet"
               onClick={() => setOpen({ kind: 'withdraw', announcement: row })}

@@ -44,6 +44,7 @@ function announcement(overrides: Partial<OfficeAnnouncement> = {}): OfficeAnnoun
     withdrawnAt: null,
     withdrawnBy: null,
     supersedesId: null,
+    correctedById: null,
     state: 'current',
     ...overrides,
   };
@@ -122,6 +123,62 @@ describe('Settings › Announcements', () => {
     expect(screen.queryByText('مغلق في العيد')).toBeNull();
   });
 
+  it('says a current announcement beyond the newest three is not shown, and why', async () => {
+    const FOURTH = '00000001-0000-4000-8000-0000000000e3';
+    mount({
+      'GET /api/portal/announcements': () =>
+        json({
+          ...LIST,
+          announcements: [
+            ...LIST.announcements,
+            announcement({
+              id: FOURTH,
+              title: { en: 'An older note', ar: 'ملاحظة أقدم' },
+              state: 'current_not_shown',
+            }),
+          ],
+        }),
+    });
+    const row = (await screen.findByText('An older note')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('Current, not shown')).toBeTruthy();
+    expect(within(row).getByText(/three newer announcements are shown/i)).toBeTruthy();
+  });
+
+  it('offers no second correction of one already corrected', async () => {
+    mount({
+      'GET /api/portal/announcements': () =>
+        json({ ...LIST, announcements: [announcement({ correctedById: GONE })] }),
+    });
+    const row = (await screen.findByText('Closed for Eid')).closest('tr') as HTMLElement;
+    expect(within(row).queryByRole('button', { name: 'Correct' })).toBeNull();
+    expect(within(row).getByRole('button', { name: 'Withdraw' })).toBeTruthy();
+  });
+
+  it('asks the writer to confirm an ambiguous word at preview, and sends the confirmation', async () => {
+    let posted: RequestInit | undefined;
+    mount({
+      ...LISTED,
+      'POST /api/portal/announcements': (init) => {
+        posted = init;
+        return json({ announcement: announcement({ id: GONE }) }, 201);
+      },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Write an announcement' }));
+    writeOne();
+    fill('English title', 'A treat for Eid');
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    await screen.findByRole('region', { name: 'Preview' });
+    expect(screen.getByText(/“treat”, in the English title/)).toBeTruthy();
+    fill('Reason', 'Practice news for the households');
+    const publish = screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement;
+    expect(publish.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox', { name: /not a medical claim/ }));
+    expect(publish.disabled).toBe(false);
+    fireEvent.click(publish);
+    await waitFor(() => expect(posted).toBeTruthy());
+    expect(JSON.parse(String(posted?.body)).confirmedWarnings).toBe(true);
+  });
+
   it('says so, plainly, when there are none', async () => {
     mount({
       'GET /api/portal/announcements': () => json({ today: '2026-10-06', announcements: [] }),
@@ -160,7 +217,7 @@ describe('Settings › Announcements', () => {
     const { calls } = mount(LISTED);
     fireEvent.click(await screen.findByRole('button', { name: 'Write an announcement' }));
     writeOne();
-    fill('English text', 'A new treatment room has opened.');
+    fill('English text', 'A new therapy room has opened.');
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(await screen.findByText(/a word of another kind of practice/)).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Preview' })).toBeNull();
@@ -196,6 +253,7 @@ describe('Settings › Announcements', () => {
       visibleFrom: null,
       visibleUntil: null,
       supersedesId: null,
+      confirmedWarnings: false,
     });
     await waitFor(() =>
       expect(calls.filter((call) => call.path === '/api/portal/announcements').length).toBe(3),
@@ -215,7 +273,7 @@ describe('Settings › Announcements', () => {
     expect((screen.getByLabelText('English title') as HTMLInputElement).value).toBe(
       'Closed for Eid',
     );
-    expect(screen.getByText(/withdrawn as this one is published/)).toBeTruthy();
+    expect(screen.getByText(/replaced by this one/)).toBeTruthy();
     fill('English title', 'Closed for Eid al-Adha');
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
     await screen.findByRole('region', { name: 'Preview' });

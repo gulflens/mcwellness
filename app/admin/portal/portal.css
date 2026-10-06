@@ -89,3 +89,15 @@
 .announcements__preview p {
   margin: 0;
 }
+
+/* Why a current announcement is not on the households' home. */
+.announcements__why {
+  display: block;
+  margin-block-start: var(--s-1);
+}
+
+.announcements__confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+}

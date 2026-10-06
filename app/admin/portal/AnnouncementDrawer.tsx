@@ -2,9 +2,12 @@ import { useRef, useState, type FormEvent } from 'react';
 import {
   ANNOUNCEMENT_BODY_MAX,
   ANNOUNCEMENT_TITLE_MAX,
+  announcementWarnings,
   checkAnnouncement,
+  correctionTakesOverNow,
   type AnnouncementField,
   type AnnouncementProblem,
+  type AnnouncementWarning,
 } from '../../../domain/portal';
 import type { OfficeAnnouncement } from '../../api/portal/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
@@ -59,6 +62,15 @@ function sentenceFor(problem: AnnouncementProblem): string {
   }
 }
 
+/** The ambiguous words at preview, in one sentence the writer can act on. */
+function warningSentence(warnings: readonly AnnouncementWarning[]): string {
+  const named = warnings
+    .map((warning) => `“${warning.term}”, in ${FIELD_NAME[warning.field].replace(/^The /, 'the ')}`)
+    .join('; ');
+  const verb = warnings.length === 1 ? 'This word can' : 'These words can';
+  return `${named}. ${verb} read as a medical claim. Check the sense before you publish.`;
+}
+
 const FORBIDDEN = 'Announcements are the owner’s and an admin’s to publish.';
 const GENERIC = 'It could not be published. Try again.';
 const REFUSALS: Record<string, string> = {
@@ -67,6 +79,7 @@ const REFUSALS: Record<string, string> = {
   already_corrected: 'That announcement has already been corrected.',
   not_found: 'That announcement could not be found.',
   reason_required: 'Say why, in a sentence.',
+  confirm_wording: 'Confirm the words named above before you publish.',
 };
 
 type Words = { titleEn: string; titleAr: string; bodyEn: string; bodyAr: string };
@@ -100,6 +113,7 @@ export function AnnouncementDrawer({
   const [problems, setProblems] = useState<AnnouncementProblem[]>([]);
   const [step, setStep] = useState<'write' | 'preview'>('write');
   const [reason, setReason] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -123,6 +137,7 @@ export function AnnouncementDrawer({
     const found = checkAnnouncement(draft, today);
     setProblems(found);
     setFormError(null);
+    setConfirmed(false);
     if (found.length === 0) setStep('preview');
   }
 
@@ -133,7 +148,11 @@ export function AnnouncementDrawer({
       const res = await apiFetch('/api/portal/announcements', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-reason': reason.trim() },
-        body: JSON.stringify({ ...draft, supersedesId: correcting?.id ?? null }),
+        body: JSON.stringify({
+          ...draft,
+          supersedesId: correcting?.id ?? null,
+          confirmedWarnings: warnings.length > 0 && confirmed,
+        }),
       });
       if (res.ok) {
         onDone();
@@ -163,6 +182,10 @@ export function AnnouncementDrawer({
   }
 
   const title = correcting ? 'Correct an announcement' : 'Write an announcement';
+  // The ambiguous words (treat, patient, …), named at preview for the writer
+  // to confirm; the route refuses the publication without that confirmation.
+  const warnings = announcementWarnings(draft);
+  const waitsForFirstDay = correcting !== null && !correctionTakesOverNow(draft, today);
 
   return (
     <aside
@@ -195,8 +218,9 @@ export function AnnouncementDrawer({
             </p>
             {correcting ? (
               <Note tone="attention">
-                The announcement you are correcting is withdrawn as this one is published. A
-                published announcement is never changed in place.
+                The announcement you are correcting is replaced by this one: at once, or on this
+                one&rsquo;s first day if you give a later one, and until then households keep seeing
+                the old one. A published announcement is never changed in place.
               </Note>
             ) : null}
             <Field
@@ -286,6 +310,26 @@ export function AnnouncementDrawer({
               <p className="small muted">As a household reading Arabic will see it:</p>
               <ArabicPreview title={draft.title.ar} body={draft.body.ar} />
             </section>
+            {waitsForFirstDay ? (
+              <Note>
+                Households keep seeing the announcement you are correcting until {draft.visibleFrom}
+                , and this one from that day.
+              </Note>
+            ) : null}
+            {warnings.length > 0 ? (
+              <div className="announcements__previews">
+                <Note tone="attention">{warningSentence(warnings)}</Note>
+                <label className="announcements__confirm" htmlFor="announcement-confirm">
+                  <input
+                    id="announcement-confirm"
+                    type="checkbox"
+                    checked={confirmed}
+                    onChange={(event) => setConfirmed(event.currentTarget.checked)}
+                  />
+                  <span>I have checked: this is not a medical claim.</span>
+                </label>
+              </div>
+            ) : null}
             <Field
               id="announcement-reason"
               label="Reason"
@@ -308,7 +352,7 @@ export function AnnouncementDrawer({
               <Button
                 type="button"
                 variant="primary"
-                disabled={busy || reason.trim() === ''}
+                disabled={busy || reason.trim() === '' || (warnings.length > 0 && !confirmed)}
                 onClick={() => void publish()}
               >
                 {busy ? 'Publishing…' : correcting ? 'Publish the correction' : 'Publish'}
