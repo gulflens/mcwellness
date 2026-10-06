@@ -3,7 +3,7 @@ import { LocationMeResponse } from '../../api/location/schema';
 import { ConsentText } from '../../admin/clients/ConsentText';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
-import notice from '../../../docs/CONSENT/staff/location.en.md?raw';
+import { LOCATION_NOTICE } from './notice';
 import './location.css';
 
 /**
@@ -12,9 +12,9 @@ import './location.css';
  *
  * **Consent first.** The switch is off until the person turns it on, here, in
  * their own app. The first time, turning it on shows the notice
- * (docs/CONSENT/staff/location.en.md, the same file the practice approved,
- * imported as it is rather than retyped) and asks for "I agree"; after that
- * the switch turns sharing on and off directly. Withdrawing the agreement is
+ * (docs/CONSENT/staff/location.en.md, the words the practice approved, held
+ * word for word in ./notice.ts and tested against the file) and asks for
+ * "I agree"; after that the switch turns sharing on and off directly. Withdrawing the agreement is
  * one press, and deletes what is held.
  *
  * **A band the whole time it is on.** Whenever sharing is on, the band at the
@@ -172,7 +172,7 @@ export function LocationSharing({ geolocation }: LocationSharingProps = {}) {
       <section className="location-notice" aria-labelledby={NOTICE_HEADING_ID}>
         <h2 id={NOTICE_HEADING_ID}>Before you share your location</h2>
         <div className="location-notice__text">
-          <ConsentText markdown={notice} />
+          <ConsentText markdown={LOCATION_NOTICE} />
         </div>
         {problem ? <Note tone="critical">{problem}</Note> : null}
         <div className="location-notice__actions">

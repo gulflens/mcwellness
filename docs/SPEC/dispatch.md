@@ -433,8 +433,12 @@ person's own "I agree" in their own app is theirs. The file sits in a `staff/`
 folder rather than at `docs/CONSENT/staff-location.en.md`, because the client
 wording loader (`db/seed/consent-text.ts`) files every top-level `.md` there as
 a client `consent_text` document whose purpose must be a client
-`consent_purpose`, and a staff notice is neither. The screen imports the file
-as it is, so the words read are the words approved; a test holds its version
+`consent_purpose`, and a staff notice is neither. The screen shows the file
+word for word: `app/therapist/location/notice.ts` holds it as a string (the
+browser bundle's import walk resolves source files only, so a `?raw` import
+of the markdown fails `tests/lint/no-node-imports-in-browser-bundle.test.ts`),
+and a test compares that string with the file byte for byte, so the words
+read are the words approved. Another test holds the file's version
 to `STAFF_LOCATION_NOTICE_VERSION` and its promises about the working day to
 the rule's own constants.
 

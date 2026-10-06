@@ -7,6 +7,7 @@ import {
   SHIFT_LEAD_MINUTES,
   SHIFT_TAIL_MINUTES,
 } from '@domain/scheduling';
+import { LOCATION_NOTICE } from '../../app/therapist/location/notice';
 import {
   LocationSharing,
   POSITION_INTERVAL_MS,
@@ -116,6 +117,10 @@ const positionsSent = (fetchImpl: ReturnType<typeof vi.fn>) =>
   fetchImpl.mock.calls.filter(([url]) => String(url) === '/api/location/positions').length;
 
 describe('the notice', () => {
+  it('is shown word for word as the approved file says it', () => {
+    expect(LOCATION_NOTICE).toBe(readFileSync('docs/CONSENT/staff/location.en.md', 'utf8'));
+  });
+
   it("is the practice's approved notice at the version the server asks consent to", () => {
     const text = readFileSync('docs/CONSENT/staff/location.en.md', 'utf8');
     // One line per sentence, however the file is wrapped.
