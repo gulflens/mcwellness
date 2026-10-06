@@ -499,8 +499,8 @@ Nobody holds `delete` on any of the three. Positions leave only through
 |---|---|---|
 | `GET /api/location/me` | anybody signed in | `{ eligible, noticeVersion, consent, sharingOn, shiftOpen }`; `eligible: false` for somebody without a practitioner or lead role and a working practitioner row of their own |
 | `POST /api/location/consent` `{ noticeVersion }` | the person | 204, consent recorded and sharing on; 409 `notice_changed`; 403 not eligible; 400 |
-| `POST /api/location/consent/withdraw` | the person | 204: consent withdrawn, switch off, every position of theirs deleted at once; 403 |
-| `PUT /api/location/sharing` `{ on }` | the person | 204; turning on 409 `no_consent` / `notice_changed`; off always; 403; 400 |
+| `POST /api/location/consent/withdraw` | the person, whatever their role or practitioner row now is | 204: consent withdrawn, switch off, every position of theirs deleted at once; never refused (15.10) |
+| `PUT /api/location/sharing` `{ on }` | the person | 204; turning on 409 `no_consent` / `notice_changed`, or 403 to somebody not eligible; off is never refused (15.10); 400 |
 | `POST /api/location/positions` `{ latitude, longitude, accuracyMetres }` | the person | 204; 409 `position_refused` with `code` one of the four refusals; 403; 400 |
 | `GET /api/location/positions` | owner, admin, lead (`appointment.board.read`) | the last position of everybody sharing now whose shift is open, sent since it opened (15.10), with its age in minutes; 403 otherwise |
 
@@ -604,3 +604,28 @@ and `tests/dispatch/narrative.test.ts`.
 - **Not this round:** family members who help can share only with a
   practitioner role and row, which also opens the client list (review finding
   8). It waits on the operator.
+
+**15.11 Fix round 2, 6 October 2026** (the re-review of the same day).
+
+- **Withdrawal from the console.** `LocationSharing` has a `withdrawOnly`
+  mode, mounted once in the console layout (`app/shell/AdminLayout.tsx`): a
+  person moved to an office role who still has a standing consent or an "on"
+  switch sees only "Withdraw my agreement" above every console page. It
+  renders nothing for anybody else, an eligible lead included, and never
+  sends: positions leave only the person's own day.
+- **The date of agreement** shows on the sharing screen whenever the
+  agreement stands, with the switch on or off, as the notice says.
+- **The notice** names the database host's daily backups, "kept for 7 days on
+  the practice's plan" (the figure is to be confirmed with the operator before
+  merge), and its lines are all hard-wrapped at 80, as a test now holds.
+- **Migration 212's stamp** keys on the table's owner rather than on
+  `app_role` by name: any role but the owner — the API's today, any role
+  granted insert later — has `recorded_at` set to the server's clock. 212 was
+  unmerged and is edited in place.
+- **A late check-in** (noted by the re-review): the shift closes at the
+  latest end the visit was planned for plus the tail, even if the
+  practitioner is still at the door, so positions stop early rather than run
+  on.
+- **The uae-compliance skill** scopes "nothing deletes on a timer" and the
+  audit log's "every read and write" to the records they concern, naming the
+  staff-position exception.

@@ -3,10 +3,10 @@
 Written 6 October 2026 with the piece, from `docs/SPEC/dispatch.md` section
 15. As dispatch-01 did, and by the precedent of pieces seven to ten and
 seventeen and the cost rules of `docs/HANDOVER.md` section 6, items 1 to 15
-ride in the piece's own branch (`round-73/live-location`) under the
-integrator's widening for one piece (items 10 to 15 by fix round 1, on the
-coordinator's instruction to apply the rule and register texts in the
-branch); items 16 and 17 are proposed and not applied.
+and 18 to 19 ride in the piece's own branch (`round-73/live-location`) under
+the integrator's widening for one piece (items 10 to 15 by fix round 1, and 18
+and 19 by fix round 2, on the coordinator's instruction to apply the rule and
+register texts in the branch); items 16 and 17 are proposed and not applied.
 
 ## Applied in the branch
 
@@ -79,6 +79,16 @@ branch); items 16 and 17 are proposed and not applied.
     `<LocationSharing />`, so somebody who can no longer share can still
     withdraw. It renders nothing for anybody who never agreed.
 15. **Migration `212_live_location_floor.sql`**, in the stream's own range.
+
+## Applied in fix round 2 (6 October 2026)
+
+18. **`app/shell/AdminLayout.tsx`** (shell): one import and one element,
+    `<LocationSharing withdrawOnly />`, above the console's pages, so a person
+    moved to an office role can withdraw from where they land.
+19. **`.claude/skills/uae-compliance/SKILL.md`**: the retention sentence
+    ("nothing deletes on a timer") and the audit sentence ("every read and
+    write") each say which records they concern and name the staff-position
+    exception.
 
 ## Proposed, not applied
 
