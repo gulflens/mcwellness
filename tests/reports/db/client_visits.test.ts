@@ -136,6 +136,24 @@ describe('who is refused, never answered empty', () => {
   });
 });
 
+describe('the route answers a refusal plainly', () => {
+  it('answers 403, not a fault, when the database refuses the visits, e.g. for an erased client', async () => {
+    const res = await h.call(
+      'GET',
+      `/api/reports/gather?clientId=${erasedClientId}&from=2026-09-01&to=2026-09-30`,
+      SEEDED.owner,
+    );
+    expect(res.status).not.toBe(500);
+    expect([403, 404]).toContain(res.status);
+  });
+
+  it('leaves a voided visit out', async () => {
+    await visitAt(h, clientId, '2026-09-25T09:00:00+04:00', { status: 'voided' });
+    const owner = await visitsAs(rolesOf(SEEDED.owner), userOf(SEEDED.owner), clientId);
+    expect((owner as { days: string[] }).days).not.toContain('2026-09-25');
+  });
+});
+
 describe('how it is declared', () => {
   it('runs as its definer with a pinned search path, for the API role alone', async () => {
     const { rows } = await h.owner.query<{

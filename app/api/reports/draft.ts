@@ -11,6 +11,7 @@ import {
   gatherSession,
   listVisits,
   practiceTimeZone,
+  VisitsRefused,
   type SessionNarrative,
 } from './gather';
 import { saveQeegDraft } from './qeegDraft';
@@ -141,11 +142,22 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     await logRead(db, 'client', query.data.clientId, query.data.clientId);
 
     const timeZone = await practiceTimeZone(db);
-    const gathered = await gatherForClient(db, {
-      clientId: query.data.clientId,
-      coverage: { from: query.data.from, to: query.data.to },
-      timeZone,
-    });
+    let gathered: Awaited<ReturnType<typeof gatherForClient>>;
+    try {
+      gathered = await gatherForClient(db, {
+        clientId: query.data.clientId,
+        coverage: { from: query.data.from, to: query.data.to },
+        timeZone,
+      });
+    } catch (error) {
+      // The database's own gate on the visits (606), refusing what the route's
+      // check let through, e.g. a schedule window that lapsed: an answer, not
+      // a fault.
+      if (error instanceof VisitsRefused) {
+        return c.json({ error: 'forbidden', code: 'not_permitted', requestId }, 403);
+      }
+      throw error;
+    }
     return c.json(
       GatherResponse.parse({
         content: gathered.content,
@@ -262,15 +274,23 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
         if (!input.coverageFrom || !input.coverageTo) {
           return c.json({ error: 'bad_request', code: 'coverage_required', requestId }, 400);
         }
-        const gathered = await gatherForClient(db, {
-          clientId: input.clientId,
-          coverage: { from: input.coverageFrom, to: input.coverageTo },
-          timeZone,
-          // The pairing is `gatherProgress`'s, by goal id, and always has been:
-          // this route used to gather without it and pair by position
-          // afterwards, which was the fault.
-          narrative: narrativeOf(input.content),
-        });
+        let gathered: Awaited<ReturnType<typeof gatherForClient>>;
+        try {
+          gathered = await gatherForClient(db, {
+            clientId: input.clientId,
+            coverage: { from: input.coverageFrom, to: input.coverageTo },
+            timeZone,
+            // The pairing is `gatherProgress`'s, by goal id, and always has been:
+            // this route used to gather without it and pair by position
+            // afterwards, which was the fault.
+            narrative: narrativeOf(input.content),
+          });
+        } catch (error) {
+          if (error instanceof VisitsRefused) {
+            return c.json({ error: 'forbidden', code: 'not_permitted', requestId }, 403);
+          }
+          throw error;
+        }
         content = gathered.content;
         break;
       }

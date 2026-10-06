@@ -13,11 +13,14 @@ import { missingLabel } from './activation';
 export function ActivationSummary({
   missing,
   toSign = [],
+  activated = false,
   heading = 'Still to complete before this client can be activated',
 }: {
   missing: readonly Missing[];
   /** Consents still to sign: no bar to activation, signed at the first visit at the latest. */
   toSign?: readonly Missing[];
+  /** An active client: only the consents still to sign are worth saying. */
+  activated?: boolean;
   heading?: string;
 }) {
   const later =
@@ -31,6 +34,9 @@ export function ActivationSummary({
         </ul>
       </div>
     );
+  if (activated) {
+    return later;
+  }
   if (missing.length === 0) {
     return (
       <>

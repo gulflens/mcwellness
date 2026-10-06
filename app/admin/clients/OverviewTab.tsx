@@ -108,6 +108,13 @@ export function OverviewTab({
           {error ? <Note tone="critical">{error}</Note> : null}
         </div>
       ) : null}
+      {/* Once active, the consents still to sign before the first visit stay in
+        view: that is exactly when they are outstanding. */}
+      {record.status === 'active' && toSign.length > 0 ? (
+        <div className="tab-section">
+          <ActivationSummary missing={[]} toSign={toSign} activated />
+        </div>
+      ) : null}
       {mayWrite && record.status !== 'erased' && !editing ? (
         <div className="drawer__actions">
           <Button variant="secondary" onClick={() => setEditing(true)}>

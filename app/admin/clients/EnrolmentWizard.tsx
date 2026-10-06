@@ -610,7 +610,7 @@ export function EnrolmentWizard({
                       <summary>
                         {gate.ok ? 'Ready to activate' : 'View what is still needed to activate'}
                       </summary>
-                      <ActivationSummary missing={gate.missing} />
+                      <ActivationSummary missing={gate.missing} toSign={toSign} />
                     </details>
                   ) : null}
                 </>
@@ -651,7 +651,7 @@ export function EnrolmentWizard({
                 }}
                 onCancel={() => goTo('contacts')}
               />
-              {gate ? <ActivationSummary missing={gate.missing} /> : null}
+              {gate ? <ActivationSummary missing={gate.missing} toSign={toSign} /> : null}
             </div>
           ) : null}
         </div>

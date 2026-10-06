@@ -28,8 +28,9 @@
 -- **The day** is the check-in's day in the zone the caller names, as the query
 -- it replaces did (the practice's own zone, passed by the route).
 --
--- Needs: 302 (session.signal_quality_score, telemetry), 605 (the gate's
--- shape), app.client_status_for, app.client_visible_to_practitioner.
+-- Needs: 000 (app.current_tenant_id), 095 (app.actor_has_role), 100
+-- (app.client_status_for, app.client_visible_to_practitioner), 302
+-- (session.signal_quality_score, telemetry), 605 (the gate's shape).
 
 create function app.client_completed_visits(p_client_id uuid, p_zone text)
 returns table (id uuid, on_day text, signal_quality_score numeric, telemetry jsonb)
