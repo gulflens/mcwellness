@@ -157,8 +157,13 @@ credential); every read and write of a record is logged, hash-chained.
 3. **Rate limits** (`app/api/_middleware/rate-limit.ts`), per minute, from
    the environment: `RATE_LIMIT_PER_MINUTE` per address (300),
    `RATE_LIMIT_ACTOR_PER_MINUTE` per signed-in person (600),
-   `RATE_LIMIT_AUTH_FAILURES_PER_MINUTE` refused sign-ins per address (20),
-   `RATE_LIMIT_DEV_DOOR_PER_MINUTE` on the laptop door (30). Over budget the
+   `RATE_LIMIT_AUTH_FAILURES_PER_MINUTE` refused sign-ins per address (10),
+   `RATE_LIMIT_INVITE_DOOR_PER_MINUTE` on the portal's invitation door (5),
+   `RATE_LIMIT_ENQUIRY_DOOR_PER_MINUTE` on the website's enquiry door (5),
+   `RATE_LIMIT_DEV_DOOR_PER_MINUTE` on the laptop door (30). The three budgets
+   that face somebody with no session are half the intended figure (the
+   operator's decision of 6 October 2026), because production runs two worker
+   processes and each keeps its own counters. Over budget the
    API answers 429 with `Retry-After`. The address budgets cost nothing beyond
    the check; the per-person budget is judged after sign-in, so a refusal there
    still costs the token check and one short transaction. The counters hold

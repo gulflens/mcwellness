@@ -18,7 +18,7 @@ import { RedeemInput, RedeemResponse } from './schema';
  *   nobody to be. So the two functions it calls are `security definer` and
  *   answer either one word or one id, and nothing else in the database is
  *   reachable from here at all.
- * - Its own budget, `RATE_LIMIT_INVITE_DOOR_PER_MINUTE`, ten per address a
+ * - Its own budget, `RATE_LIMIT_INVITE_DOOR_PER_MINUTE`, five per address a
  *   minute by default (app/api/create-api.ts). A link is 32 random bytes;
  *   the budget is what makes guessing pointless rather than merely hard.
  * - Its own vocabulary of refusals, which says as little as it can: **404 for
