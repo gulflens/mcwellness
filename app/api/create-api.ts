@@ -1,6 +1,13 @@
 import { Hono, type Context } from 'hono';
-import { ENQUIRY_DOOR_PATH, mountEnquiryDoor } from './enquiries/door';
+import { ENQUIRY_DOOR_PATH, mountEnquiryDoor, originsFrom } from './enquiries/door';
 import { mountEnquiries } from './enquiries/routes';
+import {
+  PUBLISHED_TESTIMONIALS_PATH,
+  TESTIMONIAL_DOOR_PATH,
+  mountTestimonialDoor,
+  testimonialCors,
+} from './testimonials/door';
+import { mountTestimonials } from './testimonials/routes';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import { timeout } from 'hono/timeout';
@@ -95,6 +102,14 @@ import { mountSessions } from './sessions/checkin';
  */
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
+/**
+ * The reviews door's envelope (app/api/testimonials/door.ts): a review is at
+ * most 1200 characters and four short fields, which in Arabic with every
+ * character escaped by a cautious JSON encoder is a little over 7 KB. Sixteen
+ * leaves room for that and nothing like room for the 64 KB a stranger could
+ * otherwise make the API parse.
+ */
+export const TESTIMONIAL_BODY_LIMIT_BYTES = 16 * 1024;
 /** The one path with a larger envelope, and what it is allowed (see below). */
 const LOGO_PATH = '/api/practice/logo';
 export const LOGO_BODY_LIMIT_BYTES = MAX_LOGO_BASE64_LENGTH + LOGO_ENVELOPE_ALLOWANCE_BYTES;
@@ -222,7 +237,11 @@ export type ApiOptions = RequestContextDeps & {
   devSession?: DevSessionOptions;
   now?: () => Date;
   appEnv?: string;
-  /** ENQUIRY_ORIGINS: the origins allowed to post an enquiry; the apex and www by default. */
+  /**
+   * ENQUIRY_ORIGINS: the origins allowed to post an enquiry, and to post and
+   * read the website's reviews (app/api/testimonials/door.ts); the apex and
+   * www by default.
+   */
   enquiryOrigins?: string;
   /** The Supabase project the browser signs in against; named in the content security policy. */
   supabaseUrl?: string;
@@ -321,17 +340,34 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     securityHeaders(deps.appEnv, {
       supabaseUrl: deps.supabaseUrl,
       mapDocumentPaths: deps.mapDocumentPaths,
-      // The website reads the door's answer from its own origin; every other
-      // answer stays same-origin (app/api/enquiries/door.ts).
-      crossOriginResourcePaths: [ENQUIRY_DOOR_PATH],
+      // The website reads the doors' answers from its own origin; every other
+      // answer stays same-origin (app/api/enquiries/door.ts,
+      // app/api/testimonials/door.ts).
+      crossOriginResourcePaths: [ENQUIRY_DOOR_PATH, TESTIMONIAL_DOOR_PATH],
+      crossOriginReadPaths: [PUBLISHED_TESTIMONIALS_PATH],
     }),
   );
+  // The reviews' two public routes carry their CORS answer on everything they
+  // answer, the refusals below them included, so the website's script can
+  // read a 415, a 413 or a 429 rather than meeting a bare network failure
+  // (app/api/testimonials/door.ts).
+  const websiteOrigins = originsFrom(deps.enquiryOrigins);
+  api.use(TESTIMONIAL_DOOR_PATH, testimonialCors(websiteOrigins));
+  api.use(PUBLISHED_TESTIMONIALS_PATH, testimonialCors(websiteOrigins));
   // Ahead of the fence, unlike identityKeys: the local store's own signed-URL
   // route below carries its authorisation in the link and has no session.
   if (deps.storage) {
     api.use('*', withStorage(deps.storage));
   }
-  api.use('/api/*', noStore);
+  // Every answer but one holds or may hold personal data and is never cached.
+  // The one is the published reviews: four public fields that the website's
+  // page asks for on every visit, which the route marks cacheable for a few
+  // minutes itself (app/api/testimonials/door.ts).
+  api.use('/api/*', (c, next) =>
+    c.req.method === 'GET' && c.req.path === PUBLISHED_TESTIMONIALS_PATH
+      ? next()
+      : noStore(c, next),
+  );
   // Budgets first, so a flood of oversized or malformed bodies is limited too.
   api.use(
     '/api/*',
@@ -357,6 +393,10 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // path, one method's worth of bytes, and not a raised floor for everything.
   const defaultBodyLimit = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge });
   const logoBodyLimit = bodyLimit({ maxSize: LOGO_BODY_LIMIT_BYTES, onError: payloadTooLarge });
+  const testimonialBodyLimit = bodyLimit({
+    maxSize: TESTIMONIAL_BODY_LIMIT_BYTES,
+    onError: payloadTooLarge,
+  });
   // And a brain-map draft, whose typed text in two languages outgrows the
   // ordinary envelope (app/api/reports/schema.ts REPORT_DRAFT_BODY_LIMIT_BYTES).
   const reportDraftBodyLimit = bodyLimit({
@@ -390,6 +430,9 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
+    if (c.req.method === 'POST' && c.req.path === TESTIMONIAL_DOOR_PATH) {
+      return testimonialBodyLimit(c, next);
+    }
     if (isExternalReportUpload(c.req.method, c.req.path)) {
       return externalReportBodyLimit(c, next);
     }
@@ -530,6 +573,25 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     addressOf: byAddress,
   });
 
+  // The website's reviews: the second public door, on a budget of its own at
+  // the enquiry door's rate (the operator's halving of 6 October 2026 included),
+  // POST only for the same reason. And the published list the Testimonials
+  // page reads, under the per-address budget every route has.
+  const testimonialDoorLimit = rateLimit({
+    name: 'testimonial-door',
+    windowMs: MINUTE,
+    max: limits.enquiryDoorPerMinute,
+    keyOf: byAddress,
+  });
+  api.use(TESTIMONIAL_DOOR_PATH, (c, next) =>
+    c.req.method === 'POST' ? testimonialDoorLimit(c, next) : next(),
+  );
+  mountTestimonialDoor(api, {
+    pool: deps.pool,
+    origins: websiteOrigins,
+    addressOf: byAddress,
+  });
+
   api.use('/api/*', withRequestContext(deps));
   // Just inside the fence: a helper reaches their own location and who they
   // are, and is answered 403 everywhere else before any route reads a byte of
@@ -633,6 +695,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     ...(deps.push ? { push: deps.push } : {}),
   });
   mountEnquiries(api, deps.now ?? (() => new Date()));
+  mountTestimonials(api, deps.now ?? (() => new Date()));
 
   // An unknown route answers in the same shape as every other refusal.
   api.notFound((c) => c.json({ error: 'not_found', requestId: c.get('requestId') ?? null }, 404));

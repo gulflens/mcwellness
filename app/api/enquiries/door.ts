@@ -59,7 +59,12 @@ function requestIdOf(header: string | undefined): string {
   return header !== undefined && UUID.test(header) ? header : randomUUID();
 }
 
-function originsFrom(override: string | undefined): string[] {
+/**
+ * The origins allowed to talk to a public door: the override when one is
+ * named, otherwise the apex and `www`. Exported so the website's other door,
+ * the reviews' (app/api/testimonials/door.ts), answers exactly the same two.
+ */
+export function originsFrom(override: string | undefined): string[] {
   const named = (override ?? '')
     .split(',')
     .map((o) => o.trim())
