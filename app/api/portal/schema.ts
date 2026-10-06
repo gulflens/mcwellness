@@ -689,6 +689,8 @@ export const OfficePushMessage = z.object({
   title: BilingualText,
   body: BilingualText,
   sentAt: z.string(),
+  /** The practice's own day it was sent on. */
+  sentOn: IsoDate,
   sentBy: z.string().nullable(),
   recipients: z.number().int().nonnegative(),
   devices: z.number().int().nonnegative(),

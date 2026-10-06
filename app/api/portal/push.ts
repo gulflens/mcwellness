@@ -74,7 +74,8 @@ const OFFER_DAYS_SQL =
 
 const MESSAGE_COLUMNS =
   'm.id, m.kind::text as kind, m.title_en, m.title_ar, m.body_en, m.body_ar, ' +
-  'm.created_at, u.display_name as sent_by, m.recipient_count, m.device_count, ' +
+  "m.created_at, to_char(m.created_at at time zone $1, 'YYYY-MM-DD') as sent_on, " +
+  'u.display_name as sent_by, m.recipient_count, m.device_count, ' +
   'm.delivered_count, m.gone_count, m.failed_count, m.delivered_at';
 
 const MESSAGES_SQL =
@@ -85,7 +86,7 @@ const MESSAGES_SQL =
 const MESSAGE_SQL =
   `select ${MESSAGE_COLUMNS} from push_message m ` +
   'left join app_user u on u.id = m.created_by ' +
-  'where m.tenant_id = app.current_tenant_id() and m.id = $1';
+  'where m.tenant_id = app.current_tenant_id() and m.id = $2';
 
 const RECIPIENTS_SQL =
   'select r.user_id, u.display_name as name, r.devices, r.marketing_standing::text as standing, ' +
@@ -112,6 +113,7 @@ type MessageRow = {
   body_en: string;
   body_ar: string;
   created_at: Date;
+  sent_on: string;
   sent_by: string | null;
   recipient_count: number;
   device_count: number;
@@ -128,6 +130,7 @@ function toOffice(row: MessageRow): OfficePushMessage {
     title: { en: row.title_en, ar: row.title_ar },
     body: { en: row.body_en, ar: row.body_ar },
     sentAt: row.created_at.toISOString(),
+    sentOn: row.sent_on,
     sentBy: row.sent_by,
     recipients: row.recipient_count,
     devices: row.device_count,
@@ -284,7 +287,7 @@ export function mountPortalPush(
     const [audience, offers, messages] = await Promise.all([
       db.query<AudienceRow>(AUDIENCE_SQL),
       db.query<{ day: string }>(OFFER_DAYS_SQL, [zone]),
-      db.query<MessageRow>(MESSAGES_SQL),
+      db.query<MessageRow>(MESSAGES_SQL, [zone]),
     ]);
     return c.json(
       OfficePushResponse.parse({
@@ -308,7 +311,8 @@ export function mountPortalPush(
     }
     const params = IdParams.safeParse(c.req.param());
     if (!params.success) return c.json({ error: 'not_found', requestId }, 404);
-    const message = (await db.query<MessageRow>(MESSAGE_SQL, [params.data.id])).rows[0];
+    const { zone } = await practiceToday(db);
+    const message = (await db.query<MessageRow>(MESSAGE_SQL, [zone, params.data.id])).rows[0];
     if (!message) return c.json({ error: 'not_found', requestId }, 404);
     const recipients = await db.query<{
       user_id: string;
@@ -442,7 +446,7 @@ export function mountPortalPush(
       sender.deliver({ tenantId: actor.tenantId, messageId: input.id, senderId: actor.userId });
     });
 
-    const message = (await db.query<MessageRow>(MESSAGE_SQL, [input.id])).rows[0];
+    const message = (await db.query<MessageRow>(MESSAGE_SQL, [zone, input.id])).rows[0];
     if (!message) throw new Error('The message was written and could not be read back.');
     return c.json(SendPushResponse.parse({ message: toOffice(message) }), 201);
   });
