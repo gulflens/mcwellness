@@ -44,12 +44,22 @@ import type { Db } from '../_middleware/request-context';
  * (100–199), and a database without that range has no client to report on.
  */
 
+// Every completed visit of the client, whoever of the practice ran it and
+// whoever writes the report (the operator's decision of 6 October 2026):
+// read by `app.client_completed_visits` (migration 606) on the practice's
+// behalf, behind the same gate as drafting a report, because row security
+// would show a practitioner only her own.
+/** The visits of a client the caller may not draft a report for (606 refused). */
+export class VisitsRefused extends Error {
+  constructor() {
+    super('The visits of that client are not yours to read.');
+    this.name = 'VisitsRefused';
+  }
+}
+
 const VISITS_SQL =
-  "select s.id, to_char(s.checked_in_at at time zone $2, 'YYYY-MM-DD') as on_day, " +
-  's.signal_quality_score, s.telemetry ' +
-  'from session s ' +
-  "where s.tenant_id = app.current_tenant_id() and s.client_id = $1 and s.status = 'completed' " +
-  'order by s.checked_in_at, s.id';
+  'select id, on_day, signal_quality_score, telemetry ' +
+  'from app.client_completed_visits($1::uuid, $2::text)';
 
 const ENTITLEMENTS_SQL =
   'select id, status::text as status from entitlement ' +
@@ -212,15 +222,30 @@ export async function gatherForClient(
     tableExists(db, 'public.assessment'),
   ]);
 
-  const [visits, entitlements, goals] = await Promise.all([
-    visitsPresent
-      ? db.query<{
-          id: string;
-          on_day: string;
-          signal_quality_score: string | null;
-          telemetry: unknown;
-        }>(VISITS_SQL, [input.clientId, input.timeZone])
-      : Promise.resolve({ rows: [] }),
+  // The visits first, alone, in a savepoint: `app.client_completed_visits`
+  // refuses with insufficient_privilege (606) rather than answering empty, and
+  // a refusal rolled back to here leaves the request's transaction usable, so
+  // the route can answer it plainly (`VisitsRefused`) instead of with a fault.
+  type VisitDbRow = {
+    id: string;
+    on_day: string;
+    signal_quality_score: string | null;
+    telemetry: unknown;
+  };
+  let visits: { rows: VisitDbRow[] } = { rows: [] };
+  if (visitsPresent) {
+    await db.query('savepoint gather_visits');
+    try {
+      visits = await db.query<VisitDbRow>(VISITS_SQL, [input.clientId, input.timeZone]);
+      await db.query('release savepoint gather_visits');
+    } catch (error) {
+      await db.query('rollback to savepoint gather_visits');
+      if ((error as { code?: unknown }).code === '42501') throw new VisitsRefused();
+      throw error;
+    }
+  }
+
+  const [entitlements, goals] = await Promise.all([
     entitlementsPresent
       ? db.query<{ id: string; status: EntitlementRow['status'] }>(ENTITLEMENTS_SQL, [
           input.clientId,

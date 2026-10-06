@@ -1,4 +1,4 @@
-export { canActivate } from './canActivate';
+export { canActivate, consentsOutstanding } from './canActivate';
 export type { Missing } from './canActivate';
 export { canGiveConsent } from './canGiveConsent';
 export type { ConsentGiver, ConsentRefusal, ConsentSubject } from './canGiveConsent';

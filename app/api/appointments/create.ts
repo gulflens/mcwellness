@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { ageOn, canActor, hasRole, isoDateIn, type Capability, type IsoDate } from '@domain/shared';
+import { canActor, hasRole, isoDateIn, type Capability } from '@domain/shared';
 import {
   checkConflicts,
   windowFor,
@@ -77,25 +77,16 @@ type LocationRow = {
 };
 type ConsentRow = { purpose: string };
 
-/** The consent purposes this appointment needs (scheduling-manual.md section 6.1). A
- * null date of birth cannot be proven adult, so it counts as needing the minor
- * purpose too — fail closed, not open. Booking policy, not a scheduling
- * conflict rule, so it lives here rather than in domain/scheduling; and not in
- * domain/client, which this stream may not import from (docs/SPEC/OWNERSHIP.md
- * rule 3). */
-export function requiredConsentPurposes(
-  deliveryMode: DeliveryMode,
-  dateOfBirth: string | null,
-  on: IsoDate,
-): string[] {
-  const purposes = ['participation'];
-  if (dateOfBirth === null || ageOn(dateOfBirth, on) < 18) {
-    purposes.push('minor_participation');
-  }
-  if (deliveryMode === 'home') {
-    purposes.push('home_visit');
-  }
-  return purposes;
+/** The consent purposes a booking needs: none (scheduling-manual.md section 6.1,
+ * amended by the operator's decision of 6 October 2026, on the practice's
+ * request of 29 September). The household signs its consents when the
+ * practitioner meets them at the first visit, so a visit is booked before
+ * they exist; the visit itself is refused at check-in until they are signed
+ * (domain/session canCheckIn, the four purposes, the minor's included). Kept as
+ * the one place booking policy names its consents, should it ever require one
+ * again. */
+export function requiredConsentPurposes(): string[] {
+  return [];
 }
 
 function badRequest(c: Context<ApiEnv>, requestId: string | null, code: BadRequestCode) {
@@ -261,7 +252,7 @@ export function mountAppointmentCreate(
         clientAppointments: toExisting(clientAppointmentsResult.rows),
         practitionerCredentials: assigneeCapabilities,
         clientActive: client.status === 'active',
-        requiredConsentPurposes: requiredConsentPurposes(deliveryMode, client.date_of_birth, on),
+        requiredConsentPurposes: requiredConsentPurposes(),
         activeConsentPurposes: consentResult.rows.map((r) => r.purpose),
       },
     );

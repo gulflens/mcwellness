@@ -19,7 +19,7 @@ import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { PhoneField } from '../../shell/components/PhoneField';
 import { ActivationSummary } from './ActivationSummary';
-import { canActivate, practiceToday, toActivationRecord } from './activation';
+import { canActivate, consentsOutstanding, practiceToday, toActivationRecord } from './activation';
 import { Checkbox } from './FormAtoms';
 import { ConsentTab } from './ConsentTab';
 import { ContactsTab } from './ContactsTab';
@@ -309,8 +309,9 @@ export function EnrolmentWizard({
   }
 
   const record = state.kind === 'ready' ? state.record : null;
-  const gate = useMemo(
-    () => (record ? canActivate(toActivationRecord(record), practiceToday()) : null),
+  const gate = useMemo(() => (record ? canActivate(toActivationRecord(record)) : null), [record]);
+  const toSign = useMemo(
+    () => (record ? consentsOutstanding(toActivationRecord(record), practiceToday()).missing : []),
     [record],
   );
 
@@ -586,7 +587,11 @@ export function EnrolmentWizard({
                       <h3 className="drawer__section">
                         {gate.ok ? 'Ready to activate' : 'Still to complete'}
                       </h3>
-                      <ActivationSummary missing={gate.missing} heading="Still needed" />
+                      <ActivationSummary
+                        missing={gate.missing}
+                        toSign={toSign}
+                        heading="Still needed"
+                      />
                       {activationError ? <Note tone="critical">{activationError}</Note> : null}
                       {gate.ok ? (
                         <div className="drawer__actions">
@@ -605,7 +610,7 @@ export function EnrolmentWizard({
                       <summary>
                         {gate.ok ? 'Ready to activate' : 'View what is still needed to activate'}
                       </summary>
-                      <ActivationSummary missing={gate.missing} />
+                      <ActivationSummary missing={gate.missing} toSign={toSign} />
                     </details>
                   ) : null}
                 </>
@@ -646,7 +651,7 @@ export function EnrolmentWizard({
                 }}
                 onCancel={() => goTo('contacts')}
               />
-              {gate ? <ActivationSummary missing={gate.missing} /> : null}
+              {gate ? <ActivationSummary missing={gate.missing} toSign={toSign} /> : null}
             </div>
           ) : null}
         </div>

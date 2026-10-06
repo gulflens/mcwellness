@@ -960,6 +960,30 @@ describe('POST /api/sessions/:id/events', () => {
     ]);
   });
 
+  it('blocks an ACTIVE client whose participation consent is not signed', async () => {
+    // A lead may now be activated before its consents (the operator's
+    // decision of 6 October 2026); the check-in is where they are required,
+    // whatever the client's status.
+    await owner.query("update client set status = 'active' where id = $1", [
+      CLIENT_NO_PARTICIPATION,
+    ]);
+    try {
+      const res = await postCheckIn(SESSION_NO_PARTICIPATION, AUTH.practitionerA, {
+        id: EVENT_NO_PARTICIPATION,
+        clientId: CLIENT_NO_PARTICIPATION,
+      });
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({
+        status: 'blocked',
+        reasons: ['consent_missing_participation'],
+      });
+    } finally {
+      await owner.query("update client set status = 'lead' where id = $1", [
+        CLIENT_NO_PARTICIPATION,
+      ]);
+    }
+  });
+
   it("blocks a visit the household was never told about, writing nothing but the 'refused' row", async () => {
     // The operator's decision of 10 September 2026 (decision 5): a proposed
     // visit is the office's to confirm, not the practitioner's to run.

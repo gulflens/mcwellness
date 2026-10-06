@@ -273,6 +273,9 @@ describe('EnrolmentWizard', () => {
     expect(await screen.findByText('Still to complete')).toBeTruthy();
     expect(screen.getByText('Date of birth')).toBeTruthy();
     expect(screen.getByText('A location with its pin set')).toBeTruthy();
+    // Consents no longer stand in the way of activation (the practice's request
+    // of 29 September 2026): they are listed apart, to sign at the first visit.
+    expect(screen.getByText('To sign at the first visit')).toBeTruthy();
     expect(screen.getByText('Participation consent')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
   });

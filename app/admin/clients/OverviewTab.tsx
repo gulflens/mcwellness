@@ -7,7 +7,7 @@ import { ActivationSummary } from './ActivationSummary';
 import { ErasureSection } from './ErasureSection';
 import { IdentityForm } from './IdentityForm';
 import { contactDisplayName } from './contactName';
-import { canActivate, practiceToday, toActivationRecord } from './activation';
+import { canActivate, consentsOutstanding, practiceToday, toActivationRecord } from './activation';
 import { canAskForErasure, canErase } from './clientAccess';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -63,7 +63,11 @@ export function OverviewTab({
   const actor = session.status === 'signed-in' ? session.actor : null;
   const primaryLocation = record.locations.find((l) => l.isPrimary) ?? record.locations[0] ?? null;
   const age = record.dateOfBirth ? ageOn(record.dateOfBirth, practiceToday()) : null;
-  const gate = useMemo(() => canActivate(toActivationRecord(record), practiceToday()), [record]);
+  const gate = useMemo(() => canActivate(toActivationRecord(record)), [record]);
+  const toSign = useMemo(
+    () => consentsOutstanding(toActivationRecord(record), practiceToday()).missing,
+    [record],
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -93,7 +97,7 @@ export function OverviewTab({
     <div className="tab-section">
       {record.status === 'lead' ? (
         <div className="tab-section">
-          <ActivationSummary missing={gate.missing} />
+          <ActivationSummary missing={gate.missing} toSign={toSign} />
           {gate.ok && mayWrite ? (
             <div className="drawer__actions">
               <Button variant="primary" disabled={busy} onClick={() => void activate()}>
@@ -102,6 +106,13 @@ export function OverviewTab({
             </div>
           ) : null}
           {error ? <Note tone="critical">{error}</Note> : null}
+        </div>
+      ) : null}
+      {/* Once active, the consents still to sign before the first visit stay in
+        view: that is exactly when they are outstanding. */}
+      {record.status === 'active' && toSign.length > 0 ? (
+        <div className="tab-section">
+          <ActivationSummary missing={[]} toSign={toSign} activated />
         </div>
       ) : null}
       {mayWrite && record.status !== 'erased' && !editing ? (

@@ -152,6 +152,17 @@ describe('OverviewTab', () => {
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
   });
 
+  it('keeps the consents still to sign in view once the client is active', () => {
+    // Activated before signing (the operator's decision of 6 October 2026):
+    // what is left to sign at the first visit is shown, and nothing about
+    // activation.
+    mount(<OverviewTab record={{ ...record, status: 'active' }} onChanged={vi.fn()} mayWrite />);
+    expect(screen.getByText('To sign at the first visit')).toBeTruthy();
+    expect(screen.getByText('Participation consent')).toBeTruthy();
+    expect(screen.queryByText(/Everything needed to activate/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
+  });
+
   it('offers no Activate to someone the status route would refuse', () => {
     mount(<OverviewTab record={record} onChanged={vi.fn()} mayWrite={false} />);
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();

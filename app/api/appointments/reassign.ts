@@ -285,11 +285,7 @@ export function mountAppointmentReassign(
         clientAppointments: context.clientAppointments,
         practitionerCredentials: target.capabilities,
         clientActive: context.client.status === 'active',
-        requiredConsentPurposes: requiredConsentPurposes(
-          appointment.delivery_mode,
-          context.client.date_of_birth,
-          context.on,
-        ),
+        requiredConsentPurposes: requiredConsentPurposes(),
         activeConsentPurposes: context.activeConsentPurposes,
       },
     );

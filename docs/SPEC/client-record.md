@@ -27,7 +27,8 @@ any ──► erased   (erasure request)
 ```
 
 - `lead`: created from an enquiry. Minimum: one name, one contact phone. No goals or session data on a lead.
-- `lead → active` requires: date of birth, at least one `location` with verified coordinate, `participation` consent active (plus `minor_participation` if under 18, given by a contact who is a legal guardian and may consent, plus `home_visit` if any home delivery). Emirates ID is optional and never required.
+- `lead → active` requires: date of birth, at least one `location` with verified coordinate, and at least one contact who may consent. Emirates ID is optional and never required.
+- **No consent is required to activate** (the practice's request of 29 September 2026, approved by the operator on 6 October): the household signs when the practitioner meets them at the first visit, so a lead must be active, and bookable, first. The consents — `participation` (plus `minor_participation` if under 18, given by a contact who is a legal guardian and may consent, plus `home_visit` if any home delivery, plus `health_data`) — are still required **before a visit starts**: the check-in gate (`canCheckIn`, session-capture) refuses one without them. `consentsOutstanding(client)` lists what is still to sign, and the enrolment summary and the Overview show it as "To sign at the first visit".
 - `active → paused`: no scheduling allowed; entitlements don't expire while paused (see FINANCE).
 - `closed`: read-only except documents. Reactivation creates an audit event with reason.
 - `erased`: see §8.
@@ -140,7 +141,7 @@ person at the door is not surprised.
 
 ## 5. Rules (each is a pure function in `domain/client`, each has tests)
 
-1. `canActivate(client)` → `{ ok, missing[] }` — the §3 gate.
+1. `canActivate(client)` → `{ ok, missing[] }` — the §3 gate. `consentsOutstanding(client, today)` → `{ ok, missing[] }` — the consents still to sign before the first visit.
 2. `isMinor(dateOfBirth, atDate)` — under 18.
 3. `requiredConsents(client, deliveryModes)` → purposes that must be active.
 4. `validateEmiratesId(raw)` — 15 digits, starts `784`, Luhn check digit valid. No expiry check: the expiry column was dropped in the compliance review for want of a need (decision of 2026-09-02). Returns normalised form. Only when one is captured; never required.

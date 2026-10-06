@@ -1,4 +1,4 @@
-import { canActivate, type ClientRecord, type Missing } from '@domain/client';
+import { canActivate, consentsOutstanding, type ClientRecord, type Missing } from '@domain/client';
 import type { ClientRecordResponse } from '../../api/clients/record-schema';
 
 /**
@@ -83,5 +83,5 @@ export function practiceTodayInWords(now: Date = new Date()): string {
   }).format(now);
 }
 
-export { canActivate };
+export { canActivate, consentsOutstanding };
 export type { Missing };
