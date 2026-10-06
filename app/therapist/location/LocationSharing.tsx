@@ -58,7 +58,31 @@ export type LocationSharingProps = {
    * tab, only from their own day.
    */
   withdrawOnly?: boolean;
+  /**
+   * A helper's own page (docs/SPEC/dispatch.md section 15.12): the same
+   * switch, notice and band, in a helper's words — they help rather than
+   * work, and their working day is the practitioner's they go with.
+   */
+  helper?: boolean;
+  /** Told what the server said each time it is asked, so a page around this can say it too. */
+  onStatus?: (status: LocationMeResponse) => void;
 };
+
+/** The few sentences that differ for a helper; everything else is the same screen. */
+const WORDS = {
+  practitioner: {
+    switchLabel: 'Share my location while I work',
+    band: 'You are sharing your location with the office while you work.',
+    offShift: 'Nothing is sent outside your working day.',
+    back: 'Back to my day',
+  },
+  helper: {
+    switchLabel: 'Share my location while I help',
+    band: 'You are sharing your location with the office while you help.',
+    offShift: 'Nothing is sent outside the working day of the practitioner you help.',
+    back: 'Back',
+  },
+} as const;
 
 function browserGeolocation(): Geolocation | null {
   return typeof navigator !== 'undefined' && navigator.geolocation ? navigator.geolocation : null;
@@ -81,7 +105,13 @@ function AgreedOn({ givenAt }: { givenAt: string }) {
   );
 }
 
-export function LocationSharing({ geolocation, withdrawOnly = false }: LocationSharingProps = {}) {
+export function LocationSharing({
+  geolocation,
+  withdrawOnly = false,
+  helper = false,
+  onStatus,
+}: LocationSharingProps = {}) {
+  const words = helper ? WORDS.helper : WORDS.practitioner;
   const { apiFetch } = useAuth();
   const [status, setStatus] = useState<LocationMeResponse | null>(null);
   const [reading, setReading] = useState(false);
@@ -93,6 +123,10 @@ export function LocationSharing({ geolocation, withdrawOnly = false }: LocationS
   const geo = geolocation === undefined ? browserGeolocation() : geolocation;
 
   const reload = useCallback(() => setReads((count) => count + 1), []);
+
+  useEffect(() => {
+    if (status !== null) onStatus?.(status);
+  }, [status, onStatus]);
 
   useEffect(() => {
     let live = true;
@@ -251,7 +285,7 @@ export function LocationSharing({ geolocation, withdrawOnly = false }: LocationS
             </Button>
           )}
           <Button variant="quiet" onClick={() => setReading(false)}>
-            {agreed ? 'Back to my day' : 'Not now'}
+            {agreed ? words.back : 'Not now'}
           </Button>
         </div>
       </section>
@@ -285,13 +319,13 @@ export function LocationSharing({ geolocation, withdrawOnly = false }: LocationS
     return (
       <section className="location-band" aria-label="Location sharing">
         <p className="location-band__line" role="status">
-          You are sharing your location with the office while you work.
+          {words.band}
         </p>
         {status.consent ? <AgreedOn givenAt={status.consent.givenAt} /> : null}
         <p className="small">
           {status.shiftOpen
             ? 'It is sent every two minutes while this app is open, and kept two days.'
-            : 'Nothing is sent outside your working day.'}
+            : words.offShift}
         </p>
         {locationRefused ? <Note tone="attention">{NO_LOCATION}</Note> : null}
         {problem ? <Note tone="critical">{problem}</Note> : null}
@@ -326,7 +360,7 @@ export function LocationSharing({ geolocation, withdrawOnly = false }: LocationS
           else setReading(true);
         }}
       >
-        <span>Share my location while I work</span>
+        <span>{words.switchLabel}</span>
       </button>
       <p id="location-share-off" className="small muted">
         Off. The office does not see where you are.

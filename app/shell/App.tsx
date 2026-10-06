@@ -26,7 +26,7 @@ import { ScreenBoundary } from './ScreenBoundary';
 import { NoAccessPage } from './pages/NoAccessPage';
 import { PasswordPage } from './pages/PasswordPage';
 import { SignInPage } from './pages/SignInPage';
-import { homeFor } from './routing';
+import { HELPER_HOME, homeFor, isHelperOnly } from './routing';
 
 /**
  * A screen the browser fetches the first time somebody opens it, rather than
@@ -109,6 +109,7 @@ const ExpoEnquiryPage = screen(() => import('./pages/ExpoEnquiryPage'), 'ExpoEnq
 const CheckInPage = screen(() => import('../therapist/session/CheckInPage'), 'CheckInPage');
 const TodayPage = screen(() => import('../therapist/today/TodayPage'), 'TodayPage');
 const TodayLanding = screen(() => import('../therapist/TodayLanding'), 'TodayLanding');
+const HelperPage = screen(() => import('../therapist/location/HelperPage'), 'HelperPage');
 
 /** Waits for the session, then either renders or sends the person to sign in. */
 function RequireAuth({ children }: { children: (actor: Actor) => ReactNode }) {
@@ -349,7 +350,16 @@ export function App() {
           <Route
             path="/admin"
             element={
-              <RequireAuth>{(actor) => <AdminLayout actorName={actor.displayName} />}</RequireAuth>
+              <RequireAuth>
+                {(actor) =>
+                  // A helper has no desk: every console request would be refused.
+                  isHelperOnly(actor) ? (
+                    <Navigate to={HELPER_HOME} replace />
+                  ) : (
+                    <AdminLayout actorName={actor.displayName} />
+                  )
+                }
+              </RequireAuth>
             }
           >
             <Route index element={<Navigate to="/admin/clients" replace />} />
@@ -592,7 +602,15 @@ export function App() {
             element={
               <Suspense fallback={<DarkGround />}>
                 <RequireAuth>
-                  {(actor) => (canOpenToday(actor) ? <TodayPage /> : <TodayLanding />)}
+                  {(actor) =>
+                    canOpenToday(actor) ? (
+                      <TodayPage />
+                    ) : isHelperOnly(actor) ? (
+                      <Navigate to={HELPER_HOME} replace />
+                    ) : (
+                      <TodayLanding />
+                    )
+                  }
                 </RequireAuth>
               </Suspense>
             }
@@ -619,7 +637,33 @@ export function App() {
         the page is for (docs/SPEC/client-portal.md section 3.7).
       */}
           <Route path="/portal/invite/:token" element={<InvitePage />} />
-          <Route path="/portal" element={<RequireAuth>{() => <PortalRoot />}</RequireAuth>}>
+          {/*
+            A helper's one page (round 76, docs/SPEC/dispatch.md section
+            15.12): their own location while they help, on the practitioner
+            face's dark ground. Anybody else is sent to their own home.
+          */}
+          <Route
+            path={HELPER_HOME}
+            element={
+              <Suspense fallback={<DarkGround />}>
+                <RequireAuth>
+                  {(actor) =>
+                    isHelperOnly(actor) ? <HelperPage /> : <Navigate to={homeFor(actor)} replace />
+                  }
+                </RequireAuth>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/portal"
+            element={
+              <RequireAuth>
+                {(actor) =>
+                  isHelperOnly(actor) ? <Navigate to={HELPER_HOME} replace /> : <PortalRoot />
+                }
+              </RequireAuth>
+            }
+          >
             <Route index element={<HomeScreen />} />
             <Route path="visits" element={<VisitsScreen />} />
             <Route path="money" element={<MoneyScreen />} />

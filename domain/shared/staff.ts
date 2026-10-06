@@ -31,6 +31,7 @@ export const STAFF_ROLE_LABELS: Record<Role, string> = {
   practitioner: 'Practitioner',
   lead_practitioner: 'Lead practitioner',
   client_contact: 'Household contact',
+  helper: 'Helper',
 };
 
 /** A row that holds ownership. Nothing on it is anybody's to change (spec section 3). */
@@ -42,7 +43,8 @@ export function canSuspend(actorUserId: string, targetUserId: string): boolean {
   return actorUserId !== targetUserId;
 }
 
-export type RoleSwitchRefusal = 'not_a_working_role' | 'not_yourself' | 'locked' | 'last_role';
+export type RoleSwitchRefusal =
+  'not_a_working_role' | 'not_yourself' | 'locked' | 'last_role' | 'helper_holds_no_other_role';
 
 /**
  * Whether a role may be switched on or off for somebody; null means yes. The
@@ -65,6 +67,11 @@ export function canSwitchRole(input: {
   // of it.
   if (input.actorUserId === input.targetUserId) return 'not_yourself';
   if (isLocked(input.targetRoles)) return 'locked';
+  // A helper holds no working role (round 76, docs/SPEC/dispatch.md section
+  // 15.12): the helper's floor and fence bind a person holding the helper role
+  // alone, and a working role beside it would lift both. The trigger
+  // `app.guard_helper_alone` (migration 213) refuses the row beneath this.
+  if (input.on && input.targetRoles.includes('helper')) return 'helper_holds_no_other_role';
   if (!input.on) {
     const left = input.targetRoles.filter((r) => isStaffRole(r) && r !== input.role);
     const holds = input.targetRoles.includes(input.role);

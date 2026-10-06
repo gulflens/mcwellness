@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { AppointmentListResponse, type AppointmentRow } from '../../../api/appointments/schema';
 import { PracticeDayResponse, type PracticeDayPractitioner } from '../../../api/routing/schema';
-import { SharedPositionsResponse, type SharedPosition } from '../../../api/location/schema';
+import {
+  SharedPositionsResponse,
+  type SharedHelperPosition,
+  type SharedPosition,
+} from '../../../api/location/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { Button, Note, PageHeader, Select } from '../../../shell/components/Controls';
 import { DateField } from '../../../shell/components/DateField';
@@ -15,7 +19,12 @@ import { DayMap, formatDrive } from './DayMap';
 import { DocumentBoundary } from './documentBoundary';
 import { browserMapKey, loadGoogleMaps, type GoogleMaps } from '../../../shell/maps/googleMaps';
 import { OptimiseDrawer } from './OptimiseDrawer';
-import { describeAge, describePosition } from '../board/positions';
+import {
+  describeAge,
+  describeHelperPosition,
+  describePosition,
+  helperMapLabel,
+} from '../board/positions';
 import './map.css';
 
 /**
@@ -148,6 +157,8 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
   // somebody is now, and another day has no now in it.
   const today = date === practiceDay(new Date());
   const [positions, setPositions] = useState<Map<string, SharedPosition> | null>(null);
+  // Helpers sharing, as the board reads them (section 15.12).
+  const [helpers, setHelpers] = useState<readonly SharedHelperPosition[]>([]);
   useEffect(() => {
     if (!today) return;
     let live = true;
@@ -156,13 +167,18 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
       void apiFetch('/api/location/positions')
         .then(async (res) => {
           if (!res.ok) throw new Error('unavailable');
-          return SharedPositionsResponse.parse(await res.json()).positions;
+          return SharedPositionsResponse.parse(await res.json());
         })
-        .then((list) => {
-          if (live) setPositions(new Map(list.map((p) => [p.practitionerId, p])));
+        .then((answer) => {
+          if (!live) return;
+          setPositions(new Map(answer.positions.map((p) => [p.practitionerId, p])));
+          setHelpers(answer.helpers);
         })
         .catch(() => {
-          if (live) setPositions(null);
+          if (live) {
+            setPositions(null);
+            setHelpers([]);
+          }
         });
     };
     read();
@@ -262,6 +278,23 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
     [shared],
   );
 
+  // The helpers going with the practitioner on the map now, beside them.
+  const helpersHere = useMemo(
+    () =>
+      today && positions !== null && current !== null
+        ? helpers.filter((helper) => helper.accompaniesPractitionerId === current.practitionerId)
+        : [],
+    [today, positions, current, helpers],
+  );
+  const alongside = useMemo(
+    () =>
+      helpersHere.map((helper) => ({
+        point: { lat: helper.latitude, lng: helper.longitude },
+        label: helperMapLabel(helper),
+      })),
+    [helpersHere],
+  );
+
   const movable = rows.filter((entry) => entry.row.status === 'proposed').length;
   const canOptimise = state.kind === 'ready' && rows.length >= 2 && movable > 0;
 
@@ -291,6 +324,7 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
             selectedId={selectedId}
             onSelect={setSelectedId}
             here={here}
+            alongside={alongside}
           />
         ) : (
           <div className="daymap daymap--absent" />
@@ -343,6 +377,11 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
           {today && positions !== null && current !== null ? (
             <p className="small muted numeric">{describePosition(shared)}</p>
           ) : null}
+          {helpersHere.map((helper) => (
+            <p key={helper.firstName + helper.recordedAt} className="small muted numeric">
+              {describeHelperPosition(helper)}
+            </p>
+          ))}
           {state.kind === 'loading' ? <Note>Loading the day.</Note> : null}
           {state.kind === 'error' ? <Note tone="critical">{DAY_FAILED}</Note> : null}
           {actionError ? <Note tone="critical">{actionError}</Note> : null}

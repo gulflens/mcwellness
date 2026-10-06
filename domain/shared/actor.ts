@@ -15,6 +15,14 @@ export const ROLES = [
   'practitioner',
   'finance',
   'client_contact',
+  /**
+   * A member of the practitioner's family who drives and carries kit on the
+   * day, and shares their own location while they help (round 76,
+   * docs/SPEC/dispatch.md section 15.12). Named by no action below, so
+   * `canActor` refuses a helper everything; what a helper may do is their own
+   * location, in app/api/location/routes.ts, and nothing else.
+   */
+  'helper',
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -133,6 +141,11 @@ export type Action =
   | { type: 'kit.manage' }
   | { type: 'staff.manage' }
   | { type: 'staff.access.manage' }
+  /**
+   * Adding a helper, naming whom they accompany, and revoking one (round 76,
+   * docs/SPEC/dispatch.md section 15.12).
+   */
+  | { type: 'staff.helper.manage' }
   | { type: 'kit.read'; assignedToSelf: boolean }
   | { type: 'routing.day.read'; scope: 'own' }
   | { type: 'routing.practiceDay.read' }
@@ -478,6 +491,16 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     // minting a temporary password: the owner's alone (operator, 21 September
     // 2026). `staff.manage` above keeps the list for an admin and nothing else.
     case 'staff.access.manage':
+      return hasRole(actor, 'owner');
+    // A helper (round 76): a member of the practitioner's family who shares
+    // their own location while they help, and reaches nothing else. Adding
+    // one, naming whom they accompany and revoking one are Team access, and
+    // Team access is the owner's alone (the operator's rule of 21 September
+    // 2026, confirmed for helpers on 6 October). `app.name_helper` and
+    // `app.revoke_helper` (migration 213) ask the same of `user_role` beneath
+    // this. An admin reads the helpers with the rest of the list
+    // (`staff.manage`).
+    case 'staff.helper.manage':
       return hasRole(actor, 'owner');
     case 'kit.manage':
       // The equipment register: listing it, adding an item, editing one,

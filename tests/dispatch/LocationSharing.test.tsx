@@ -148,6 +148,19 @@ describe('the notice', () => {
     // Hard-wrapped like every other wording file: no line runs past 80.
     for (const line of text.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80);
     expect(flat).toContain('weekly backup leaves positions out');
+    // Version 1.2 (round 76, approved 6 October 2026): the five changes for
+    // the family members who help on the day.
+    expect(flat).toContain(
+      'to the people who visit households for it, and to the family members who help them on the day.',
+    );
+    expect(flat).toContain('or "while I help" if you help on the day');
+    expect(flat).toContain(
+      'your working day is the working day of the practitioner you go with, read the same way from their visits',
+    );
+    expect(flat).toContain('Helpers do not see it, their own included.');
+    expect(flat).toContain(
+      'your positions are deleted at once and your sign-in is closed; your agreement stays on record as given',
+    );
     expect(flat).toContain('Settings › Practice');
     expect(flat).not.toMatch(/@[a-z0-9-]+\.[a-z]/i);
   });

@@ -169,6 +169,8 @@ const ENTITY: Record<string, Text> = {
   staff_consent: t('staff consent', 'موافقة موظف'),
   location_sharing: t('location sharing', 'مشاركة الموقع'),
   practitioner_position: t('shared location', 'الموقع المُشارَك'),
+  // Whom a helper goes with on the day (round 76, dispatch section 15.12).
+  helper_accompaniment: t('helper assignment', 'تكليف المساعد'),
 };
 
 /**

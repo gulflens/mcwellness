@@ -41,6 +41,8 @@ const FINANCE_AUTH = '00000000-0000-4000-8000-0000000000f8';
 const PRACTITIONER_ID = '00000000-0000-4000-8000-0000000000f9';
 const PRACTITIONER_AUTH = '00000000-0000-4000-8000-0000000000fa';
 const WITNESS_ID = '00000000-0000-4000-8000-0000000000fb';
+/** A helper (round 76): signs in, and is not staff — never a witness. */
+const HELPER_ID = '00000000-0000-4000-8000-0000000079b1';
 const WITNESS_AUTH = '00000000-0000-4000-8000-0000000000fc';
 /** Another practice entirely: its owner may not reach a single row of this one. */
 const OTHER_TENANT_AUTH = '00000000-0000-4000-8000-0000000000fd';
@@ -176,6 +178,13 @@ beforeAll(async () => {
     authId: WITNESS_AUTH,
     displayName: 'Fern Summit',
     roles: ['practitioner'],
+  });
+  await seedUser(owner, {
+    id: HELPER_ID,
+    tenantId: IDS.tenantA,
+    authId: null,
+    displayName: 'Juniper Vale',
+    roles: ['helper'],
   });
   // A second practice, so "another tenant" is a real actor rather than an
   // unknown id: its owner holds every role there and none here.
@@ -688,6 +697,15 @@ describe('POST /api/clients/:id/consents', () => {
     });
     expect(contact.status).toBe(400);
     expect((await contact.json()) as { code: string }).toMatchObject({ code: 'witness_not_staff' });
+
+    // Nor is a helper (round 76): a family member who drives on the day holds
+    // a role, but not a working one, and hears nothing as the practice.
+    const helper = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+      method: 'POST',
+      body: body({ witnessedByUserId: HELPER_ID }),
+    });
+    expect(helper.status).toBe(400);
+    expect((await helper.json()) as { code: string }).toMatchObject({ code: 'witness_not_staff' });
   });
 
   it('refuses a witness on a consent that was signed', async () => {
@@ -718,6 +736,8 @@ describe('POST /api/clients/:id/consents', () => {
     // Not the household's portal account, and not another practice's staff.
     expect(ids).not.toContain(CONTACT_USER_ID);
     expect(ids).not.toContain(IDS.ownerB);
+    // Nor a helper, who holds a role but not a working one (round 76).
+    expect(ids).not.toContain(HELPER_ID);
     expect(witnesses.find((witness) => witness.id === WITNESS_ID)?.name).toBe('Fern Summit');
 
     // Finance does not record consent, so it is not asked who might witness one.

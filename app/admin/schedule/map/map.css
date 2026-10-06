@@ -152,3 +152,10 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* A helper beside the practitioner they go with (dispatch section 15.12):
+   the same label, its accent rule in the neutral ink rather than the brand,
+   so the practitioner's own position is the one that stands out. */
+.daymap__here--helper {
+  border-inline-start-color: var(--slate);
+}

@@ -532,3 +532,19 @@
 .access-switch[aria-disabled='true'][aria-checked='true']::before {
   background: var(--paper);
 }
+
+/* Helpers (round 76, dispatch section 15.12): a section of its own under the
+   staff, its heading and its one action on a line. */
+.team__helpers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin-block-start: var(--s-6);
+}
+
+.team__helpers-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}

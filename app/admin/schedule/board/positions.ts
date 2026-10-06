@@ -1,4 +1,4 @@
-import type { SharedPosition } from '../../../api/location/schema';
+import type { SharedHelperPosition, SharedPosition } from '../../../api/location/schema';
 
 /**
  * How the board says where a practitioner is sharing from (docs/SPEC/
@@ -25,4 +25,22 @@ export function describePosition(
   // no one's switch), so it says only what is true of both.
   if (position === undefined) return 'Not sharing now';
   return `Location shared ${describeAge(position.ageMinutes)}, within ${Math.round(position.accuracyMetres)} m`;
+}
+
+/**
+ * A helper's line, under the practitioner they accompany (section 15.12):
+ * marked as a helper's and named by first name, so nobody reads it as the
+ * practitioner's own position.
+ */
+export function describeHelperPosition(
+  helper: Pick<SharedHelperPosition, 'firstName' | 'ageMinutes' | 'accuracyMetres'>,
+): string {
+  return `Helper ${helper.firstName}: location shared ${describeAge(helper.ageMinutes)}, within ${Math.round(helper.accuracyMetres)} m`;
+}
+
+/** The same helper's pin on the day map. */
+export function helperMapLabel(
+  helper: Pick<SharedHelperPosition, 'firstName' | 'ageMinutes'>,
+): string {
+  return `Helper ${helper.firstName}, last shared ${describeAge(helper.ageMinutes)}`;
 }

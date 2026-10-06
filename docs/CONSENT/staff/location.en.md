@@ -2,7 +2,7 @@
 purpose: location_sharing
 audience: staff
 locale: en
-version: 1.1
+version: 1.2
 status: approved
 written: 2026-10-06
 ---
@@ -10,8 +10,9 @@ written: 2026-10-06
 # Sharing your location while you work
 
 McWellness, Dubai. October 2026. The practice's notice to the people who visit
-households for it. Read it before you turn sharing on. It is your choice, and
-you can change your mind at any time.
+households for it, and to the family members who help them on the day. Read it
+before you turn sharing on. It is your choice, and you can change your mind at
+any time.
 
 ## Why we ask
 
@@ -32,13 +33,19 @@ route, not anything else on your phone.
 Only when all three of these are true:
 
 - you have agreed to this page, in your own app;
-- your switch, "Share my location while I work", is on;
+- your switch — "Share my location while I work", or "while I help" if you
+  help on the day — is on;
 - you are working. Your working day is read from your own visits: it starts an
   hour and a half before your first visit's arrival window, and ends half an
   hour after your last visit is finished — or after it could at the latest
   have finished, if it was never closed. It never runs past 9 in the evening,
   even if a visit was left open, and on a day with no visits there is no
   working day at all.
+
+If you help on the day, your working day is the working day of the
+practitioner you go with, read the same way from their visits; if the practice
+has not named whom you go with, or has ended it, you have no working day and
+nothing is sent.
 
 Because the working day begins before your first visit, the first position of
 the day can be your home, or wherever you set off from.
@@ -53,6 +60,8 @@ The owner, the practice's administrator and the lead practitioner — the people
 who coordinate the day — on the office's board and map. They see your last
 position and how long ago it was sent, and only while your working day is
 open; never a trail of where you have been. Other practitioners do not see it.
+Helpers do not see it, their own included. A helper's position is shown beside
+the practitioner they go with, marked as a helper's, with their first name.
 Households never see it. Finance never sees it.
 
 The office's map is drawn by Google Maps. Your position is drawn on it by the
@@ -92,8 +101,11 @@ working day has closed.
 
 Or withdraw this agreement, also in your app. Sharing stops at once, and every
 position of yours still held is deleted there and then. You can always do
-this, even if your role at the practice has changed. Saying no, or stopping,
-costs you nothing and changes nothing about your work.
+this, even if your role at the practice has changed. If you help on the day and
+the practice stops your helping, your positions are deleted at once and your
+sign-in is closed; your agreement stays on record as given, as it would after
+a withdrawal. Saying no, or stopping, costs you nothing and changes nothing
+about your work.
 
 You can also ask the practice what it holds about you, and ask for it to be
 corrected or deleted, at any time: ask the practice owner, in person or

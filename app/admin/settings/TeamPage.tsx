@@ -5,6 +5,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader } from '../../shell/components/Controls';
 import { Table, type Column } from '../../shell/components/Table';
 import { SettingsNav } from './SettingsNav';
+import { TeamHelpers } from './TeamHelpers';
 import { TeamMemberDrawer } from './TeamMemberDrawer';
 import './settings.css';
 
@@ -34,6 +35,12 @@ import './settings.css';
  * once and never again — the operator's decision of 10 September — so the
  * person who pressed the button hands it over across a desk or by WhatsApp.
  * Nothing here deletes anybody.
+ *
+ * **Helpers** (round 76, docs/SPEC/dispatch.md section 15.12) are listed in a
+ * section of their own below the staff — read by the owner and an admin,
+ * changed by the owner alone (`staff.helper.manage`) — and are left out of the staff table: a helper has
+ * no profile and no working role, and the drawer's role switches are not a
+ * door anybody should find open on one.
  */
 
 const LOAD_ERROR = 'The team could not be loaded. Try again.';
@@ -141,6 +148,12 @@ export function TeamPage() {
   // will ask the same rule about, so no button is offered that it would refuse.
   const myRoles = ((members ?? []).find((member) => member.isYou)?.roles ?? []) as Role[];
   const canManage = myRoles.includes('owner');
+  const canSeeHelpers = myRoles.includes('owner') || myRoles.includes('admin');
+  // A person holding the helper role and nothing else is in the helpers'
+  // section, not here.
+  const staff = (members ?? []).filter(
+    (member) => !(member.roles.length === 1 && member.roles[0] === 'helper'),
+  );
 
   const columns: readonly Column<TeamMember>[] = [
     {
@@ -292,11 +305,12 @@ export function TeamPage() {
         <Table
           caption="The practice's staff and their roles"
           columns={columns}
-          rows={members}
+          rows={staff}
           rowKey={(row) => row.id}
           empty={<Note>Nobody yet.</Note>}
         />
       ) : null}
+      {members !== null && canSeeHelpers ? <TeamHelpers canManage={canManage} /> : null}
       {openId === null ? null : (
         <TeamMemberDrawer
           memberId={openId}
