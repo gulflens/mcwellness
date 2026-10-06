@@ -284,7 +284,15 @@ describe('every other route, for a helper', () => {
       seen.add(key);
       if (ALLOWED.some((allowed) => allowed.test(route.path)) || PUBLIC.has(key)) continue;
       const path = route.path.replace(/:[A-Za-z_]+(\{[^}]*\})?/g, NOBODY);
-      const res = await h.callAs(route.method, path, helper.authId, {});
+      const write = route.method !== 'GET' && route.method !== 'HEAD';
+      const res = await h.api.request(path, {
+        method: route.method,
+        headers: {
+          ...(await h.authHeader(helper.authId)),
+          ...(write ? { 'content-type': 'application/json' } : {}),
+        },
+        ...(write ? { body: '{}' } : {}),
+      });
       answers[key] = res.status;
     }
     // Enough routes walked that this is the API and not a corner of it.
