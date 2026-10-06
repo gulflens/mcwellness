@@ -581,12 +581,15 @@ export type ConsentErrorCode = (typeof CONSENT_ERROR_CODES)[number];
 
 export const RecordConsentBody = z.object({
   /**
-   * The purposes the console offers, as the bundle below: never `marketing`,
-   * which is the adult's own switch on their portal (migration 706; PR 247's
-   * review, finding 1), and never a retired purpose. A recorded consent of
-   * any purpose is still read back through `Consent` above.
+   * Never `marketing`: that is the adult's own switch on their portal
+   * (migration 706; PR 247's review, finding 1), and a consent recorded here
+   * for it would supersede the adult's own row. Every other purpose stays as
+   * it was, retired ones included, because the console still records and
+   * withdraws a retired purpose's consent where one is on file
+   * (tests/client/db/consent_documents.test.ts); the bundle below, which only
+   * ever signs a new household's consents, takes `OFFERED_CONSENT_PURPOSES`.
    */
-  purpose: z.enum(OFFERED_CONSENT_PURPOSES),
+  purpose: z.enum(CONSENT_PURPOSES).exclude(['marketing']),
   givenByContactId: z.uuid(),
   textDocumentId: z.uuid(),
   method: z.enum(CONSENT_METHODS),
