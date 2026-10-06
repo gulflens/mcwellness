@@ -3441,3 +3441,92 @@ same entry served, "Free (100%)" present, health 200.
 
 **Not walked.** No report and no free sale has yet been made on the live site;
 the first real one is the first use.
+
+## What was done on 2026-10-06: the forty-first to forty-fourth live passes — four answers, the announcements and a dependency fix
+
+Four passes on one evening, three by this record's writer and the fourth by a
+second session, which held the host while the other waited. Every merge's
+checks were run again against the main of that moment, and main's own CI
+passed on each merge commit before its archive was made.
+
+**Forty-first, 16:25 UTC (20:25 +04): main `4c3b855d`, PR 239 (round 70).**
+- The three rate limits that face somebody with no session are halved in the
+  code's defaults: refused sign-ins 20 to 10 a minute, the invitation door
+  and the enquiry door 10 to 5. The host sets no `RATE_LIMIT_*` variable, so
+  production runs on the defaults, and it runs two worker processes, each
+  with its own counters.
+- A brain-map draft is written under the practice's `brain-map` service, so
+  only a credential for that service signs it. Production held one valid
+  brain-map signing credential beforehand, so nothing was blocked.
+- No migration. Archive 7,606,132 bytes, build `01a11208`. The build log's
+  source line names the archive; the entry moved to `index-CcVvme9A.js`.
+  Health 0.83 s, deep 0.65 s.
+
+**Forty-second, 17:14 UTC (21:14 +04): main `70442dda`, PR 240 (round 71).**
+- A lead becomes active, and can be booked, before its consents are signed.
+  The household signs at the first visit, and the check-in still refuses the
+  visit until it has.
+- A progress report reads every completed visit of the client, whoever ran
+  it, through migration 606 `app.client_completed_visits`.
+- 606 (`a3511ba3092f736a15b876b9f8393bc4c662b2c781d5119c573206bac2cc0af1`)
+  went to production from the file through `supabase db query --linked
+  --file`, wrapped with its ledger row. On staging it went through the
+  Supabase connector, because the staging command-line copy then failed with
+  an IPv6 error. The function's body is identical on production, staging and
+  a database built from the files.
+- Both databases are at 122. Build `01a11236`; the entry moved to
+  `index-DCWk9YZH.js`. "To sign at the first visit" is served. Health 0.42 s;
+  deep 8.6 s on its first call after the restart.
+
+**Forty-third, 17:53 UTC (21:53 +04): main `e05d2d1f`, PR 241 (round 72).**
+- Announcements on the household's portal home, written in Settings ›
+  Announcements by the owner or an admin, in English and Arabic.
+- The marketing consent wording is drafted in `docs/CONSENT/drafts/` for the
+  practice's approval.
+- Migration 705
+  (`15e15da72faf783838af857fe460bf3997447aa2b5da808a70cd36c8b83e75ca`) and
+  `db/policies/portal/announcement.sql` went to both databases from the
+  files. The staging command-line copy was mended by running `supabase link
+  --project-ref` again in its folder. The new table's constraints, policies,
+  triggers and functions are identical on both databases.
+- Both databases are at 123. Build `01a11259`; the entry moved to
+  `index-B8JC2A9C.js`, and "Write an announcement" is served. Health 0.37 s,
+  deep 0.49 s.
+
+**Forty-fourth, 18:22 UTC (22:22 +04): main `7bd704c9`, PR 243, by the second
+session.**
+- The host had flagged `shell-quote` 1.9.0 (high) under `concurrently`.
+- PR 243 overrides it for both pnpm (`pnpm-workspace.yaml`) and npm
+  (`package.json` `overrides`, which is what the host's npm reads), with a
+  lint test keeping the two equal. It also brings hono to ^4.13.13 and widens
+  `audit:deps` to the development dependencies, so CI sees what the host
+  installs.
+- No migration (both databases stay at 123) and no screen change: the entry
+  stayed `index-B8JC2A9C.js`.
+- Archive `mcwellness-7bd704c9.tar.gz`, 7,655,909 bytes, build `01a11273`.
+- The host's install now reports "found 0 vulnerabilities", where the 41st
+  pass's reported two critical ones, and `hosting_nodejs_list-vulnerabilities`
+  answers empty.
+- Health 0.37 s, deep 0.81 s. The host runs Node 24.6.0; jsdom 30.1.2 asks
+  for 24.15 or later, which is a warning about a development tool only.
+
+**A test tied to the calendar, mended in PR 239.**
+`tests/billing/db/summary.test.ts` failed on main from 1 October 2026. Its
+visit was dated by the database's `now()`, and the consumption trigger stamps
+the credit with the real clock, while the test reads September 2026. The
+app's figures were right. The test now dates both inside the month it reads.
+
+**Held, not live.** PR 242, live location for the dispatcher, is a draft. It
+waits on the operator's approval of the staff notice 1.1, on confirmation of
+the database host's backup period (7 days is written), and on whether family
+members who help should share.
+
+**For the owner.**
+- Settings › Announcements: write practice news in both languages; households
+  see it on their portal home.
+- A new client can be activated and booked once a date of birth, a verified
+  location and a contact who may consent are on file. The Overview lists the
+  consents "To sign at the first visit", and the first visit cannot start
+  until they are signed.
+- A progress report counts every visit of the client.
+- An installed window loads the new version after Cmd+R.
