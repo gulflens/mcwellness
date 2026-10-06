@@ -4,6 +4,7 @@ import { positionsCutoff } from '@domain/scheduling';
 import { testimonialRetentionCutoffs } from '@domain/testimonial';
 import { postPendingEvents } from './accounting/poster';
 import { describeSweep, sweepErasureFiles } from './clients/erasure-file-sweep';
+import { sweepWithdrawnReportFiles } from './reports/withdraw';
 import type { ServerStorageProvider } from './_middleware/storage';
 
 /**
@@ -202,8 +203,17 @@ export async function runJob(name: JobName, deps: SchedulerDeps): Promise<void> 
           log(`Scheduler: practice ${ordinal}, ${rows[0]?.deleted ?? 0} stale reviews deleted.`);
         } else {
           const swept = await sweepErasureFiles(client, deps.storage);
+          // A withdrawn upload's file is the same kind of leftover: bytes a
+          // request meant to delete after its commit (migration 608 section 3).
+          const withdrawn = await sweepWithdrawnReportFiles(client, deps.storage);
           await client.query('commit');
           log(`Scheduler: practice ${ordinal}, ${describeSweep(swept)}`);
+          if (withdrawn.removed + withdrawn.stillThere + withdrawn.notOurs > 0) {
+            log(
+              `Scheduler: practice ${ordinal}, withdrawn uploads: ${withdrawn.removed} removed, ` +
+                `${withdrawn.stillThere} still in the store, ${withdrawn.notOurs} left alone.`,
+            );
+          }
         }
       } catch (error) {
         await client.query('rollback').catch(() => undefined);

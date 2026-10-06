@@ -56,7 +56,7 @@ const REPORTS_SQL =
   'r.version, r.document_id, ' +
   // An uploaded report's title, from the row itself: nothing here joins a
   // table the household's reach does not include (migration 608).
-  "case when r.kind::text = 'external' then r.content ->> 'title' end as title " +
+  "case when r.kind::text = 'external' then r.content ->> 'externalReportTitle' end as title " +
   'from report r ' +
   'where r.tenant_id = app.current_tenant_id() and r.client_id = any($1::uuid[]) ' +
   'order by r.issued_on desc nulls last, r.created_at desc, r.id';

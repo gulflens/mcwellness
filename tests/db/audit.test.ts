@@ -414,6 +414,16 @@ describe('app.audit_redact drops a fixed set of keys outright (audit.md section 
     });
   });
 
+  it('drops an uploaded report’s title from its content, keeping the size (migration 979)', async () => {
+    expect(
+      await redact({
+        content: { externalReportTitle: 'A title a person typed', byteSize: 12 },
+        externalReportTitle: 'at the top as well',
+        number: 7,
+      }),
+    ).toEqual({ content: { byteSize: 12 }, number: 7 });
+  });
+
   it('drops the number an erasure request was made from, keeping what the request says', async () => {
     // erasure_request.requested_by_phone (the client-record stream's migration
     // 104) is recorded in clear on purpose — the erasure has not happened yet

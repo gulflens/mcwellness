@@ -115,6 +115,18 @@ export function mountReportDeliver(
       return c.json({ error: 'unprocessable', code: imported, requestId }, 422);
     }
 
+    if (record.kind === 'external' && record.withdrawn) {
+      // Withdrawn because it was filed against the wrong client, or was the
+      // wrong file (migration 608 section 3): never sent anywhere again.
+      await logAction(
+        db,
+        'report.deliver_refused',
+        { type: 'report', id: reportId, clientId: record.client_id },
+        { reason: 'withdrawn' },
+      );
+      return c.json({ error: 'unprocessable', code: 'withdrawn', requestId }, 422);
+    }
+
     const contacts = await db.query<{
       id: string;
       phone: string | null;

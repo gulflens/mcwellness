@@ -178,6 +178,9 @@ export function ExternalUpload({
         onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
       />
       <p className="small muted">A PDF of at most 20 MB.</p>
+      {/* Said before the press, because there is no draft step: filed is shown.
+          A wrong one is taken back with Withdraw on its page. */}
+      <Note tone="attention">The household can see this report as soon as it is uploaded.</Note>
       {error ? <Note tone="critical">{error}</Note> : null}
       <div className="report-editor__actions">
         <Button variant="primary" disabled={busy} onClick={() => void upload()}>

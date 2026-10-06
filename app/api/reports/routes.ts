@@ -12,6 +12,7 @@ import { mountReportIssue } from './issue';
 import { mountReportList } from './list';
 import { mountReportPreview } from './preview';
 import { mountReportSupersede } from './supersede';
+import { mountReportWithdraw } from './withdraw';
 
 /**
  * Mounts every reports route (docs/SPEC/reports-v1.md section 7.1). Called
@@ -44,6 +45,7 @@ export function mountReports(api: Hono<ApiEnv>, now: () => Date = () => new Date
   mountReportIssue(api, now);
   mountReportPreview(api, now);
   mountReportSupersede(api, now);
+  mountReportWithdraw(api, now);
   mountReportDeliver(api, now);
   mountReportFigures(api, now);
   mountReportTwin(api, now);

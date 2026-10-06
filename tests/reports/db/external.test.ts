@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PortalReportsResponse } from '../../../app/api/portal/schema';
+import { answerForFilingError } from '../../../app/api/reports/external';
+import { sweepWithdrawnReportFiles } from '../../../app/api/reports/withdraw';
 import type {
   DeliverResponse,
   DocumentLinkResponse,
@@ -160,7 +162,10 @@ describe('the row', () => {
     );
     const row = rows[0];
     if (!row) throw new Error('The report was not filed with its document.');
-    expect(row.content).toEqual({ title: 'Brain map, initial', byteSize: bytes.byteLength });
+    expect(row.content).toEqual({
+      externalReportTitle: 'Brain map, initial',
+      byteSize: bytes.byteLength,
+    });
     expect(row.signed_at).toBeNull();
     const ownerUser = h.data.users[SEEDED.owner]?.id;
     expect(row.created_by).toBe(ownerUser);
@@ -191,7 +196,7 @@ describe('the row', () => {
       await rejectsWith(
         h.owner,
         '23001',
-        `update report set content = '{"title":"Another title","byteSize":10}'::jsonb where id = $1`,
+        `update report set content = '{"externalReportTitle":"Another title","byteSize":10}'::jsonb where id = $1`,
         [report.id],
       );
       await rejectsWith(
@@ -217,14 +222,14 @@ describe('the row', () => {
         h.owner,
         '23514',
         "insert into report (tenant_id, client_id, kind, content) values ($1, $2, 'external', " +
-          `'{"title":"A draft","byteSize":10}'::jsonb)`,
+          `'{"externalReportTitle":"A draft","byteSize":10}'::jsonb)`,
         [h.data.tenant.id, clientId],
       );
       // A title with nothing in it, and no document.
       await rejectsWith(
         h.owner,
         '23514',
-        `${base}) values ($1, $2, 'external', 'issued', '{"title":"","byteSize":10}'::jsonb, ` +
+        `${base}) values ($1, $2, 'external', 'issued', '{"externalReportTitle":"","byteSize":10}'::jsonb, ` +
           "999001, current_date, 'Erased client', 'MW-1', 'Practice', null)",
         [h.data.tenant.id, clientId],
       );
@@ -249,7 +254,7 @@ describe('the row', () => {
           h.owner,
           '42501',
           'insert into report (tenant_id, client_id, kind, status, content) values ' +
-            `($1, $2, 'external', 'issued', '{"title":"By hand","byteSize":10}'::jsonb)`,
+            `($1, $2, 'external', 'issued', '{"externalReportTitle":"By hand","byteSize":10}'::jsonb)`,
           [h.data.tenant.id, clientId],
         );
       });
@@ -268,6 +273,46 @@ describe('the row', () => {
         [clientId],
       );
     });
+  });
+
+  it('says a date still to come with its own hint, and the door reads only that one', async () => {
+    let seen: { code?: string; hint?: string } = {};
+    await h.asPerson(SEEDED.owner, async (db) => {
+      await db.query('savepoint future');
+      try {
+        await db.query(
+          "select app.file_external_report($1, 'Brain map', '2999-01-01', 10, gen_random_uuid(), " +
+            "'k/not-used', decode(repeat('ab', 32), 'hex'), null)",
+          [clientId],
+        );
+      } catch (error) {
+        seen = error as { code?: string; hint?: string };
+      } finally {
+        await db.query('rollback to savepoint future');
+      }
+    });
+    expect(seen.code).toBe('23514');
+    expect(seen.hint).toBe('report_date_in_future');
+    expect(answerForFilingError(seen)).toEqual({ status: 400, code: 'date_in_future' });
+    // Any other check the row fails is a fault, not a date the person can fix.
+    expect(answerForFilingError({ code: '23514' })).toBeUndefined();
+    expect(answerForFilingError({ code: '23514', hint: 'something_else' })).toBeUndefined();
+  });
+
+  it('keeps the title out of the trail, so no erasure has a copy to miss', async () => {
+    const title = 'Trail never holds this title';
+    const report = await uploaded(SEEDED.owner, { title });
+    const { rows } = await h.owner.query<{ n: number; content_keys: string[] | null }>(
+      'select count(*)::int as n, ' +
+        "(select array_agg(k) from audit_log a2, jsonb_object_keys(a2.new_values -> 'content') k " +
+        "  where a2.entity_id = $1 and jsonb_typeof(a2.new_values -> 'content') = 'object') " +
+        '  as content_keys ' +
+        'from audit_log a where a.new_values::text like $2 or a.old_values::text like $2',
+      [report.id, `%${title}%`],
+    );
+    expect(rows[0]?.n).toBe(0);
+    // The filing is on the trail, and what it held of the content is the size.
+    expect(rows[0]?.content_keys).toEqual(['byteSize']);
   });
 
   it('is invisible to another practice, and cannot be filed into one', async () => {
@@ -343,6 +388,25 @@ describe('the upload door', () => {
     const title = 'تقرير خريطة الدماغ';
     const report = await uploaded(SEEDED.owner, { title });
     expect(report.title).toBe(title);
+  });
+
+  it('files once when the same file is sent twice at the same moment', async () => {
+    const bytes = pdf();
+    const [one, two] = await Promise.all([
+      upload(SEEDED.owner, bytes),
+      upload(SEEDED.owner, bytes),
+    ]);
+    expect([one.status, two.status].sort()).toEqual([200, 201]);
+    const ids = await Promise.all(
+      [one, two].map(async (res) => ((await res.json()) as { report: ReportRow }).report.id),
+    );
+    expect(ids[0]).toBe(ids[1]);
+    const { rows } = await h.owner.query<{ n: number }>(
+      'select count(*)::int as n from report r join document d on d.id = r.document_id ' +
+        "where r.client_id = $1 and d.sha256 = decode($2, 'hex')",
+      [clientId, digest(bytes)],
+    );
+    expect(rows[0]?.n).toBe(1);
   });
 
   it('hands back the report already filed when the same file is sent again', async () => {
@@ -521,5 +585,156 @@ describe('erasure', () => {
       [request.rows[0]?.id],
     );
     expect(pending.rows[0]?.keys.map((entry) => entry.storageKey)).toContain(storageKey);
+  });
+});
+
+describe('withdrawing an upload', () => {
+  async function withdraw(user: number, id: string, reason?: string): Promise<Response> {
+    return h.call(
+      'POST',
+      `/api/reports/${id}/withdraw`,
+      user,
+      {},
+      reason === undefined ? {} : { 'x-reason': reason },
+    );
+  }
+
+  async function storageKeyOf(documentId: string | null): Promise<string> {
+    const { rows } = await h.owner.query<{ storage_key: string }>(
+      'select storage_key from document where id = $1',
+      [documentId],
+    );
+    return rows[0]?.storage_key ?? '';
+  }
+
+  it('takes it out of the household’s portal at once, keeps its number, and deletes the file', async () => {
+    const bytes = pdf();
+    const res = await upload(SEEDED.owner, bytes, { title: 'Filed against the wrong client' });
+    const report = ((await res.json()) as { report: ReportRow }).report;
+    const key = await storageKeyOf(report.documentId);
+    const before = await callWithToken('GET', '/api/portal/reports', householdAuthId);
+    expect(((await before.json()) as PortalReportsResponse).reports.map((r) => r.id)).toContain(
+      report.id,
+    );
+
+    const answer = await withdraw(SEEDED.owner, report.id, 'Filed against the wrong client.');
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual({ ok: true, withdrawn: true });
+
+    const { rows } = await h.owner.query<{
+      content: Record<string, unknown>;
+      withdrawn: boolean;
+      withdraw_reason: string;
+      reference: string;
+      document_id: string | null;
+      status: string;
+    }>(
+      'select content, withdrawn_at is not null as withdrawn, withdraw_reason, reference, ' +
+        'document_id, status::text as status from report where id = $1',
+      [report.id],
+    );
+    expect(rows[0]).toEqual({
+      content: {},
+      withdrawn: true,
+      withdraw_reason: 'Filed against the wrong client.',
+      reference: report.reference,
+      document_id: report.documentId,
+      status: 'issued',
+    });
+    expect(await h.storage.exists(key)).toBe(false);
+
+    // The household: not listed, and the link is not there.
+    const after = await callWithToken('GET', '/api/portal/reports', householdAuthId);
+    expect(((await after.json()) as PortalReportsResponse).reports.map((r) => r.id)).not.toContain(
+      report.id,
+    );
+    const link = await callWithToken(
+      'GET',
+      `/api/portal/reports/${report.documentId}/link`,
+      householdAuthId,
+    );
+    expect(link.status).toBe(404);
+
+    // The practice: still listed, as withdrawn, never opened or sent.
+    const one = await h.call('GET', `/api/reports/${report.id}`, SEEDED.owner);
+    expect(one.status).toBe(200);
+    const body = (await one.json()) as ReportResponse;
+    expect(body.report.withdrawn).toBe(true);
+    expect(body.url).toBeNull();
+    const sent = await h.call('POST', `/api/reports/${report.id}/deliver`, SEEDED.owner, {
+      contactId,
+      channel: 'whatsapp',
+    });
+    expect(sent.status).toBe(422);
+    expect(((await sent.json()) as { code: string }).code).toBe('withdrawn');
+
+    // Withdrawing again answers and changes nothing; the same file filed again is a new report.
+    const again = await withdraw(SEEDED.owner, report.id, 'Again.');
+    expect(await again.json()).toEqual({ ok: true, withdrawn: false });
+    const refiled = await upload(SEEDED.owner, bytes);
+    expect(refiled.status).toBe(201);
+    expect(((await refiled.json()) as { report: ReportRow }).report.id).not.toBe(report.id);
+  });
+
+  it('carries a reason, and is open to whoever may file one and nobody else', async () => {
+    const report = await uploaded();
+    expect((await withdraw(SEEDED.owner, report.id)).status).toBe(400);
+    expect((await withdraw(SEEDED.owner, report.id, 'x'.repeat(201))).status).toBe(400);
+    expect((await withdraw(SEEDED.admin, report.id, 'Wrong client.')).status).toBe(403);
+
+    // Not the client the erasure above took.
+    const other = h.data.clients.filter((c) => c.id !== clientId)[1];
+    if (!other) throw new Error('The seed has too few clients.');
+    const theirs = await uploaded(SEEDED.owner, { client: other.id });
+    // Off her schedule the report is simply not there for a practitioner.
+    expect((await withdraw(SEEDED.practitioner, theirs.id, 'Wrong client.')).status).toBe(404);
+  });
+
+  it('is never a way to change anything else on the row', async () => {
+    const report = await uploaded();
+    await h.asPerson(SEEDED.owner, async (db) => {
+      await rejectsWith(
+        db,
+        '23001',
+        "update report set withdrawn_at = now(), withdraw_reason = 'Wrong client.', " +
+          "content = '{}'::jsonb, issued_on = '2026-08-01' where id = $1",
+        [report.id],
+      );
+      // Nor is the title kept on a withdrawn one.
+      await rejectsWith(
+        db,
+        '23001',
+        "update report set withdrawn_at = now(), withdraw_reason = 'Wrong client.' where id = $1",
+        [report.id],
+      );
+    });
+  });
+
+  it('leaves bytes the store would not give up to the hourly sweep', async () => {
+    const bytes = pdf();
+    const report = ((await (await upload(SEEDED.owner, bytes)).json()) as { report: ReportRow })
+      .report;
+    const key = await storageKeyOf(report.documentId);
+    expect((await withdraw(SEEDED.owner, report.id, 'Wrong file.')).status).toBe(200);
+    // As if the delete after the commit had failed.
+    await h.storage.put(key, bytes, 'application/pdf');
+
+    await h.owner.query('begin');
+    try {
+      await asApiRole(
+        h.owner,
+        h.data.tenant.id,
+        async () => {
+          const swept = await sweepWithdrawnReportFiles(h.owner, h.storage);
+          expect(swept.removed).toBeGreaterThanOrEqual(1);
+          expect(swept.notOurs).toBe(0);
+          // As the scheduler runs it: the erasure sweep's role, the office's.
+        },
+        'admin',
+      );
+    } finally {
+      await h.owner.query('rollback');
+    }
+    expect(await h.storage.exists(key)).toBe(false);
   });
 });

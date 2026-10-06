@@ -91,6 +91,8 @@ export function checkExternalUpload(input: {
 export function externalTitleOf(kind: ReportKind, content: unknown): string | null {
   if (kind !== 'external') return null;
   if (content === null || typeof content !== 'object' || Array.isArray(content)) return null;
-  const title = (content as { title?: unknown }).title;
+  // `externalReportTitle`, never `title`: a name nothing else uses, so the
+  // trail can drop it by name (migration 979) and an erasure leaves no copy.
+  const title = (content as { externalReportTitle?: unknown }).externalReportTitle;
   return typeof title === 'string' && title.length > 0 ? title : null;
 }

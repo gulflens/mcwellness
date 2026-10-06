@@ -223,7 +223,10 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
 
     let url: string | null = null;
     const storage = c.get('storage');
-    if (record.document_id && storage) {
+    // A withdrawn upload's file is deleted (migration 608 section 3): the row
+    // is still read, for the trail and the list, and no link is signed.
+    const withdrawnUpload = record.kind === 'external' && record.withdrawn;
+    if (record.document_id && storage && !withdrawnUpload) {
       const found = await db.query<{ id: string; storage_key: string; sha256: Buffer }>(
         DOCUMENT_SQL,
         [record.document_id],

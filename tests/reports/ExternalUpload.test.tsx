@@ -73,6 +73,7 @@ function mount(
 ) {
   const sent: Sent[] = [];
   let reports = options.reports ?? [];
+  let withdrawn = false;
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     sent.push({
@@ -88,13 +89,20 @@ function mount(
       if (answer.status < 300) reports = [uploadedRow()];
       return json(answer.body, answer.status);
     }
+    if (url === `/api/reports/${UPLOADED}/withdraw`) {
+      withdrawn = true;
+      reports = [uploadedRow({ withdrawn: true, title: null })];
+      return json({ ok: true, withdrawn: true });
+    }
     if (url === `/api/reports/${UPLOADED}`) {
       return json({
-        report: uploadedRow(),
-        content: { title: 'Brain map, initial', byteSize: PDF_BYTES.byteLength },
+        report: withdrawn ? uploadedRow({ withdrawn: true, title: null }) : uploadedRow(),
+        content: withdrawn
+          ? {}
+          : { externalReportTitle: 'Brain map, initial', byteSize: PDF_BYTES.byteLength },
         deliveries: [],
-        url: 'https://storage.example.com/signed',
-        expiresInSeconds: 300,
+        url: withdrawn ? null : 'https://storage.example.com/signed',
+        expiresInSeconds: withdrawn ? null : 300,
       });
     }
     if (url === `/api/clients/${CLIENT}`) {
@@ -145,6 +153,14 @@ describe('uploading a PDF report', () => {
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Upload a PDF report' })).toBeNull(),
     );
+  });
+
+  it('says the household can see it as soon as it is uploaded', async () => {
+    mount();
+    await openForm();
+    expect(
+      screen.getByText('The household can see this report as soon as it is uploaded.'),
+    ).toBeTruthy();
   });
 
   it('chooses PDFs only', async () => {
@@ -239,5 +255,50 @@ describe('an uploaded report on the list and on its page', () => {
     expect(await screen.findByRole('button', { name: 'Send' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Correct this report' })).toBeNull();
     expect(screen.queryByText('Signed by')).toBeNull();
+  });
+});
+
+describe('withdrawing an uploaded report', () => {
+  it('asks for a reason, confirms, sends it in X-Reason, and then says it is withdrawn', async () => {
+    const sent = mount(LEAD_PRACTITIONER, { reports: [uploadedRow()] });
+    fireEvent.click(await screen.findByRole('button', { name: 'RPT-000021' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+    expect(
+      screen.getByText(/The household stops seeing it at once and its file is deleted/),
+    ).toBeTruthy();
+    // No reason, nothing sent.
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw this report' }));
+    expect(await screen.findByText('Say why it is being withdrawn.')).toBeTruthy();
+    expect(sent.some((call) => call.url.endsWith('/withdraw'))).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('Why it is being withdrawn'), {
+      target: { value: 'Filed against the wrong client.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw this report' }));
+    await waitFor(() => expect(sent.some((call) => call.url.endsWith('/withdraw'))).toBe(true));
+    const post = sent.find((call) => call.url.endsWith('/withdraw'))!;
+    expect(post.method).toBe('POST');
+    expect(post.headers.get('x-reason')).toBe('Filed against the wrong client.');
+
+    expect(
+      await screen.findByText(
+        'Withdrawn. The household can no longer see it, and its file has been deleted.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open the report' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull();
+  });
+
+  it('is not offered to an admin, who never files one', async () => {
+    mount(ADMIN, { reports: [uploadedRow()] });
+    fireEvent.click(await screen.findByRole('button', { name: 'RPT-000021' }));
+    expect(await screen.findByRole('button', { name: 'Open the report' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull();
+  });
+
+  it('shows a withdrawn one as withdrawn on the list', async () => {
+    mount(LEAD_PRACTITIONER, { reports: [uploadedRow({ withdrawn: true, title: null })] });
+    expect(await screen.findByText('Withdrawn')).toBeTruthy();
   });
 });

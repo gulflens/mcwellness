@@ -80,11 +80,15 @@ $$;
 --    clause that leaves a draft out — the household's line names the two
 --    statuses it may read, and `imported` is neither.
 --
---    An uploaded report (kind `external`, migration 608) needs no line of its
---    own: it is filed `issued`, so a guardian reads it as any issued report
---    of their client, and every arm here is asked of it unchanged. Its title
---    sits in `content`, on this row, so the portal reads it without joining
---    any table the household's reach leaves out.
+--    An uploaded report (kind `external`, migration 608) is filed `issued`,
+--    so a guardian reads it as any issued report of their client, and every
+--    arm here is asked of it unchanged. Its title sits in `content`, on this
+--    row, so the portal reads it without joining any table the household's
+--    reach leaves out. One clause is its own: a withdrawn one (608 section 3:
+--    filed against the wrong client, or the wrong file) is the household's no
+--    longer, from the moment it is withdrawn. `withdrawn_at` is null on every
+--    other issued or superseded row (603's `report_withdraw_only_imported`),
+--    so the clause changes nothing for them.
 ------------------------------------------------------------------------------
 drop policy if exists report_readers on public.report;
 create policy report_readers on public.report as restrictive for select to app_role using (
@@ -95,6 +99,7 @@ create policy report_readers on public.report as restrictive for select to app_r
     or (
       app.actor_has_role('client_contact') and app.actor_may_read_reports_of(client_id)
       and (status = 'issued' or (status = 'superseded' and app.report_was_delivered(id)))
+      and withdrawn_at is null
     )
   )
 );

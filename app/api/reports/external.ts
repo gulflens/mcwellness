@@ -64,8 +64,26 @@ const ANSWER_FOR: Readonly<Record<string, { status: 400 | 403 | 404 | 422; code:
   '42501': { status: 403, code: 'not_permitted' },
   P0002: { status: 404, code: 'not_found' },
   '23001': { status: 422, code: 'record_erased' },
-  '23514': { status: 400, code: 'date_in_future' },
 };
+
+/**
+ * The function's refusal of a date still to come: a check violation carrying
+ * its own hint (migration 608). Read by the hint and not by the SQLSTATE alone,
+ * because every row check on `report` is a check violation too, and a row the
+ * database refused for any other reason is a fault to report, not a date the
+ * person can correct.
+ */
+const DATE_IN_FUTURE_HINT = 'report_date_in_future';
+
+export function answerForFilingError(
+  error: unknown,
+): { status: 400 | 403 | 404 | 422; code: string } | undefined {
+  const { code, hint } = error as { code?: string; hint?: string };
+  if (code === '23514') {
+    return hint === DATE_IN_FUTURE_HINT ? { status: 400, code: 'date_in_future' } : undefined;
+  }
+  return ANSWER_FOR[code ?? ''];
+}
 
 /** The title header, decoded; null where it is missing or will not decode. */
 function titleFrom(header: string | undefined): string | null {
@@ -178,7 +196,7 @@ export function mountReportExternal(api: Hono<ApiEnv>, now: () => Date = () => n
       filed = row;
       await db.query('release savepoint file_external_report');
     } catch (error) {
-      const answer = ANSWER_FOR[(error as { code?: string }).code ?? ''];
+      const answer = answerForFilingError(error);
       if (!answer) throw error;
       await db.query('rollback to savepoint file_external_report');
       await refuse(answer.code);

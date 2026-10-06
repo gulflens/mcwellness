@@ -38,6 +38,15 @@ import { languageWord, twinLines } from './qeeg/twinWords';
  * brain-map form.
  */
 
+/** What `POST /api/reports/:id/withdraw` refuses, in a sentence each. */
+const WITHDRAW_REFUSALS: Record<string, string> = {
+  reason_required: 'Say why it is being withdrawn, in at most 200 characters.',
+  not_permitted: 'You may not withdraw a report for this client.',
+  not_found: 'That report is no longer there.',
+  not_an_upload: 'Only an uploaded report is withdrawn; a report written here is corrected.',
+  record_erased: 'This record has been erased. Nothing is left to withdraw.',
+};
+
 const REFUSALS: Record<string, string> = {
   not_issued: 'A draft is not sent. Sign it first.',
   no_consent: 'This client has no live agreement to take part, so nothing may be sent.',
@@ -115,6 +124,9 @@ export function ReportView({
   const [handoff, setHandoff] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [superseding, setSuperseding] = useState(false);
+  /** Withdrawing an uploaded report: the confirm step is open. */
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -292,6 +304,45 @@ export function ReportView({
     }
   }
 
+  /**
+   * An uploaded report taken back (docs/SPEC/reports-v1.md section 12): the
+   * household stops seeing it and its file is deleted; the row and its number
+   * stay. The reason goes in `X-Reason`, which the route requires.
+   */
+  async function withdraw(): Promise<void> {
+    const why = withdrawReason.trim();
+    if (why === '') {
+      setError('Say why it is being withdrawn.');
+      return;
+    }
+    if (why.length > 200) {
+      setError('Keep the reason to 200 characters.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/reports/${reportId}/withdraw`, {
+        method: 'POST',
+        headers: { 'x-reason': why },
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { code?: string } | null;
+        setError(WITHDRAW_REFUSALS[body?.code ?? ''] ?? 'The report could not be withdrawn.');
+        return;
+      }
+      setWithdrawing(false);
+      setWithdrawReason('');
+      await reread();
+    } catch {
+      // A header carries Latin-1 at most: a reason typed in another script
+      // fails in the browser before it is sent.
+      setError('The report could not be withdrawn. Write the reason in English letters.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (state === 'loading') return <Note>Loading.</Note>;
   if (state === 'error' || !report) {
     return <Note tone="critical">{loadError ?? 'That report could not be loaded.'}</Note>;
@@ -309,6 +360,7 @@ export function ReportView({
   const progress =
     row.kind === 'progress' ? (report.content as ProgressReportContent | null) : null;
   const uploaded = row.kind === 'external';
+  const withdrawnUpload = uploaded && row.withdrawn;
 
   return (
     <div className="report-view">
@@ -356,7 +408,11 @@ export function ReportView({
         ) : null}
       </dl>
 
-      {uploaded ? (
+      {withdrawnUpload ? (
+        <Note tone="attention">
+          Withdrawn. The household can no longer see it, and its file has been deleted.
+        </Note>
+      ) : uploaded ? (
         <Note>
           Uploaded as a PDF made in another tool, and not signed in this app. It is opened and sent
           exactly as it was uploaded; the reference above is this app’s and is not printed on it.
@@ -399,7 +455,7 @@ export function ReportView({
           <Button variant="primary" onClick={() => void open()}>
             Open the report
           </Button>
-        ) : (
+        ) : withdrawnUpload ? null : (
           <Note>This report has no filed document.</Note>
         )}
         <Button variant="quiet" onClick={onBack}>
@@ -407,7 +463,7 @@ export function ReportView({
         </Button>
       </div>
 
-      {maySend && mayBeSent(row.status) ? (
+      {maySend && mayBeSent(row.status) && !withdrawnUpload ? (
         <section>
           <h3 className="report-editor__heading">Send it to the household</h3>
           {contacts.length === 0 ? (
@@ -512,6 +568,47 @@ export function ReportView({
             </>
           ) : (
             <Button onClick={() => setSuperseding(true)}>Correct this report</Button>
+          )}
+        </section>
+      ) : null}
+
+      {mayDraft && uploaded && !row.withdrawn && row.status === 'issued' ? (
+        <section className="report-editor__sign">
+          {withdrawing ? (
+            <>
+              <label className="field__label" htmlFor="withdraw-reason">
+                Why it is being withdrawn
+              </label>
+              <textarea
+                id="withdraw-reason"
+                className="report-editor__note"
+                maxLength={200}
+                value={withdrawReason}
+                onChange={(event) => setWithdrawReason(event.currentTarget.value)}
+              />
+              <p className="small muted">
+                For a report filed against the wrong client, or the wrong file. The household stops
+                seeing it at once and its file is deleted; its reference stays on this list. This
+                cannot be undone: to file it again, upload it again.
+              </p>
+              <div className="report-editor__actions">
+                <Button variant="primary" disabled={busy} onClick={() => void withdraw()}>
+                  Withdraw this report
+                </Button>
+                <Button
+                  variant="quiet"
+                  disabled={busy}
+                  onClick={() => {
+                    setWithdrawing(false);
+                    setError(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button onClick={() => setWithdrawing(true)}>Withdraw</Button>
           )}
         </section>
       ) : null}

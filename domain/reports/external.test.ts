@@ -93,12 +93,14 @@ describe('checkExternalUpload', () => {
 
 describe('externalTitleOf', () => {
   it('reads the title an uploaded report carries', () => {
-    expect(externalTitleOf('external', { title: 'Brain map', byteSize: 10 })).toBe('Brain map');
+    expect(externalTitleOf('external', { externalReportTitle: 'Brain map', byteSize: 10 })).toBe(
+      'Brain map',
+    );
   });
 
   it('answers null for an erased one, and for every other kind', () => {
     expect(externalTitleOf('external', {})).toBeNull();
-    expect(externalTitleOf('progress', { title: 'Not a title' })).toBeNull();
+    expect(externalTitleOf('progress', { externalReportTitle: 'Not a title' })).toBeNull();
     expect(externalTitleOf('external', null)).toBeNull();
   });
 });
