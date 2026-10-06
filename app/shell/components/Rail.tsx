@@ -15,6 +15,7 @@ import {
   PinIcon,
   PortalIcon,
   RailIcon,
+  ReviewsIcon,
   ScheduleIcon,
   SettingsIcon,
   SignOutIcon,
@@ -54,6 +55,10 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
   // dismisses it. AdminLayout shows it only to the three roles that may action
   // one (adminAccess.ts).
   { key: 'enquiries', label: 'Enquiries', to: '/admin/enquiries', icon: <EnquiriesIcon /> },
+  // What people sent from the website's Testimonials page, waiting to be
+  // approved or declined, beside the other thing the website sends. AdminLayout
+  // shows it only to the owner and an admin (adminAccess.ts).
+  { key: 'reviews', label: 'Reviews', to: '/admin/reviews', icon: <ReviewsIcon /> },
   {
     key: 'schedule',
     label: 'Schedule',
@@ -292,8 +297,9 @@ export function Rail({
   /** Called when a section is chosen, so the layout may put the rail away. */
   onChoose?: () => void;
   /**
-   * A count beside a section, by its key: today the enquiries waiting for
-   * somebody (useNewEnquiryCount.ts). Nothing is drawn for nought, and nothing
+   * A count beside a section, by its key: the enquiries waiting for somebody
+   * (useNewEnquiryCount.ts) and the reviews waiting for a decision
+   * (usePendingReviewCount.ts). Nothing is drawn for nought, and nothing
    * for a section the layout did not list.
    */
   badges?: Readonly<Record<string, number>>;

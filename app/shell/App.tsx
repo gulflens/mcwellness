@@ -15,6 +15,7 @@ import {
   canOpenNotifications,
   canOpenPortalAccess,
   canOpenPractitioners,
+  canOpenReviews,
   canOpenSchedule,
   canOpenSettings,
   canOpenTeam,
@@ -75,6 +76,7 @@ const PinPickerPage = screen(() => import('../admin/clients/pin/PinPickerPage'),
 const EnquiriesPage = screen(() => import('../admin/enquiries/EnquiriesPage'), 'EnquiriesPage');
 const ExpoPosterPage = screen(() => import('../admin/enquiries/ExpoPosterPage'), 'ExpoPosterPage');
 const KitPage = screen(() => import('../admin/kit/KitPage'), 'KitPage');
+const ReviewsPage = screen(() => import('../admin/reviews/ReviewsPage'), 'ReviewsPage');
 const TeamPage = screen(() => import('../admin/settings/TeamPage'), 'TeamPage');
 const SchedulePage = screen(() => import('../admin/schedule/SchedulePage'), 'SchedulePage');
 const WeekPage = screen(() => import('../admin/schedule/WeekPage'), 'WeekPage');
@@ -498,6 +500,20 @@ export function App() {
                   {(actor) =>
                     canOpenEnquiries(actor, new Date()) ? (
                       <EnquiriesPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="reviews"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenReviews(actor, new Date()) ? (
+                      <ReviewsPage />
                     ) : (
                       <Navigate to={homeFor(actor)} replace />
                     )
