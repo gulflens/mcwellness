@@ -2,11 +2,11 @@
 
 Written 6 October 2026 with the piece, from `docs/SPEC/dispatch.md` section
 15. As dispatch-01 did, and by the precedent of pieces seven to ten and
-seventeen and the cost rules of `docs/HANDOVER.md` section 6, items 1 to 9
+seventeen and the cost rules of `docs/HANDOVER.md` section 6, items 1 to 15
 ride in the piece's own branch (`round-73/live-location`) under the
-integrator's widening for one piece; items 10 to 13 are **proposed and not
-applied**, because they are rules and registers rather than code, and the
-integrator should word them.
+integrator's widening for one piece (items 10 to 15 by fix round 1, on the
+coordinator's instruction to apply the rule and register texts in the
+branch); items 16 and 17 are proposed and not applied.
 
 ## Applied in the branch
 
@@ -55,33 +55,39 @@ integrator should word them.
    (`app/admin/clients/ConsentText.tsx`), unchanged, so a wording file is
    rendered one way everywhere and never through `dangerouslySetInnerHTML`.
 
-## Proposed, not applied
+## Applied in fix round 1 (6 October 2026)
 
 10. **`.claude/rules/data-model.md`**, the standard-column exemptions
-    paragraph, which ends "Nothing else is exempt." Proposed addition before
-    that sentence: *"`practitioner_position` (211_live_location.sql,
-    docs/SPEC/dispatch.md section 15) is exempt from the audit trigger by the
-    dispatcher plan the operator approved on 10 September 2026 and switched on
-    on 6 October 2026: a practitioner's positions are kept two days and
-    deleted by the hourly job, and the trigger would copy each into an
-    append-only log kept five years. A board read of one is logged by the
-    route by id, never by content. The table says so in its own comment,
-    `unaudited by decision`, which is what `tests/db/schema.test.ts` admits it
-    by."*
-11. **`docs/COMPLIANCE/approved-vendors.md`**, the Google Maps Platform row's
-    approval column, after "no household coordinate is sent to Google by the
-    map": *"Nor is a practitioner's shared location (piece twenty-five,
-    6 October 2026): it is drawn by the app on the day map like every other
-    pin, is not part of the map's extent, and reaches Google in no request.
-    The position itself comes from the practitioner's own browser
-    geolocation, which sends nothing to a vendor."* The existing row already
-    covers the behaviour; the sentence makes it explicit for staff.
-12. **`docs/CONSENT/README.md`**: one paragraph saying `staff/` holds notices
+    paragraph: the exemption sentence for `practitioner_position` before
+    "Nothing else is exempt", and the sentence that the five-year retention
+    rule concerns client records, a staff position not being one.
+11. **`.claude/rules/compliance.md`**: "every table holding personal data has
+    the audit trigger" names its two exceptions, `enquiry` and
+    `practitioner_position`; the retention bullet says it concerns client
+    records and that a staff position is deleted after two days by design.
+    CLAUDE.md is not edited.
+12. **`docs/COMPLIANCE/approved-vendors.md`**, the Google Maps Platform row:
+    a practitioner's shared location is drawn on the day map by the app, is
+    not part of the map's extent, and is sent in no Google request; the
+    position comes from the browser's own geolocation, which sends nothing to
+    a vendor.
+13. **`.github/workflows/backup.yml`** (shared, build and deploy): the weekly
+    dump excludes `practitioner_position`'s rows and keeps its shape, with
+    `tests/dispatch/backup-leaves-positions-out.test.ts` holding every
+    `pg_dump` line to it.
+14. **`app/therapist/TodayLanding.tsx`**: one import and one element,
+    `<LocationSharing />`, so somebody who can no longer share can still
+    withdraw. It renders nothing for anybody who never agreed.
+15. **Migration `212_live_location_floor.sql`**, in the stream's own range.
+
+## Proposed, not applied
+
+16. **`docs/CONSENT/README.md`**: one paragraph saying `staff/` holds notices
     the practice gives its own staff, which the client wording loader does not
     read (it files top-level files only), and that a staff consent is recorded
     in `staff_consent` against the notice's `version:` rather than as a
     `consent_text` document. Not edited here because the README is the
     approved-wording record and its status lines are the operator's.
-13. **`docs/SPEC/00-data-model.md`**: deliberately **not** edited, as
+17. **`docs/SPEC/00-data-model.md`**: deliberately **not** edited, as
     dispatch-01 item 1 did not edit it for migration 210. The three entities
     are written down in `docs/SPEC/dispatch.md` section 15.4.

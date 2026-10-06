@@ -425,7 +425,7 @@ driving alone between houses is where they should be. Never for pay, hours,
 performance or any decision about the person; nothing reads a position but
 the board and the day map.
 
-**15.2 The notice.** `docs/CONSENT/staff/location.en.md`, version `1.0`,
+**15.2 The notice.** `docs/CONSENT/staff/location.en.md`, version `1.1` (fix round 1, 15.10),
 English only (staff screens are English only). Purpose, what is collected,
 when, who sees it, two days, what it is never used for, and how to stop. The
 operator's approval of 6 October 2026 stands as the practice's signature; the
@@ -454,9 +454,9 @@ the statuses that are stops on their own day sheet: confirmed, checked in,
 completed and nobody home. It opens 90 minutes before the first visit's
 window opens (the drive to the first door) and closes 30 minutes after the
 last visit closed, or, if nobody closed it, 30 minutes after it could at the
-latest have ended (window end plus the service's length). While the
-practitioner is checked in at a door with the session still open it stays open.
-It is clipped to the practice day — never before midnight, never past it — and
+latest have ended (window end plus the service's length) — a forgotten
+check-in included, since fix round 1 (15.10). It never runs past 21:00 in
+Dubai (`SHIFT_LATEST_HOUR`) and never opens before midnight, and
 a day with no such visit has no shift at all, so a day off shares nothing.
 Both figures are named constants and the notice says them in words.
 
@@ -502,7 +502,7 @@ Nobody holds `delete` on any of the three. Positions leave only through
 | `POST /api/location/consent/withdraw` | the person | 204: consent withdrawn, switch off, every position of theirs deleted at once; 403 |
 | `PUT /api/location/sharing` `{ on }` | the person | 204; turning on 409 `no_consent` / `notice_changed`; off always; 403; 400 |
 | `POST /api/location/positions` `{ latitude, longitude, accuracyMetres }` | the person | 204; 409 `position_refused` with `code` one of the four refusals; 403; 400 |
-| `GET /api/location/positions` | owner, admin, lead (`appointment.board.read`) | the last position of everybody sharing now, recorded today, with its age in minutes; 403 otherwise |
+| `GET /api/location/positions` | owner, admin, lead (`appointment.board.read`) | the last position of everybody sharing now whose shift is open, sent since it opened (15.10), with its age in minutes; 403 otherwise |
 
 No route takes a person's id. A consent, a withdrawal and every turn of the
 switch are audited under the person with a reason of the route's own. The
@@ -560,3 +560,47 @@ refusal); `tests/dispatch/LocationSharing.test.tsx` (the switch, the notice,
 the band, sending and stopping); `tests/dispatch/BoardPositions.test.tsx`,
 `tests/dispatch/DayMapPosition.test.tsx`, `tests/dispatch/positions.test.ts`
 and `tests/dispatch/narrative.test.ts`.
+
+**15.10 Fix round 1, 6 October 2026** (the review of the same day).
+
+- **Backups.** The weekly dump (`.github/workflows/backup.yml`, kept 90 days)
+  carries `practitioner_position`'s shape and none of its rows
+  (`--exclude-table-data=public.practitioner_position`), held there by
+  `tests/dispatch/backup-leaves-positions-out.test.ts`. The database host's
+  own daily snapshots still hold positions for the host's backup period; the
+  notice says so.
+- **The database floor** (migration `212`). A position written by `app_role`
+  takes the server's clock, whatever it sent; the purge deletes anything
+  stamped more than a minute in the future as well as anything over two days
+  old; `app.location_sharing_active` counts a consent only for the notice in
+  force (`app.staff_location_notice_version()`, held equal to the domain's
+  constant by a test). The shift itself is checked in the route only: it is a
+  business rule, and writing it again in SQL would be a second copy free to
+  drift (rule 4).
+- **A forgotten check-in** no longer holds the shift open to midnight: an open
+  visit counts to the latest it could have ended, like any visit nobody
+  closed, and no shift runs past 21:00 Dubai. A visit starting at or after
+  21:00 makes no shift.
+- **The board** shows a position only while that person's shift is open and
+  only one sent since it opened; otherwise the row says "Not sharing now".
+- **Withdrawal always works.** `POST /api/location/consent/withdraw` and
+  `PUT /api/location/sharing {on:false}` are refused to nobody signed in,
+  whatever their role or practitioner row now is, and withdrawal still
+  deletes their positions at once. `GET /api/location/me` reports the consent
+  and switch of somebody no longer eligible, and the screen offers them
+  "Withdraw my agreement" on Today and on the landing screen.
+- **A changed notice** pauses sharing: the band says so and offers the new
+  notice, nothing is sent, and the board stops showing the old position.
+- **The notice, version 1.1.** It drops "work out what happened yesterday"
+  (nothing can read anything but the last position) and adds: the 21:00 cap
+  and the forgotten check-in; that the first position can be home; that the
+  audit record keeps the times of agreeing, withdrawing and switching for at
+  least five years, and that they could show working hours; the host's daily
+  copies and the weekly backup that leaves positions out; who to ask (the
+  owner, or the practice's email in Settings › Practice); and that the owner
+  could reset the password and sign in as the person, against which the date
+  of agreement stands on the person's own band. Version 1.0 was never shown to
+  anybody outside a laptop, so 1.1 replaces it in the same file.
+- **Not this round:** family members who help can share only with a
+  practitioner role and row, which also opens the client list (review finding
+  8). It waits on the operator.
