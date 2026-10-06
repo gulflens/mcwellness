@@ -198,6 +198,76 @@ function insertParams(
   ];
 }
 
+describe('reading: the edges of who and when', () => {
+  it('shows a contact whose only client has been erased nothing', async () => {
+    await rolledBack(owner, async () => {
+      await owner.query("update client set status = 'erased' where id = $1", [PORTAL.adultClient]);
+      expect(await asContact(owner, PORTAL.adultUser, ids)).toEqual([]);
+    });
+  });
+
+  it("shows a young person's own login nothing the day before their eighteenth birthday, and the current ones on it", async () => {
+    const BIRTHDAY =
+      '((select (now() at time zone t.timezone)::date from tenant t where t.id = $2) ' +
+      "- interval '18 years')::date";
+    await rolledBack(owner, async () => {
+      // Eighteen tomorrow: still a young person's own login today.
+      await owner.query(`update client set date_of_birth = ${BIRTHDAY} + 1 where id = $1`, [
+        PORTAL.childA,
+        IDS.tenantA,
+      ]);
+      expect(await asContact(owner, PORTAL.minorUser, ids)).toEqual([]);
+      // Eighteen today, in the practice's own day.
+      await owner.query(`update client set date_of_birth = ${BIRTHDAY} where id = $1`, [
+        PORTAL.childA,
+        IDS.tenantA,
+      ]);
+      expect(await asContact(owner, PORTAL.minorUser, ids)).toEqual(CURRENT_TENANT_A);
+    });
+  });
+
+  it("decides the first day in the practice's own time zone, not the server's", async () => {
+    // Two zones twenty-six hours apart, so the answer differs at every hour of
+    // the day rather than only in the four hours after 20:00 UTC when Dubai is
+    // already tomorrow: a row whose first day is today at the far east of the
+    // date line is shown by a practice there, and not by one at the far west.
+    await rolledBack(owner, async () => {
+      await owner.query(
+        'insert into announcement (id, tenant_id, title_en, title_ar, body_en, body_ar, ' +
+          "visible_from, created_by) values ($1, $2, 'A title', 'عنوان', 'A body.', 'نص.', " +
+          "(now() at time zone 'Pacific/Kiritimati')::date, $3)",
+        [A.fresh, IDS.tenantA, IDS.ownerA],
+      );
+      await owner.query("update tenant set timezone = 'Pacific/Kiritimati' where id = $1", [
+        IDS.tenantA,
+      ]);
+      expect(await asContact(owner, PORTAL.motherUser, ids)).toContain(A.fresh);
+      await owner.query("update tenant set timezone = 'Etc/GMT+12' where id = $1", [IDS.tenantA]);
+      expect(await asContact(owner, PORTAL.motherUser, ids)).not.toContain(A.fresh);
+    });
+  });
+
+  it('keeps showing an announcement until its correction’s first day, and the correction from then', async () => {
+    const CORRECTION =
+      'insert into announcement (id, tenant_id, title_en, title_ar, body_en, body_ar, ' +
+      "visible_from, supersedes_id, created_by) values ($1, $2, 'A title', 'عنوان', " +
+      "'A body.', 'نص.', ((select (now() at time zone t.timezone)::date from tenant t " +
+      'where t.id = $2) + $3::int), $4, $5)';
+    await rolledBack(owner, async () => {
+      await owner.query(CORRECTION, [A.correction, IDS.tenantA, 2, A.current, IDS.ownerA]);
+      const waiting = await asContact(owner, PORTAL.motherUser, ids);
+      expect(waiting).toContain(A.current);
+      expect(waiting).not.toContain(A.correction);
+    });
+    await rolledBack(owner, async () => {
+      await owner.query(CORRECTION, [A.correction, IDS.tenantA, 0, A.current, IDS.ownerA]);
+      const begun = await asContact(owner, PORTAL.motherUser, ids);
+      expect(begun).toContain(A.correction);
+      expect(begun).not.toContain(A.current);
+    });
+  });
+});
+
 describe('publishing: the owner and an admin, as themselves', () => {
   it('lets an admin publish one in their own name', async () => {
     await rolledBack(owner, async () => {

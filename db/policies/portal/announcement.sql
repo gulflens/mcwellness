@@ -50,7 +50,7 @@ create policy announcement_readers on public.announcement
     or (
       app.actor_has_role('client_contact')
       and app.actor_reads_announcements()
-      and app.announcement_is_current(created_at, withdrawn_at, visible_from, visible_until)
+      and app.announcement_is_current(id, created_at, withdrawn_at, visible_from, visible_until)
     )
   );
 

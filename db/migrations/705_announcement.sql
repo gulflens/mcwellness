@@ -18,7 +18,10 @@
 --
 -- **Never edited in place.** A correction is a new announcement that names
 -- the one it replaces (`supersedes_id`), and the old one is withdrawn in the
--- same transaction. The one change a row admits after it is written is its
+-- same transaction — unless the correction names a first day still to come:
+-- then the old one stays standing and shown until that day, and the read rule
+-- (app.announcement_is_current below) hides it from then, so households never
+-- see a gap and nothing waits on a job at midnight. The one change a row admits after it is written is its
 -- withdrawal — `withdrawn_at` and `withdrawn_by`, set once, together, and
 -- never cleared — and app.guard_announcement below refuses every other.
 -- There is no delete grant: a withdrawn announcement is still the record of
@@ -133,15 +136,21 @@ create trigger guard_announcement before update on public.announcement
   for each row execute function app.guard_announcement();
 
 ------------------------------------------------------------------------------
--- 2. app.announcement_is_current() — the domain's isCurrentOn, for the policy.
+-- 2. app.announcement_is_current() — the domain's rule, for the policy.
 --
---    Security definer so the read policy may ask the practice's time zone
---    without `tenant`'s own policies being evaluated as part of answering
---    (SQLSTATE 42P17, as 702 explains). Today is the practice's day; the row
+--    Security definer so the read policy may ask the practice's time zone,
+--    and whether a correction of this row has begun, without `tenant`'s or
+--    this table's own policies being evaluated as part of answering
+--    (SQLSTATE 42P17, as 702 explains). Today is the practice's day. The row
 --    is current when it is not withdrawn, has been published on or before
---    today, and today falls within its first and last days where set.
+--    today, today falls within its first and last days where set, and no
+--    standing correction of it has begun — a correction with a first day
+--    still to come leaves the row it corrects shown until that day
+--    (`correctionTakesOverNow` and `announcementsFor` in
+--    domain/portal/announcements.ts).
 ------------------------------------------------------------------------------
 create function app.announcement_is_current(
+  p_id uuid,
   p_published_at timestamptz,
   p_withdrawn_at timestamptz,
   p_visible_from date,
@@ -159,11 +168,20 @@ as $$
           and (p_published_at at time zone t.timezone)::date <= d.today
           and (p_visible_from is null or p_visible_from <= d.today)
           and (p_visible_until is null or p_visible_until >= d.today)
+          and not exists (
+            select 1
+              from public.announcement c
+             where c.tenant_id = t.id
+               and c.supersedes_id = p_id
+               and c.withdrawn_at is null
+               and (c.created_at at time zone t.timezone)::date <= d.today
+               and (c.visible_from is null or c.visible_from <= d.today)
+          )
      )
 $$;
-revoke execute on function app.announcement_is_current(timestamptz, timestamptz, date, date)
+revoke execute on function app.announcement_is_current(uuid, timestamptz, timestamptz, date, date)
   from public;
-grant execute on function app.announcement_is_current(timestamptz, timestamptz, date, date)
+grant execute on function app.announcement_is_current(uuid, timestamptz, timestamptz, date, date)
   to app_role;
 
 ------------------------------------------------------------------------------
@@ -237,5 +255,5 @@ $$;
 --   drop trigger if exists audit_row on public.announcement;
 --   drop table if exists announcement;
 --   drop function if exists app.guard_announcement();
---   drop function if exists app.announcement_is_current(timestamptz, timestamptz, date, date);
+--   drop function if exists app.announcement_is_current(uuid, timestamptz, timestamptz, date, date);
 --   drop function if exists app.actor_reads_announcements();
