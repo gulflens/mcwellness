@@ -150,3 +150,35 @@ export const TEAM_REFUSALS = [
   'not_a_working_role',
   'conflict',
 ] as const;
+
+/**
+ * A helper (round 76, docs/SPEC/dispatch.md section 15.12): a member of the
+ * practitioner's family who shares their own location while they help, and
+ * reaches nothing else. Added with a name, a sign-in address and the
+ * practitioner they accompany — no telephone number, no profile, no role
+ * switches: nothing a helper does needs more.
+ */
+export const HelperBody = z.object({
+  displayName: InviteBody.shape.displayName,
+  email: InviteBody.shape.email,
+  practitionerId: z.uuid(),
+});
+export type HelperBody = z.infer<typeof HelperBody>;
+
+export const AccompanimentBody = z.object({ practitionerId: z.uuid() });
+
+export const HelperRow = z.object({
+  userId: z.uuid(),
+  displayName: z.string(),
+  status: z.enum(STAFF_STATUSES),
+  /** Whom they accompany now, or null: never named, or revoked. */
+  accompanies: z.object({ practitionerId: z.uuid(), displayName: z.string() }).nullable(),
+});
+export type HelperRow = z.infer<typeof HelperRow>;
+
+export const HelpersResponse = z.object({
+  helpers: z.array(HelperRow),
+  /** The working practitioners a helper may be named to accompany. */
+  practitioners: z.array(z.object({ practitionerId: z.uuid(), displayName: z.string() })),
+});
+export type HelpersResponse = z.infer<typeof HelpersResponse>;

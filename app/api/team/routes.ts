@@ -13,6 +13,7 @@ import { logAction, logReads } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isAuthAdminUnavailable, isEmailInUse, type AuthAdminProvider } from '../portal/auth-admin';
 import { mountTeamProfile } from './profile';
+import { mountTeamHelpers } from './helpers';
 import { GRANT_SQL, mountTeamRoles } from './roles';
 import { InviteBody, InviteResponse, StatusBody, TeamListResponse } from './schema';
 import { membersSql, readTargetRoles, toMember, type Row } from './target';
@@ -253,6 +254,10 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     return c.json(InviteResponse.parse({ userId: id.data, temporaryPassword: password }));
   });
 
+  // Helpers (round 76): the owner's and an admin's, through 213's two doors.
+  // Ahead of the profile, whose `/api/team/:id` would otherwise answer
+  // `/api/team/helpers` as a colleague with a malformed id.
+  mountTeamHelpers(api, { authAdmin: options.authAdmin, now });
   mountTeamProfile(api, { authAdmin: options.authAdmin, now });
   mountTeamRoles(api, now);
 }
