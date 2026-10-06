@@ -15,6 +15,14 @@ export const ROLES = [
   'practitioner',
   'finance',
   'client_contact',
+  /**
+   * A member of the practitioner's family who drives and carries kit on the
+   * day, and shares their own location while they help (round 76,
+   * docs/SPEC/dispatch.md section 15.12). Named by no action below, so
+   * `canActor` refuses a helper everything; what a helper may do is their own
+   * location, in app/api/location/routes.ts, and nothing else.
+   */
+  'helper',
 ] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -132,6 +140,11 @@ export type Action =
   | { type: 'kit.manage' }
   | { type: 'staff.manage' }
   | { type: 'staff.access.manage' }
+  /**
+   * Adding a helper, naming whom they accompany, and revoking one (round 76,
+   * docs/SPEC/dispatch.md section 15.12).
+   */
+  | { type: 'staff.helper.manage' }
   | { type: 'kit.read'; assignedToSelf: boolean }
   | { type: 'routing.day.read'; scope: 'own' }
   | { type: 'routing.practiceDay.read' }
@@ -471,6 +484,16 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     // 2026). `staff.manage` above keeps the list for an admin and nothing else.
     case 'staff.access.manage':
       return hasRole(actor, 'owner');
+    // A helper (round 76): a member of the practitioner's family who shares
+    // their own location while they help, and reaches nothing else. The owner
+    // and an admin add one, name whom they accompany and revoke one — the
+    // brief of 6 October 2026, wider than `staff.access.manage` on purpose:
+    // a helper's sign-in opens their own location and no record, no money and
+    // no colleague, so handing one out is not the act the owner kept to
+    // themselves on 21 September. `app.name_helper` and `app.revoke_helper`
+    // (migration 213) ask the same two roles of `user_role` beneath this.
+    case 'staff.helper.manage':
+      return hasRole(actor, 'owner', 'admin');
     case 'kit.manage':
       // The equipment register: listing it, adding an item, editing one,
       // assigning it and recording a calibration

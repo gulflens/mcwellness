@@ -31,6 +31,7 @@ const ROLES: Role[] = [
   'lead_practitioner',
   'practitioner',
   'client_contact',
+  'helper',
 ];
 
 const TABLE: Record<Role, { read: boolean; write: boolean; owner: boolean }> = {
@@ -40,6 +41,7 @@ const TABLE: Record<Role, { read: boolean; write: boolean; owner: boolean }> = {
   lead_practitioner: { read: false, write: false, owner: false },
   practitioner: { read: false, write: false, owner: false },
   client_contact: { read: false, write: false, owner: false },
+  helper: { read: false, write: false, owner: false },
 };
 
 describe('who may keep the books', () => {

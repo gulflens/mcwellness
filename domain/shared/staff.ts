@@ -31,6 +31,7 @@ export const STAFF_ROLE_LABELS: Record<Role, string> = {
   practitioner: 'Practitioner',
   lead_practitioner: 'Lead practitioner',
   client_contact: 'Household contact',
+  helper: 'Helper',
 };
 
 /** A row that holds ownership. Nothing on it is anybody's to change (spec section 3). */
