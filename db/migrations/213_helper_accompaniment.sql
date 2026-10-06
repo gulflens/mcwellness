@@ -6,8 +6,10 @@
 --
 -- Three things here:
 --
--- 1. **Whom a helper accompanies** — `helper_accompaniment`. The owner or an
---    admin names, for each helper, one practitioner. Append-only in the shape
+-- 1. **Whom a helper accompanies** — `helper_accompaniment`. The owner names,
+--    for each helper, one practitioner (the operator's rule of 21 September
+--    2026: Team access is the owner's alone; confirmed for helpers on 6
+--    October). Append-only in the shape
 --    `staff_consent` already has: one standing row per helper; ending one
 --    stamps `ended_at` and `ended_by` once and nothing else on the row moves;
 --    a change of practitioner is the old row ended and a new row written in
@@ -50,7 +52,16 @@
 --    - `app.accompanied_name()`: the accompanied practitioner's display name,
 --      for the helper's own page, which shows the first name only.
 --    - `app.name_helper(user, practitioner)` and `app.revoke_helper(user)`:
---      the owner's or an admin's two acts.
+--      the owner's two acts.
+--
+-- 4. **A helper holds no working role, and a person with one is never a
+--    helper** — `app.guard_helper_alone`, a trigger on `user_role` enabled
+--    always, so it binds the table's owner, a data step and every route
+--    written later, not only the API role. The helper's floor
+--    (db/policies/core/helper_reach.sql) and the API's fence bind a person
+--    holding the helper role and nothing else; a working role added beside it
+--    would quietly lift both. A household contact is not a working role and
+--    is not refused here (`app.name_helper` refuses one, as its own rule).
 --    - `app.forget_own_positions()` is replaced so a withdrawal takes a
 --      helper's positions as well as a practitioner's.
 --
@@ -102,7 +113,7 @@ create index helper_accompaniment_created_by_idx on public.helper_accompaniment 
 
 comment on table public.helper_accompaniment is
   'audited: no client - which practitioner a helper accompanies on the day, named by the '
-  'owner or an admin (docs/SPEC/dispatch.md section 15.12). Append-only: ending one stamps '
+  'owner (docs/SPEC/dispatch.md section 15.12). Append-only: ending one stamps '
   'ended_at once, and a change of practitioner is a new row. A helper reads their own and '
   'changes none.';
 
@@ -277,21 +288,21 @@ $$;
 revoke execute on function app.accompanied_name() from public;
 grant execute on function app.accompanied_name() to app_role;
 
--- Whether the caller is the owner or an admin of the current practice, read
--- from user_role and not from a session setting (923's reasoning: these doors
+-- Whether the caller is an owner of the current practice, read from
+-- user_role and not from a session setting (923's reasoning: these doors
 -- write rows the API role cannot, so the question has one answer).
-create function app.office_names_helpers(p_actor uuid) returns boolean
+create function app.owner_names_helpers(p_actor uuid) returns boolean
 language sql stable security definer
 set search_path = pg_catalog, pg_temp
 as $$
   select p_actor is not null and exists (
     select 1 from public.user_role r
      where r.user_id = p_actor and r.tenant_id = app.current_tenant_id()
-       and r.role::text in ('owner', 'admin'))
+       and r.role::text = 'owner')
 $$;
-revoke execute on function app.office_names_helpers(uuid) from public;
+revoke execute on function app.owner_names_helpers(uuid) from public;
 
--- The owner or an admin names whom a helper accompanies: makes the person a
+-- The owner names whom a helper accompanies: makes the person a
 -- helper if they are not one yet, and replaces any standing accompaniment
 -- with one naming this practitioner. Naming the same practitioner again
 -- changes nothing. Returns the standing row's id.
@@ -305,8 +316,8 @@ declare
   v_standing public.helper_accompaniment%rowtype;
   v_id       uuid;
 begin
-  if not app.office_names_helpers(v_actor) then
-    raise exception 'only the owner or an admin names a helper' using errcode = '42501';
+  if not app.owner_names_helpers(v_actor) then
+    raise exception 'only an owner names a helper' using errcode = '42501';
   end if;
   if p_user_id is null or p_practitioner_id is null then
     raise exception 'a helper and a practitioner are both named' using errcode = '22004';
@@ -359,7 +370,7 @@ $$;
 revoke execute on function app.name_helper(uuid, uuid) from public;
 grant execute on function app.name_helper(uuid, uuid) to app_role;
 
--- The owner or an admin revokes a helper: the accompaniment ends, every
+-- The owner revokes a helper: the accompaniment ends, every
 -- position of theirs still held is deleted, and their sign-in is suspended,
 -- which the fence refuses (`app.resolve_actor` answers nobody who is not
 -- active). The role row stays, so the person is still found in Settings ›
@@ -376,8 +387,8 @@ declare
   v_gone   integer;
   v_shut   integer;
 begin
-  if not app.office_names_helpers(v_actor) then
-    raise exception 'only the owner or an admin revokes a helper' using errcode = '42501';
+  if not app.owner_names_helpers(v_actor) then
+    raise exception 'only an owner revokes a helper' using errcode = '42501';
   end if;
   if p_user_id is null or v_actor = p_user_id then
     raise exception 'nobody revokes themselves' using errcode = '42501';
@@ -435,7 +446,46 @@ end
 $$;
 
 ------------------------------------------------------------------------------
--- 4. Row security and privileges, in 211's shape. The API role reads the
+-- 4. A helper holds no working role, and a working person is never a helper.
+--    Before insert or update on user_role, for every caller: the person's
+--    own app_user row is locked first, so two writes racing for the same
+--    person (a helper named while a role is switched on) are serialised and
+--    the second sees the first. Security definer so the check sees every
+--    role row whoever is writing. 42501, which the role switch already
+--    answers as a refusal beneath it.
+------------------------------------------------------------------------------
+create function app.guard_helper_alone() returns trigger
+language plpgsql security definer
+set search_path = pg_catalog, pg_temp
+as $$
+declare
+  v_working constant text[] := array['owner', 'admin', 'lead_practitioner', 'practitioner', 'finance'];
+begin
+  perform 1 from public.app_user u where u.id = new.user_id for update;
+  if new.role::text = 'helper' and exists (
+       select 1 from public.user_role r
+        where r.user_id = new.user_id and r.id <> new.id
+          and r.role::text = any (v_working)) then
+    raise exception 'a person who holds a working role is not made a helper'
+      using errcode = '42501';
+  end if;
+  if new.role::text = any (v_working) and exists (
+       select 1 from public.user_role r
+        where r.user_id = new.user_id and r.id <> new.id
+          and r.role::text = 'helper') then
+    raise exception 'a helper holds no working role'
+      using errcode = '42501';
+  end if;
+  return new;
+end
+$$;
+revoke execute on function app.guard_helper_alone() from public;
+create trigger guard_helper_alone before insert or update on public.user_role
+  for each row execute function app.guard_helper_alone();
+alter table public.user_role enable always trigger guard_helper_alone;
+
+------------------------------------------------------------------------------
+-- 5. Row security and privileges, in 211's shape. The API role reads the
 --    accompaniment and writes it only through the two functions above.
 ------------------------------------------------------------------------------
 do $$
@@ -453,9 +503,11 @@ end
 $$;
 
 -- rollback:
+--   drop trigger if exists guard_helper_alone on public.user_role;
+--   drop function if exists app.guard_helper_alone();
 --   drop function if exists app.revoke_helper(uuid);
 --   drop function if exists app.name_helper(uuid, uuid);
---   drop function if exists app.office_names_helpers(uuid);
+--   drop function if exists app.owner_names_helpers(uuid);
 --   drop function if exists app.accompanied_name();
 --   drop function if exists app.accompanied_day(timestamptz, timestamptz);
 --   drop function if exists app.latest_helper_position_id(uuid);

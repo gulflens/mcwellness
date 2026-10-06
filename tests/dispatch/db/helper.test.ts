@@ -15,7 +15,7 @@ import {
 /**
  * The helper in the database (migrations 213 and 974,
  * db/policies/dispatch/location.sql, docs/SPEC/dispatch.md section 15.12):
- * whom a helper accompanies is named by the owner or an admin and by nobody
+ * whom a helper accompanies is named by the owner and by nobody
  * else, ended rather than edited; a helper writes only their own positions,
  * and only while they accompany somebody, have agreed and have switched on;
  * the board's roles read a helper's last position alone; another practice
@@ -145,13 +145,10 @@ describe('whom a helper accompanies', () => {
     expect(rows).toEqual([{ role: 'helper' }]);
   });
 
-  it('is named by an admin too, and by nobody else', async () => {
-    expect(
-      await as(ADMIN_USER, 'admin', () =>
-        outcome('select app.name_helper($1, $2)', [OTHER_HELPER, PRACTITIONER]),
-      ),
-    ).toBe('ok');
+  it('is named by the owner alone: an admin is refused, as everybody else is', async () => {
+    // The operator's rule of 21 September 2026: Team access is the owner's.
     for (const [user, roles] of [
+      [ADMIN_USER, 'admin'],
       [LEAD_USER, 'lead_practitioner'],
       [PRACTITIONER_USER, 'practitioner'],
       [FINANCE_USER, 'finance'],
@@ -164,6 +161,8 @@ describe('whom a helper accompanies', () => {
         roles,
       ).toBe('42501');
     }
+    await nameAsOwner(OTHER_HELPER, PRACTITIONER);
+    expect(await standing(OTHER_HELPER)).toEqual([{ practitioner_id: PRACTITIONER }]);
   });
 
   it('asks who is calling of user_role, never of the roles the session claims', async () => {
@@ -249,9 +248,7 @@ describe('whom a helper accompanies', () => {
         'order by id',
     );
     expect(rows.length).toBeGreaterThanOrEqual(4);
-    expect(rows.every((row) => row.actor_id === IDS.ownerA || row.actor_id === ADMIN_USER)).toBe(
-      true,
-    );
+    expect(rows.every((row) => row.actor_id === IDS.ownerA)).toBe(true);
   });
 });
 
@@ -449,8 +446,9 @@ describe("a helper's positions", () => {
 });
 
 describe('revoking a helper', () => {
-  it('is refused to a lead, and to the helper', async () => {
+  it('is refused to an admin, a lead, and the helper', async () => {
     for (const [user, roles] of [
+      [ADMIN_USER, 'admin'],
       [LEAD_USER, 'lead_practitioner'],
       [HELPER, 'helper'],
     ] as const) {
@@ -476,8 +474,8 @@ describe('revoking a helper', () => {
       [IDS.tenantA, HELPER],
     );
     await owner.query('begin');
-    await setAuditContext(owner, ADMIN_USER, 'revoked a helper');
-    await asApiRoleCommitted('admin', () => owner.query('select app.revoke_helper($1)', [HELPER]));
+    await setAuditContext(owner, IDS.ownerA, 'revoked a helper');
+    await asApiRoleCommitted('owner', () => owner.query('select app.revoke_helper($1)', [HELPER]));
     await owner.query('commit');
 
     expect(await standing(HELPER)).toEqual([]);
@@ -511,5 +509,73 @@ describe('revoking a helper', () => {
     );
     expect(rows).toEqual([{ visible: false }]);
     await owner.query("select set_config('app.tenant_id', '', false)");
+  });
+});
+
+describe('a helper holds no working role, whoever writes the row', () => {
+  // A trigger on user_role, enabled always: it binds the table's owner and any
+  // future route alike, not only the API role.
+  it('refuses a working role for a helper, even written as the table owner', async () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner', 'practitioner', 'finance']) {
+      expect(
+        await rolledBack(owner, () =>
+          outcome(
+            'insert into user_role (tenant_id, user_id, role) values ($1, $2, $3::role_kind)',
+            [IDS.tenantA, OTHER_HELPER, role],
+          ),
+        ),
+        role,
+      ).toBe('42501');
+    }
+  });
+
+  it('refuses the helper role for somebody with a working role', async () => {
+    for (const user of [PRACTITIONER_USER, ADMIN_USER, FINANCE_USER, IDS.ownerA]) {
+      expect(
+        await rolledBack(owner, () =>
+          outcome("insert into user_role (tenant_id, user_id, role) values ($1, $2, 'helper')", [
+            IDS.tenantA,
+            user,
+          ]),
+        ),
+        user,
+      ).toBe('42501');
+    }
+  });
+
+  it('refuses turning one of two working roles into the helper role', async () => {
+    expect(
+      await rolledBack(owner, async () => {
+        await owner.query(
+          "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'admin')",
+          [IDS.tenantA, FINANCE_USER],
+        );
+        return outcome(
+          "update user_role set role = 'helper' where user_id = $1 and role = 'finance'",
+          [FINANCE_USER],
+        );
+      }),
+    ).toBe('42501');
+  });
+
+  it('leaves a household contact free to be given the helper role by the table owner', async () => {
+    // The trigger is about working roles; app.name_helper is what refuses a
+    // contact, and that is its own rule, tested above.
+    expect(
+      await rolledBack(owner, async () => {
+        await owner.query(
+          "insert into app_user (id, tenant_id, display_name) values ($1, $2, 'Synthetic Contact')",
+          [NEWCOMER.replace(/07$/, '08'), IDS.tenantA],
+        );
+        await owner.query(
+          "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'client_contact')",
+          [IDS.tenantA, NEWCOMER.replace(/07$/, '08')],
+        );
+        return outcome(
+          "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'helper')",
+          [IDS.tenantA, NEWCOMER.replace(/07$/, '08')],
+        );
+      }),
+    ).toBe('ok');
   });
 });
