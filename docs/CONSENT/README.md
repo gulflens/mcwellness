@@ -1,7 +1,7 @@
 # Consent wording
 
 The texts a person is shown, and agrees to, before McWellness works with them.
-Four purposes, each in English and Arabic, each a versioned document. The app
+Five purposes, each in English and Arabic, each a versioned document. The app
 records **which version** was shown when a consent is recorded
 (`consent.text_document_id`, `docs/SPEC/client-record.md` section 7), so these
 files are never edited in place once a version has been used: a change is a
@@ -13,19 +13,41 @@ new version with a new `version:` line, and the old file stays.
 | `minor_participation` | `agreement.en.md`, `agreement.ar.md` | a parent or legal guardian, for a client under 18 |
 | `home_visit` | `agreement.en.md`, `agreement.ar.md` | the client or guardian, when sessions happen at home |
 | `health_data` | `health-data.en.md`, `health-data.ar.md` | the client or guardian; required before any session |
+| `marketing` | `marketing.en.md`, `marketing.ar.md` | an adult, for themselves alone, on their own portal sign-in; never a young person's own sign-in, never at the studio |
 
 The agreement is **one page shown for three purposes**. A household meets a
 single document rather than three that repeat each other, and each purpose
 still files its own row, because a recorded consent names exactly one. The
 loader reads that from a `purpose:` line naming several (`db/seed/consent-text.ts`).
 
-`docs/CONSENT/drafts/` holds wording not yet approved — today the marketing
-consent, `marketing.en.md` and `marketing.ar.md`, at `0.1-draft` (round 72,
-2026-10-06). It is a folder of its own because the loader files every
-top-level `.md` here as a wording a household may be shown; a draft must never
-be filed, and `tests/portal/consent-drafts.test.ts` proves the seed never
-reads this folder. On approval a draft moves up one folder as `1.0`,
-`approved`, and the seed's pinned tests gain its purpose.
+`docs/CONSENT/drafts/` holds wording not yet approved. It is a folder of its
+own because the loader files every top-level `.md` here as a wording a
+household may be shown; a draft must never be filed, and
+`tests/portal/consent-drafts.test.ts` proves the seed never reads that folder.
+On approval a draft moves up one folder as `1.0`, `approved`, and the seed's
+pinned tests gain its purpose. It is empty of drafts since 6 October 2026.
+
+## The marketing consent, approved 6 October 2026
+
+`marketing.en.md` and `marketing.ar.md` were drafted on 6 October 2026 (round
+72, `0.1-draft`) from the rules the practice set for offers in the push memo
+(`docs/OPERATOR/2026-09-17-push-notifications.md`, decision 3), and the
+practice approved both languages the same day. They moved up from `drafts/` at
+`1.0`, `status: approved`, with the approval date in their front matter; the
+draft notice that headed each was the only text removed, and not a word of
+the wording itself changed. The seed now files them, and `marketing` is no
+longer a retired purpose (`db/seed/consent-text.test.ts` pins it).
+
+It is the one consent that is not given at the studio. An adult gives it, for
+themselves alone, with the switch beside this wording under Agreements on their
+own portal, and withdraws it there with one press (or with the "stop" in any
+offer, which leads to the same switch). Each record that adult is a contact of
+files its own row, every one pointing at the exact wording they read, and the
+method says how it was given: `portal_switch` (migration 706). A young
+person's own sign-in is never offered it and the database refuses one. It is
+not on the four consents' signing forms in the console, deliberately: a
+consent to offers given at a kitchen table beside the health questions is the
+kind the memo's decision 1 was written to avoid.
 
 `docs/CONSENT/notices/` holds what the practice publishes but nobody signs:
 `your-information.en.md` and its Arabic twin. They are not consent wording and

@@ -106,9 +106,12 @@ version        int                        -- of THIS consent, counting its amend
 text_document_id                          -- the exact wording shown
 status         'active' | 'withdrawn' | 'expired' | 'superseded'
 given_at, withdrawn_at, expires_at
-method         'app_signature' | 'paper_scan' | 'verbal_witnessed'
+method         'app_signature' | 'paper_scan' | 'verbal_witnessed' |
+               'portal_switch'
 signature_document_id
 ```
+
+**`portal_switch`** (migration 706, 2026-10-06): the `marketing` consent and nothing else, given by an adult on their own portal with a switch beside the wording they read, and withdrawn there with one press. It files one row on each record that adult is a contact of, `given_by_contact_id` their own contact row on each, and no `signature_document_id`; the household's only way to write it is `app.portal_give_marketing_consent` and `app.portal_withdraw_marketing_consent` (`SPEC/client-portal.md`).
 Every session start checks the relevant active consent at that moment. No active `participation` consent → session cannot start.
 
 **`consent.version` is the consent record's own version, not the wording's** (decided in trunk round 14, because the column's old comment read either way and a reader could not tell). It counts amendments of this consent: a first giving is 1, and it moves only when this consent is amended. The version of the *wording* is never copied here — it is reached through the pointer `text_document_id`, and lives on that document row as `document.version`. The two are free to disagree and usually do: a first giving (`version` 1) of wording `0.1-draft` is the ordinary case, and the seed writes exactly that.
@@ -145,6 +148,15 @@ Append-only: select and insert only, for a contact of the client; the three offi
 The practice's news on every household's portal home (`SPEC/client-portal.md` sections 3.1, 3.10 and 6.7; added 2026-10-06, migration 705; the push memo's decision 4). `title_en`, `title_ar` (80 at most), `body_en`, `body_ar` (600 at most), `visible_from`, `visible_until` (the practice's own days, both optional), `supersedes_id` (the announcement a correction replaces, at most one correction each), `withdrawn_at`, `withdrawn_by`. No `client_id`: it is addressed to every adult household and names none (`'audited: no client'`).
 
 Born published — `created_at` is the moment of publication — and never edited in place: a guard trigger admits the withdrawal, once, and nothing else; a correction is a new row naming the old, which is withdrawn in the same transaction. No delete grant. The owner and an admin read and write it; a household reads only the current ones, and a young person's own login none.
+
+### `push_subscription`
+One device of one adult portal login, to which the practice's phone notifications are delivered through the phone's own push service — Apple's, Google's or Mozilla's (`SPEC/client-portal.md` section 3.11; added 2026-10-06, migration 707; the push memo's decision 2). `user_id`, `push_endpoint` (the service's https address for the device, refused unless it is one of the three services on the vendor register), `push_p256dh` and `push_auth` (the device's public key and authentication secret, base64url, which seal each message so the service cannot read it). Unique per practice and address: the address is the device, and a shared device moves to the last person who turned notifications on with it. No `client_id`: a person's devices follow them across every record they are a contact of (`'audited: no client'`). A person reads and removes only their own; the practice reads none and learns only how many, through `app.push_audience`; a young person's own login holds none. A device the service reports gone (404 or 410) is deleted by the delivery.
+
+### `push_message`
+Every notification the practice sent, once (migration 707; the push memo's decision 3, "a record of every message"). `kind` (`announcement` | `offer`), `title_en`, `title_ar` (60 at most), `body_en`, `body_ar` (240 at most), `recipient_count` (people) and `device_count`, and the delivery's outcome — `delivered_count`, `gone_count`, `failed_count`, `delivered_at` — all four null until it has run, then all four set, once. `created_at` is the moment of sending and `created_by` who pressed Send. Never edited and never deleted. At most two offers a calendar month in the practice's own days (`domain/portal/push.ts`, restated by a trigger). The owner and an admin send and read; nobody else reads.
+
+### `push_recipient`
+One row per person a message went to (migration 707): `message_id`, `user_id`, `devices`, and `marketing_standing` (`on` | `off`) with `marketing_consent_id`, the consent row it stood on at that moment — which names the exact wording agreed to. The text is the message's, held once, and never copied here. Never edited, never deleted; the owner and an admin read it.
 
 ---
 

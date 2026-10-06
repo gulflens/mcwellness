@@ -41,7 +41,12 @@ import { mountBilling } from './billing/routes';
 import { mountClients } from './clients/list';
 import { mountClientRecord } from './clients/mount';
 import { mountDevSession, type DevSessionOptions } from './dev-session';
-import { mountPortal, mountPortalDoor, type AuthAdminProvider } from './portal/mount';
+import {
+  mountPortal,
+  mountPortalDoor,
+  type AuthAdminProvider,
+  type PushSender,
+} from './portal/mount';
 import { mountPractice } from './practice/routes';
 import { mountPractitioners } from './practitioners/routes';
 import { mountTeam } from './team/routes';
@@ -240,6 +245,13 @@ export type ApiOptions = RequestContextDeps & {
    * appearing to work (docs/CHANGE-REQUESTS/client-portal-05.md item 3).
    */
   authAdmin?: AuthAdminProvider;
+  /**
+   * Phone notifications (app/api/portal/push/sender.ts): on with the
+   * practice's key pair, delivering from inside this process. Absent: push is
+   * off cleanly — the portal offers no step and the Send screen says it is
+   * not configured.
+   */
+  push?: PushSender;
 };
 
 export function createApi(deps: ApiOptions): Hono<ApiEnv> {
@@ -582,7 +594,11 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // but one: a brain-map draft's picture, the raw-body door above
   // (reports-02 request 3).
   mountReports(api, deps.now);
-  mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
+  mountPortal(api, deps.now, {
+    publicAppUrl: deps.publicAppUrl,
+    appEnv: deps.appEnv,
+    ...(deps.push ? { push: deps.push } : {}),
+  });
   mountEnquiries(api, deps.now ?? (() => new Date()));
 
   // An unknown route answers in the same shape as every other refusal.

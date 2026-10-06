@@ -1,15 +1,11 @@
 ---
 purpose: marketing
 locale: en
-version: 0.1-draft
-status: draft
+version: 1.0
+status: approved
 written: 2026-10-06
+approved: 2026-10-06
 ---
-
-> **DRAFT, for the practice's approval.** Not shown to anybody, and not filed
-> as a wording, until the practice approves it. Written 6 October 2026 from
-> the rules the practice set for offers (the push-notification memo,
-> decision 3).
 
 # Offers from McWellness on your phone
 

@@ -9,6 +9,7 @@ import type {
 import { useAuth } from '../shell/auth/AuthContext';
 import { Note } from '../shell/components/Controls';
 import { ClientHeading, Screen, Sections } from './Layout';
+import { NotificationsStep } from './NotificationsStep';
 import { PHRASES, useWords } from './i18n';
 import { usePortalHome } from './PortalRoot';
 
@@ -41,6 +42,11 @@ import { usePortalHome } from './PortalRoot';
  * and a paragraph in the language the person is reading, under one quiet
  * heading. Nothing at all when there are none — no heading, no empty line —
  * and the route sends none to a young person's own login.
+ *
+ * **Notifications on this phone** (section 3.11, the push memo's decision 2).
+ * Straight after the announcements: turning the practice's notifications on
+ * for this phone, with the iPhone's home-screen step where it is needed.
+ * Nothing at all where it cannot be used (`NotificationsStep.tsx`).
  */
 
 /** The `wa.me` link, built at the moment it is pressed and never rendered early. */
@@ -248,6 +254,10 @@ export function HomeScreen() {
           ))}
         </section>
       ) : null}
+
+      {/* The practice's notifications on this phone (the push memo's decision
+          2): after its own news, which is what a notification points at. */}
+      <NotificationsStep />
 
       {reviews.length > 0 && reviewUrl !== null ? (
         <section className="portal__section">

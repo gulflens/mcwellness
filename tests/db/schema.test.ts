@@ -138,10 +138,13 @@ describe('core schema', () => {
       'client_contact',
     ]);
     expect(await enumValues('emirate')).toEqual(['DXB', 'AUH', 'SHJ', 'AJM', 'UAQ', 'RAK', 'FUJ']);
+    // `portal_switch` since migration 706: the marketing consent, given by an
+    // adult on their own portal (docs/CHANGE-REQUESTS/client-portal-07.md).
     expect(await enumValues('consent_method')).toEqual([
       'app_signature',
       'paper_scan',
       'verbal_witnessed',
+      'portal_switch',
     ]);
   });
 

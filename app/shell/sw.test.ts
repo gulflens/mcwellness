@@ -69,6 +69,9 @@ const caches = new Map<string, FakeCache>();
 let listeners: Record<string, Listener[]>;
 let fetchImpl: ReturnType<typeof vi.fn>;
 let posted: unknown[];
+/** What the worker asked the phone to show, and which windows it opened. */
+let shown: { title: string; options: Record<string, unknown> }[];
+let opened: string[];
 
 function keyOf(key: Request | string): string {
   return typeof key === 'string' ? key : key.url;
@@ -128,6 +131,8 @@ beforeEach(async () => {
   caches.clear();
   listeners = {};
   posted = [];
+  shown = [];
+  opened = [];
   fetchImpl = vi.fn(async (request: Request) => new Response(`live ${request.url}`));
 
   const scope = {
@@ -139,6 +144,15 @@ beforeEach(async () => {
     clients: {
       claim: vi.fn(async () => undefined),
       matchAll: vi.fn(async () => [{ postMessage: (message: unknown) => posted.push(message) }]),
+      openWindow: vi.fn(async (url: string) => {
+        opened.push(url);
+        return null;
+      }),
+    },
+    registration: {
+      showNotification: vi.fn(async (title: string, options: Record<string, unknown>) => {
+        shown.push({ title, options });
+      }),
     },
     // The precache reaches for the store through `self`, not the bare global.
     caches: cacheStorage,
@@ -371,5 +385,106 @@ describe('the two messages', () => {
       listener({ tag: 'something-else', waitUntil: () => undefined } as never);
     }
     expect(posted).toEqual([]);
+  });
+});
+
+/**
+ * Phone notifications (the push memo's decisions 2 and 3; app/api/portal/
+ * push/sender.ts seals what arrives here). The worker shows what the practice
+ * sent, in the language and direction it was sealed in, and opens the portal
+ * when it is pressed — or, for an offer's stop, the switch itself. It opens
+ * nothing but a path of the portal on this origin, whatever a payload says.
+ */
+describe('phone notifications', () => {
+  async function push(data: unknown): Promise<void> {
+    const waited: Promise<unknown>[] = [];
+    for (const listener of listeners.push ?? []) {
+      listener({
+        data: { json: () => data },
+        waitUntil: (work: Promise<unknown>) => waited.push(work),
+      } as never);
+    }
+    await Promise.all(waited);
+  }
+
+  async function press(data: unknown, action = ''): Promise<boolean> {
+    const waited: Promise<unknown>[] = [];
+    let closed = false;
+    for (const listener of listeners.notificationclick ?? []) {
+      listener({
+        action,
+        notification: { data, close: () => (closed = true) },
+        waitUntil: (work: Promise<unknown>) => waited.push(work),
+      } as never);
+    }
+    await Promise.all(waited);
+    return closed;
+  }
+
+  const ANNOUNCEMENT = {
+    v: 1,
+    kind: 'announcement',
+    lang: 'ar',
+    dir: 'rtl',
+    title: 'مغلق في العطلة',
+    body: 'الاستوديو مغلق يوم الخميس.',
+    url: '/portal',
+    stopUrl: null,
+    stopLabel: null,
+  };
+  const OFFER = {
+    ...ANNOUNCEMENT,
+    kind: 'offer',
+    lang: 'en',
+    dir: 'ltr',
+    title: 'A season price',
+    body: 'Ten sessions at the season price.\nTo stop offers, turn the switch off under Agreements.',
+    stopUrl: '/portal/agreements#offers',
+    stopLabel: 'Stop offers',
+  };
+
+  it('shows an announcement in the language and direction it was sent in, with no stop', async () => {
+    await push(ANNOUNCEMENT);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.title).toBe('مغلق في العطلة');
+    expect(shown[0]?.options).toMatchObject({
+      body: 'الاستوديو مغلق يوم الخميس.',
+      lang: 'ar',
+      dir: 'rtl',
+      data: { url: '/portal', stopUrl: null },
+      actions: [],
+    });
+  });
+
+  it('shows an offer with its stop as an action', async () => {
+    await push(OFFER);
+    expect(shown[0]?.options).toMatchObject({
+      actions: [{ action: 'stop', title: 'Stop offers' }],
+      data: { url: '/portal', stopUrl: '/portal/agreements#offers' },
+    });
+  });
+
+  it('shows nothing for a message that is not the practice’s shape', async () => {
+    await push({ title: 'x' });
+    await push(null);
+    expect(shown).toEqual([]);
+  });
+
+  it('opens the portal when pressed, and the switch when the stop is pressed', async () => {
+    expect(await press({ url: '/portal', stopUrl: '/portal/agreements#offers' })).toBe(true);
+    await press({ url: '/portal', stopUrl: '/portal/agreements#offers' }, 'stop');
+    expect(opened).toEqual(['/portal', '/portal/agreements#offers']);
+  });
+
+  it('opens nothing but a portal path on this origin, whatever the payload says', async () => {
+    for (const url of [
+      'https://example.com/portal',
+      '//example.com/portal',
+      '/admin',
+      'javascript:x',
+    ]) {
+      await press({ url, stopUrl: null });
+    }
+    expect(opened).toEqual([]);
   });
 });

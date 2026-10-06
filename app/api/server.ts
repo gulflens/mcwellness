@@ -9,7 +9,7 @@ import { startScheduler } from './scheduler';
 import { issuerFor, verifierFromEnv } from './_middleware/token-verifier';
 import { createApi } from './create-api';
 import { devSessionEnabled, isLoopback } from './dev-session';
-import { authAdminFromEnv } from './portal/mount';
+import { authAdminFromEnv, pushSenderFromEnv } from './portal/mount';
 import { mountApp } from './serve-app';
 
 const apiDatabaseUrl = process.env.API_DATABASE_URL;
@@ -36,6 +36,11 @@ console.log(`Drive estimates: ${routing.describe()}.`);
 // API from starting.
 const authAdmin = authAdminFromEnv(process.env);
 console.log(`Portal sign-ins: ${authAdmin.describe()}.`);
+// Phone notifications (app/api/portal/push/sender.ts): on when the practice's
+// key pair is set (pnpm push:keys makes one), off cleanly when none of the
+// three variables is, and a plain-language refusal at startup for half of it.
+const push = pushSenderFromEnv(process.env, pool);
+console.log(`Phone notifications: ${push.describe()}.`);
 
 // The development sign-in door exists only on a laptop: APP_ENV=development, a
 // local database, a local Supabase URL and the local secret to sign with.
@@ -62,6 +67,7 @@ const api = createApi({
   storage,
   routing,
   authAdmin,
+  push,
   // The one document served with the wider policy a browser map needs
   // (docs/SPEC/route-planning.md section 8.2). Named here, in the trunk, so
   // the widening is visible where the process is assembled.
