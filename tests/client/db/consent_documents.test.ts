@@ -1150,7 +1150,7 @@ describe('withdrawing a consent', () => {
 });
 
 describe('a client enrolled, signed and activated', () => {
-  it('goes lead to active once every consent is recorded on screen', async () => {
+  it('goes lead to active before any consent, and takes every consent on screen afterwards', async () => {
     // The whole path the task brief asks for, end to end: a lead with a date
     // of birth and a verified location, every consent `requiredConsents` names
     // recorded through the route with a signature filed, and then the status
@@ -1177,16 +1177,22 @@ describe('a client enrolled, signed and activated', () => {
       [locationId, IDS.tenantA, clientId, IDS.ownerA],
     );
 
-    // An adult at home needs participation and home_visit, and no guardian.
-    const tooSoon = await request(ADMIN_AUTH, `/api/clients/${clientId}/status`, {
+    // Activated before any consent (the practice's request of 29 September
+    // 2026, approved on 6 October): the household signs at the first visit,
+    // and the check-in refuses a visit until it has.
+    const activated = await request(ADMIN_AUTH, `/api/clients/${clientId}/status`, {
       method: 'POST',
       body: JSON.stringify({ to: 'active' }),
     });
-    expect(tooSoon.status).toBe(400);
-    expect((await tooSoon.json()) as { missing: string[] }).toMatchObject({
-      missing: ['consent:health_data', 'consent:home_visit', 'consent:participation'],
-    });
+    expect(activated.status).toBe(200);
+    const { rows } = await owner.query<{ status: string }>(
+      'select status from client where id = $1',
+      [clientId],
+    );
+    expect(rows[0]?.status).toBe('active');
 
+    // An adult at home then signs participation, home_visit and health_data,
+    // and no guardian, on the active client.
     for (const [purpose, wording] of [
       ['participation', WORDING_PARTICIPATION],
       ['home_visit', WORDING_HOME_VISIT],
@@ -1206,16 +1212,5 @@ describe('a client enrolled, signed and activated', () => {
       });
       expect(recorded.status).toBe(201);
     }
-
-    const activated = await request(ADMIN_AUTH, `/api/clients/${clientId}/status`, {
-      method: 'POST',
-      body: JSON.stringify({ to: 'active' }),
-    });
-    expect(activated.status).toBe(200);
-    const { rows } = await owner.query<{ status: string }>(
-      'select status from client where id = $1',
-      [clientId],
-    );
-    expect(rows[0]?.status).toBe('active');
   });
 });
