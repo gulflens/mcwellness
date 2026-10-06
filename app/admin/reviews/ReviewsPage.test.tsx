@@ -74,9 +74,16 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function mount(options: { failList?: boolean; failAction?: boolean } = {}) {
+function mount(
+  options: {
+    failList?: boolean;
+    failAction?: boolean;
+    rows?: Testimonial[];
+    turningAway?: boolean;
+  } = {},
+) {
   const posts: { url: string; body: unknown }[] = [];
-  let rows: Testimonial[] = [WAITING, FIRST, SECOND, ARABIC, DECLINED];
+  let rows: Testimonial[] = options.rows ?? [WAITING, FIRST, SECOND, ARABIC, DECLINED];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') {
@@ -98,6 +105,7 @@ function mount(options: { failList?: boolean; failAction?: boolean } = {}) {
           approved: rows.filter((row) => row.status === 'approved').length,
           declined: rows.filter((row) => row.status === 'declined').length,
         },
+        turningAway: options.turningAway ?? false,
       });
     }
     if (init?.method === 'POST') {
@@ -109,6 +117,15 @@ function mount(options: { failList?: boolean; failAction?: boolean } = {}) {
       const body = init.body ? (JSON.parse(String(init.body)) as unknown) : null;
       posts.push({ url, body });
       if (options.failAction) return json({ error: 'internal' }, 500);
+      if (url === '/api/testimonials/decline-all') {
+        const ids = (body as { ids: string[] }).ids;
+        rows = rows.map((row) =>
+          ids.includes(row.id) && row.status === 'pending'
+            ? { ...row, status: 'declined', decidedAt: '2026-10-06T08:00:00.000Z' }
+            : row,
+        );
+        return json({ declined: ids.length });
+      }
       const [, , , id, action] = url.split('/');
       if (action === 'approve' || action === 'decline' || action === 'withdraw') {
         rows = rows.map((row) =>
@@ -262,5 +279,72 @@ describe('ReviewsPage', () => {
     fireEvent.click(within(table).getByRole('button', { name: 'Approve Hazel H.' }));
     expect(await screen.findByText('That could not be done. Reload and try again.')).toBeTruthy();
     expect(within(table).getByText('Hazel H.')).toBeTruthy();
+  });
+
+  it('says Withdraw takes a review off the website within a minute', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Approved (3)' }));
+    expect(
+      await screen.findByText(/Withdraw takes a review off the website within a minute/),
+    ).toBeTruthy();
+  });
+
+  it('marks every review past the thirtieth of its language as not shown on the website', async () => {
+    const many: Testimonial[] = Array.from({ length: 31 }, (_, i) => ({
+      ...FIRST,
+      id: `0000000f-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+      displayName: `Reviewer ${i + 1}`,
+    }));
+    mount({ rows: [...many, ARABIC] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Approved (32)' }));
+    const table = await screen.findByRole('table');
+    await within(table).findByText('Reviewer 31');
+    const marked = within(table).getAllByText('Not shown on the website (only the first 30 are)');
+    expect(marked).toHaveLength(1);
+    const row = marked[0]!.closest('tr')!;
+    expect(within(row).getByText('Reviewer 31')).toBeTruthy();
+  });
+
+  it('says when new reviews are being turned away because the queue is full', async () => {
+    mount({ turningAway: true });
+    expect(
+      await screen.findByText(
+        'New reviews are being turned away — the queue is full; decline or approve some.',
+      ),
+    ).toBeTruthy();
+    cleanup();
+    mount();
+    await screen.findByRole('table');
+    expect(screen.queryByText(/New reviews are being turned away/)).toBeNull();
+  });
+
+  it('declines every review shown on Pending, after asking', async () => {
+    const other: Testimonial = { ...WAITING, id: '0000000f-0000-4000-8000-000000000009' };
+    const { posts } = mount({ rows: [WAITING, other, FIRST] });
+    await screen.findByRole('table');
+    fireEvent.click(screen.getByRole('button', { name: 'Decline all shown' }));
+    expect(posts).toEqual([]);
+    expect(
+      screen.getByText('Decline all 2 reviews shown? They will never be published.'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText(/Decline all 2 reviews shown/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Decline all shown' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Decline all 2' }));
+    await waitFor(() =>
+      expect(posts).toEqual([
+        { url: '/api/testimonials/decline-all', body: { ids: [WAITING.id, other.id] } },
+      ]),
+    );
+    expect(await screen.findByRole('button', { name: 'Pending (0)' })).toBeTruthy();
+  });
+
+  it('offers Decline all shown on Pending only, and not when nothing is waiting', async () => {
+    mount({ rows: [FIRST] });
+    await screen.findByText(/Nothing is waiting/);
+    expect(screen.queryByRole('button', { name: 'Decline all shown' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Approved (1)' }));
+    await screen.findByText('Basil V.');
+    expect(screen.queryByRole('button', { name: 'Decline all shown' })).toBeNull();
   });
 });

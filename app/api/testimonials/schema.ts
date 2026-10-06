@@ -51,6 +51,11 @@ export const TestimonialListResponse = z.object({
   testimonials: z.array(Testimonial),
   /** Every status, whichever list was asked for: the tabs' own numbers. */
   counts: z.object({ pending: count, approved: count, declined: count }),
+  /**
+   * Whether a practice-wide limit has turned a new review away in the last
+   * day (migration 978): the screen says the queue needs deciding.
+   */
+  turningAway: z.boolean().default(false),
 });
 export type TestimonialListResponse = z.infer<typeof TestimonialListResponse>;
 
@@ -58,3 +63,6 @@ export type TestimonialListResponse = z.infer<typeof TestimonialListResponse>;
 export const TestimonialCountResponse = z.object({ pending: count });
 
 export const MoveTestimonialBody = z.object({ direction: z.enum(['up', 'down']) });
+
+/** Decline all shown: the ids on the Pending table, as many as it lists at most. */
+export const DeclineAllBody = z.object({ ids: z.array(z.uuid()).min(1).max(500) });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   DECLINED_KEPT_DAYS,
+  PUBLISHED_TESTIMONIALS_MAX,
   TESTIMONIAL_STATUSES,
   type MoveDirection,
   type TestimonialStatus,
@@ -20,8 +21,15 @@ import './reviews.css';
  * the website, and what was declined. A waiting review is approved onto the
  * website or declined. A published one can be moved up or down among the
  * others in its own language — the order the website shows them in — or
- * withdrawn, which takes it off the website at once; that is also how a
- * person's request to take theirs down is met. Nobody edits what somebody
+ * withdrawn, which takes it off the website within a minute (the published
+ * list may be cached that long); that is also how a person's request to take
+ * theirs down is met. The website is sent the first thirty of each language,
+ * and a review placed below that is marked as not shown.
+ *
+ * **When the queue is full.** The door stops taking new reviews past thirty
+ * an hour or while five hundred wait, and still answers the sender as if it
+ * had, so a script learns nothing (migration 978). The office is told here
+ * instead, and Decline all shown clears a flooded Pending list in one press. Nobody edits what somebody
  * wrote: the screen offers no way to, and the database refuses one
  * (migration 978).
  *
@@ -63,7 +71,10 @@ const LOAD_ERROR = 'The reviews could not be loaded. Reload the page to try agai
 const ACTION_ERROR = 'That could not be done. Reload and try again.';
 const DECLINED_NOTE = `A declined or withdrawn review is deleted ${DECLINED_KEPT_DAYS} days after the decision. It is never shown on the website.`;
 const APPROVED_NOTE =
-  'The website shows these in this order, each language on its own page. A review approved since the list was last arranged goes to the top. Withdraw takes a review off the website at once, including when the person who wrote it asks.';
+  'The website shows these in this order, each language on its own page. A review approved since the list was last arranged goes to the top. Withdraw takes a review off the website within a minute, including when the person who wrote it asks.';
+const TURNING_AWAY =
+  'New reviews are being turned away — the queue is full; decline or approve some.';
+const NOT_SHOWN = `Not shown on the website (only the first ${PUBLISHED_TESTIMONIALS_MAX} are)`;
 
 type Counts = Record<TestimonialStatus, number>;
 
@@ -76,6 +87,9 @@ export function ReviewsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  /** Decline all shown: the confirm step is open. */
+  const [decliningAll, setDecliningAll] = useState(false);
+  const [turningAway, setTurningAway] = useState(false);
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
@@ -91,6 +105,7 @@ export function ReviewsPage() {
         if (parsed.success) {
           setRows(parsed.data.testimonials);
           setCounts(parsed.data.counts);
+          setTurningAway(parsed.data.turningAway);
           setFailed(false);
         } else {
           setFailed(true);
@@ -109,7 +124,31 @@ export function ReviewsPage() {
     setRows(null);
     setError(null);
     setWithdrawing(null);
+    setDecliningAll(false);
     setStatus(next);
+  }
+
+  /** Every waiting review on the table, declined in one press once confirmed. */
+  async function declineAll(ids: readonly string[]): Promise<void> {
+    setBusy('all');
+    setError(null);
+    try {
+      const res = await apiFetch('/api/testimonials/decline-all', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        setError(ACTION_ERROR);
+        return;
+      }
+      setDecliningAll(false);
+      setGeneration((g) => g + 1);
+    } catch {
+      setError(ACTION_ERROR);
+    } finally {
+      setBusy(null);
+    }
   }
 
   /** One press: a decision or a move. The list is asked for again either way. */
@@ -240,7 +279,21 @@ export function ReviewsPage() {
       numeric: true,
       render: (row) => placeOf.get(row.id)?.place ?? '',
     },
-    who,
+    {
+      ...who,
+      // The website is sent the first thirty of each language; one placed
+      // below that is approved and not on the page, which the office needs to
+      // see before wondering why.
+      render: (row) => (
+        <div className="reviews__who">
+          <span>{row.displayName}</span>
+          {row.context ? <span className="small muted">{row.context}</span> : null}
+          {(placeOf.get(row.id)?.place ?? 0) > PUBLISHED_TESTIMONIALS_MAX ? (
+            <span className="small muted">{NOT_SHOWN}</span>
+          ) : null}
+        </div>
+      ),
+    },
     rating,
     language,
     words,
@@ -318,6 +371,32 @@ export function ReviewsPage() {
             </button>
           ))}
         </nav>
+      ) : null}
+      {turningAway ? <Note tone="attention">{TURNING_AWAY}</Note> : null}
+      {status === 'pending' && rows !== null && rows.length > 0 ? (
+        decliningAll ? (
+          <div className="reviews__actions">
+            <span>
+              Decline all {rows.length} {rows.length === 1 ? 'review' : 'reviews'} shown? They will
+              never be published.
+            </span>
+            <Button
+              disabled={busy !== null}
+              onClick={() => void declineAll(rows.map((row) => row.id))}
+            >
+              {`Decline all ${rows.length}`}
+            </Button>
+            <Button variant="quiet" onClick={() => setDecliningAll(false)}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <div className="reviews__actions">
+            <Button variant="quiet" disabled={busy !== null} onClick={() => setDecliningAll(true)}>
+              Decline all shown
+            </Button>
+          </div>
+        )
       ) : null}
       {status === 'approved' ? <Note>{APPROVED_NOTE}</Note> : null}
       {status === 'declined' ? <Note>{DECLINED_NOTE}</Note> : null}

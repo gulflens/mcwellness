@@ -32,7 +32,8 @@ async function submit(displayName: string, language: 'en' | 'ar' = 'en'): Promis
       body: 'Kind, punctual and clear about every step.',
       language,
       consent_to_publish: true,
-      ip_hash: hashes.toString(16).padStart(64, '0'),
+      // A documentation address (RFC 5737) of its own each time.
+      address: `198.51.100.${hashes}`,
     }),
   ]);
   return rows[0]!.id;
@@ -41,6 +42,7 @@ async function submit(displayName: string, language: 'en' | 'ar' = 'en'): Promis
 type Listed = {
   testimonials: { id: string; displayName: string; status: string; decidedByName: string | null }[];
   counts: { pending: number; approved: number; declined: number };
+  turningAway: boolean;
 };
 
 async function list(status: string): Promise<Listed> {
@@ -193,5 +195,94 @@ describe('arranging the page', () => {
     const waiting = await submit('Hazel H.');
     expect((await act(waiting, 'move', { direction: 'up' })).status).toBe(404);
     expect((await act(waiting, 'move', { direction: 'sideways' })).status).toBe(400);
+  });
+});
+
+describe('two moves at once', () => {
+  it('waits for the language’s list rather than renumbering from a stale order', async () => {
+    await h.owner.query('delete from testimonial');
+    const a = await submit('Basil V.');
+    const b = await submit('Iris C.');
+    for (const id of [a, b]) await act(id, 'approve');
+    const tenant = await h.owner.query<{ id: string }>('select id from tenant limit 1');
+    await h.owner.query('begin');
+    await h.owner.query(
+      "select pg_advisory_xact_lock(hashtext('testimonial-move:' || $1::text || ':en'))",
+      [tenant.rows[0]?.id],
+    );
+    const moving = act(a, 'move', { direction: 'up' });
+    try {
+      const deadline = Date.now() + 4_000;
+      for (;;) {
+        // The activity view is read once per transaction unless cleared.
+        await h.owner.query('select pg_stat_clear_snapshot()');
+        const { rows } = await h.owner.query<{ n: number }>(
+          'select count(*)::int as n from pg_locks l join pg_stat_activity a on a.pid = l.pid ' +
+            "where a.application_name = 'mcwellness-api' and l.locktype = 'advisory' " +
+            'and not l.granted',
+        );
+        if ((rows[0]?.n ?? 0) >= 1) break;
+        if (Date.now() > deadline) throw new Error('The move never waited for the list.');
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    } finally {
+      await h.owner.query('rollback');
+    }
+    expect(await (await moving).json()).toEqual({ ok: true, moved: true });
+  });
+});
+
+describe('a flooded queue', () => {
+  it('declines every review shown in one press, and only those still waiting', async () => {
+    await h.owner.query('delete from testimonial');
+    const one = await submit('Hazel H.');
+    const two = await submit('Rowan M.');
+    const kept = await submit('Basil V.');
+    await act(kept, 'approve');
+    const res = await h.callAs('POST', '/api/testimonials/decline-all', PORTAL.adminAuth, {
+      ids: [one, two, kept],
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ declined: 2 });
+    const listed = await list('declined');
+    expect(listed.testimonials.map((t) => t.id).sort()).toEqual([one, two].sort());
+    expect(listed.counts.approved).toBe(1);
+    const { rows } = await h.owner.query<{ n: number }>(
+      "select count(*)::int as n from audit_log where action = 'decline' and entity_id = any($1::uuid[])",
+      [[one, two]],
+    );
+    expect(rows[0]?.n).toBe(2);
+    expect(
+      (
+        await h.callAs('POST', '/api/testimonials/decline-all', PORTAL.adminAuth, {
+          ids: [],
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it('tells the office when the door has turned reviews away', async () => {
+    await h.owner.query('delete from testimonial');
+    await h.owner.query('delete from app.testimonial_turned_away');
+    expect((await list('pending')).turningAway).toBe(false);
+    await h.owner.query(
+      'insert into testimonial (tenant_id, display_name, rating, body, language, ' +
+        "consent_to_publish) select (select id from tenant limit 1), 'Reviewer ' || n, 5, " +
+        "'Kind, punctual and clear about every step.', 'en', true from generate_series(1, 30) n",
+    );
+    const { rows } = await h.owner.query<{ id: string | null }>(SUBMIT, [
+      JSON.stringify({
+        display_name: 'Pearl C.',
+        rating: 5,
+        body: 'Kind, punctual and clear about every step.',
+        language: 'en',
+        consent_to_publish: true,
+        address: '198.51.100.250',
+      }),
+    ]);
+    expect(rows[0]?.id).toBeNull();
+    expect((await list('pending')).turningAway).toBe(true);
+    await h.owner.query('delete from testimonial');
+    await h.owner.query('delete from app.testimonial_turned_away');
   });
 });

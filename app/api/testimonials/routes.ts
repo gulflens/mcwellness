@@ -10,6 +10,7 @@ import {
 import { logAction, logReads } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import {
+  DeclineAllBody,
   MoveTestimonialBody,
   TestimonialCountResponse,
   TestimonialListResponse,
@@ -59,6 +60,11 @@ const ORDER_BY: Record<TestimonialStatus, string> = {
   approved: `(t.language = 'en') desc, ${PUBLISHED_ORDER}`,
   declined: 't.decided_at desc, t.id',
 };
+
+/** One practice's arranging of one language's list at a time (see the move route). */
+export const MOVE_LOCK_SQL =
+  "select pg_advisory_xact_lock(hashtext('testimonial-move:' || " +
+  "app.current_tenant_id()::text || ':' || $1::text))";
 
 /** Far more than will ever wait at once; the definer stops taking new ones at five hundred. */
 const LIST_LIMIT = 500;
@@ -119,6 +125,12 @@ export function mountTestimonials(api: Hono<ApiEnv>, now: () => Date): void {
     );
     const counts = { pending: 0, approved: 0, declined: 0 };
     for (const row of counted.rows) counts[row.status] = row.n;
+    // When the door's practice-wide limits are refusing new reviews, the
+    // public is still answered 201 (a script learns nothing); the office is
+    // the one who is told, here.
+    const turned = await db.query<{ yes: boolean }>(
+      'select app.testimonials_turned_away_recently() as yes',
+    );
     // A name somebody chose to be published under, and their words: a read of
     // a person, logged as one for each row on the screen.
     await logReads(
@@ -127,7 +139,13 @@ export function mountTestimonials(api: Hono<ApiEnv>, now: () => Date): void {
       rows.map((row) => ({ id: row.id, clientId: null })),
       'list',
     );
-    return c.json(TestimonialListResponse.parse({ testimonials: rows.map(toWire), counts }));
+    return c.json(
+      TestimonialListResponse.parse({
+        testimonials: rows.map(toWire),
+        counts,
+        turningAway: turned.rows[0]?.yes ?? false,
+      }),
+    );
   });
 
   /**
@@ -165,6 +183,33 @@ export function mountTestimonials(api: Hono<ApiEnv>, now: () => Date): void {
   decision('withdraw', 'approved', 'declined');
 
   /**
+   * Decline all shown: every waiting review the Pending table listed, in one
+   * press, for a queue a script has filled. Only ids the office was shown, and
+   * only those still waiting: one approved or declined meanwhile is left as it
+   * is. Each is logged as its own decline, as a single press would be.
+   */
+  api.post('/api/testimonials/decline-all', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    if (!canActor(actor, { type: 'testimonial.decide' }, {}, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const body = DeclineAllBody.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: 'bad_request', field: 'ids', requestId }, 400);
+    const declined = await db.query<{ id: string }>(
+      "update testimonial set status = 'declined', decided_by = $2, decided_at = now(), " +
+        "ip_hash = null, published_order = null where id = any($1::uuid[]) and status = 'pending' " +
+        'returning id',
+      [body.data.ids, actor.userId],
+    );
+    for (const row of declined.rows) {
+      await logAction(db, 'decline', { type: 'testimonial', id: row.id, clientId: null }, {});
+    }
+    return c.json({ declined: declined.rowCount ?? 0 });
+  });
+
+  /**
    * Moves an approved review one place up or down among the approved reviews
    * in its own language — the list the website's page in that language shows.
    * The whole list is renumbered from one, under a lock, so the places are
@@ -189,6 +234,11 @@ export function mountTestimonials(api: Hono<ApiEnv>, now: () => Date): void {
     );
     const language = found.rows[0]?.language;
     if (language === undefined) return c.json({ error: 'not_found', requestId }, 404);
+    // One arranging of a language's list at a time. Row locks alone do not do
+    // it: two moves both read the order, the second waits on the first's rows,
+    // and then renumbers from the order it read before the wait — undoing the
+    // first. Held to the commit, so the second reads the first's result.
+    await db.query(MOVE_LOCK_SQL, [language]);
     const listed = await db.query<{ id: string }>(
       "select t.id from testimonial t where t.status = 'approved' and t.language = $1 " +
         `order by ${PUBLISHED_ORDER} for update`,
