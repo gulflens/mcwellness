@@ -38,4 +38,14 @@ describe('live location in the trail', () => {
       expect(en, entityType).not.toContain(entityType);
     }
   });
+
+  it('names a helper assignment in words, in both languages', () => {
+    const entityType = 'helper_accompaniment';
+    const en = narrate(event({ entityType, action: 'insert' }), 'en')?.sentence ?? '';
+    expect(en).toContain('helper assignment');
+    expect(en).not.toContain(entityType);
+    expect(narrate(event({ entityType, action: 'insert' }), 'ar')?.sentence).toContain(
+      'تكليف المساعد',
+    );
+  });
 });
