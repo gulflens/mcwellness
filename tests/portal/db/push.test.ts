@@ -494,3 +494,91 @@ describe('another practice', () => {
     });
   });
 });
+
+/**
+ * Migration 975 (docs/CHANGE-REQUESTS/client-portal-07.md, "Asked of the
+ * trunk", items 1 and 2): a device's address and keys never reach the trail,
+ * and an erasure that closes a household account takes that account's devices
+ * with it — and spares a colleague's, as 968 spares the colleague.
+ */
+describe('migration 975: the trail and the erasure', () => {
+  const ERASURE = '00000001-0000-4000-8000-0000000000b9';
+  const COLLEAGUE_CONTACT = '00000001-0000-4000-8000-0000000000ba';
+
+  async function device(userId: string, n: number): Promise<void> {
+    await owner.query(
+      'insert into push_subscription (tenant_id, user_id, push_endpoint, push_p256dh, push_auth, ' +
+        'created_by) values ($1, $2, $3, $4, $5, $2)',
+      [IDS.tenantA, userId, endpoint(n), P256DH, AUTH],
+    );
+  }
+
+  async function devicesOf(userId: string): Promise<number> {
+    const rows = await owner.query<{ n: number }>(
+      'select count(*)::int as n from push_subscription where user_id = $1',
+      [userId],
+    );
+    return rows.rows[0]?.n ?? 0;
+  }
+
+  it('keeps a device’s address and keys out of the trail, on the way in and the way out', async () => {
+    await rolledBack(owner, async () => {
+      await household(PORTAL.motherUser, () => subscribe(11));
+      await household(PORTAL.motherUser, () =>
+        owner.query('delete from push_subscription where push_endpoint = $1', [endpoint(11)]),
+      );
+      const trail = await owner.query<{ action: string; values: Record<string, unknown> }>(
+        'select action, coalesce(new_values, old_values) as values from audit_log ' +
+          "where entity_type = 'push_subscription' order by id",
+      );
+      expect(trail.rows.map((row) => row.action)).toEqual(['insert', 'delete']);
+      for (const row of trail.rows) {
+        for (const key of ['push_endpoint', 'push_p256dh', 'push_auth']) {
+          expect(Object.keys(row.values), `${row.action} ${key}`).not.toContain(key);
+        }
+        expect(JSON.stringify(row.values)).not.toContain('synthetic-device');
+        // What it still says: whose device, and that it was one.
+        expect(row.values.user_id).toBe(PORTAL.motherUser);
+      }
+    });
+  });
+
+  it('takes the devices of the household account an erasure closes, and only those', async () => {
+    await rolledBack(owner, async () => {
+      await device(PORTAL.adultUser, 21);
+      await device(PORTAL.adultUser, 22);
+      await device(PORTAL.motherUser, 23);
+      // A colleague who is also a contact on the record being erased (968).
+      await owner.query(
+        'insert into contact (id, tenant_id, client_id, user_id, relationship, given_name, ' +
+          "family_name, is_legal_guardian, can_consent) values ($1, $2, $3, $4, 'spouse', " +
+          "'Iris', 'Harbour', false, false)",
+        [COLLEAGUE_CONTACT, IDS.tenantA, PORTAL.adultClient, PORTAL.admin],
+      );
+      await device(PORTAL.admin, 24);
+      await owner.query(
+        'insert into erasure_request (id, tenant_id, client_id, reason) values ($1, $2, $3, $4)',
+        [ERASURE, IDS.tenantA, PORTAL.adultClient, 'Household asked to be forgotten'],
+      );
+      await setAuditContext(owner, IDS.ownerA);
+      await owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_roles', 'owner', true)",
+        [IDS.tenantA],
+      );
+      const result = await owner.query<{ summary: Record<string, unknown> }>(
+        'select app.erase_client($1, $2) as summary',
+        [PORTAL.adultClient, ERASURE],
+      );
+      expect(result.rows[0]?.summary).toMatchObject({ portalAccountsArchived: 1 });
+      expect(await devicesOf(PORTAL.adultUser)).toBe(0);
+      // Another household's devices, and the spared colleague's own, stand.
+      expect(await devicesOf(PORTAL.motherUser)).toBe(1);
+      expect(await devicesOf(PORTAL.admin)).toBe(1);
+      const status = await owner.query<{ status: string }>(
+        'select status::text as status from app_user where id = $1',
+        [PORTAL.admin],
+      );
+      expect(status.rows[0]?.status).toBe('active');
+    });
+  });
+});

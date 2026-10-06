@@ -18,10 +18,12 @@
 
 **No new dependency.** Web push is RFC 8291 and 8292 written with Node's own crypto in `app/api/portal/push/webpush.ts`, proved byte for byte against RFC 8291's worked example. The `web-push` package was not taken: it would have brought several transitive packages to the host's scanner for about a hundred lines.
 
-**Asked of the trunk, not done here.**
+12. **Core migration `975_push_devices_redacted_and_erased.sql`** (trunk range, taken into this round on the coordinator's word of 6 October 2026; 974 is reserved for the helper-role stream). It does two things, each a whole restatement of the latest definition on main with one addition:
+    - `app.audit_redact`, from 967: it now drops `push_endpoint`, `push_p256dh` and `push_auth`, so a device's address and keys never reach the append-only trail.
+    - `app.erase_client`, from 972: a new step 2a deletes the `push_subscription` rows of exactly the household accounts the erasure closes. That is the accounts step 2 archives, so a spared colleague's devices stand (968).
 
-- **Redaction.** `app.audit_redact` should drop `push_endpoint`, `push_p256dh` and `push_auth`, so a device's address and keys do not sit in the append-only trail. It cannot be done from the portal's range: 967 restates the function in full and sorts after any 7xx file. The columns carry distinctive names for exactly this. Until then the values reach `audit_log` on insert and delete; they cannot be used to send without the practice's private key.
-- **Erasure.** `app.erase_client` closes a household's own portal account; it should delete that account's `push_subscription` rows in the same act. Until then nothing reaches such a device: the audience reads active logins only, the delivery reads active logins only, and a login that is nobody's contact any more is no recipient (`pushRecipients`).
-- **Sign-out on a shared device.** The shell's sign-out could also let this device's push subscription go (the portal's own "turn off" already does). Until then a shared tablet keeps receiving the practice's news and, where the last person's switch is on, offers — which carry no personal data — until the next person turns notifications on with it, which moves the device to them.
+    `tests/portal/db/push.test.ts` proves both, and fails without the migration. The erasure's summary is unchanged.
+
+**Recorded follow-up, not built.** Sign-out on a shared device: the shell's sign-out could also let this device's push subscription go, as the portal's own "turn off" already does. Until then, a shared tablet keeps receiving the practice's news and, if the last person's switch is on, its offers; neither carries personal data. This lasts until the next person turns notifications on with that tablet, which moves the device to them.
 
 **Spec.** `docs/SPEC/client-portal.md` sections 3.5, 3.6, 3.11, 3.12, 4, 5 (rules 11 and 12), 6.5, 6.8, 6.9, 7 and 9, amended 2026-10-06.
