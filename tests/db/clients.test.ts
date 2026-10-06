@@ -139,14 +139,25 @@ describe('GET /api/clients', () => {
 
   it('keeps erased records with the owner and lead practitioner, away from an admin', async () => {
     await owner.query("update client set status = 'erased' where mrn = 'MW-000020'");
-    const asOwner = (await (
-      await list(authIdOf(0), '?status=erased')
-    ).json()) as ClientListResponse;
-    expect(asOwner.clients.map((c) => c.mrn)).toEqual(['MW-000020']);
-    const asAdmin = (await (await list(authIdOf(3))).json()) as ClientListResponse;
-    expect(asAdmin.clients).toHaveLength(19);
-    expect(asAdmin.clients.some((c) => c.status === 'erased')).toBe(false);
-    await owner.query("update client set status = 'active' where mrn = 'MW-000020'");
+    try {
+      const asOwner = (await (
+        await list(authIdOf(0), '?status=erased')
+      ).json()) as ClientListResponse;
+      expect(asOwner.clients.map((c) => c.mrn)).toEqual(['MW-000020']);
+      const asAdmin = (await (await list(authIdOf(3))).json()) as ClientListResponse;
+      expect(asAdmin.clients).toHaveLength(19);
+      expect(asAdmin.clients.some((c) => c.status === 'erased')).toBe(false);
+      // Asking for them by name is the bypass the list's guard exists for.
+      const adminAsks = (await (
+        await list(authIdOf(3), '?status=erased')
+      ).json()) as ClientListResponse;
+      expect(adminAsks.clients).toEqual([]);
+      // The owner's own default list leaves them out too; the filter brings them back.
+      const ownerDefault = (await (await list(authIdOf(0))).json()) as ClientListResponse;
+      expect(ownerDefault.clients.some((c) => c.mrn === 'MW-000020')).toBe(false);
+    } finally {
+      await owner.query("update client set status = 'active' where mrn = 'MW-000020'");
+    }
   });
 
   it('shows another practice nothing, and a stranger nothing at all', async () => {

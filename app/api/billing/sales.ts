@@ -100,10 +100,13 @@ const RECIPIENT_TYPE = 'individual';
 const FIRST_PRICES_SQL =
   'select (select min(pp.valid_from)::text from package_price pp ' +
   '    where pp.tenant_id = app.current_tenant_id() and pp.package_id = $1) as package_from, ' +
+  // A retired service has no price the catalogue will use, so it answers null
+  // ("never priced") rather than a date that would still be refused.
   '  array(select (select min(p.valid_from)::text from price p ' +
-  '      where p.tenant_id = pc.tenant_id and p.service_type_id = pc.service_type_id ' +
+  "      where st.status = 'active' and p.tenant_id = pc.tenant_id " +
+  '        and p.service_type_id = pc.service_type_id ' +
   '        and p.jurisdiction = $2 and p.recipient_type = $3) ' +
-  '    from package_component pc ' +
+  '    from package_component pc join service_type st on st.id = pc.service_type_id ' +
   '    where pc.tenant_id = app.current_tenant_id() and pc.package_id = $1 ' +
   '    order by pc.line_no) as component_froms';
 

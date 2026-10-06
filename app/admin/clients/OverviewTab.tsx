@@ -107,7 +107,8 @@ export function OverviewTab({
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          ...(reason ? { 'x-reason': reason } : {}),
+          // One line: a header cannot carry the newline a textarea allows.
+          ...(reason ? { 'x-reason': reason.replace(/\s+/g, ' ').trim() } : {}),
         },
         body: JSON.stringify({ to }),
       });

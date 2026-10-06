@@ -89,11 +89,14 @@ describe('useNewEnquiryCount', () => {
     const fetchImpl = counting([1, 4]);
     mount(fetchImpl);
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('1'));
+    // Only the interval may ask again: nothing navigates in this test.
+    expect(asked(fetchImpl)).toBe(1);
     expect(ENQUIRY_COUNT_REFRESH_MS).toBe(120_000);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(ENQUIRY_COUNT_REFRESH_MS);
     });
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('4'));
+    expect(asked(fetchImpl)).toBe(2);
   });
 
   it('leaves the title bare when nothing is waiting', async () => {
