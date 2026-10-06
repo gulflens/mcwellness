@@ -16,6 +16,7 @@ import { RoutingDayResponse, type DayLegRow } from '../../api/routing/schema';
 import { StopBalanceResponse } from '../../api/billing/document-schema';
 import { formatFils } from '../../admin/billing/money';
 import { requestPersistentStorage } from '../session/outbox/store';
+import { LocationSharing } from '../location/LocationSharing';
 import { canOpenPractitioners } from '../../shell/adminAccess';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
@@ -737,6 +738,11 @@ export function TodayPage() {
             {DAY_FORMAT.format(new Date(`${date}T00:00:00${PRACTICE_UTC_OFFSET}`))}
           </div>
         </header>
+
+        {/* Live location (docs/SPEC/dispatch.md section 15): the switch, or
+            the band the whole time sharing is on. Nothing at all for somebody
+            with no day of their own to share. */}
+        <LocationSharing />
 
         {state.kind === 'loading' ? <Note>Loading your day.</Note> : null}
         {state.kind === 'error' ? (
