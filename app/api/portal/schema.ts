@@ -558,6 +558,8 @@ export const OfficeAnnouncement = z.object({
   withdrawnBy: z.string().nullable(),
   /** The announcement this one corrects, when it is a correction. */
   supersedesId: z.uuid().nullable(),
+  /** Its correction, once one is published: a second correction is refused. */
+  correctedById: z.uuid().nullable(),
   state: z.enum(ANNOUNCEMENT_STATES),
 });
 export type OfficeAnnouncement = z.infer<typeof OfficeAnnouncement>;
@@ -593,6 +595,12 @@ export const PublishAnnouncementInput = z.object({
   visibleUntil: TypedDay.nullable().default(null),
   /** Publishing a correction: the standing announcement it replaces and withdraws. */
   supersedesId: z.uuid().nullable().default(null),
+  /**
+   * The writer has read the ambiguous words the preview named (treat,
+   * patient, …) and confirms they are not a medical claim. Recorded with the
+   * publication; without it, a text carrying one answers 422 `confirm_wording`.
+   */
+  confirmedWarnings: z.boolean().default(false),
 });
 export type PublishAnnouncementInput = z.input<typeof PublishAnnouncementInput>;
 

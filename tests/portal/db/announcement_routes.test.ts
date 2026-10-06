@@ -128,6 +128,8 @@ describe('Settings › Announcements: the list', () => {
       const body = (await res.json()) as OfficeAnnouncementsResponse;
       const state = new Map(body.announcements.map((a) => [a.id, a.state]));
       expect(state.get(SEEDED.newest)).toBe('current');
+      // Current by its own days, but the home shows the newest three.
+      expect(state.get(SEEDED.oldest)).toBe('current_not_shown');
       expect(state.get(SEEDED.withdrawn)).toBe('withdrawn');
       expect(state.get(SEEDED.future)).toBe('scheduled');
       expect(body.announcements.find((a) => a.id === SEEDED.newest)?.publishedBy).toBe(
@@ -178,6 +180,46 @@ describe('Settings › Announcements: publishing', () => {
     const res = await h.callAs('POST', '/api/portal/announcements', PORTAL.adminAuth, DRAFT);
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe('reason_required');
+  });
+
+  it('refuses a reason that cleans to nothing', async () => {
+    const res = await h.callAs('POST', '/api/portal/announcements', PORTAL.adminAuth, DRAFT, {
+      'x-reason': '\u007f\u0085\u009f',
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('reason_required');
+  });
+
+  it('asks for an ambiguous word to be confirmed, and records the confirmation', async () => {
+    const draft = { ...DRAFT, title: { en: 'A treat for Eid', ar: 'هدية العيد' } };
+    const unconfirmed = await h.callAs(
+      'POST',
+      '/api/portal/announcements',
+      PORTAL.adminAuth,
+      draft,
+      REASON,
+    );
+    expect(unconfirmed.status).toBe(422);
+    expect(await unconfirmed.json()).toMatchObject({
+      error: 'confirm_wording',
+      warnings: [{ field: 'titleEn', term: 'treat' }],
+    });
+
+    const confirmed = await h.callAs(
+      'POST',
+      '/api/portal/announcements',
+      PORTAL.adminAuth,
+      { ...draft, confirmedWarnings: true },
+      REASON,
+    );
+    expect(confirmed.status).toBe(201);
+    const { announcement } = (await confirmed.json()) as PublishAnnouncementResponse;
+    const action = await h.owner.query<{ new_values: Record<string, string> }>(
+      "select new_values from audit_log where action = 'portal.announcement.published' " +
+        'and entity_id = $1',
+      [announcement.id],
+    );
+    expect(action.rows[0]?.new_values).toEqual({ confirmedWarnings: 'titleEn:treat' });
   });
 
   it('refuses a medical word, in either language, with the field it is in', async () => {
@@ -240,6 +282,38 @@ describe('Settings › Announcements: publishing', () => {
       REASON,
     );
     expect(again.status).toBe(409);
+  });
+
+  it('leaves the old one standing and shown when its correction starts on a later day', async () => {
+    const later = await h.owner.query<{ day: string }>(
+      "select to_char((now() at time zone timezone)::date + 3, 'YYYY-MM-DD') as day " +
+        'from tenant where id = $1',
+      [IDS.tenantA],
+    );
+    const res = await h.callAs(
+      'POST',
+      '/api/portal/announcements',
+      OWNER_AUTH,
+      { ...DRAFT, visibleFrom: later.rows[0]?.day, supersedesId: SEEDED.older },
+      REASON,
+    );
+    expect(res.status).toBe(201);
+    const { announcement } = (await res.json()) as PublishAnnouncementResponse;
+    expect(announcement.state).toBe('scheduled');
+    const old = await h.owner.query<{ withdrawn_at: Date | null }>(
+      'select withdrawn_at from announcement where id = $1',
+      [SEEDED.older],
+    );
+    expect(old.rows[0]?.withdrawn_at).toBeNull();
+    // Still standing, so still current on the practice's own list (shown or
+    // not, depending on how many newer ones the earlier cases published).
+    const list = await h.callAs('GET', '/api/portal/announcements', OWNER_AUTH);
+    const body = (await list.json()) as OfficeAnnouncementsResponse;
+    const state = body.announcements.find((a) => a.id === SEEDED.older)?.state;
+    expect(['current', 'current_not_shown']).toContain(state);
+    expect(body.announcements.find((a) => a.id === SEEDED.older)?.correctedById).toBe(
+      announcement.id,
+    );
   });
 
   it('refuses a correction of an announcement that does not exist', async () => {

@@ -2,15 +2,18 @@ import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import {
-  announcementState,
+  announcementStates,
+  announcementWarnings,
   announcementsFor,
   announcementsVisibleTo,
   checkAnnouncement,
+  correctionTakesOverNow,
   type AnnouncementRow,
 } from '../../../domain/portal';
 import { canActor, isoDateIn } from '../../../domain/shared';
 import { logAction, logReads } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
+import { cleanText } from '../_middleware/text';
 import type { Household } from './household';
 import {
   OfficeAnnouncementsResponse,
@@ -90,8 +93,6 @@ const OFFICE_FROM =
 
 const OFFICE_SQL = `${OFFICE_FROM} order by a.created_at desc, a.id desc limit 200`;
 
-const ONE_SQL = `${OFFICE_FROM} and a.id = $2`;
-
 const TIMEZONE_SQL = 'select timezone from tenant where id = app.current_tenant_id()';
 
 function toRule(row: Row): AnnouncementRow {
@@ -104,25 +105,32 @@ function toRule(row: Row): AnnouncementRow {
     publishedOn: row.published_on,
     publishedAt: row.created_at.toISOString(),
     withdrawn: row.withdrawn_at !== null,
+    supersedesId: row.supersedes_id,
   };
 }
 
-function toOffice(row: OfficeRow, today: string): OfficeAnnouncement {
-  const rule = toRule(row);
-  return {
-    id: row.id,
-    title: rule.title,
-    body: rule.body,
-    visibleFrom: rule.visibleFrom,
-    visibleUntil: rule.visibleUntil,
-    publishedAt: rule.publishedAt,
-    publishedOn: rule.publishedOn,
-    publishedBy: row.published_by,
-    withdrawnAt: row.withdrawn_at === null ? null : row.withdrawn_at.toISOString(),
-    withdrawnBy: row.withdrawn_by_name,
-    supersedesId: row.supersedes_id,
-    state: announcementState(rule, today),
-  };
+/** The practice's own list, each row with the state the whole list decides. */
+function toOffice(rows: readonly OfficeRow[], today: string): OfficeAnnouncement[] {
+  const rules = rows.map(toRule);
+  const states = announcementStates(rules, today);
+  return rows.map((row, index) => {
+    const rule = rules[index] as AnnouncementRow;
+    return {
+      id: row.id,
+      title: rule.title,
+      body: rule.body,
+      visibleFrom: rule.visibleFrom,
+      visibleUntil: rule.visibleUntil,
+      publishedAt: rule.publishedAt,
+      publishedOn: rule.publishedOn,
+      publishedBy: row.published_by,
+      withdrawnAt: row.withdrawn_at === null ? null : row.withdrawn_at.toISOString(),
+      withdrawnBy: row.withdrawn_by_name,
+      supersedesId: row.supersedes_id,
+      correctedById: rows.find((other) => other.supersedes_id === row.id)?.id ?? null,
+      state: states[row.id] ?? 'scheduled',
+    };
+  });
 }
 
 /** What the household's home carries, and the reads it records. */
@@ -155,8 +163,14 @@ export async function homeAnnouncements(
 
 const IdParams = z.object({ id: z.uuid() });
 
+/**
+ * The reason as the fence stamps it: cleaned of what draws nothing, as
+ * `request-context.ts` cleans it, so a header of invisible characters that
+ * would stamp an empty reason is refused here rather than passed (round 72's
+ * review, finding 2.2).
+ */
 function reasonOf(header: string | undefined): string | null {
-  const reason = (header ?? '').trim();
+  const reason = cleanText(header ?? '', 500);
   return reason.length === 0 ? null : reason;
 }
 
@@ -181,7 +195,7 @@ export function mountPortalAnnouncements(
     return c.json(
       OfficeAnnouncementsResponse.parse({
         today,
-        announcements: rows.rows.map((row) => toOffice(row, today)),
+        announcements: toOffice(rows.rows, today),
       }),
     );
   });
@@ -208,6 +222,13 @@ export function mountPortalAnnouncements(
     if (problems.length > 0) {
       return c.json({ error: 'wording', problems, requestId }, 422);
     }
+    // An ambiguous word (treat, patient, …) is published only once the writer
+    // has confirmed at preview that it is not a medical claim.
+    const warnings = announcementWarnings(input);
+    if (warnings.length > 0 && !input.confirmedWarnings) {
+      return c.json({ error: 'confirm_wording', warnings, requestId }, 422);
+    }
+    const confirmed = warnings.map((warning) => `${warning.field}:${warning.term}`).join(',');
 
     if (input.supersedesId !== null) {
       // The one it corrects: standing, and not already corrected. Locked, so
@@ -249,10 +270,16 @@ export function mountPortalAnnouncements(
       db,
       'portal.announcement.published',
       { type: 'announcement', id, clientId: null },
-      input.supersedesId === null ? {} : { supersedesId: input.supersedesId },
+      {
+        ...(input.supersedesId === null ? {} : { supersedesId: input.supersedesId }),
+        ...(confirmed === '' ? {} : { confirmedWarnings: confirmed }),
+      },
     );
 
-    if (input.supersedesId !== null) {
+    // A correction withdraws what it corrects at once — unless it names a
+    // first day still to come, when the old one stays shown until that day and
+    // the read rule hides it from then (correctionTakesOverNow).
+    if (input.supersedesId !== null && correctionTakesOverNow(input, today)) {
       await db.query(
         'update announcement set withdrawn_at = now(), withdrawn_by = $2 ' +
           'where tenant_id = app.current_tenant_id() and id = $1',
@@ -266,10 +293,10 @@ export function mountPortalAnnouncements(
       );
     }
 
-    const written = await db.query<OfficeRow>(ONE_SQL, [zone, id]);
-    const row = written.rows[0];
-    if (!row) return c.json({ error: 'not_found', requestId }, 404);
-    return c.json(PublishAnnouncementResponse.parse({ announcement: toOffice(row, today) }), 201);
+    const written = await db.query<OfficeRow>(OFFICE_SQL, [zone]);
+    const announcement = toOffice(written.rows, today).find((row) => row.id === id);
+    if (!announcement) return c.json({ error: 'not_found', requestId }, 404);
+    return c.json(PublishAnnouncementResponse.parse({ announcement }), 201);
   });
 
   api.post('/api/portal/announcements/:id/withdraw', async (c) => {
