@@ -155,11 +155,11 @@ function Wherever() {
 }
 
 function renderPage(fetchImpl: typeof fetch, actor: typeof PRACTITIONER = PRACTITIONER) {
-  const me = vi.fn(async (input: RequestInfo | URL) => {
+  const me = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input).startsWith('/api/me')) {
       return new Response(JSON.stringify(actor), { status: 200 });
     }
-    return fetchImpl(input);
+    return fetchImpl(input, init);
   }) as unknown as typeof fetch;
   return render(
     <AuthProviderBoundary provider={provider} fetchImpl={me}>
@@ -539,5 +539,97 @@ describe('TodayPage, the money at the door', () => {
     // Never the console's wide route: that body is the practice's commercial
     // position and does not belong on a phone at a front door.
     expect(calls.some((call) => /\/balance$/.test(String(call[0])))).toBe(false);
+  });
+});
+
+describe('TodayPage: calling off a stop of your own', () => {
+  /**
+   * The day, the practice's notice period, and the call-off itself; every
+   * POST is kept so a test can say what was sent. After a call-off the own
+   * scope no longer lists the stop (app/api/appointments/list.ts), and the
+   * fake does the same.
+   */
+  function dayWithCallOff(first: DayStop) {
+    const posts: { url: string; reason: string | null; body: unknown }[] = [];
+    let calledOff = false;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === 'POST') {
+        const headers = new Headers((init.headers ?? {}) as HeadersInit);
+        posts.push({
+          url,
+          reason: headers.get('x-reason'),
+          body: JSON.parse(String(init.body)) as unknown,
+        });
+        calledOff = true;
+        return new Response(
+          JSON.stringify({
+            id: first.id,
+            status: 'cancelled',
+            reason: 'client_request',
+            noticeHours: 24,
+            callOutFeeNetFils: null,
+            callOutFeeVatFils: null,
+            callOutFeeGrossFils: null,
+            feeInvoiceId: null,
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.startsWith('/api/appointments/settings')) {
+        return new Response(JSON.stringify({ noticeHours: 24, unfitFeeFils: 15000 }), {
+          status: 200,
+        });
+      }
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: calledOff ? [] : [first] }), {
+          status: 200,
+        });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+    return { fetchImpl, posts };
+  }
+
+  it('offers Call off on a stop not yet started, through the same drawer and reason as the day', async () => {
+    const tomorrowish = new Date(Date.now() + 30 * 3_600_000).toISOString();
+    const { fetchImpl, posts } = dayWithCallOff(
+      stop({ id: '00000009-0000-4000-8000-000000000220', windowStart: tomorrowish }),
+    );
+    renderPage(fetchImpl);
+    fireEvent.click(await screen.findByRole('button', { name: "Call off Iris C.'s visit" }));
+    const drawer = screen.getByRole('dialog', { name: 'Call off appointment' });
+    // Nothing goes without a sentence about what happened, as on the day.
+    const submit = within(drawer).getByRole('button', { name: 'Call off this visit' });
+    await waitFor(() => expect(within(drawer).queryByText(/Reading the practice/)).toBeNull());
+    expect(submit.hasAttribute('disabled')).toBe(true);
+    fireEvent.change(within(drawer).getByLabelText('What happened?'), {
+      target: { value: 'The family asked to stop for the week.' },
+    });
+    fireEvent.click(submit);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]?.url).toBe('/api/appointments/00000009-0000-4000-8000-000000000220/cancel');
+    expect(posts[0]?.reason).toBe('The family asked to stop for the week.');
+    expect(posts[0]?.body).toEqual({ reason: 'client_request' });
+    expect(await within(drawer).findByText('The visit is called off.')).toBeTruthy();
+    // The office's own doors are not the practitioner's.
+    expect(within(drawer).queryByRole('link', { name: 'Open Billing' })).toBeNull();
+    // And the day is read again, without the stop.
+    await waitFor(() => expect(screen.getByText('Nothing is booked for you today.')).toBeTruthy());
+  });
+
+  it('does not offer it on a stop already started or delivered', async () => {
+    renderPage(
+      dayOf(
+        stop({ id: '00000009-0000-4000-8000-000000000221', status: 'checked_in' }),
+        stop({
+          id: '00000009-0000-4000-8000-000000000222',
+          status: 'completed',
+          windowStart: dubai('11:00:00'),
+        }),
+      ),
+    );
+    await screen.findByText('Done');
+    expect(screen.queryByRole('button', { name: /^Call off/ })).toBeNull();
   });
 });

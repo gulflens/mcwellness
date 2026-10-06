@@ -12,9 +12,9 @@ import type { AuthProvider } from '../../app/shell/auth/types';
 afterEach(cleanup);
 
 /**
- * The week, read only (docs/SPEC/scheduling-manual.md sections 4.1 and 5.2):
- * seven days across, the same facts the day's own rows carry, and nothing on
- * it that changes a visit.
+ * The week (docs/SPEC/scheduling-manual.md sections 4.1 and 5.2): seven days
+ * across, the same facts the day's own rows carry, and the day's own actions
+ * on each visit through the day's own drawers.
  */
 
 const provider: AuthProvider = {
@@ -194,12 +194,80 @@ describe('WeekPage', () => {
     expect(screen.getAllByText('Nothing booked.')).toHaveLength(6);
   });
 
-  it('offers no way to change a visit: it is a week to look at', async () => {
+  it("offers the day's own actions on a visit still open, and books nothing", async () => {
     renderWeek(week());
     await screen.findByText('Iris Cliff');
-    expect(screen.queryByRole('button', { name: /^Move/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Call off/ })).toBeNull();
+    expect(screen.getByRole('button', { name: "Move Iris Cliff's appointment" })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Call off Iris Cliff's appointment" })).toBeTruthy();
+    // Confirmed already: there is nobody left to tell.
+    expect(screen.queryByRole('button', { name: "Confirm Iris Cliff's appointment" })).toBeNull();
+    // Booking stays on the day, where the coordinator sees what else it holds.
     expect(screen.queryByRole('button', { name: 'Add appointment' })).toBeNull();
+  });
+
+  it("opens the day's own drawers from a card, one at a time", async () => {
+    renderWeek(week());
+    fireEvent.click(
+      await screen.findByRole('button', { name: "Call off Iris Cliff's appointment" }),
+    );
+    expect(screen.getByRole('dialog', { name: 'Call off appointment' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: "Move Iris Cliff's appointment" }));
+    expect(screen.queryByRole('dialog', { name: 'Call off appointment' })).toBeNull();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+
+  it('confirms a proposed visit from its card and reads the week again', async () => {
+    const proposedId = '0000000b-0000-4000-8000-000000000102';
+    let confirmed = false;
+    const posts: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://localhost');
+      if (init?.method === 'POST') {
+        posts.push(url.pathname);
+        confirmed = true;
+        return new Response('{}', { status: 200 });
+      }
+      const date = url.searchParams.get('date');
+      const appointments =
+        date === ANCHOR
+          ? [{ ...appointmentOn(ANCHOR, proposedId), status: confirmed ? 'confirmed' : 'proposed' }]
+          : [];
+      return new Response(JSON.stringify({ appointments }), { status: 200 });
+    }) as unknown as typeof fetch;
+    renderWeek(fetchImpl);
+    fireEvent.click(
+      await screen.findByRole('button', { name: "Confirm Iris Cliff's appointment" }),
+    );
+    await waitFor(() => expect(screen.getByText('Confirmed')).toBeTruthy());
+    expect(posts).toEqual([`/api/appointments/${proposedId}/confirm`]);
+  });
+
+  it('folds called-off visits away until the switch asks for them', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost');
+      const date = url.searchParams.get('date');
+      const appointments =
+        date === ANCHOR
+          ? [
+              appointmentOn(ANCHOR, '0000000b-0000-4000-8000-000000000101'),
+              {
+                ...appointmentOn(ANCHOR, '0000000b-0000-4000-8000-000000000103'),
+                status: 'cancelled_late',
+                client: { ...appointmentOn(ANCHOR, 'x').client, givenName: 'Juniper' },
+              },
+            ]
+          : [];
+      return new Response(JSON.stringify({ appointments }), { status: 200 });
+    }) as unknown as typeof fetch;
+    renderWeek(fetchImpl);
+    await screen.findByText('Iris Cliff');
+    expect(screen.queryByText('Juniper Cliff')).toBeNull();
+    expect(screen.getByText('1 appointment')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Show called-off visits/ }));
+    expect(screen.getByText('Juniper Cliff')).toBeTruthy();
+    expect(screen.getByText('Cancelled late')).toBeTruthy();
+    // Called off is called off: no Move, no Call off on it.
+    expect(screen.queryByRole('button', { name: "Move Juniper Cliff's appointment" })).toBeNull();
   });
 
   it('moves a week at a time, and hands a day back to the day view', async () => {

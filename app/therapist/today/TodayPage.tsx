@@ -15,6 +15,7 @@ import { DayStopListResponse, type DayStop } from '../../api/appointments/schema
 import { RoutingDayResponse, type DayLegRow } from '../../api/routing/schema';
 import { StopBalanceResponse } from '../../api/billing/document-schema';
 import { formatFils } from '../../admin/billing/money';
+import { CancelAppointmentDrawer } from '../../admin/schedule/CancelAppointmentDrawer';
 import { requestPersistentStorage } from '../session/outbox/store';
 import { LocationSharing } from '../location/LocationSharing';
 import { canOpenPractitioners } from '../../shell/adminAccess';
@@ -117,6 +118,9 @@ const STOP_NOTES: Partial<Record<AppointmentStatus, string>> = {
   no_show: 'Nobody answered',
   rescheduled: 'Moved to another day',
 };
+
+/** The statuses a stop can still be called off from: nobody has started it. */
+const CALL_OFF_STATUSES: readonly AppointmentStatus[] = ['proposed', 'confirmed'];
 
 const CRITICAL_STATUSES: readonly AppointmentStatus[] = [
   'cancelled',
@@ -391,6 +395,7 @@ function Stop({
   balance,
   drive,
   onCheckIn,
+  onCallOff,
 }: {
   stop: DayStop;
   phase: StopPhase;
@@ -405,6 +410,7 @@ function Stop({
    */
   drive: { leg: DayLegRow | undefined } | null;
   onCheckIn: (stop: DayStop) => void;
+  onCallOff: (stop: DayStop) => void;
 }) {
   const name = shortName(stop.client.givenName, stop.client.familyInitial);
   const age = describeAge(stop.client.age);
@@ -414,6 +420,11 @@ function Stop({
   // practitioner has got to in the day. A confirmed visit nobody closed is
   // still a visit somebody owes: it folds away, but it keeps its buttons.
   const settled = isSettled(stop.status);
+  // A practitioner may call off their own stop while nobody has started it
+  // (app/api/appointments/cancel.ts admits the practitioner role, and the
+  // definer door beneath holds them to their own visits). Once checked in, how
+  // the visit ends is recorded on the session itself, never here.
+  const canCallOff = CALL_OFF_STATUSES.includes(stop.status);
 
   const head = (
     <>
@@ -489,6 +500,16 @@ function Stop({
           >
             Check in
           </Button>
+          {canCallOff ? (
+            <Button
+              variant="quiet"
+              className="stop__action"
+              aria-label={`Call off ${name}'s visit`}
+              onClick={() => onCallOff(stop)}
+            >
+              Call off
+            </Button>
+          ) : null}
         </div>
       )}
     </div>
@@ -535,6 +556,8 @@ export function TodayPage() {
   );
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
+  // The stop being called off, while its drawer is open.
+  const [callingOff, setCallingOff] = useState<DayStop | null>(null);
   const [balances, setBalances] = useState<Record<string, StopBalance>>({});
   const [drives, setDrives] = useState<Drives | null>(null);
   // The day's picture as an object URL, or null while there is none to show.
@@ -826,6 +849,7 @@ export function TodayPage() {
                 // would leave a placeholder there for ever.
                 drive={index === 0 ? null : { leg: legsByStop.get(stop.id) }}
                 onCheckIn={checkIn}
+                onCallOff={setCallingOff}
               />
             ))}
           </ol>
@@ -851,6 +875,29 @@ export function TodayPage() {
           </Button>
         </div>
       </main>
+      {callingOff ? (
+        // The office's own drawer, so the reasons, the notice period and what
+        // it costs are worked out by the one piece of code that already says
+        // them on the day. The family name is the initial the stop carries,
+        // and nothing more reaches this screen.
+        <CancelAppointmentDrawer
+          appointment={{
+            id: callingOff.id,
+            status: callingOff.status,
+            windowStart: callingOff.windowStart,
+            windowEnd: callingOff.windowEnd,
+            client: {
+              givenName: callingOff.client.givenName,
+              familyName: callingOff.client.familyInitial
+                ? `${callingOff.client.familyInitial}.`
+                : '',
+            },
+          }}
+          practitionerOwn
+          onClose={() => setCallingOff(null)}
+          onCancelled={() => setReloadToken((token) => token + 1)}
+        />
+      ) : null}
     </div>
   );
 }

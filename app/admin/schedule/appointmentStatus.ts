@@ -45,3 +45,17 @@ export const APPOINTMENT_STATUS_TONES: Record<AppointmentStatus, StatusTone> = {
   rescheduled: 'neutral',
   voided: 'neutral',
 };
+
+/**
+ * A visit called off, in time or late. The day keeps these on its list on
+ * purpose — a cancellation is a fact the ledger shows (app/api/appointments/
+ * list.ts) — and the day and the week fold them away behind a switch, so the
+ * visits still happening are what is read first. A `rescheduled` row is not
+ * one of them: it says where the visit went, which is the thing a coordinator
+ * looks it up to find.
+ */
+export const CALLED_OFF_STATUSES: readonly AppointmentStatus[] = ['cancelled', 'cancelled_late'];
+
+export function isCalledOff(status: AppointmentStatus): boolean {
+  return CALLED_OFF_STATUSES.includes(status);
+}

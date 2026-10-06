@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
   AppointmentListResponse,
@@ -8,18 +8,30 @@ import {
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, PageHeader } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
-import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from './appointmentStatus';
+import {
+  APPOINTMENT_STATUS_LABELS,
+  APPOINTMENT_STATUS_TONES,
+  isCalledOff,
+} from './appointmentStatus';
+import {
+  ShowCalledOff,
+  useVisitActions,
+  VisitActionButtons,
+  VisitActionDrawers,
+} from './visitActions';
 import { addDays, formatDay, formatWindow, practiceDay, PRACTICE_UTC_OFFSET } from './windows';
 import './schedule.css';
 
 /**
- * The week, read only (docs/SPEC/scheduling-manual.md sections 4.1 and 5.2).
+ * The week (docs/SPEC/scheduling-manual.md sections 4.1 and 5.2).
  *
  * Seven days across, every practitioner in each, carrying the same facts the
  * day view's rows carry: the window, who, with whom, which service, where,
- * and where it stands. Nothing here books, moves or calls anything off — a
- * week is for seeing the shape of it, and every change is made on the day
- * itself, where the coordinator can see what else that day already holds.
+ * and where it stands. Each visit offers the day's own actions — Confirm, Move
+ * and Call off while it is open, Correct and Void on one logged from the
+ * records — through the day's own drawers (visitActions.tsx), so a week is
+ * somewhere a visit can be dealt with and not only looked at. Booking stays on
+ * the day, where the coordinator can see what else that day already holds.
  * Section 4.1's dragging is not this screen either: it belongs to the real
  * calendar grid, and a drag with no conflict feedback beside it would be a
  * worse thing to ship than no drag at all.
@@ -78,6 +90,12 @@ export function WeekPage() {
   // overnight marks the right column in the morning.
   const today = practiceDay(new Date());
   const [state, setState] = useState<State>({ kind: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
+  // Called-off visits are folded away until asked for, as on the day.
+  const [showCalledOff, setShowCalledOff] = useState(false);
+  const reload = useCallback(() => setReloadToken((token) => token + 1), []);
+  const { acting, openAction, closeAction, confirm, confirming, actionError, canVoid } =
+    useVisitActions({ onChanged: reload });
 
   useEffect(() => {
     let live = true;
@@ -98,15 +116,24 @@ export function WeekPage() {
     return () => {
       live = false;
     };
-  }, [anchor, apiFetch, days]);
+  }, [anchor, apiFetch, days, reloadToken]);
 
   // The answer in hand is only this week's answer if it was asked for this
   // week; otherwise the request for this one is still in flight.
   const settled = state.kind !== 'loading' && state.anchor === anchor ? state : null;
+  const visible = (day: Day) =>
+    showCalledOff ? day.appointments : day.appointments.filter((row) => !isCalledOff(row.status));
   const total =
     settled?.kind === 'ready'
-      ? settled.days.reduce((count, day) => count + day.appointments.length, 0)
+      ? settled.days.reduce((count, day) => count + visible(day).length, 0)
       : null;
+  const calledOff =
+    settled?.kind === 'ready'
+      ? settled.days.reduce(
+          (count, day) => count + day.appointments.filter((row) => isCalledOff(row.status)).length,
+          0,
+        )
+      : 0;
 
   function shift(offset: number) {
     setParams({ date: addDays(anchor, offset) });
@@ -139,10 +166,17 @@ export function WeekPage() {
         <Button variant="quiet" onClick={() => shift(7)}>
           Next week
         </Button>
+        <ShowCalledOff
+          id="week-show-called-off"
+          checked={showCalledOff}
+          hidden={calledOff}
+          onChange={setShowCalledOff}
+        />
       </div>
 
       {settled === null ? <Note>Loading the week.</Note> : null}
       {settled?.kind === 'error' ? <Note tone="critical">{LOAD_ERROR}</Note> : null}
+      {actionError ? <Note tone="critical">{actionError}</Note> : null}
       {settled?.kind === 'ready' ? (
         <div className="week">
           {settled.days.map((day) => (
@@ -160,11 +194,11 @@ export function WeekPage() {
                   {formatDay(day.date)}
                 </Link>
               </h2>
-              {day.appointments.length === 0 ? (
+              {visible(day).length === 0 ? (
                 <p className="week__empty small muted">Nothing booked.</p>
               ) : (
                 <ol className="week__stops">
-                  {day.appointments.map((row) => (
+                  {visible(day).map((row) => (
                     <li key={row.id} className="week__stop">
                       <span className="week__window numeric">
                         {formatWindow(row.windowStart, row.windowEnd)}
@@ -190,6 +224,14 @@ export function WeekPage() {
                         label={APPOINTMENT_STATUS_LABELS[row.status]}
                         tone={APPOINTMENT_STATUS_TONES[row.status]}
                       />
+                      <VisitActionButtons
+                        row={row}
+                        canVoid={canVoid}
+                        confirming={confirming}
+                        onConfirm={(visit) => void confirm(visit)}
+                        onOpen={openAction}
+                        className="week__actions"
+                      />
                     </li>
                   ))}
                 </ol>
@@ -198,6 +240,7 @@ export function WeekPage() {
           ))}
         </div>
       ) : null}
+      <VisitActionDrawers acting={acting} onClose={closeAction} onChanged={reload} />
     </section>
   );
 }
