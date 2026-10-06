@@ -24,7 +24,7 @@ applied.
    as a loop over the catalogue so a table added by any stream is covered on
    its first migrate without anybody editing this file.
 3. **`domain/shared/actor.ts`** (shared): `'helper'` in `ROLES`, named by no
-   action; one new action, `staff.helper.manage` (owner and admin).
+   action; one new action, `staff.helper.manage` (the owner alone).
 4. **`domain/shared/staff.ts`** (shared): `STAFF_ROLE_LABELS.helper = 'Helper'`
    (the record is exhaustive over `Role`). `STAFF_ROLES` is unchanged: a helper
    is not a working role and is never offered as a switch.
@@ -41,10 +41,15 @@ applied.
    profile's `/api/team/:id` (which would otherwise answer
    `/api/team/helpers` as a colleague with a malformed id); `HelperBody`,
    `AccompanimentBody`, `HelperRow`, `HelpersResponse`. Nothing existing in the
-   folder changes behaviour.
-9. **`app/admin/settings/TeamHelpers.tsx`** (new), **`TeamPage.tsx`** and
-   **`settings.css`** (the trunk's): the Helpers section, shown to the owner
-   and an admin; a person holding the helper role alone is left out of the
+   folder changes behaviour, except two refusals: `PUT /api/team/:id/roles/:role`
+   answers 409 `helper_holds_no_other_role` for a working role on a helper
+   (`canSwitchRole` in `domain/shared/staff.ts`, and `roles.ts`'s status map),
+   and `POST /api/team` answers 400 with the same code when the body names
+   `helper`.
+9. **`app/admin/settings/TeamHelpers.tsx`** (new), **`TeamPage.tsx`**,
+   **`TeamAccessTab.tsx`** and **`settings.css`** (the trunk's): the Helpers
+   section, read by the owner and an admin and changed by the owner alone;
+   one sentence for the new refusal code; a person holding the helper role alone is left out of the
    staff table. The existing `TeamPage.test.tsx` and `TeamMemberDrawer.test.tsx`
    are untouched and pass.
 10. **`app/shell/routing.ts`** and **`app/shell/App.tsx`** (the shell):
@@ -125,3 +130,17 @@ applied.
     the staff included. The routes refuse it, so nothing is shown; the floor
     beneath is missing. Not fixed here: it is the portal's and the trunk's,
     and a restrictive `app_user` policy for households needs its own review.
+
+## Fix round 1 (6 October 2026, the coordinator's word)
+
+19. **Team access stays the owner's.** `staff.helper.manage` is the owner's
+    alone; `app.name_helper` and `app.revoke_helper` ask for an owner of
+    `user_role` (`app.owner_names_helpers`, replacing 213's office check, in
+    the unmerged 213). An admin reads the helpers (`staff.manage`) and changes
+    nothing.
+20. **A helper holds no working role**, enforced beneath every route by
+    `app.guard_helper_alone`, a before-insert-or-update trigger on `user_role`
+    (core table) enabled always, written in the unmerged 213 rather than a new
+    core number. It locks the person's `app_user` row first so racing writes
+    serialise, and raises 42501, which the role switch already answers as a
+    refusal beneath it.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canActor, type Action, type Actor, type Capability } from '@domain/shared';
+import { canActor, canSwitchRole, type Action, type Actor, type Capability } from '@domain/shared';
 
 /**
  * The helper role grants nothing by itself (round 76, docs/SPEC/dispatch.md
@@ -115,12 +115,11 @@ describe('canActor, for a helper', () => {
 });
 
 describe('staff.helper.manage', () => {
-  it('is the owner’s and an admin’s, and nobody else’s', () => {
+  it('is the owner’s alone, as all of Team access is (21 September 2026)', () => {
     const action = EVERY['staff.helper.manage'];
-    for (const role of ['owner', 'admin'] as const) {
-      expect(canActor({ ...helper, roles: [role] }, action, {}, NOW), role).toBe(true);
-    }
+    expect(canActor({ ...helper, roles: ['owner'] }, action, {}, NOW)).toBe(true);
     for (const role of [
+      'admin',
       'lead_practitioner',
       'practitioner',
       'finance',
@@ -129,5 +128,23 @@ describe('staff.helper.manage', () => {
     ] as const) {
       expect(canActor({ ...helper, roles: [role] }, action, {}, NOW), role).toBe(false);
     }
+  });
+});
+
+describe('canSwitchRole, for a helper', () => {
+  const base = { actorUserId: 'owner', targetUserId: HELPER_USER, on: true };
+
+  it('refuses switching a working role on for a helper, with its own code', () => {
+    for (const role of ['admin', 'finance', 'practitioner', 'lead_practitioner']) {
+      expect(canSwitchRole({ ...base, targetRoles: ['helper'], role }), role).toBe(
+        'helper_holds_no_other_role',
+      );
+    }
+  });
+
+  it('never offers the helper role as a switch', () => {
+    expect(canSwitchRole({ ...base, targetRoles: ['finance'], role: 'helper' })).toBe(
+      'not_a_working_role',
+    );
   });
 });

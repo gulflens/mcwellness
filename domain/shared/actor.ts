@@ -485,15 +485,15 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'staff.access.manage':
       return hasRole(actor, 'owner');
     // A helper (round 76): a member of the practitioner's family who shares
-    // their own location while they help, and reaches nothing else. The owner
-    // and an admin add one, name whom they accompany and revoke one — the
-    // brief of 6 October 2026, wider than `staff.access.manage` on purpose:
-    // a helper's sign-in opens their own location and no record, no money and
-    // no colleague, so handing one out is not the act the owner kept to
-    // themselves on 21 September. `app.name_helper` and `app.revoke_helper`
-    // (migration 213) ask the same two roles of `user_role` beneath this.
+    // their own location while they help, and reaches nothing else. Adding
+    // one, naming whom they accompany and revoking one are Team access, and
+    // Team access is the owner's alone (the operator's rule of 21 September
+    // 2026, confirmed for helpers on 6 October). `app.name_helper` and
+    // `app.revoke_helper` (migration 213) ask the same of `user_role` beneath
+    // this. An admin reads the helpers with the rest of the list
+    // (`staff.manage`).
     case 'staff.helper.manage':
-      return hasRole(actor, 'owner', 'admin');
+      return hasRole(actor, 'owner');
     case 'kit.manage':
       // The equipment register: listing it, adding an item, editing one,
       // assigning it and recording a calibration

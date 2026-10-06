@@ -146,6 +146,8 @@ export type ProfileBody = z.infer<typeof ProfileBody>;
 export const TEAM_REFUSALS = [
   'locked',
   'last_role',
+  // Round 76: a helper holds no working role, and is never given one.
+  'helper_holds_no_other_role',
   'not_yourself',
   'not_a_working_role',
   'conflict',

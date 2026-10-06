@@ -676,7 +676,8 @@ walls stand beneath that:
    `/help` and is sent back there from the console, the day and the portal.
 
 *Whom a helper accompanies* (migration `213`, `helper_accompaniment`). The
-owner or an admin names one practitioner per helper. Append-only and audited,
+owner names one practitioner per helper (Team access is the owner's alone,
+the operator's rule of 21 September 2026, confirmed for helpers on 6 October). Append-only and audited,
 in `staff_consent`'s shape: one standing row per helper; ending one stamps
 `ended_at` and `ended_by` once and nothing else moves; a change of practitioner
 ends the old row and writes a new one. The API role holds select and nothing
@@ -684,9 +685,13 @@ else: the two doors are `app.name_helper(user, practitioner)` (makes the person
 a helper if they are not yet, and names or renames whom they go with) and
 `app.revoke_helper(user)` (ends the accompaniment, deletes their positions,
 suspends their sign-in, keeps the role row so they are still listed). Both ask
-whether the caller is the owner or an admin of `user_role`, not of the
-session's claimed roles (923's reasoning). A helper holds no other role:
-`app.name_helper` refuses a person who holds any. Read by the board's three
+whether the caller is an owner, of `user_role`, not of the
+session's claimed roles (923's reasoning). A helper holds no working role, and a person with one is never made a
+helper: the trigger `app.guard_helper_alone` on `user_role`, enabled always,
+refuses the row for every writer, the table's owner included; the role
+switch and the colleague invite refuse it first with the code
+`helper_holds_no_other_role`. `app.name_helper` also refuses a household
+contact. Read by the board's three
 roles and the helper themselves.
 
 *Positions.* In `practitioner_position`, with a nullable `user_id` and a check
@@ -719,9 +724,8 @@ null), and nobody else that field. `GET /api/location/positions` answers a
 second list, `helpers`, each with `accompaniesPractitionerId`, `firstName` and
 the position and age, read and logged exactly as a practitioner's.
 Settings › Team: `GET`, `POST /api/team/helpers` and `PUT`, `DELETE
-/api/team/helpers/:id`, for the owner and an admin (`staff.helper.manage` —
-wider than the rest of Team on purpose: a helper's sign-in opens their own
-location and nothing else). A new helper is made as a colleague is — a sign-in
+/api/team/helpers/:id`, the list for the owner and an admin (`staff.manage`), every change for the
+owner alone (`staff.helper.manage`). A new helper is made as a colleague is — a sign-in
 by email, a temporary password shown once, the sign-in taken back if the rows
 fail — then named. Sign-in by telephone is not offered: the seam makes email
 sign-ins, and a telephone one needs the provider's SMS sending, an unapproved

@@ -37,8 +37,8 @@ import './settings.css';
  * Nothing here deletes anybody.
  *
  * **Helpers** (round 76, docs/SPEC/dispatch.md section 15.12) are listed in a
- * section of their own below the staff, for the owner and an admin
- * (`staff.helper.manage`), and are left out of the staff table: a helper has
+ * section of their own below the staff — read by the owner and an admin,
+ * changed by the owner alone (`staff.helper.manage`) — and are left out of the staff table: a helper has
  * no profile and no working role, and the drawer's role switches are not a
  * door anybody should find open on one.
  */
@@ -148,7 +148,7 @@ export function TeamPage() {
   // will ask the same rule about, so no button is offered that it would refuse.
   const myRoles = ((members ?? []).find((member) => member.isYou)?.roles ?? []) as Role[];
   const canManage = myRoles.includes('owner');
-  const canManageHelpers = myRoles.includes('owner') || myRoles.includes('admin');
+  const canSeeHelpers = myRoles.includes('owner') || myRoles.includes('admin');
   // A person holding the helper role and nothing else is in the helpers'
   // section, not here.
   const staff = (members ?? []).filter(
@@ -310,7 +310,7 @@ export function TeamPage() {
           empty={<Note>Nobody yet.</Note>}
         />
       ) : null}
-      {members !== null && canManageHelpers ? <TeamHelpers /> : null}
+      {members !== null && canSeeHelpers ? <TeamHelpers canManage={canManage} /> : null}
       {openId === null ? null : (
         <TeamMemberDrawer
           memberId={openId}

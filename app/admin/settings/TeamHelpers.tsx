@@ -8,8 +8,10 @@ import { Table, type Column } from '../../shell/components/Table';
  * Helpers, in Settings › Team (round 76, docs/SPEC/dispatch.md section
  * 15.12): a member of the practitioner's family who drives and carries kit
  * on the day, signs in, and shares their own location while they help — and
- * reaches nothing else. The owner or an admin adds one, with a name, a
- * sign-in address and the practitioner they go with, and revokes one.
+ * reaches nothing else. The owner adds one, with a name, a sign-in address
+ * and the practitioner they go with, and revokes one; an admin reads the list
+ * and changes nothing on it, as with the staff (the operator's rule of 21
+ * September 2026).
  *
  * A helper is listed here and not in the staff table above it: a helper has
  * no profile to keep and no working role to switch, and a working role
@@ -31,7 +33,7 @@ function statusLabel(row: HelperRow): string {
   return row.status === 'suspended' ? 'Revoked' : 'Archived';
 }
 
-export function TeamHelpers() {
+export function TeamHelpers({ canManage }: { canManage: boolean }) {
   const { apiFetch } = useAuth();
   const [data, setData] = useState<HelpersResponse | null>(null);
   const [failed, setFailed] = useState(false);
@@ -148,7 +150,7 @@ export function TeamHelpers() {
       header: '',
       fit: true,
       render: (row) =>
-        row.status !== 'active' ? null : confirming === row.userId ? (
+        !canManage || row.status !== 'active' ? null : confirming === row.userId ? (
           <span className="team__actions">
             <Button
               variant="primary"
@@ -178,7 +180,7 @@ export function TeamHelpers() {
     <section className="team__helpers" aria-labelledby="team-helpers-heading">
       <div className="team__helpers-head">
         <h2 id="team-helpers-heading">Helpers</h2>
-        {!adding ? (
+        {canManage && !adding ? (
           <Button variant="primary" onClick={() => setAdding(true)}>
             Add a helper
           </Button>

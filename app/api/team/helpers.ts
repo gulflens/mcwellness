@@ -15,16 +15,15 @@ import { AccompanimentBody, HelperBody, HelpersResponse, InviteResponse } from '
  *
  * | Route | What |
  * |---|---|
- * | `GET /api/team/helpers` | every helper, whom each accompanies, and the practitioners one may accompany |
+ * | `GET /api/team/helpers` | (owner and admin) every helper, whom each accompanies, and the practitioners one may accompany |
  * | `POST /api/team/helpers` | a new helper: a sign-in, a temporary password, and whom they accompany |
  * | `PUT /api/team/helpers/:id` | whom an existing helper accompanies |
  * | `DELETE /api/team/helpers/:id` | revoke: the accompaniment ends, their positions go, their sign-in is suspended |
  *
- * **Who may.** The owner and an admin (`staff.helper.manage`), as the brief of
- * 6 October 2026 asks — wider than the rest of this folder, which is the
- * owner's alone since 21 September, on purpose: a helper's sign-in opens their
- * own location and nothing else, so handing one out is not the act the owner
- * kept to themselves (domain/shared/actor.ts says the same at the action).
+ * **Who may.** The list is the owner's and an admin's (`staff.manage`, as the
+ * team list is); every change is the owner's alone (`staff.helper.manage`),
+ * because Team access is the owner's (the operator's rule of 21 September
+ * 2026, confirmed for helpers on 6 October).
  *
  * **The same path as a colleague.** A new helper is made exactly as
  * `POST /api/team` makes a colleague — the sign-in through the same seam, the
@@ -32,7 +31,7 @@ import { AccompanimentBody, HelperBody, HelpersResponse, InviteResponse } from '
  * if the practice's rows cannot be written — and then named through
  * `app.name_helper` (migration 213), which gives the role and the
  * accompaniment together and asks again, of `user_role`, whether the caller is
- * the owner or an admin. Revoking is `app.revoke_helper`, the same shape. The
+ * an owner. Revoking is `app.revoke_helper`, the same shape. The
  * API role writes neither the role nor the accompaniment by itself.
  *
  * **Sign-in by email only.** The sign-in seam (`AuthAdminProvider`) makes a
@@ -111,7 +110,7 @@ export function mountTeamHelpers(api: Hono<ApiEnv>, options: HelpersOptions): vo
     const actor = c.get('actor');
     const db = c.get('db');
     const requestId = c.get('requestId');
-    if (!canActor(actor, { type: 'staff.helper.manage' }, {}, now())) {
+    if (!canActor(actor, { type: 'staff.manage' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const helpers = await db.query<{

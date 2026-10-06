@@ -101,11 +101,9 @@ describe('Settings › Team: helpers', () => {
     expect(helper.authId).not.toBe('');
   });
 
-  it('lets an admin add one too, and nobody else', async () => {
-    expect(
-      (await addHelper(PORTAL.adminAuth, 'Linden Shore', 'linden.shore@example.com')).status,
-    ).toBe(201);
+  it('lets the owner alone add one: an admin is refused', async () => {
     for (const auth of [
+      PORTAL.adminAuth,
       PORTAL.leadAuth,
       PORTAL.practitionerAuth,
       PORTAL.financeAuth,
@@ -151,6 +149,46 @@ describe('Settings › Team: helpers', () => {
     expect((await addHelper(OWNER_AUTH, 'Rowan Field', 'rowan.field@example.com')).status).toBe(
       201,
     );
+  });
+
+  it('lets an admin read the helpers, and refuses them a change of whom one goes with', async () => {
+    expect((await h.callAs('GET', '/api/team/helpers', PORTAL.adminAuth)).status).toBe(200);
+    const res = await h.callAs('PUT', `/api/team/helpers/${helper.userId}`, PORTAL.adminAuth, {
+      practitionerId: PORTAL.practitionerRow,
+    });
+    expect(res.status).toBe(403);
+    expect(
+      (
+        await h.callAs('PUT', `/api/team/helpers/${helper.userId}`, OWNER_AUTH, {
+          practitionerId: PORTAL.practitionerRow,
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it('refuses a working role for a helper with its own code, and nothing moves', async () => {
+    const res = await h.callAs('PUT', `/api/team/${helper.userId}/roles/practitioner`, OWNER_AUTH);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'helper_holds_no_other_role' });
+    const { rows } = await h.owner.query<{ role: string }>(
+      'select role::text as role from user_role where user_id = $1',
+      [helper.userId],
+    );
+    expect(rows).toEqual([{ role: 'helper' }]);
+  });
+
+  it('refuses the helper role on the colleague invite, with its own code', async () => {
+    const res = await h.callAs('POST', '/api/team', OWNER_AUTH, {
+      displayName: 'Aspen Field',
+      email: 'aspen.field@example.com',
+      roles: ['finance', 'helper'],
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'helper_holds_no_other_role' });
+    const { rows } = await h.owner.query(
+      "select 1 from app_user where email = 'aspen.field@example.com'",
+    );
+    expect(rows).toEqual([]);
   });
 
   it('refuses a colleague as a helper: the route reaches helpers only', async () => {
@@ -315,9 +353,15 @@ describe('revoking a helper', () => {
     ).toBe(403);
   });
 
-  it('ends the accompaniment and shuts the sign-in, for an admin', async () => {
+  it('is refused to an admin', async () => {
     expect(
       (await h.callAs('DELETE', `/api/team/helpers/${helper.userId}`, PORTAL.adminAuth)).status,
+    ).toBe(403);
+  });
+
+  it('ends the accompaniment and shuts the sign-in, for the owner', async () => {
+    expect(
+      (await h.callAs('DELETE', `/api/team/helpers/${helper.userId}`, OWNER_AUTH)).status,
     ).toBe(200);
     const { rows } = await h.owner.query<{ status: string; standing: number }>(
       'select u.status::text as status, (select count(*)::int from helper_accompaniment a ' +

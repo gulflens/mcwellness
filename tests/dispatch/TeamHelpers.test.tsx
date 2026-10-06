@@ -9,7 +9,7 @@ import type { AuthProvider } from '../../app/shell/auth/types';
 
 /**
  * Helpers in Settings › Team (docs/SPEC/dispatch.md section 15.12): the owner
- * or an admin adds one — a name, a sign-in address and the practitioner they
+ * adds one — a name, a sign-in address and the practitioner they
  * go with — and revokes one. A helper is listed there and not among the
  * staff, so nobody opens a helper's profile or switches a working role on for
  * them by accident. Seed names, example.com, reserved ids.
@@ -173,10 +173,11 @@ describe('helpers in Settings › Team', () => {
     await within(row).findByText('Revoked');
   });
 
-  it('offers an admin the same, on a list they otherwise only read', async () => {
+  it('shows an admin the helpers and offers them nothing to change', async () => {
     mount(['admin']);
-    expect(await screen.findByRole('button', { name: 'Add a helper' })).toBeTruthy();
-    expect(await screen.findByRole('button', { name: 'Revoke Juniper Vale' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Add a person' })).toBeNull();
+    const helpers = await screen.findByRole('table', { name: 'Helpers and whom each goes with' });
+    expect(within(helpers).getByRole('row', { name: /Juniper Vale/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add a helper' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Revoke Juniper Vale' })).toBeNull();
   });
 });

@@ -116,7 +116,14 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     if (!canActor(actor, { type: 'staff.access.manage' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const body = InviteBody.safeParse(await c.req.json().catch(() => ({})));
+    const raw: unknown = await c.req.json().catch(() => ({}));
+    // A helper is added in their own section and holds no other role (round
+    // 76); said with its own code rather than as a malformed body.
+    const asked = (raw as { roles?: unknown } | null)?.roles;
+    if (Array.isArray(asked) && asked.includes('helper')) {
+      return c.json({ error: 'helper_holds_no_other_role', requestId }, 400);
+    }
+    const body = InviteBody.safeParse(raw);
     if (!body.success) {
       return c.json({ error: 'bad_request', requestId }, 400);
     }
