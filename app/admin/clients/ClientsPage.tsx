@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
 import {
+  canSeeErased,
   canSeeFullRecord,
   canWriteConcerns,
   canWriteGoals,
@@ -316,8 +317,10 @@ export function ClientsPage() {
               setNotice(null);
             }}
           >
-            <option value="">Any status</option>
-            {CLIENT_STATUSES.filter((s) => s !== 'erased').map((s) => (
+            {/* Erased records are left out unless asked for by name, and only
+              the owner and the lead practitioner may ask (app/api/clients/list.ts). */}
+            <option value="">All except erased</option>
+            {CLIENT_STATUSES.filter((s) => s !== 'erased' || canSeeErased(actor)).map((s) => (
               <option key={s} value={s}>
                 {s.charAt(0).toUpperCase() + s.slice(1)}
               </option>

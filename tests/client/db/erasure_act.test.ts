@@ -848,6 +848,19 @@ describe('what is left of an erased record', () => {
     expect(((await search.json()) as { clients: unknown[] }).clients).toHaveLength(0);
   });
 
+  it('is hidden from the lead practitioner’s list by default, and shown when erased is asked for', async () => {
+    const ids = async (path: string): Promise<string[]> => {
+      const res = await request(api, LEAD_AUTH, path);
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { clients: { id: string }[] }).clients.map((row) => row.id);
+    };
+    expect(await ids('/api/clients')).not.toContain(MAIN.client);
+    expect(await ids('/api/clients?status=erased')).toContain(MAIN.client);
+    // An admin asking for erased records is still answered none.
+    const admin = await request(api, ADMIN_AUTH, '/api/clients?status=erased');
+    expect(((await admin.json()) as { clients: { id: string }[] }).clients).toHaveLength(0);
+  });
+
   it('is behind no practitioner’s schedule door, and no balance route', async () => {
     const visible = await owner.query<{ visible: boolean }>(
       'select app.client_visible_to_practitioner($1) as visible',

@@ -2,7 +2,9 @@ import type { ClientStatus } from './types';
 
 /**
  * The lifecycle diagram in docs/SPEC/client-record.md section 3: lead becomes
- * active; active and paused move back and forth; active becomes closed, and
+ * active; active and paused move back and forth; active becomes closed, and so
+ * does paused (the practice's request, decided 6 October 2026: a paused
+ * household that is not coming back is closed without first reactivating);
  * closed reactivates to active (an audited, reason-prompted move — section 9
  * lists "reactivation from closed" alongside erasure and consent withdrawal);
  * and any live status may become erased. Erased is terminal.
@@ -10,7 +12,7 @@ import type { ClientStatus } from './types';
 const ALLOWED_TRANSITIONS: Record<ClientStatus, readonly ClientStatus[]> = {
   lead: ['active', 'erased'],
   active: ['paused', 'closed', 'erased'],
-  paused: ['active', 'erased'],
+  paused: ['active', 'closed', 'erased'],
   closed: ['active', 'erased'],
   erased: [],
 };

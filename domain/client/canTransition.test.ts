@@ -9,6 +9,7 @@ const ALLOWED = new Set<`${ClientStatus}->${ClientStatus}`>([
   'active->closed',
   'active->erased',
   'paused->active',
+  'paused->closed',
   'paused->erased',
   'closed->active',
   'closed->erased',
@@ -41,8 +42,11 @@ describe('canTransition', () => {
     expect(canTransition('closed', 'active')).toBe(true);
   });
 
-  it('never lets paused go straight to closed, or closed straight to paused', () => {
-    expect(canTransition('paused', 'closed')).toBe(false);
+  it('lets paused close (the practice: "pause to closed")', () => {
+    expect(canTransition('paused', 'closed')).toBe(true);
+  });
+
+  it('never lets closed go straight to paused: it reactivates first', () => {
     expect(canTransition('closed', 'paused')).toBe(false);
   });
 

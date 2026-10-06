@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
 import { ClientsPage, searchRequest } from './ClientsPage';
-import { ADMIN, FINANCE, PRACTITIONER, signedInProvider } from './testActors';
+import { ADMIN, FINANCE, LEAD_PRACTITIONER, PRACTITIONER, signedInProvider } from './testActors';
 
 // Set by the one test that needs the wizard replaced with a button standing in for
 // activation, so every other test here still exercises the real drawer (its dialog
@@ -232,6 +232,34 @@ describe('ClientsPage search', () => {
     await waitFor(() =>
       expect(calls.some((c) => c.url === '/api/clients?status=active&emirate=AUH')).toBe(true),
     );
+  });
+
+  it('leaves erased records out by default, and offers them by name to the lead practitioner', async () => {
+    const calls = mount([], 200, LEAD_PRACTITIONER);
+    await screen.findByRole('table');
+    const status = screen.getByLabelText('Status');
+    expect([...status.querySelectorAll('option')].map((o) => o.textContent)).toEqual([
+      'All except erased',
+      'Lead',
+      'Active',
+      'Paused',
+      'Closed',
+      'Erased',
+    ]);
+    expect(calls.some((c) => c.url === '/api/clients')).toBe(true);
+    fireEvent.change(status, { target: { value: 'erased' } });
+    await waitFor(() =>
+      expect(calls.some((c) => c.url === '/api/clients?status=erased')).toBe(true),
+    );
+  });
+
+  it('offers no erased filter to an admin, whom the list never answers with an erased record', async () => {
+    mount([], 200, ADMIN);
+    await screen.findByRole('table');
+    const options = [...screen.getByLabelText('Status').querySelectorAll('option')].map(
+      (o) => o.textContent,
+    );
+    expect(options).not.toContain('Erased');
   });
 
   it('offers no emirate filter to a finance account, which reads no address and would always get nothing', async () => {

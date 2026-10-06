@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { canActor, hasRole } from '@domain/shared';
 import {
   checkConflicts,
+  isClientBookable,
   windowFor,
   CLIENT_OVERLAP_MESSAGE,
   PRACTITIONER_OVERLAP_MESSAGE,
@@ -199,7 +200,7 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
         practitionerAppointments: context.practitionerAppointments,
         clientAppointments: context.clientAppointments,
         practitionerCredentials: context.assigneeCapabilities,
-        clientActive: context.client.status === 'active',
+        clientBookable: isClientBookable(context.client.status),
         requiredConsentPurposes: requiredConsentPurposes(),
         activeConsentPurposes: context.activeConsentPurposes,
       },

@@ -8,6 +8,7 @@ import { isEmiratesIdShaped, wholeEmiratesIdDigits } from './emirates-id-shape';
 import { logReads } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
+import { canListErasedClients } from './access';
 import { logRefused } from './refused';
 
 /**
@@ -83,7 +84,11 @@ const SQL =
   COLUMNS +
   'from client c ' +
   JOINS +
-  'where ($1::client_status is null or c.status = $1::client_status) ' +
+  // No status asked for lists every status but erased: an erased record is shown
+  // only when the filter asks for it by name (the practice's request, 6 October
+  // 2026), and the booking drawer's client search, which sends no status, never
+  // offers one.
+  "where (($1::client_status is null and c.status <> 'erased') or c.status = $1::client_status) " +
   // Erased records stay with the lead practitioner (client-record.md section 2).
   "and ($3::boolean or c.status <> 'erased') " +
   // The emirate the column shows: the primary address's, never another address
@@ -216,7 +221,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
       .query<Row>(SQL, [
         query.data.status ?? null,
         search ? likePattern(search) : null,
-        hasRole(actor, 'owner', 'lead_practitioner'),
+        canListErasedClients(actor),
         PAGE_SIZE + 1,
         query.data.emirate ?? null,
       ]);
@@ -275,10 +280,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     }
     const { rows } = await c
       .get('db')
-      .query<Row>(ID_SQL, [
-        emiratesIdHash(digits, identityKeys),
-        hasRole(actor, 'owner', 'lead_practitioner'),
-      ]);
+      .query<Row>(ID_SQL, [emiratesIdHash(digits, identityKeys), canListErasedClients(actor)]);
     const clients = toClientRows(rows, isoDateIn(now(), PRACTICE_TIME_ZONE));
     if (clients.length === 0) {
       await logSearched(c.get('db'));

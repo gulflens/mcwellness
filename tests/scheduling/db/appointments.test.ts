@@ -51,7 +51,7 @@ const PRACTITIONER_B = '00000000-0000-4000-8000-000000005001'; // credentialed f
 const PRACTITIONER_B_USER = '00000000-0000-4000-8000-000000005002';
 const PRACTITIONER_C = '00000000-0000-4000-8000-000000005003'; // a second credentialed provider
 const PRACTITIONER_C_USER = '00000000-0000-4000-8000-000000005004';
-const CLIENT_INACTIVE = '00000000-0000-4000-8000-000000005005'; // left at the default 'lead' status
+const CLIENT_INACTIVE = '00000000-0000-4000-8000-000000005005'; // paused: not bookable
 const AUTH_OWNER_B = '00000000-0000-4000-8000-000000005006';
 const OTHER_APPOINTMENT = '00000000-0000-4000-8000-000000005007';
 const BYPASS_1 = '00000000-0000-4000-8000-000000005008';
@@ -89,6 +89,9 @@ const LOCATION_RACE_1 = '00000000-0000-4000-8000-000000005037';
 const LOCATION_RACE_2 = '00000000-0000-4000-8000-000000005038';
 // A well-formed id that names no client at all, in any tenant.
 const CLIENT_NONEXISTENT = '00000000-0000-4000-8000-000000005039';
+// A lead: no date of birth, no contact, no consent, and still bookable.
+const CLIENT_LEAD = '00000000-0000-4000-8000-000000005040';
+const LOCATION_LEAD = '00000000-0000-4000-8000-000000005041';
 
 function at(iso: string): Date {
   return new Date(iso);
@@ -311,13 +314,20 @@ beforeAll(async () => {
     'participation',
     'home_visit',
   ]);
-  // Left at the default 'lead' status: not bookable. No consent needed to prove that.
+  // Paused: not bookable. No consent needed to prove that.
   await owner.query(
-    'insert into client (id, tenant_id, mrn, given_name, family_name, created_by) ' +
-      "values ($1, $2, 'MW-INACTIVE', 'Synthetic', 'Inactive', $3)",
+    'insert into client (id, tenant_id, mrn, given_name, family_name, created_by, status) ' +
+      "values ($1, $2, 'MW-INACTIVE', 'Synthetic', 'Inactive', $3, 'paused')",
     [CLIENT_INACTIVE, IDS.tenantA, IDS.ownerA],
   );
   await seedLocation(owner, IDS.tenantA, LOCATION_INACTIVE, CLIENT_INACTIVE, IDS.ownerA);
+  // Left at the default 'lead' status: bookable before any consent is signed.
+  await owner.query(
+    'insert into client (id, tenant_id, mrn, given_name, family_name, created_by) ' +
+      "values ($1, $2, 'MW-LEAD', 'Synthetic', 'Lead', $3)",
+    [CLIENT_LEAD, IDS.tenantA, IDS.ownerA],
+  );
+  await seedLocation(owner, IDS.tenantA, LOCATION_LEAD, CLIENT_LEAD, IDS.ownerA);
   // Active and adult, but no contact and no consent at all: every purpose missing.
   await seedClient(owner, IDS.tenantA, CLIENT_MISSING_PARTICIPATION, IDS.ownerA, 'NoConsent');
   await owner.query(
@@ -579,7 +589,7 @@ describe('POST /api/appointments', () => {
     expect(body.issues.map((i) => i.code)).toContain('client_overlap');
   });
 
-  it('is refused with 409 when the client is not active', async () => {
+  it('is refused with 409 when the client is paused', async () => {
     const res = await call(AUTH.ownerA, 'POST', '/api/appointments', {
       clientId: CLIENT_INACTIVE,
       practitionerId: MORE_IDS.practitionerA,
@@ -617,6 +627,8 @@ describe('POST /api/appointments: consent', () => {
       [CLIENT_MISSING_HOME_VISIT, LOCATION_MISSING_HOME_VISIT, '2026-09-10T09:00:00.000Z'],
       [CLIENT_MINOR, LOCATION_MINOR, '2026-09-10T11:00:00.000Z'],
       [CLIENT_NULL_DOB, LOCATION_NULL_DOB, '2026-09-10T13:00:00.000Z'],
+      // A lead (the practice's request: book before consent, then activate).
+      [CLIENT_LEAD, LOCATION_LEAD, '2026-09-11T09:00:00.000Z'],
     ];
     for (const [clientId, locationId, windowStart] of cases) {
       const res = await call(AUTH.ownerA, 'POST', '/api/appointments', {

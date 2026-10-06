@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import { canActor, hasRole, isoDateIn } from '@domain/shared';
 import {
   checkConflicts,
+  isClientBookable,
   windowFor,
   CLIENT_OVERLAP_MESSAGE,
   PRACTITIONER_OVERLAP_MESSAGE,
@@ -232,7 +233,7 @@ export function mountAppointmentReorder(
           practitionerAppointments: fresh.practitionerAppointments,
           clientAppointments: fresh.clientAppointments,
           practitionerCredentials: fresh.assigneeCapabilities,
-          clientActive: fresh.client.status === 'active',
+          clientBookable: isClientBookable(fresh.client.status),
           requiredConsentPurposes: requiredConsentPurposes(),
           activeConsentPurposes: fresh.activeConsentPurposes,
         },

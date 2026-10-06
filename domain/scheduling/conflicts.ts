@@ -56,14 +56,28 @@ export type SchedulingContext = {
   clientAppointments: readonly ExistingAppointment[];
   /** The practitioner's credentials, in the same shape domain/shared's Actor carries them. */
   practitionerCredentials: readonly Capability[];
-  /** Whether the client's record is `active` (docs/SPEC/00-data-model.md section 3). */
-  clientActive: boolean;
+  /** Whether the client's record may be booked: `isClientBookable` on its status. */
+  clientBookable: boolean;
   /** The consent purposes this appointment needs; the caller (create.ts) decides which, since that
    * is booking policy, not a scheduling conflict rule. */
   requiredConsentPurposes: readonly string[];
   /** The client's currently active consent purposes, loaded in the same transaction. */
   activeConsentPurposes: readonly string[];
 };
+
+/**
+ * The client statuses a visit may be booked for: an active client, and a lead
+ * (the practice's request of 29 September 2026, decided 6 October: a first
+ * visit is booked before the household's consents exist, and check-in still
+ * refuses it until they are signed — domain/session canCheckIn). Paused,
+ * closed and erased are refused (`client_inactive`). A string, not
+ * ClientStatus, because the routes read it straight off a row.
+ */
+const BOOKABLE_CLIENT_STATUSES: readonly string[] = ['lead', 'active'];
+
+export function isClientBookable(status: string): boolean {
+  return BOOKABLE_CLIENT_STATUSES.includes(status);
+}
 
 export const PRACTITIONER_OVERLAP_MESSAGE =
   'This practitioner is already booked close to this time.';
@@ -137,8 +151,11 @@ export function checkConflicts(
     });
   }
 
-  if (!context.clientActive) {
-    blocking.push({ code: 'client_inactive', message: "This client's record is not active." });
+  if (!context.clientBookable) {
+    blocking.push({
+      code: 'client_inactive',
+      message: "This client's record is paused, closed or erased.",
+    });
   }
 
   const active = new Set(context.activeConsentPurposes);
