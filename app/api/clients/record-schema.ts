@@ -28,6 +28,14 @@ export const CONSENT_PURPOSES = [
   'marketing',
 ] as const;
 export const CONSENT_METHODS = ['app_signature', 'paper_scan', 'verbal_witnessed'] as const;
+/**
+ * Every method a recorded consent may carry, which is one more than the
+ * console may record: `portal_switch` (migration 706) is the marketing
+ * consent an adult turns on themselves on their own portal, and only there
+ * (docs/CHANGE-REQUESTS/client-portal-07.md). The record reads it; the
+ * console's own recording forms never offer it.
+ */
+export const RECORDED_CONSENT_METHODS = [...CONSENT_METHODS, 'portal_switch'] as const;
 export const GOAL_STATUSES = ['active', 'achieved', 'dropped'] as const;
 export const CLIENT_RECORD_STATUSES = ['lead', 'active', 'paused', 'closed'] as const;
 
@@ -103,7 +111,7 @@ export const Consent = z.object({
   givenAt: z.string(),
   withdrawnAt: z.string().nullable(),
   expiresAt: z.string().nullable(),
-  method: z.enum(CONSENT_METHODS),
+  method: z.enum(RECORDED_CONSENT_METHODS),
   /**
    * The evidence of what was signed: the PNG the pad rendered, or the
    * photographed paper form. Null for a `verbal_witnessed` re-confirmation,

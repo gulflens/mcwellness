@@ -15,6 +15,8 @@ import {
  * Every row here is invented and names nobody.
  */
 
+const OWNER_AUTH = '00000001-0000-4000-8000-000000000010';
+
 const W = {
   en: '00000001-0000-4000-8000-0000000000a1',
   ar: '00000001-0000-4000-8000-0000000000a2',
@@ -156,6 +158,29 @@ describe('turning it on and off', () => {
     const res = await h.callAs('GET', '/api/portal/agreements', PORTAL.motherAuth);
     const body = (await res.json()) as AgreementsResponse;
     expect(body.agreements.map((row) => row.purpose)).toEqual(['participation']);
+  });
+
+  it('leaves the practice’s own record of the client readable, naming the switch as the method', async () => {
+    const res = await h.callAs('GET', `/api/clients/${PORTAL.childB}`, OWNER_AUTH);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { consents: { purpose: string; method: string }[] };
+    expect(body.consents.find((row) => row.purpose === 'marketing')?.method).toBe('portal_switch');
+  });
+
+  it('is never recorded by the practice for somebody: the console cannot file the switch', async () => {
+    const res = await h.callAs(
+      'POST',
+      `/api/clients/${PORTAL.childB}/consents`,
+      OWNER_AUTH,
+      {
+        purpose: 'marketing',
+        givenByContactId: PORTAL.motherSecondContact,
+        textDocumentId: W.en,
+        method: 'portal_switch',
+      },
+      { 'x-reason': 'Synthetic test' },
+    );
+    expect(res.status).toBe(400);
   });
 
   it('turns it off with one press, every row at once', async () => {

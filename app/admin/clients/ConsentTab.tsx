@@ -25,6 +25,9 @@ const METHOD_LABELS: Record<string, string> = {
   app_signature: 'Signed on screen',
   paper_scan: 'Paper form on file',
   verbal_witnessed: 'Confirmed verbally, witnessed',
+  // The marketing consent, turned on by the adult on their own portal
+  // (migration 706; docs/CHANGE-REQUESTS/client-portal-07.md).
+  portal_switch: 'Turned on by the person, on their portal',
 };
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
