@@ -7,11 +7,21 @@ import { formatDate, formatFils } from './money';
 import { eventWords, RELIEF_WORDS } from './words';
 
 /**
- * What the practice's books say today (docs/SPEC/accounting.md section 5.1):
- * the month's three billing figures, then the books' own — the result for the
- * year, what is in the bank, what households owe, and the corporate-tax
- * set-aside with the word *estimate* beside it, because the platform files
- * nothing and the adviser decides the election.
+ * What the practice's books say today (docs/SPEC/accounting.md section 5.1).
+ *
+ * **Cash first.** The practice suggested money be counted only when a receipt
+ * is issued, not on an invoice. The operator kept the books on accruals — the
+ * statements, the tax estimate and the year-end close all need them — and
+ * decided on 2026-10-06 that the overview leads with cash instead. So the
+ * first, larger row is what arrived: received this month and this year, both
+ * receipts, and what is in the bank. The second row, quieter and under its
+ * own heading, is what the accruals say: revenue recognised, sessions owed,
+ * what households owe and the year's result, each with one plain line saying
+ * what it is, because "recognised" is an accountant's word. Nothing about the
+ * postings changed; only the order and the words did.
+ *
+ * Then the corporate-tax set-aside, with the word *estimate* beside it,
+ * because the platform files nothing and the adviser decides the election.
  *
  * Every figure was computed on the server and is formatted by `money.ts`; no
  * screen in this codebase does arithmetic on money.
@@ -29,11 +39,21 @@ type State =
   | { kind: 'error' }
   | { kind: 'ready'; overview: OverviewResponse };
 
-function Figure({ label, valueFils }: { label: string; valueFils: number }) {
+function Figure({
+  label,
+  valueFils,
+  explains,
+}: {
+  label: string;
+  valueFils: number;
+  /** One plain line under the figure saying what it is, where the label alone does not. */
+  explains?: string;
+}) {
   return (
     <div className="figures__figure">
       <p className="figures__label small muted">{label}</p>
       <p className="figures__value numeric">{formatFils(valueFils)}</p>
+      {explains ? <p className="figures__explains small muted">{explains}</p> : null}
     </div>
   );
 }
@@ -124,18 +144,48 @@ export function OverviewSection({
   const { overview } = state;
   return (
     <>
-      {summary ? (
-        <section className="figures" aria-label="This month">
-          <Figure label="Cash collected this month" valueFils={summary.cashCollectedFils} />
-          <Figure label="Revenue recognised this month" valueFils={summary.revenueRecognisedFils} />
-          <Figure label="Sessions owed" valueFils={summary.deferredNetFils} />
-        </section>
-      ) : null}
-
-      <section className="figures" aria-label="The books">
-        <Figure label="Result, year to date" valueFils={overview.resultYearToDateFils} />
+      {/* The month's figures come from billing and arrive a moment after the
+          books'; until they do, the two tiles that need them are simply not
+          there yet, as the whole row used to be. */}
+      <section className="figures figures--lead" aria-label="Money received">
+        {summary ? (
+          <Figure label="Received this month (receipts)" valueFils={summary.cashCollectedFils} />
+        ) : null}
+        <Figure label="Received this year (receipts)" valueFils={overview.receivedYearToDateFils} />
         <Figure label="In the bank" valueFils={overview.cashPositionFils} />
-        <Figure label="Owed by households" valueFils={overview.receivableFils} />
+      </section>
+
+      <h2 id="books-earned-heading" className="books__figures-heading">
+        Earned and owed (from invoices and sessions)
+      </h2>
+      <section className="figures figures--secondary" aria-labelledby="books-earned-heading">
+        {summary ? (
+          <>
+            <Figure
+              label="Revenue recognised this month"
+              valueFils={summary.revenueRecognisedFils}
+              explains="Earned when a session is delivered, whether or not it has been paid."
+            />
+            <Figure
+              label="Sessions owed"
+              valueFils={summary.deferredNetFils}
+              explains="Paid for in advance, not yet delivered."
+            />
+          </>
+        ) : null}
+        <Figure
+          label="Owed by households"
+          valueFils={overview.receivableFils}
+          explains="Invoiced and not yet paid."
+        />
+        <Figure
+          label="Result, year to date"
+          valueFils={overview.resultYearToDateFils}
+          explains="What was earned this year, less what it cost to earn it."
+        />
+      </section>
+
+      <section className="figures figures--secondary" aria-label="Tax">
         <Figure
           label="Corporate tax to set aside (estimate)"
           valueFils={overview.corporateTaxEstimateFils}

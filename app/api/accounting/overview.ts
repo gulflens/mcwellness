@@ -9,6 +9,7 @@ import {
   reliefWatch,
   yearBoundsContaining,
 } from '../../../domain/accounting';
+import { cashCollectedBetween } from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayReadBooks } from './access';
@@ -23,12 +24,23 @@ import { OverviewResponse } from './schema';
  * books. The three billing figures the screen shows alongside these come from
  * `/api/billing/summary`, which finance already reads.
  *
+ * **The money received this year** is the one figure here not read off the
+ * posted lines. The screen leads with cash (the operator's decision of
+ * 2026-10-06) and "received" means receipts: the payments the month's figure
+ * counts, through the same door (`app.practice_money_ledger`, migration 952,
+ * which names nobody and answers the same whoever asks), added up over the
+ * books' own year by `domain/billing`. The cash account's movement would not
+ * do — an owner putting money in, or a transfer, moves the bank and is not a
+ * receipt.
+ *
  * Every figure is computed by a pure function over the posted lines; the route
  * chooses the days and nothing else.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 const RECENT_ENTRIES = 50;
+
+const LEDGER_SQL = 'select app.practice_money_ledger() as ledger';
 
 const Query = z.object({
   month: z
@@ -50,15 +62,24 @@ export function mountOverview(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const db = c.get('db');
     const asOf = isoDateIn(now(), PRACTICE_TIME_ZONE);
     const month = query.data.month ?? asOf.slice(0, 7);
-    const [lines, setting, chart, totals] = await Promise.all([
+    const [lines, setting, chart, totals, ledger] = await Promise.all([
       readPostedLines(db),
       readSetting(db),
       readChart(db),
       readAccountTotals(db),
+      db.query<{ ledger: { payments: { amountFils: number; receivedOn: string }[] } }>(LEDGER_SQL),
     ]);
     const year = yearBoundsContaining(asOf, setting.yearEndMonth, setting.yearEndDay);
     const yearToDate = profitAndLoss(lines, year.startsOn, asOf);
     const cash = cashPosition(lines, asOf);
+    const receivedYearToDateFils = cashCollectedBetween(
+      (ledger.rows[0]?.ledger.payments ?? []).map((row) => ({
+        amountFils: fils(row.amountFils),
+        receivedOn: row.receivedOn,
+      })),
+      year.startsOn,
+      asOf,
+    );
 
     // What households owe, read off the account found by role and never by
     // code: the codes are the owner's to change and the role is not. A chart
@@ -90,6 +111,7 @@ export function mountOverview(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         cashPositionFils: cash.totalFils,
         cashAccounts: cash.accounts,
         receivableFils,
+        receivedYearToDateFils,
         corporateTaxEstimateFils: corporateTaxEstimate(
           yearToDate.resultFils,
           yearToDate.incomeFils,

@@ -59,6 +59,7 @@ type Overview = {
   cashPositionFils: number;
   cashAccounts: StatementRow[];
   receivableFils: number;
+  receivedYearToDateFils: number;
   corporateTaxEstimateFils: number;
   reliefWatch: 'clear' | 'approaching' | 'exceeded';
   reliefThresholdFils: number;
@@ -298,6 +299,30 @@ describe('the Zoho-shaped exports', () => {
 });
 
 describe('the overview', () => {
+  it('says what was received this year, the receipts and nothing else', async () => {
+    // The overview leads with cash (the operator's decision of 2026-10-06):
+    // the money that arrived from the first day of the books' year to today,
+    // the same payments the month's "received" figure counts — and asked
+    // through the finance account too, because the figure must not depend on
+    // who asks.
+    const overview = await get<Overview>(`/api/accounting/overview?month=${activity.month}`);
+    const { rows } = await h.owner.query<{ total: string }>(
+      'select coalesce(sum(amount_fils), 0)::text as total from payment ' +
+        "where to_char(received_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') between $1 and $2",
+      [overview.fiscalYearStartsOn, overview.asOf],
+    );
+    expect(Number(rows[0]?.total)).toBeGreaterThan(0);
+    expect(overview.receivedYearToDateFils).toBe(Number(rows[0]?.total));
+    const res = await h.callAs(
+      'GET',
+      `/api/accounting/overview?month=${activity.month}`,
+      FINANCE.authId,
+    );
+    expect(res.status).toBe(200);
+    const asFinance = (await res.json()) as Overview;
+    expect(asFinance.receivedYearToDateFils).toBe(overview.receivedYearToDateFils);
+  });
+
   it('reads zero outstanding after a posting run, and the relief clear', async () => {
     const overview = await get<Overview>(`/api/accounting/overview?month=${activity.month}`);
     expect(overview.month).toBe(activity.month);
