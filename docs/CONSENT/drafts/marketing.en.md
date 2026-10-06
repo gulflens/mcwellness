@@ -1,7 +1,7 @@
 ---
 purpose: marketing
 locale: en
-version: 1.0
+version: 0.1-draft
 status: draft
 written: 2026-10-06
 ---
@@ -63,7 +63,7 @@ on again whenever you like.
 
 ## What does not change
 
-Your sessions, your prices and how we treat you are the same whether you say
+Your sessions, your prices and how we look after you are the same whether you say
 yes, no, or nothing at all. We still do not sell your information, and we still
 do not use it for research.
 
