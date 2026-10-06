@@ -107,7 +107,14 @@ export type Action =
   /** See the website's enquiries, and turn one into a lead or dismiss it (operator, 2026-09-09). */
   | { type: 'enquiry.list' }
   | { type: 'enquiry.action' }
-  | { type: 'appointment.list'; scope: 'practice' | 'own' }
+  /**
+   * `team` is Today's "Whole practice" (the practice's request for equal
+   * visibility, operator 2026-10-06): every practitioner's stops in the day
+   * sheet's own shape. It is the practice scope's audience exactly, so the
+   * switch shows nobody anything the row policies would not already let them
+   * read.
+   */
+  | { type: 'appointment.list'; scope: 'practice' | 'own' | 'team' }
   | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
   | { type: 'appointment.move' }
   // The dispatcher (docs/SPEC/dispatch.md section 9): the same three roles
@@ -330,6 +337,7 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
         // A practitioner's own day; the route and the row policies keep it to their rows.
         return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner');
       }
+      // 'practice' and 'team' alike: the whole practice's day, in either shape.
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.create':
       // Booking takes the booking role and, for the assignee, a credential that lets

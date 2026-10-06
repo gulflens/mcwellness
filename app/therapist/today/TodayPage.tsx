@@ -11,7 +11,13 @@ import {
   type AppointmentStatus,
   type StopPhase,
 } from '@domain/scheduling';
-import { DayStopListResponse, type DayStop } from '../../api/appointments/schema';
+import { canActor } from '@domain/shared';
+import {
+  DayStopListResponse,
+  TeamDayStopListResponse,
+  type DayStop,
+  type TeamDayStop,
+} from '../../api/appointments/schema';
 import { RoutingDayResponse, type DayLegRow } from '../../api/routing/schema';
 import { StopBalanceResponse } from '../../api/billing/document-schema';
 import { formatFils } from '../../admin/billing/money';
@@ -223,7 +229,46 @@ export function wantsInstallNote(nav: Navigator, standalone: boolean): boolean {
   return iOS && safari;
 }
 
-type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; stops: readonly DayStop[] };
+/**
+ * Whose day the screen shows: the caller's own, or every practitioner's — the
+ * "Whole practice" switch (the practice asked that the four of them see the
+ * day alike; the operator's decision of 2026-10-06). The switch is offered
+ * only to the roles the database already lets read every appointment
+ * (`canActor`'s `appointment.list` with scope `team`), so it widens what a
+ * screen shows and never what anybody may read.
+ */
+type View = 'mine' | 'team';
+
+/**
+ * The choice is remembered for the browser session and no longer: a session
+ * store rather than a server setting, because it is a way of looking at one
+ * day and not a preference the practice keeps about a person. A new session
+ * opens on the person's own day again.
+ */
+const VIEW_KEY = 'mcwellness-today-view';
+
+function rememberedView(): View | null {
+  try {
+    const stored = sessionStorage.getItem(VIEW_KEY);
+    return stored === 'mine' || stored === 'team' ? stored : null;
+  } catch {
+    // Storage blocked: the screen simply opens on its default each time.
+    return null;
+  }
+}
+
+/**
+ * A stop as the screen holds it, in either view. `mine` decides the buttons:
+ * only the caller's own stop carries Check in and Call off, and anybody
+ * else's is there to be looked at. `practitioner` comes with the whole
+ * practice's answer alone; the own day is all one person's.
+ */
+type ShownStop = DayStop & { practitioner?: TeamDayStop['practitioner']; mine: boolean };
+
+type State =
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | { kind: 'ready'; stops: readonly ShownStop[]; hasOwnDay: boolean };
 
 /** The drives and the picture, or nothing at all when the route could not answer. */
 type Drives = { legs: readonly DayLegRow[]; pictureUrl: string | null; mapAvailable: boolean };
@@ -378,13 +423,25 @@ function fetchDrives(apiFetch: ApiFetch, date: string): Promise<Drives | null> {
     .catch(() => null);
 }
 
-function fetchDay(apiFetch: ApiFetch, date: string): Promise<State> {
-  return apiFetch(`/api/appointments?date=${date}&scope=own`)
-    .then(async (res) => {
-      if (!res.ok) return { kind: 'error' } as const;
-      const parsed = DayStopListResponse.safeParse(await res.json());
-      if (!parsed.success) return { kind: 'error' } as const;
-      return { kind: 'ready', stops: parsed.data.appointments } as const;
+function fetchDay(apiFetch: ApiFetch, date: string, view: View): Promise<State> {
+  return apiFetch(`/api/appointments?date=${date}&scope=${view === 'team' ? 'team' : 'own'}`)
+    .then(async (res): Promise<State> => {
+      if (!res.ok) return { kind: 'error' };
+      const body: unknown = await res.json();
+      if (view === 'team') {
+        const parsed = TeamDayStopListResponse.safeParse(body);
+        if (!parsed.success) return { kind: 'error' };
+        return { kind: 'ready', stops: parsed.data.appointments, hasOwnDay: true };
+      }
+      const parsed = DayStopListResponse.safeParse(body);
+      if (!parsed.success) return { kind: 'error' };
+      return {
+        kind: 'ready',
+        stops: parsed.data.appointments.map((stop) => ({ ...stop, mine: true })),
+        // Absent on a day the worker cached before the field existed, and
+        // that day was somebody's own (schema.ts's note on `hasOwnDay`).
+        hasOwnDay: parsed.data.hasOwnDay ?? true,
+      };
     })
     .catch(() => ({ kind: 'error' }) as const);
 }
@@ -392,13 +449,16 @@ function fetchDay(apiFetch: ApiFetch, date: string): Promise<State> {
 function Stop({
   stop,
   phase,
+  whose,
   balance,
   drive,
   onCheckIn,
   onCallOff,
 }: {
-  stop: DayStop;
+  stop: ShownStop;
   phase: StopPhase;
+  /** Whose stop it is, in the whole practice's view; null on the caller's own day. */
+  whose: string | null;
   /** Null while billing has not answered yet: the line appears when it does,
    * rather than a placeholder standing in for it. */
   balance: StopBalance | null;
@@ -409,8 +469,8 @@ function Stop({
    * all there, rather than reserved for a leg that may never exist.
    */
   drive: { leg: DayLegRow | undefined } | null;
-  onCheckIn: (stop: DayStop) => void;
-  onCallOff: (stop: DayStop) => void;
+  onCheckIn: (stop: ShownStop) => void;
+  onCallOff: (stop: ShownStop) => void;
 }) {
   const name = shortName(stop.client.givenName, stop.client.familyInitial);
   const age = describeAge(stop.client.age);
@@ -425,11 +485,17 @@ function Stop({
   // definer door beneath holds them to their own visits). Once checked in, how
   // the visit ends is recorded on the session itself, never here.
   const canCallOff = CALL_OFF_STATUSES.includes(stop.status);
+  // Somebody else's stop, seen from the whole practice, is to look at: the
+  // check-in, the call-off and the drive to the door are the practitioner's
+  // whose visit it is (the operator's decision of 2026-10-06). The server
+  // decides `mine` against the caller's own practitioner row.
+  const actionable = stop.mine && !settled;
 
   const head = (
     <>
       <span className="stop__window numeric">{formatWindow(stop.windowStart, stop.windowEnd)}</span>
       <span className="stop__name">{name}</span>
+      {whose ? <span className="stop__whose small muted">{whose}</span> : null}
       {note ? (
         <span
           className={
@@ -473,7 +539,7 @@ function Stop({
           </>
         )}
       </div>
-      {settled ? null : (
+      {actionable ? (
         <div className="stop__actions">
           {/* The visible word is one of several identical ones down the
               column, and it leaves the app, so the announced name says whose
@@ -511,7 +577,7 @@ function Stop({
             </Button>
           ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
 
@@ -555,9 +621,15 @@ export function TodayPage() {
     () => typeof navigator === 'undefined' || navigator.onLine !== false,
   );
   const [state, setState] = useState<State>({ kind: 'loading' });
+  // The view somebody chose on the switch this session, or null while nobody has.
+  const [chosen, setChosen] = useState<View | null>(rememberedView);
+  // Set when the own day comes back saying the caller is nobody's
+  // practitioner: an owner or an administrator who delivers no visits would
+  // otherwise open on an empty day that reads as "nothing booked".
+  const [noOwnDay, setNoOwnDay] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   // The stop being called off, while its drawer is open.
-  const [callingOff, setCallingOff] = useState<DayStop | null>(null);
+  const [callingOff, setCallingOff] = useState<ShownStop | null>(null);
   const [balances, setBalances] = useState<Record<string, StopBalance>>({});
   const [drives, setDrives] = useState<Drives | null>(null);
   // The day's picture as an object URL, or null while there is none to show.
@@ -593,6 +665,24 @@ export function TodayPage() {
   // open overnight asks for the new day, not yesterday's.
   const date = practiceDate(now);
 
+  const mayViewPractice =
+    session.status === 'signed-in' &&
+    canActor(session.actor, { type: 'appointment.list', scope: 'team' }, {}, now);
+  // A remembered choice is a preference, never a permission: somebody who may
+  // not see the whole practice gets their own day whatever the store says (a
+  // shared phone, a practitioner signing in after a lead).
+  const view: View = mayViewPractice ? (chosen ?? (noOwnDay ? 'team' : 'mine')) : 'mine';
+
+  const choose = useCallback((next: View) => {
+    setChosen(next);
+    setState({ kind: 'loading' });
+    try {
+      sessionStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // Nothing to do: the choice holds for this screen and is not remembered.
+    }
+  }, []);
+
   useEffect(() => {
     const tick = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
     // Coming back to the screen is the moment a coordinator's change is most
@@ -619,18 +709,33 @@ export function TodayPage() {
 
   useEffect(() => {
     let live = true;
-    void fetchDay(apiFetch, date).then((next) => {
-      if (live) setState(next);
+    void fetchDay(apiFetch, date, view).then((next) => {
+      if (!live) return;
+      // Nobody's practitioner, and allowed to see everyone's: go straight to
+      // the whole practice rather than show an empty day first. Only while
+      // nobody has chosen — a person who picked Mine gets Mine.
+      if (next.kind === 'ready' && !next.hasOwnDay && mayViewPractice && chosen === null) {
+        setNoOwnDay(true);
+        return;
+      }
+      setState(next);
     });
-    void fetchDrives(apiFetch, date).then((next) => {
-      if (live) setDrives(next);
-    });
+    // The drives and the picture are the caller's own route through their own
+    // day (app/api/routing/day.ts); the whole practice has no one route, so
+    // they are not asked for there, and `shownDrives` below hides any left
+    // over from the own view.
+    if (view === 'mine') {
+      void fetchDrives(apiFetch, date).then((next) => {
+        if (live) setDrives(next);
+      });
+    }
     return () => {
       live = false;
     };
-  }, [apiFetch, date, reloadToken]);
+  }, [apiFetch, date, reloadToken, view, mayViewPractice, chosen]);
 
-  const pictureUrl = drives?.pictureUrl ?? null;
+  const shownDrives = view === 'mine' ? drives : null;
+  const pictureUrl = shownDrives?.pictureUrl ?? null;
   useEffect(() => {
     // Nothing to fetch, and nothing to clear either: the run before this one
     // revoked its own object URL and emptied the slot on its way out.
@@ -706,7 +811,7 @@ export function TodayPage() {
   }, [apiFetch, date, state]);
 
   const checkIn = useCallback(
-    (stop: DayStop) => {
+    (stop: ShownStop) => {
       // Router state, never the address: a record number is personal data and
       // .claude/rules/ui.md keeps it out of paths and query strings. It is
       // carried in memory, so it never lands in history, a bookmark, a shared
@@ -735,7 +840,7 @@ export function TodayPage() {
     !hasConsole &&
     canOpenPractitioners(session.actor, new Date());
   const stops = state.kind === 'ready' ? state.stops : [];
-  const legsByStop = new Map((drives?.legs ?? []).map((leg) => [leg.toStopId, leg]));
+  const legsByStop = new Map((shownDrives?.legs ?? []).map((leg) => [leg.toStopId, leg]));
   const installNote =
     !installDismissed &&
     typeof navigator !== 'undefined' &&
@@ -762,12 +867,25 @@ export function TodayPage() {
           </div>
         </header>
 
+        {mayViewPractice ? (
+          <div className="today__view" role="group" aria-label="Whose day">
+            <Button variant="quiet" aria-pressed={view === 'mine'} onClick={() => choose('mine')}>
+              Mine
+            </Button>
+            <Button variant="quiet" aria-pressed={view === 'team'} onClick={() => choose('team')}>
+              Whole practice
+            </Button>
+          </div>
+        ) : null}
+
         {/* Live location (docs/SPEC/dispatch.md section 15): the switch, or
             the band the whole time sharing is on. Nothing at all for somebody
             with no day of their own to share. */}
         <LocationSharing />
 
-        {state.kind === 'loading' ? <Note>Loading your day.</Note> : null}
+        {state.kind === 'loading' ? (
+          <Note>{view === 'team' ? 'Loading the day.' : 'Loading your day.'}</Note>
+        ) : null}
         {state.kind === 'error' ? (
           <div className="today__error">
             <Note tone="critical">{LOAD_ERROR}</Note>
@@ -805,8 +923,8 @@ export function TodayPage() {
         {/* The day, as a picture. Above the stops and sized to the column: it
             is for orientation, and the Navigate hand-off does the driving
             (section 5.3, decision 2). */}
-        {stops.length > 0 && drives !== null ? (
-          drives.pictureUrl === null ? (
+        {stops.length > 0 && shownDrives !== null ? (
+          shownDrives.pictureUrl === null ? (
             <p className="small muted">{MAP_UNAVAILABLE}</p>
           ) : mapUrl === null ? (
             // The box, reserved at the picture's own aspect ratio while the
@@ -832,22 +950,39 @@ export function TodayPage() {
         ) : null}
 
         {state.kind === 'ready' && stops.length === 0 ? (
-          <Note>Nothing is booked for you today.</Note>
+          <Note>
+            {view === 'team'
+              ? 'Nothing is booked for anyone today.'
+              : 'Nothing is booked for you today.'}
+          </Note>
         ) : null}
         {stops.length > 0 ? (
-          <ol className="stops" aria-label="Your stops today">
+          <ol
+            className="stops"
+            aria-label={view === 'team' ? "The practice's stops today" : 'Your stops today'}
+          >
             {stops.map((stop, index) => (
               <Stop
                 key={stop.id}
                 stop={stop}
                 phase={phases[index] ?? 'later'}
+                whose={
+                  view === 'team'
+                    ? stop.mine
+                      ? 'Yours'
+                      : (stop.practitioner?.displayName ?? null)
+                    : null
+                }
                 balance={balances[stop.clientId] ?? null}
                 // Between consecutive stops, one line (section 5.4). The leg
                 // from the practitioner's home base to the first stop is
                 // estimated and drawn on the picture, but no line is reserved
                 // above the first card: a practice that records no home base
                 // would leave a placeholder there for ever.
-                drive={index === 0 ? null : { leg: legsByStop.get(stop.id) }}
+                // No drive lines across the whole practice: the legs are the
+                // caller's own route, and consecutive stops there are often
+                // two different people's.
+                drive={view === 'team' || index === 0 ? null : { leg: legsByStop.get(stop.id) }}
                 onCheckIn={checkIn}
                 onCallOff={setCallingOff}
               />

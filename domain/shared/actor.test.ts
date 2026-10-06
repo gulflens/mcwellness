@@ -271,6 +271,7 @@ describe('the appointment and price actions', () => {
   });
   const practice = { type: 'appointment.list', scope: 'practice' } as const;
   const own = { type: 'appointment.list', scope: 'own' } as const;
+  const team = { type: 'appointment.list', scope: 'team' } as const;
   const booking = {
     type: 'appointment.create',
     practitionerId: 'p1',
@@ -285,6 +286,17 @@ describe('the appointment and price actions', () => {
     serviceTypeId: SERVICE,
     on: '2026-06-01',
   } as const;
+
+  it("offers Today's whole practice to exactly the roles that may read every appointment", () => {
+    // The same three as the practice scope: the switch on Today shows nobody
+    // anything the database would not already let them read.
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), team, {}, NOW)).toBe(true);
+    }
+    for (const role of ['practitioner', 'finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), team, {}, NOW)).toBe(false);
+    }
+  });
 
   it('lets the calendar roles log a past visit for a practitioner credentialed on that day', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
