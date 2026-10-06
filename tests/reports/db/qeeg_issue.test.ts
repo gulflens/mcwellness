@@ -623,6 +623,30 @@ describe('a complete draft, signed', () => {
   });
 });
 
+describe('a draft saved before it recorded its service', () => {
+  it('is signed under the brain-map service, so only that credential signs it', async () => {
+    // A draft saved before the operator's decision of 6 October 2026 has no
+    // service; signing it gives it the brain-map service first, so both the
+    // route and app.issue_report hold it to that service's credential.
+    const draft = await steps.completeDraft(SEEDED.owner, { seed: 31 });
+    await h.owner.query('update report set service_type_id = null where id = $1', [draft.id]);
+    // The stamp the route compares, as the draft route answers it (microseconds).
+    const { rows: stamp } = await h.owner.query<{ saved_at: string }>(
+      'select to_char(updated_at at time zone \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') as saved_at ' +
+        'from report where id = $1',
+      [draft.id],
+    );
+    const res = await issue({ id: draft.id, savedAt: stamp[0]?.saved_at ?? '' });
+    expect([res.status, res.status === 201 ? '' : await res.clone().text()]).toEqual([201, '']);
+    const { rows } = await h.owner.query<{ code: string | null }>(
+      'select st.code from report r left join service_type st on st.id = r.service_type_id ' +
+        'where r.id = $1',
+      [draft.id],
+    );
+    expect(rows[0]?.code).toBe('brain-map');
+  });
+});
+
 describe('two signatures at once', () => {
   it('signs once: one 201, one stale refusal, and one reference taken', async () => {
     const draft = await steps.completeDraft(SEEDED.owner, { seed: 41 });

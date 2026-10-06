@@ -17,6 +17,7 @@ import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
 import { requiredReason } from './reason';
 import { practiceTimeZone } from './gather';
+import { brainMapService } from './qeeg/brainMapService';
 import { countedSessions } from './qeeg/sessionsCounted';
 import { QeegDraftInput, QeegDraftResponse } from './schema';
 import { asRow, readReport, type ReportRecord } from './source';
@@ -472,10 +473,23 @@ export async function saveQeegDraft(
       return unknown;
     }
   }
-  return writeDraft(c, input, checked.content, {
-    comparedWithId,
-    serviceTypeId: input.serviceTypeId,
-  });
+  // The service is the route's: a brain-map report is written under the
+  // practice's brain-map service, never one a request names (the operator's
+  // decision of 6 October 2026), so only that service's credential signs it.
+  const service = await brainMapService(c.get('db'));
+  if (input.serviceTypeId !== null && input.serviceTypeId !== service) {
+    return c.json(
+      {
+        error: 'bad_request',
+        code: 'route_owned',
+        field: 'serviceTypeId',
+        fields: ['serviceTypeId'],
+        requestId,
+      },
+      400,
+    );
+  }
+  return writeDraft(c, input, checked.content, { comparedWithId, serviceTypeId: service });
 }
 
 /**

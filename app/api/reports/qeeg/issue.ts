@@ -19,6 +19,7 @@ import { asRow, readReport, type ReportRecord } from '../source';
 import { signerFor, signingCredentials } from '../signer';
 import { gatheredOnce, linksOf, pagesOf, picturesOf, signedFacts } from './pages';
 import { countedSessions } from './sessionsCounted';
+import { brainMapService } from './brainMapService';
 
 /**
  * `POST /api/reports/:id/issue` for a brain-map (qEEG) draft
@@ -208,9 +209,19 @@ export async function issueQeeg(
   // the answer that binds (issue.ts says why).
   const own = await signerFor(db, actor.userId);
   if (!own) return refuse(403, 'not_a_practitioner');
+  // A draft saved before a brain-map report recorded its service (the
+  // operator's decision of 6 October 2026) has none, and would let any
+  // signing credential sign it. The route asks for the brain-map service's
+  // credential here, and the row is given that service after the guarded
+  // write below, so app.issue_report holds it to the same. A second-language
+  // draft keeps its first report's, whatever that is.
+  const serviceTypeId =
+    draft.service_type_id === null && draft.twin_of_id === null
+      ? await brainMapService(db)
+      : draft.service_type_id;
   const answer = canIssue(await signingCredentials(db, own.practitionerId), {
     practitionerId: own.practitionerId,
-    serviceTypeId: draft.service_type_id,
+    serviceTypeId,
     on: today,
   });
   if (!answer.ok) return refuse(403, SIGNING_REFUSALS[answer.code] ?? answer.code);
@@ -236,6 +247,13 @@ export async function issueQeeg(
     // Saved over, or signed, between the read above and this write.
     await db.query('rollback to savepoint qeeg_issue');
     return refuse(409, 'stale_draft');
+  }
+  if (serviceTypeId !== null && draft.service_type_id === null) {
+    // After the guarded write, so the stamp it compared is not moved first.
+    await db.query(
+      'update report set service_type_id = $2 where id = $1 and service_type_id is null',
+      [draft.id, serviceTypeId],
+    );
   }
   const issued = await db.query<{ id: string }>(
     'select id from app.issue_report($1::uuid, $2::uuid, $3::date)',

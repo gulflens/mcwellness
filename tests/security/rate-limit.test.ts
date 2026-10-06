@@ -133,13 +133,22 @@ describe('the API budgets', () => {
     ).toEqual({
       perMinute: 10,
       actorPerMinute: 600,
-      authFailuresPerMinute: 20,
+      authFailuresPerMinute: 10,
       devDoorPerMinute: 30,
       inviteDoorPerMinute: 4,
       enquiryDoorPerMinute: 3,
     });
-    expect(limitsFromEnv({}).inviteDoorPerMinute).toBe(10);
-    expect(limitsFromEnv({}).enquiryDoorPerMinute).toBe(10);
+  });
+
+  it('halves the three stranger-facing defaults, because the host runs two processes', () => {
+    // The operator's decision of 6 October 2026: production runs two worker
+    // processes and each keeps its own counters, so a default is reached
+    // twice before a caller is refused. Halving the three budgets that face
+    // somebody with no session brings the effective ceiling back to the
+    // figure docs/SECURITY.md intended.
+    expect(limitsFromEnv({}).authFailuresPerMinute).toBe(10);
+    expect(limitsFromEnv({}).inviteDoorPerMinute).toBe(5);
+    expect(limitsFromEnv({}).enquiryDoorPerMinute).toBe(5);
   });
 
   it('trusts X-Forwarded-For only for the configured number of proxies', async () => {

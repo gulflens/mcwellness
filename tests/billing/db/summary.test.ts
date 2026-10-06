@@ -51,9 +51,26 @@ async function deliverVisit(clientId: string): Promise<void> {
   await asPractitioner();
   await h.owner.query(
     'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
-      "delivery_mode, status, checked_in_at) values ($1, $2, $3, $4, $5, 'home', 'completed', now())",
-    [id, h.data.tenant.id, clientId, practitioner?.id, h.serviceTypeId('nf-session')],
+      "delivery_mode, status, checked_in_at) values ($1, $2, $3, $4, $5, 'home', 'completed', $6)",
+    // Inside the month the summary reads (MONTH), never the database's own
+    // now(): from 1 October 2026 a visit at now() fell outside September and
+    // the earned figure read nought, failing a test that had passed.
+    [
+      id,
+      h.data.tenant.id,
+      clientId,
+      practitioner?.id,
+      h.serviceTypeId('nf-session'),
+      `${SEED_TODAY}T10:00:00Z`,
+    ],
   );
+  // The consumption trigger stamps the credit with the database's real clock,
+  // which is right in use; this suite reads a fixed month, so the credit is
+  // dated inside it as well.
+  await h.owner.query('update entitlement set consumed_at = $2 where consumed_by_session_id = $1', [
+    id,
+    `${SEED_TODAY}T10:00:00Z`,
+  ]);
 }
 
 async function summary(month = MONTH): Promise<MonthlyMoneyResponse> {

@@ -172,13 +172,18 @@ export type RateLimits = {
   enquiryDoorPerMinute: number;
 };
 
+// The three budgets that face somebody with no session (refused sign-ins, the
+// portal's invitation door, the website's enquiry door) are half the figure
+// docs/SECURITY.md intends, by the operator's decision of 6 October 2026: the
+// host runs two worker processes, each with its own counters, so a caller
+// meets each ceiling twice before being refused.
 export const DEFAULT_LIMITS: RateLimits = {
   perMinute: 300,
   actorPerMinute: 600,
-  authFailuresPerMinute: 20,
+  authFailuresPerMinute: 10,
   devDoorPerMinute: 30,
-  inviteDoorPerMinute: 10,
-  enquiryDoorPerMinute: 10,
+  inviteDoorPerMinute: 5,
+  enquiryDoorPerMinute: 5,
 };
 
 function positiveInt(value: string | undefined, fallback: number): number {

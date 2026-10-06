@@ -291,6 +291,33 @@ describe('a practitioner saves a blank brain-map draft', () => {
     });
   });
 
+  it('records the brain-map service on the draft, so only a brain-map credential signs it', async () => {
+    // The operator's decision of 6 October 2026: a brain-map report is
+    // written under the brain-map service, read off the practice's own
+    // catalogue by its code, whatever the form sends.
+    const body = await created(sentInitial());
+    const { rows } = await h.owner.query<{ code: string | null }>(
+      'select st.code from report r left join service_type st on st.id = r.service_type_id ' +
+        'where r.id = $1',
+      [body.report.id],
+    );
+    expect(rows[0]?.code).toBe('brain-map');
+  });
+
+  it('refuses a draft that names another service, because the service is the route’s', async () => {
+    const before = await reportCount();
+    const res = await save({
+      clientId,
+      kind: 'qeeg',
+      locale: 'en',
+      serviceTypeId: h.serviceTypeId('nf-session'),
+      content: sentInitial(),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'route_owned', field: 'serviceTypeId' });
+    expect(await reportCount()).toBe(before);
+  });
+
   it('saves a blank follow-up, compared with a signed report as that report stands', async () => {
     const body = await created(sentFollowUp(issuedId));
     const content = body.content as ReturnType<typeof blankFollowUp>;
