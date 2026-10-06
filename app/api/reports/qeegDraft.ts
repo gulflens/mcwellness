@@ -11,6 +11,7 @@ import { validateQeegContent } from '../../../domain/reports/qeeg/shape';
 import { isRecord } from '../../../domain/reports/qeeg/text';
 import type { Locale, QeegContent, QeegFollowUp } from '../../../domain/reports/qeeg/types';
 import { twinChangeIn } from '../../../domain/reports/qeeg/twin';
+import { BRAIN_MAP_SERVICE_CODE } from '../../../domain/reports/qeeg/catalogue/ids';
 import { isUuid } from '../billing/ids';
 import { logAction, logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -474,8 +475,21 @@ export async function saveQeegDraft(
   }
   return writeDraft(c, input, checked.content, {
     comparedWithId,
-    serviceTypeId: input.serviceTypeId,
+    serviceTypeId: input.serviceTypeId ?? (await brainMapService(c.get('db'))),
   });
+}
+
+/**
+ * The practice's brain-map service, by its catalogue code; null where the
+ * practice has none, and the report is then signed as before by any valid
+ * signing credential.
+ */
+async function brainMapService(db: Db): Promise<string | null> {
+  const found = await db.query<{ id: string }>(
+    'select id from service_type where tenant_id = app.current_tenant_id() and code = $1',
+    [BRAIN_MAP_SERVICE_CODE],
+  );
+  return found.rows[0]?.id ?? null;
 }
 
 /**

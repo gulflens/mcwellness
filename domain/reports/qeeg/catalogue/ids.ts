@@ -264,3 +264,11 @@ export function tierOf(score: number): TierId {
   if (score <= 7) return 'middle';
   return 'high';
 }
+
+/**
+ * The catalogue code of the service a brain-map report is written under (the
+ * operator's decision of 6 October 2026). The practice's own `service_type`
+ * row carries it, so a report is signed only by a credential for that
+ * service, as a session report is by its session's.
+ */
+export const BRAIN_MAP_SERVICE_CODE = 'brain-map';
