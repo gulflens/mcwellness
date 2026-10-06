@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { AppointmentListResponse, type AppointmentRow } from '../../../api/appointments/schema';
 import { PracticeDayResponse, type PracticeDayPractitioner } from '../../../api/routing/schema';
+import { SharedPositionsResponse, type SharedPosition } from '../../../api/location/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { Button, Note, PageHeader, Select } from '../../../shell/components/Controls';
 import { DateField } from '../../../shell/components/DateField';
@@ -14,6 +15,7 @@ import { DayMap, formatDrive } from './DayMap';
 import { DocumentBoundary } from './documentBoundary';
 import { browserMapKey, loadGoogleMaps, type GoogleMaps } from '../../../shell/maps/googleMaps';
 import { OptimiseDrawer } from './OptimiseDrawer';
+import { describeAge, describePosition } from '../board/positions';
 import './map.css';
 
 /**
@@ -49,6 +51,8 @@ const WRONG_DOOR =
 const DAY_FAILED = 'The day could not be loaded. Try again.';
 const CONFIRM_FAILED =
   'The visit could not be confirmed. Reload the day to see where it stands, then try again.';
+/** As often as a phone sends (docs/SPEC/dispatch.md section 15). */
+const POSITIONS_REFRESH_MS = 120_000;
 const ALREADY_MOVED_ON =
   'This visit is no longer waiting to be confirmed — it has been confirmed, moved or called ' +
   'off already. Reload the day to see where it stands.';
@@ -140,6 +144,35 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
     };
   }, [apiFetch, date, reloadToken]);
 
+  // Where the people sharing are, on today's map only: a position is where
+  // somebody is now, and another day has no now in it.
+  const today = date === practiceDay(new Date());
+  const [positions, setPositions] = useState<Map<string, SharedPosition> | null>(null);
+  useEffect(() => {
+    if (!today) return;
+    let live = true;
+    const read = () => {
+      if (document.visibilityState === 'hidden') return;
+      void apiFetch('/api/location/positions')
+        .then(async (res) => {
+          if (!res.ok) throw new Error('unavailable');
+          return SharedPositionsResponse.parse(await res.json()).positions;
+        })
+        .then((list) => {
+          if (live) setPositions(new Map(list.map((p) => [p.practitionerId, p])));
+        })
+        .catch(() => {
+          if (live) setPositions(null);
+        });
+    };
+    read();
+    const timer = setInterval(read, POSITIONS_REFRESH_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [apiFetch, today, reloadToken]);
+
   const reload = useCallback(() => {
     setReloadToken((token) => token + 1);
     setSelectedId(null);
@@ -214,6 +247,21 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
     [apiFetch, reload],
   );
 
+  const shared =
+    today && positions !== null && current !== null
+      ? positions.get(current.practitionerId)
+      : undefined;
+  const here = useMemo(
+    () =>
+      shared === undefined
+        ? null
+        : {
+            point: { lat: shared.latitude, lng: shared.longitude },
+            label: `Last shared ${describeAge(shared.ageMinutes)}`,
+          },
+    [shared],
+  );
+
   const movable = rows.filter((entry) => entry.row.status === 'proposed').length;
   const canOptimise = state.kind === 'ready' && rows.length >= 2 && movable > 0;
 
@@ -237,7 +285,13 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
           centred and with no pins, which is a true picture of an empty day.
         */}
         {maps !== null ? (
-          <DayMap maps={maps} day={current} selectedId={selectedId} onSelect={setSelectedId} />
+          <DayMap
+            maps={maps}
+            day={current}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            here={here}
+          />
         ) : (
           <div className="daymap daymap--absent" />
         )}
@@ -286,6 +340,9 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
             </Button>
           </div>
           {mapNote ? <Note>{mapNote}</Note> : null}
+          {today && positions !== null && current !== null ? (
+            <p className="small muted numeric">{describePosition(shared)}</p>
+          ) : null}
           {state.kind === 'loading' ? <Note>Loading the day.</Note> : null}
           {state.kind === 'error' ? <Note tone="critical">{DAY_FAILED}</Note> : null}
           {actionError ? <Note tone="critical">{actionError}</Note> : null}

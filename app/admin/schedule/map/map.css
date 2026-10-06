@@ -133,3 +133,22 @@
 .optimise__figures dd {
   margin: 0;
 }
+
+/* Where the practitioner last shared their location from, today
+   (docs/SPEC/dispatch.md section 15). A label rather than a numbered pin, so
+   it can never be read as a stop, with the practice's violet down its leading
+   edge — the interface's accent, not a status hue — and the age in it. */
+.daymap__here {
+  position: absolute;
+  translate: -50% -50%;
+  padding-block: 0.125rem;
+  padding-inline: 0.375rem;
+  border: 1px solid var(--rule);
+  border-inline-start: var(--s-1) solid var(--brand);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

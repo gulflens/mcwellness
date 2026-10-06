@@ -50,6 +50,15 @@ export type DayMapProps = {
   day: PracticeDayPractitioner | null;
   selectedId: string | null;
   onSelect: (appointmentId: string) => void;
+  /**
+   * Where this practitioner last shared their location from, today, and what
+   * to say about it (docs/SPEC/dispatch.md section 15); absent when they are
+   * not sharing. Drawn by the app like every other pin, so the coordinate is
+   * in no request Google receives. Not added to the map's extent: the extent
+   * is the day's, and refitting it every time a position arrives would throw
+   * the coordinator's pan and zoom away every two minutes.
+   */
+  here?: { point: { lat: number; lng: number }; label: string } | null;
 };
 
 /**
@@ -80,7 +89,7 @@ function token(name: string): string | undefined {
   return value === '' ? undefined : value;
 }
 
-export function DayMap({ maps, day, selectedId, onSelect }: DayMapProps) {
+export function DayMap({ maps, day, selectedId, onSelect, here = null }: DayMapProps) {
   const canvas = useRef<HTMLDivElement | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [projection, setProjection] = useState<Projection | null>(null);
@@ -166,6 +175,22 @@ export function DayMap({ maps, day, selectedId, onSelect }: DayMapProps) {
                   aria-hidden="true"
                 >
                   H
+                </span>
+              );
+            })()
+          : null}
+        {here
+          ? (() => {
+              const position = at(here.point);
+              if (position === null) return null;
+              return (
+                <span
+                  className="daymap__here"
+                  role="img"
+                  aria-label={here.label}
+                  style={{ left: position.left, top: position.top }}
+                >
+                  {here.label}
                 </span>
               );
             })()
