@@ -414,3 +414,79 @@
     padding-inline: var(--s-6);
   }
 }
+
+/* The offers switch (the push memo's decision 1): the wording's own last
+   paragraph as the label, the track at the inline end, mirrored for Arabic
+   by the logical properties alone. A real control: a button with
+   role="switch". The thumb is the one thing that moves, and only when pressed. */
+.portal__switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  inline-size: 100%;
+  min-block-size: var(--tap);
+  padding-block: var(--s-3);
+  padding-inline: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.portal__switch > span {
+  flex: 1 1 auto;
+}
+
+.portal__switch:hover {
+  border-color: var(--brand);
+}
+
+.portal__switch:focus-visible {
+  box-shadow: var(--focus);
+}
+
+.portal__switch::after {
+  content: '';
+  flex: none;
+  inline-size: var(--s-12);
+  block-size: var(--s-6);
+  border: var(--hairline) solid var(--ink-2);
+  border-radius: calc(var(--s-6) / 2);
+  background: var(--surface);
+}
+
+.portal__switch[aria-checked='true']::after {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.portal__switch::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  inset-inline-end: calc(var(--s-4) + var(--s-12) - var(--s-1) - var(--s-4));
+  inline-size: var(--s-4);
+  block-size: var(--s-4);
+  border-radius: 50%;
+  background: var(--ink-2);
+  transition: inset-inline-end var(--motion) var(--ease);
+}
+
+.portal__switch[aria-checked='true']::before {
+  inset-inline-end: calc(var(--s-4) + var(--s-1));
+  background: var(--paper);
+}
+
+/* The iPhone's home-screen steps: three plain lines, numbered. */
+.portal__steps {
+  margin: 0;
+  padding-inline-start: var(--s-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
