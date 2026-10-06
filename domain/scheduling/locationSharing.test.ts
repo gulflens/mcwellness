@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   POSITION_RETENTION_HOURS,
   SHIFT_LEAD_MINUTES,
+  SHIFT_LATEST_HOUR,
   SHIFT_TAIL_MINUTES,
   STAFF_LOCATION_NOTICE_VERSION,
   mayWritePosition,
@@ -72,14 +73,24 @@ describe('shiftWindow', () => {
     expect(window?.closesAt).toEqual(new Date(at('11:50').getTime() + SHIFT_TAIL_MINUTES * 60_000));
   });
 
-  it('stays open to midnight while the practitioner is still checked in at a door', () => {
-    const window = shiftWindow([stop('20:00', { status: 'checked_in' })], DAY);
-    expect(window?.closesAt).toEqual(DAY.end);
+  it('closes on a forgotten check-in as on any visit nobody closed, not at midnight', () => {
+    // Checked in at 09:00 and never closed: the visit could at the latest have
+    // ended at 10:45 (window end 09:45 plus the 60-minute session), and the
+    // tail follows that, rather than the shift running on into the evening.
+    const window = shiftWindow([stop('09:00', { status: 'checked_in' })], DAY);
+    expect(window?.closesAt).toEqual(new Date(at('10:45').getTime() + SHIFT_TAIL_MINUTES * 60_000));
   });
 
-  it('never runs past midnight, however late the last visit', () => {
-    const window = shiftWindow([stop('23:00')], DAY);
-    expect(window?.closesAt).toEqual(DAY.end);
+  it(`never runs past ${SHIFT_LATEST_HOUR}:00 in Dubai, however late the last visit`, () => {
+    expect(SHIFT_LATEST_HOUR).toBe(21);
+    expect(shiftWindow([stop('19:45')], DAY)?.closesAt).toEqual(at('21:00'));
+    expect(shiftWindow([stop('20:00', { status: 'checked_in' })], DAY)?.closesAt).toEqual(
+      at('21:00'),
+    );
+  });
+
+  it('has no shift at all for a visit that starts after the latest hour', () => {
+    expect(shiftWindow([stop('22:30')], DAY)).toBeNull();
   });
 
   it('never opens before midnight, however early the first visit', () => {
@@ -154,8 +165,12 @@ describe('mayWritePosition', () => {
     });
   });
 
+  it('is at version 1.1 of the notice', () => {
+    expect(STAFF_LOCATION_NOTICE_VERSION).toBe('1.1');
+  });
+
   it('refuses a consent given to a notice that has since changed', () => {
-    expect(mayWritePosition(facts({ consentVersion: '0.9' }))).toEqual({
+    expect(mayWritePosition(facts({ consentVersion: '1.0' }))).toEqual({
       ok: false,
       reason: 'notice_changed',
     });

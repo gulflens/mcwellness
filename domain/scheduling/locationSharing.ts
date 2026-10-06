@@ -21,9 +21,9 @@ import type { AppointmentStatus } from './status';
  * already records: it opens {@link SHIFT_LEAD_MINUTES} before the first
  * window of the day's first visit — the drive to the first door — and closes
  * {@link SHIFT_TAIL_MINUTES} after the last visit closed, or after it could at
- * the latest have ended if nobody closed it. While the practitioner is still
- * checked in at a door it stays open. It never crosses midnight in the
- * practice's zone, and a day with no visit on it has no shift at all. The
+ * the latest have ended if nobody closed it — a forgotten check-in included.
+ * It never runs past {@link SHIFT_LATEST_HOUR}:00 in the practice's zone, and
+ * a day with no visit on it has no shift at all. The
  * visits that make a shift are the ones that are stops on the practitioner's
  * own day sheet (`app/api/appointments/list.ts`'s own scope): confirmed,
  * checked in, completed, and nobody home — a visit nobody answered was still
@@ -31,7 +31,7 @@ import type { AppointmentStatus } from './status';
  */
 
 /** The version of the notice a consent must name (docs/CONSENT/staff/location.en.md). */
-export const STAFF_LOCATION_NOTICE_VERSION = '1.0';
+export const STAFF_LOCATION_NOTICE_VERSION = '1.1';
 
 /** How long a position is kept before the hourly job deletes it: two days. */
 export const POSITION_RETENTION_HOURS = 48;
@@ -41,6 +41,13 @@ export const SHIFT_LEAD_MINUTES = 90;
 
 /** And closes this long after the last visit is over: the drive away from the last door. */
 export const SHIFT_TAIL_MINUTES = 30;
+
+/**
+ * The latest the shift ever runs, as an hour of the practice day in Dubai: a
+ * visit left open, or a late booking, never carries sharing into the evening
+ * at home (fix round 1 of piece twenty-five, review finding 3).
+ */
+export const SHIFT_LATEST_HOUR = 21;
 
 /** The visits that make a working day: the stops on the practitioner's own day sheet. */
 export const SHIFT_STATUSES: readonly AppointmentStatus[] = [
@@ -69,27 +76,33 @@ const MINUTE = 60_000;
 
 /** When the shift opens and closes on this day, or null when there is no shift. */
 export function shiftWindow(day: readonly ShiftStop[], bounds: DayBounds): ShiftWindow | null {
+  // `bounds.start` is the practice day's midnight, so the latest hour is
+  // arithmetic on it and needs no time zone here.
+  const latest = Math.min(
+    bounds.end.getTime(),
+    bounds.start.getTime() + SHIFT_LATEST_HOUR * 60 * MINUTE,
+  );
   const stops = day.filter(
     (stop) =>
       SHIFT_STATUSES.includes(stop.status) &&
       stop.windowStart.getTime() >= bounds.start.getTime() &&
-      stop.windowStart.getTime() < bounds.end.getTime(),
+      stop.windowStart.getTime() < latest,
   );
   if (stops.length === 0) return null;
 
   const first = Math.min(...stops.map((stop) => stop.windowStart.getTime()));
   const opensAt = Math.max(bounds.start.getTime(), first - SHIFT_LEAD_MINUTES * MINUTE);
 
-  const atADoor = stops.some((stop) => stop.status === 'checked_in' && stop.closedAt === null);
+  // A visit nobody closed — confirmed and never checked in, or checked in and
+  // never finished — counts to the latest it could have ended. A forgotten
+  // check-in is the same case, and never holds the shift open past it.
   const lastEnd = Math.max(
     ...stops.map(
       (stop) =>
         stop.closedAt?.getTime() ?? stop.windowEnd.getTime() + stop.durationMinutes * MINUTE,
     ),
   );
-  const closesAt = atADoor
-    ? bounds.end.getTime()
-    : Math.min(bounds.end.getTime(), lastEnd + SHIFT_TAIL_MINUTES * MINUTE);
+  const closesAt = Math.min(latest, lastEnd + SHIFT_TAIL_MINUTES * MINUTE);
 
   return { opensAt: new Date(opensAt), closesAt: new Date(closesAt) };
 }

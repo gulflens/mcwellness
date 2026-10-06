@@ -64,6 +64,7 @@ export {
 export type { BoardState, Lateness, Progress } from './lateness';
 export {
   POSITION_RETENTION_HOURS,
+  SHIFT_LATEST_HOUR,
   SHIFT_LEAD_MINUTES,
   SHIFT_STATUSES,
   SHIFT_TAIL_MINUTES,
