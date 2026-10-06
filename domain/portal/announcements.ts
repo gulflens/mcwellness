@@ -125,6 +125,25 @@ export function isCurrentOn(announcement: AnnouncementRow, today: IsoDate): bool
   return true;
 }
 
+export const ANNOUNCEMENT_STATES = ['current', 'scheduled', 'ended', 'withdrawn'] as const;
+export type AnnouncementState = (typeof ANNOUNCEMENT_STATES)[number];
+
+/**
+ * What the practice's own list calls an announcement on a day: withdrawn;
+ * scheduled, while its first day (or its publication) is still to come;
+ * ended, once its last day has gone; and otherwise current, which is exactly
+ * when `isCurrentOn` shows it to a household.
+ */
+export function announcementState(
+  announcement: AnnouncementRow,
+  today: IsoDate,
+): AnnouncementState {
+  if (announcement.withdrawn) return 'withdrawn';
+  if (isCurrentOn(announcement, today)) return 'current';
+  if (announcement.visibleUntil !== null && today > announcement.visibleUntil) return 'ended';
+  return 'scheduled';
+}
+
 export function announcementsVisibleTo(
   viewer: readonly AnnouncementViewer[],
   today: IsoDate,

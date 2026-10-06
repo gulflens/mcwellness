@@ -17,9 +17,11 @@ export type {
 export { reportsVisibleTo } from './reports';
 export {
   ANNOUNCEMENT_BODY_MAX,
+  ANNOUNCEMENT_STATES,
   ANNOUNCEMENT_TITLE_MAX,
   ANNOUNCEMENT_VOCABULARY,
   ANNOUNCEMENTS_SHOWN,
+  announcementState,
   announcementsFor,
   announcementsVisibleTo,
   checkAnnouncement,
@@ -32,6 +34,7 @@ export type {
   AnnouncementProblem,
   AnnouncementProblemCode,
   AnnouncementRow,
+  AnnouncementState,
   AnnouncementViewer,
   Bilingual,
 } from './announcements';

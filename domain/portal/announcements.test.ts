@@ -3,6 +3,7 @@ import {
   ANNOUNCEMENT_BODY_MAX,
   ANNOUNCEMENT_TITLE_MAX,
   ANNOUNCEMENTS_SHOWN,
+  announcementState,
   announcementsFor,
   announcementsVisibleTo,
   checkAnnouncement,
@@ -281,5 +282,25 @@ describe('checkAnnouncement', () => {
       checkAnnouncement(draft({ visibleFrom: '2026-10-09', visibleUntil: '2026-10-09' }), TODAY),
     ).toEqual([]);
     expect(checkAnnouncement(draft({ visibleUntil: TODAY }), TODAY)).toEqual([]);
+  });
+});
+
+describe('announcementState', () => {
+  it('names a standing announcement current while households see it', () => {
+    expect(announcementState(row(), TODAY)).toBe('current');
+  });
+
+  it('names one whose first day has not come scheduled', () => {
+    expect(announcementState(row({ visibleFrom: '2026-10-08' }), TODAY)).toBe('scheduled');
+  });
+
+  it('names one whose last day has gone ended', () => {
+    expect(announcementState(row({ visibleUntil: '2026-10-05' }), TODAY)).toBe('ended');
+  });
+
+  it('names a withdrawn one withdrawn, whatever its days say', () => {
+    expect(
+      announcementState(row({ withdrawn: true, visibleFrom: '2026-10-08' }), TODAY),
+    ).toBe('withdrawn');
   });
 });
