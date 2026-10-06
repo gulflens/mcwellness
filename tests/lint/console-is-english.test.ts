@@ -48,11 +48,16 @@ const WALKED_DIRECTORIES = ['app/admin', 'app/therapist'] as const;
  * (`ArabicVersionField.tsx`; docs/CHANGE-REQUESTS/reports-02.md, request 5).
  * A box for Arabic must say it is Arabic for a screen reader to read it so;
  * every label around it stays English.
+ *
+ * And the two Arabic boxes of an announcement, with the preview of how an
+ * Arabic household will read it (`AnnouncementArabic.tsx`; the push memo's
+ * decision 3, "in both languages", docs/CHANGE-REQUESTS/client-portal-06.md).
  */
 const ALLOWED = new Set([
   'app/admin/clients/RecordConsentForm.tsx',
   'app/admin/clients/SignAllForm.tsx',
   'app/admin/reports/qeeg/atoms/ArabicVersionField.tsx',
+  'app/admin/portal/AnnouncementArabic.tsx',
 ]);
 
 const CODE_EXTENSIONS = new Set(['.ts', '.tsx']);

@@ -44,3 +44,48 @@
 .portal-access__row-actions {
   justify-content: flex-end;
 }
+
+/*
+  Settings › Announcements (docs/SPEC/client-portal.md section 3.10). The
+  drawer's form keeps the console's drawer rhythm (the values
+  app/admin/settings/settings.css states for its own drawers), and the preview
+  is drawn the way the portal draws an announcement: a title and a paragraph,
+  quietly, no card and no hue.
+*/
+.announcements__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.announcements__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-3);
+  padding-block-start: var(--s-2);
+}
+
+.announcements__textarea {
+  min-block-size: 7rem;
+  resize: vertical;
+  font: inherit;
+}
+
+.announcements__previews {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.announcements__preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-block: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.announcements__preview h4,
+.announcements__preview p {
+  margin: 0;
+}

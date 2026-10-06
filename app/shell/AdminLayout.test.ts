@@ -36,7 +36,12 @@ function pagesOf(actor: Actor, key: string): readonly string[] {
 
 describe('the pages a rail section lists', () => {
   it("gives the owner every Settings screen, and the schedule's board", () => {
-    expect(pagesOf(OWNER, 'settings')).toEqual(['practice', 'practitioners', 'team']);
+    expect(pagesOf(OWNER, 'settings')).toEqual([
+      'practice',
+      'practitioners',
+      'team',
+      'announcements',
+    ]);
     expect(pagesOf(OWNER, 'schedule')).toContain('board');
   });
 

@@ -11,6 +11,7 @@ import {
   canOpenEnquiries,
   canOpenKit,
   canOpenPin,
+  canOpenAnnouncements,
   canOpenPortalAccess,
   canOpenPractitioners,
   canOpenSchedule,
@@ -86,6 +87,10 @@ const PractitionersPage = screen(
 const PortalAccessPage = screen(
   () => import('../admin/portal/PortalAccessPage'),
   'PortalAccessPage',
+);
+const AnnouncementsPage = screen(
+  () => import('../admin/portal/AnnouncementsPage'),
+  'AnnouncementsPage',
 );
 const AgreementsScreen = screen(() => import('../client/AgreementsScreen'), 'AgreementsScreen');
 const FamilyScreen = screen(() => import('../client/FamilyScreen'), 'FamilyScreen');
@@ -529,6 +534,26 @@ export function App() {
                   {(actor) =>
                     canOpenTeam(actor, new Date()) ? (
                       <TeamPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            {/*
+          The practice's announcements on every household's portal home
+          (docs/SPEC/client-portal.md section 3.10). The portal stream's screen,
+          under Settings because that is where the push memo's decision 3 put
+          it; the owner and an admin, as the routes say.
+        */}
+            <Route
+              path="settings/announcements"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenAnnouncements(actor, new Date()) ? (
+                      <AnnouncementsPage />
                     ) : (
                       <Navigate to={homeFor(actor)} replace />
                     )
