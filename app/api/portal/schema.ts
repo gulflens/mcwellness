@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  ANNOUNCEMENT_STATES,
   APPOINTMENT_STATUSES,
   INVITE_KINDS,
   REVIEW_MILESTONE_KINDS,
@@ -146,6 +147,22 @@ export type AnswerReviewPromptInput = z.infer<typeof AnswerReviewPromptInput>;
 export const ReviewAnswerResponse = z.object({ ok: z.literal(true) });
 export type ReviewAnswerResponse = z.infer<typeof ReviewAnswerResponse>;
 
+/** A text the practice wrote in both languages. */
+const BilingualText = z.object({ en: z.string(), ar: z.string() });
+
+/**
+ * One of the practice's announcements as a household reads it (section 3.1 as
+ * amended 2026-10-06): the title and the body, both languages, so the
+ * language switch needs no second request. Nothing else travels: not who
+ * wrote it, not when, not its first or last day.
+ */
+export const PortalAnnouncement = z.object({
+  id: z.uuid(),
+  title: BilingualText,
+  body: BilingualText,
+});
+export type PortalAnnouncement = z.infer<typeof PortalAnnouncement>;
+
 export const HomeResponse = z.object({
   practice: Practice,
   locale: Locale,
@@ -153,6 +170,8 @@ export const HomeResponse = z.object({
   nextVisit: NextVisit.nullable(),
   money: z.array(MoneySummary.extend({ clientId: z.uuid() })),
   notices: z.array(Notice),
+  /** The current announcements, newest first, at most three; none for a young person's own login. */
+  announcements: z.array(PortalAnnouncement),
 });
 export type HomeResponse = z.infer<typeof HomeResponse>;
 
@@ -517,3 +536,75 @@ export const RedeemResponse = z.object({
   authId: z.uuid().optional(),
 });
 export type RedeemResponse = z.infer<typeof RedeemResponse>;
+
+// ---------------------------------------------------------------------------
+// Announcements: the practice's own side (Settings › Announcements; section
+// 3.10, the push memo's decision 4).
+// ---------------------------------------------------------------------------
+
+/** One announcement as the owner and an admin read their own list. */
+export const OfficeAnnouncement = z.object({
+  id: z.uuid(),
+  title: BilingualText,
+  body: BilingualText,
+  visibleFrom: IsoDate.nullable(),
+  visibleUntil: IsoDate.nullable(),
+  /** The moment it was published, and the practice's day that was. */
+  publishedAt: z.string(),
+  publishedOn: IsoDate,
+  /** Who published it, as the practice's own list names a colleague. */
+  publishedBy: z.string().nullable(),
+  withdrawnAt: z.string().nullable(),
+  withdrawnBy: z.string().nullable(),
+  /** The announcement this one corrects, when it is a correction. */
+  supersedesId: z.uuid().nullable(),
+  /** Its correction, once one is published: a second correction is refused. */
+  correctedById: z.uuid().nullable(),
+  state: z.enum(ANNOUNCEMENT_STATES),
+});
+export type OfficeAnnouncement = z.infer<typeof OfficeAnnouncement>;
+
+export const OfficeAnnouncementsResponse = z.object({
+  /** The practice's own today, which every state above was decided on. */
+  today: IsoDate,
+  announcements: z.array(OfficeAnnouncement),
+});
+export type OfficeAnnouncementsResponse = z.infer<typeof OfficeAnnouncementsResponse>;
+
+/**
+ * A text as typed, cleaned of what draws nothing and capped far above what
+ * the wording check admits, so a text that is too long is refused by the
+ * check with a sentence and never cut here.
+ */
+const TypedText = z
+  .string()
+  .max(4000)
+  .transform((value) => cleanText(value, 4000));
+
+/** A day typed in Settings: the shape, and a day the calendar has. */
+const TypedDay = IsoDate.refine((value) => {
+  const day = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === value;
+}, 'A day is YYYY-MM-DD, and one the calendar has.');
+
+/** What Settings publishes. Both languages; the days optional. */
+export const PublishAnnouncementInput = z.object({
+  title: z.object({ en: TypedText, ar: TypedText }),
+  body: z.object({ en: TypedText, ar: TypedText }),
+  visibleFrom: TypedDay.nullable().default(null),
+  visibleUntil: TypedDay.nullable().default(null),
+  /** Publishing a correction: the standing announcement it replaces and withdraws. */
+  supersedesId: z.uuid().nullable().default(null),
+  /**
+   * The writer has read the ambiguous words the preview named (treat,
+   * patient, …) and confirms they are not a medical claim. Recorded with the
+   * publication; without it, a text carrying one answers 422 `confirm_wording`.
+   */
+  confirmedWarnings: z.boolean().default(false),
+});
+export type PublishAnnouncementInput = z.input<typeof PublishAnnouncementInput>;
+
+export const PublishAnnouncementResponse = z.object({ announcement: OfficeAnnouncement });
+export type PublishAnnouncementResponse = z.infer<typeof PublishAnnouncementResponse>;
+
+export const WithdrawAnnouncementResponse = z.object({ ok: z.literal(true) });

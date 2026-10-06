@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import type { HomeResponse, MoneySummary, Notice, PortalClient } from '../api/portal/schema';
+import type {
+  HomeResponse,
+  MoneySummary,
+  Notice,
+  PortalAnnouncement,
+  PortalClient,
+} from '../api/portal/schema';
 import { useAuth } from '../shell/auth/AuthContext';
 import { Note } from '../shell/components/Controls';
 import { ClientHeading, Screen, Sections } from './Layout';
@@ -28,6 +34,13 @@ import { usePortalHome } from './PortalRoot';
  * button, with no referrer — and either answer is written once through
  * `POST /api/portal/review-prompts` and removed from this screen at once. A
  * write that fails is left silent: the line simply returns next time.
+ *
+ * **The practice's announcements** (section 3.1 as amended 2026-10-06; the
+ * push memo's decision 4). After what is waiting on the household and before
+ * the review line: practice news, newest first, at most three, each a title
+ * and a paragraph in the language the person is reading, under one quiet
+ * heading. Nothing at all when there are none — no heading, no empty line —
+ * and the route sends none to a young person's own login.
  */
 
 /** The `wa.me` link, built at the moment it is pressed and never rendered early. */
@@ -80,6 +93,17 @@ function NoticeLine({ notice }: { notice: Notice }) {
         {notice.kind === 'request_open' ? words.t('requestOpen') : words.t('requestHandled')}
       </span>
     </div>
+  );
+}
+
+function Announcement({ announcement }: { announcement: PortalAnnouncement }) {
+  const words = useWords();
+  const lang = words.locale;
+  return (
+    <article className="portal__announcement">
+      <h3>{announcement.title[lang]}</h3>
+      <p>{announcement.body[lang]}</p>
+    </article>
   );
 }
 
@@ -213,6 +237,15 @@ export function HomeScreen() {
               );
             }}
           />
+        </section>
+      ) : null}
+
+      {data.announcements.length > 0 ? (
+        <section className="portal__section">
+          <h2>{words.t('fromThePractice')}</h2>
+          {data.announcements.map((announcement) => (
+            <Announcement key={announcement.id} announcement={announcement} />
+          ))}
         </section>
       ) : null}
 

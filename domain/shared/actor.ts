@@ -128,6 +128,7 @@ export type Action =
   | { type: 'portal.review.answer'; clientId: string }
   | { type: 'portal.request.handle' }
   | { type: 'portal.access.manage' }
+  | { type: 'portal.announcement.write' }
   | { type: 'kit.manage' }
   | { type: 'staff.manage' }
   | { type: 'staff.access.manage' }
@@ -449,6 +450,13 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // admin, and nobody else: handing out access to a record is the same
       // class of act as granting a role, and db/policies/portal/access.sql
       // refuses the row underneath this.
+      return hasRole(actor, 'owner', 'admin');
+    case 'portal.announcement.write':
+      // Publishing an announcement on the households' home, and withdrawing
+      // one (the push memo's decision 3, answered 6 October 2026: "written by
+      // you or an admin, in Settings"). The practice's own words in front of
+      // every adult household, so the owner and an admin, as Settings is, and
+      // db/policies/portal/announcement.sql refuses the row beneath this.
       return hasRole(actor, 'owner', 'admin');
     // The team LIST, for the owner and an admin, and nothing else — every act
     // on a colleague went to staff.access.manage below on 21 September 2026.

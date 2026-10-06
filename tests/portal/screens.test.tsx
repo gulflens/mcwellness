@@ -13,6 +13,7 @@ import {
   FAMILY,
   HOME,
   HOME_NO_MONEY,
+  HOME_WITH_ANNOUNCEMENTS,
   HOME_WITH_REVIEW,
   MONEY,
   MOTHER_CONTACT,
@@ -184,6 +185,40 @@ describe('Home', () => {
     expect(await screen.findByText('إن أحببت، يمكنك ترك تقييم لنا على غوغل.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'اترك تقييمًا' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'ليس الآن' })).toBeTruthy();
+  });
+});
+
+describe('Home: the practice’s announcements', () => {
+  it('shows each one, newest first, under the practice’s own heading, in English', async () => {
+    mountPortal(<HomeScreen />, {
+      answers: { '/api/portal/home': () => json(HOME_WITH_ANNOUNCEMENTS) },
+    });
+    const heading = await screen.findByRole('heading', { name: 'From the practice' });
+    const section = heading.closest('section');
+    const titles = Array.from(section?.querySelectorAll('h3') ?? []).map(
+      (title) => title.textContent,
+    );
+    expect(titles).toEqual(['Closed for Eid', 'A new practitioner']);
+    expect(screen.getByText(/The studio is closed from Tuesday to Thursday/)).toBeTruthy();
+    // Never the Arabic beside the English: one language at a time.
+    expect(screen.queryByText('مغلق في العيد')).toBeNull();
+  });
+
+  it('shows them in Arabic to a household reading Arabic', async () => {
+    mountPortal(<HomeScreen />, {
+      locale: 'ar',
+      answers: { '/api/portal/home': () => json(HOME_WITH_ANNOUNCEMENTS) },
+    });
+    expect(await screen.findByRole('heading', { name: 'من المركز' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'مغلق في العيد' })).toBeTruthy();
+    expect(screen.getByText(/الاستوديو مغلق من الثلاثاء إلى الخميس/)).toBeTruthy();
+    expect(screen.queryByText('Closed for Eid')).toBeNull();
+  });
+
+  it('shows nothing at all when there are none: no heading, no empty line', async () => {
+    mountPortal(<HomeScreen />, { answers: withHome() });
+    expect(await screen.findByText('Your next visit')).toBeTruthy();
+    expect(screen.queryByText('From the practice')).toBeNull();
   });
 });
 

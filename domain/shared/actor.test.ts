@@ -583,6 +583,22 @@ describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 
     }
     expect(canActor(actor([]), { type: 'portal.access.manage' }, {}, NOW)).toBe(false);
   });
+
+  it('gives writing and withdrawing an announcement to the owner and an admin alone', () => {
+    const write = { type: 'portal.announcement.write' } as const;
+    for (const role of ['owner', 'admin'] as const) {
+      expect(canActor(actor([role]), write, {}, NOW), role).toBe(true);
+    }
+    for (const role of [
+      'lead_practitioner',
+      'practitioner',
+      'finance',
+      'client_contact',
+    ] as const) {
+      expect(canActor(actor([role]), write, {}, NOW), role).toBe(false);
+    }
+    expect(canActor(actor([]), write, {}, NOW)).toBe(false);
+  });
 });
 
 describe('the four accounting actions (docs/SPEC/accounting.md section 3)', () => {

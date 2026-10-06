@@ -141,6 +141,11 @@ One row per answer a household gives the portal's review line (`SPEC/client-port
 
 Append-only: select and insert only, for a contact of the client; the three office roles read. The milestone itself is never stored — `domain/portal/reviewPrompt.ts` reads it off the visits and the credits each time — so this table is the only state the feature has: which milestones a household has already been asked about.
 
+### `announcement`
+The practice's news on every household's portal home (`SPEC/client-portal.md` sections 3.1, 3.10 and 6.7; added 2026-10-06, migration 705; the push memo's decision 4). `title_en`, `title_ar` (80 at most), `body_en`, `body_ar` (600 at most), `visible_from`, `visible_until` (the practice's own days, both optional), `supersedes_id` (the announcement a correction replaces, at most one correction each), `withdrawn_at`, `withdrawn_by`. No `client_id`: it is addressed to every adult household and names none (`'audited: no client'`).
+
+Born published — `created_at` is the moment of publication — and never edited in place: a guard trigger admits the withdrawal, once, and nothing else; a correction is a new row naming the old, which is withdrawn in the same transaction. No delete grant. The owner and an admin read and write it; a household reads only the current ones, and a young person's own login none.
+
 ---
 
 ## 4. Sessions and measurements

@@ -1,6 +1,11 @@
 import { NavLink } from 'react-router';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { canOpenPractitioners, canOpenSettings, canOpenTeam } from '../../shell/adminAccess';
+import {
+  canOpenAnnouncements,
+  canOpenPractitioners,
+  canOpenSettings,
+  canOpenTeam,
+} from '../../shell/adminAccess';
 
 /**
  * The links between the settings screens.
@@ -39,6 +44,13 @@ export function SettingsNav() {
       to: '/admin/settings/team',
       label: 'Team',
       open: canOpenTeam(session.actor, now),
+    },
+    {
+      // The practice's news on every household's portal home (trunk change
+      // request client-portal-06, 2026-10-06).
+      to: '/admin/settings/announcements',
+      label: 'Announcements',
+      open: canOpenAnnouncements(session.actor, now),
     },
   ].filter((link) => link.open);
 

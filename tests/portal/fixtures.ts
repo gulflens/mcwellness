@@ -68,6 +68,33 @@ export const HOME: HomeResponse = {
       detail: 'erasure',
     },
   ],
+  announcements: [],
+};
+
+/** Two of the practice's announcements, newest first, as the home carries them. */
+export const ANNOUNCEMENT_NEWER = '00000001-0000-4000-8000-0000000000e1';
+export const ANNOUNCEMENT_OLDER = '00000001-0000-4000-8000-0000000000e2';
+
+export const HOME_WITH_ANNOUNCEMENTS: HomeResponse = {
+  ...HOME,
+  announcements: [
+    {
+      id: ANNOUNCEMENT_NEWER,
+      title: { en: 'Closed for Eid', ar: 'مغلق في العيد' },
+      body: {
+        en: 'The studio is closed from Tuesday to Thursday. Home visits go ahead as booked.',
+        ar: 'الاستوديو مغلق من الثلاثاء إلى الخميس. تستمر الزيارات المنزلية كما هي محجوزة.',
+      },
+    },
+    {
+      id: ANNOUNCEMENT_OLDER,
+      title: { en: 'A new practitioner', ar: 'ممارسة جديدة' },
+      body: {
+        en: 'A second practitioner has joined the practice for home visits in Dubai.',
+        ar: 'انضمت ممارسة ثانية إلى المركز للزيارات المنزلية في دبي.',
+      },
+    },
+  ],
 };
 
 /** A brain-map visit the household has not yet been asked about. */

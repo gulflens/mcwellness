@@ -115,6 +115,11 @@ export const WORDS = {
   ),
   leaveReview: t('Leave a review', 'اترك تقييمًا'),
   notNow: t('Not now', 'ليس الآن'),
+  // The practice's announcements (section 3.1, amended 2026-10-06): the
+  // practice's own news, under one quiet heading. The announcements' words
+  // are the practice's, written in Settings in both languages; this is the
+  // only word the portal adds to them.
+  fromThePractice: t('From the practice', 'من المركز'),
 
   // Money, in words before figures.
   owed: t('Owed', 'المستحق'),

@@ -570,12 +570,16 @@ export type PortalHarness = {
   apiWith: (overrides: Partial<ApiOptions>) => ReturnType<typeof createApi>;
   /** A bearer header for that person, for a request built by hand. */
   authHeader: (authId: string) => Promise<Record<string, string>>;
-  /** A signed request as the person whose auth id is given. */
+  /**
+   * A signed request as the person whose auth id is given. `headers` adds to
+   * the request's own — an `X-Reason`, for a write that needs one.
+   */
   callAs: (
     method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     path: string,
     authId: string,
     body?: unknown,
+    headers?: Record<string, string>,
   ) => Promise<Response>;
   /** The same, with no session at all: what the door answers. */
   callOpen: (method: 'POST', path: string, body?: unknown) => Promise<Response>;
@@ -637,8 +641,11 @@ export async function startPortalHarness(
     async authHeader(authId) {
       return { authorization: `Bearer ${await mint(authId)}` };
     },
-    async callAs(method, path, authId, body) {
-      const headers: Record<string, string> = { authorization: `Bearer ${await mint(authId)}` };
+    async callAs(method, path, authId, body, extra = {}) {
+      const headers: Record<string, string> = {
+        ...extra,
+        authorization: `Bearer ${await mint(authId)}`,
+      };
       const init: RequestInit = { method, headers };
       if (method !== 'GET') {
         // The API takes JSON bodies only (app/api/_middleware/security.ts), and

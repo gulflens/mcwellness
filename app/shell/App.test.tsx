@@ -407,8 +407,9 @@ describe('App — /admin/settings/practitioners', () => {
     // the route would bounce straight back out of it — in neither place.
     expect(strip.queryByRole('link', { name: 'Practice' })).toBeNull();
     expect(rail.queryByRole('link', { name: 'Practice' })).toBeNull();
-    // Nor Team, which is the office's own.
+    // Nor Team, which is the office's own, nor Announcements.
     expect(rail.queryByRole('link', { name: 'Team' })).toBeNull();
+    expect(rail.queryByRole('link', { name: 'Announcements' })).toBeNull();
   });
 
   it('offers the office both, from either screen', async () => {
@@ -421,6 +422,8 @@ describe('App — /admin/settings/practitioners', () => {
     expect(rail.getByRole('link', { name: 'Practice' })).toBeTruthy();
     expect(rail.getByRole('link', { name: 'Practitioners' })).toBeTruthy();
     expect(rail.getByRole('link', { name: 'Team' })).toBeTruthy();
+    expect(rail.getByRole('link', { name: 'Announcements' })).toBeTruthy();
+    expect(strip.getByRole('link', { name: 'Announcements' })).toBeTruthy();
   });
 });
 

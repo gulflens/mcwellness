@@ -19,6 +19,14 @@ single document rather than three that repeat each other, and each purpose
 still files its own row, because a recorded consent names exactly one. The
 loader reads that from a `purpose:` line naming several (`db/seed/consent-text.ts`).
 
+`docs/CONSENT/drafts/` holds wording not yet approved — today the marketing
+consent, `marketing.en.md` and `marketing.ar.md`, at `0.1-draft` (round 72,
+2026-10-06). It is a folder of its own because the loader files every
+top-level `.md` here as a wording a household may be shown; a draft must never
+be filed, and `tests/portal/consent-drafts.test.ts` proves the seed never
+reads this folder. On approval a draft moves up one folder as `1.0`,
+`approved`, and the seed's pinned tests gain its purpose.
+
 `docs/CONSENT/notices/` holds what the practice publishes but nobody signs:
 `your-information.en.md` and its Arabic twin. They are not consent wording and
 are deliberately outside the loader's reach — `document.purpose` is typed as
