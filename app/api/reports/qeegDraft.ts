@@ -11,13 +11,13 @@ import { validateQeegContent } from '../../../domain/reports/qeeg/shape';
 import { isRecord } from '../../../domain/reports/qeeg/text';
 import type { Locale, QeegContent, QeegFollowUp } from '../../../domain/reports/qeeg/types';
 import { twinChangeIn } from '../../../domain/reports/qeeg/twin';
-import { BRAIN_MAP_SERVICE_CODE } from '../../../domain/reports/qeeg/catalogue/ids';
 import { isUuid } from '../billing/ids';
 import { logAction, logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
 import { requiredReason } from './reason';
 import { practiceTimeZone } from './gather';
+import { brainMapService } from './qeeg/brainMapService';
 import { countedSessions } from './qeeg/sessionsCounted';
 import { QeegDraftInput, QeegDraftResponse } from './schema';
 import { asRow, readReport, type ReportRecord } from './source';
@@ -473,23 +473,23 @@ export async function saveQeegDraft(
       return unknown;
     }
   }
-  return writeDraft(c, input, checked.content, {
-    comparedWithId,
-    serviceTypeId: input.serviceTypeId ?? (await brainMapService(c.get('db'))),
-  });
-}
-
-/**
- * The practice's brain-map service, by its catalogue code; null where the
- * practice has none, and the report is then signed as before by any valid
- * signing credential.
- */
-async function brainMapService(db: Db): Promise<string | null> {
-  const found = await db.query<{ id: string }>(
-    'select id from service_type where tenant_id = app.current_tenant_id() and code = $1',
-    [BRAIN_MAP_SERVICE_CODE],
-  );
-  return found.rows[0]?.id ?? null;
+  // The service is the route's: a brain-map report is written under the
+  // practice's brain-map service, never one a request names (the operator's
+  // decision of 6 October 2026), so only that service's credential signs it.
+  const service = await brainMapService(c.get('db'));
+  if (input.serviceTypeId !== null && input.serviceTypeId !== service) {
+    return c.json(
+      {
+        error: 'bad_request',
+        code: 'route_owned',
+        field: 'serviceTypeId',
+        fields: ['serviceTypeId'],
+        requestId,
+      },
+      400,
+    );
+  }
+  return writeDraft(c, input, checked.content, { comparedWithId, serviceTypeId: service });
 }
 
 /**
