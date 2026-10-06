@@ -87,7 +87,8 @@ we will ask you first, separately, and you may say no.
 ## How to stop
 
 Turn the switch off in your app. Sharing stops at once, and the board shows
-"Sharing off" rather than your last position.
+"Not sharing now" rather than your last position — as it also does once your
+working day has closed.
 
 Or withdraw this agreement, also in your app. Sharing stops at once, and every
 position of yours still held is deleted there and then. You can always do

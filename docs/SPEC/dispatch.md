@@ -530,7 +530,7 @@ position gets a calm note saying nothing is being sent.
 **15.7 The board and the day map.** The board loads no third-party script
 and keeps the console's strict policy (4.1), so it has no map of its own. On
 today's board each row says "Location shared 4 min ago, within 12 m" with a
-plain anchor to the day map, or "Sharing off" rather than pretending to know;
+plain anchor to the day map, or "Not sharing now" rather than pretending to know;
 another day's board asks for nothing. The day map draws the shown
 practitioner's last position as a label of its own ("Last shared 4 min ago"),
 never a numbered stop, drawn by the app like every other pin so the coordinate

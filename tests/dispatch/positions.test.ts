@@ -29,7 +29,7 @@ describe('describePosition', () => {
     );
   });
 
-  it('says sharing is off rather than pretending to know', () => {
-    expect(describePosition(undefined)).toBe('Sharing off');
+  it('says not sharing now, off shift or switched off, rather than pretending to know', () => {
+    expect(describePosition(undefined)).toBe('Not sharing now');
   });
 });

@@ -11,7 +11,7 @@ import type { AuthProvider } from '../../app/shell/auth/types';
 
 /**
  * Where they are, on the board (docs/SPEC/dispatch.md section 15): each
- * sharing person's last position, with how old it is, and "Sharing off" for
+ * sharing person's last position, with how old it is, and "Not sharing now" for
  * everybody else; only on today's board. Names from db/seed/names.ts; ids in
  * the reserved shape.
  */
@@ -98,17 +98,17 @@ describe('where they are, on the board', () => {
     expect(link.getAttribute('href')).toBe(`/admin/schedule/map?date=${today}`);
   });
 
-  it('says "Sharing off" for somebody who is not sharing, rather than pretending to know', async () => {
+  it('says "Not sharing now" for somebody who is not sharing, rather than pretending to know', async () => {
     mount(practiceDay(new Date()));
     const row = await screen.findByRole('region', { name: 'Sage Harbour' });
-    expect(await within(row).findByText('Sharing off')).toBeTruthy();
+    expect(await within(row).findByText('Not sharing now')).toBeTruthy();
     expect(within(row).queryByRole('link')).toBeNull();
   });
 
   it('asks for nothing and shows nothing on the board of another day', async () => {
     const fetchImpl = mount('2026-09-04');
     await screen.findByRole('region', { name: 'Cedar Ridge' });
-    expect(screen.queryByText(/Location shared|Sharing off/)).toBeNull();
+    expect(screen.queryByText(/Location shared|Not sharing now/)).toBeNull();
     expect(fetchImpl.mock.calls.some(([url]) => String(url) === '/api/location/positions')).toBe(
       false,
     );

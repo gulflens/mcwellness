@@ -3,7 +3,7 @@ import type { SharedPosition } from '../../../api/location/schema';
 /**
  * How the board says where a practitioner is sharing from (docs/SPEC/
  * dispatch.md section 15). The position itself is drawn on the day map; the
- * board says how old it is, and says "Sharing off" rather than pretending to
+ * board says how old it is, and says "Not sharing now" rather than pretending to
  * know where somebody is who is not sharing (docs/PLAN/dispatch.md).
  */
 
@@ -20,6 +20,9 @@ export function describeAge(minutes: number): string {
 export function describePosition(
   position: Pick<SharedPosition, 'ageMinutes' | 'accuracyMetres'> | undefined,
 ): string {
-  if (position === undefined) return 'Sharing off';
+  // Switched off, or switched on outside their working day: either way
+  // nothing is being shared now, and the board cannot tell which (it reads
+  // no one's switch), so it says only what is true of both.
+  if (position === undefined) return 'Not sharing now';
   return `Location shared ${describeAge(position.ageMinutes)}, within ${Math.round(position.accuracyMetres)} m`;
 }
