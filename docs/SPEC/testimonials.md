@@ -29,7 +29,7 @@ One row per review, in `testimonial`:
 | `consent_to_publish` | The tick. Always true: the table refuses a row without it. |
 | `status`, `decided_by`, `decided_at` | The office's decision and who made it. |
 | `published_order` | Where the office placed it on the page. |
-| `ip_hash` | SHA-256 of the sender's address under a fixed prefix, for the submission budget only. Cleared when the review is decided. |
+| `ip_hash` | HMAC-SHA-256 of the sender's address under a random key the API role cannot read (`app.testimonial_pepper`), computed inside `app.submit_testimonial` for the submission budget only; the address is never stored. Cleared when the review is decided, and for every row older than 24 hours on each submission and by the daily sweep. |
 
 **Nothing a person could be reached by.** There is no email, no telephone and
 no name beyond the one they chose to be shown under. The practice publishes a
@@ -58,7 +58,10 @@ Approved reviews in one language are shown by their place (`published_order`,
 1 first). A review approved since the list was last arranged has no place yet
 and is shown **above** the placed ones, newest decision first, so the office
 sees at once what it just approved and can move it down. Moving a review
-renumbers that language's whole list from 1. At most 30 are sent.
+renumbers that language's whole list from 1, one arranging of a language at a
+time (a transaction lock, so two moves at once never renumber from a stale
+order). At most 30 are sent; the Approved tab marks any placed below that "Not
+shown on the website (only the first 30 are)".
 
 ## 5. The console: Reviews
 
@@ -66,15 +69,24 @@ renumbers that language's whole list from 1. At most 30 are sent.
 badge counting what is pending (`GET /api/testimonials/count`, which logs no
 read). Three tabs:
 
-- **Pending**: Approve, Decline.
+- **Pending**: Approve, Decline; and **Decline all shown** (asks first), for a
+  queue a script has filled.
 - **Approved**: Move up, Move down (within the review's own language), Withdraw
-  (asks first: "Take it off the website?"). Withdraw makes it declined at once.
+  (asks first: "Take it off the website?"). Withdraw makes it declined at once,
+  and it leaves the website within a minute (section 8's cache).
+
+When the door's practice-wide limits have turned a review away in the last day
+(section 7), every tab says: "New reviews are being turned away — the queue is
+full; decline or approve some."
 - **Declined**: read only, with the note that it is deleted 30 days after the
   decision.
 
 Staff routes (behind the fence): `GET /api/testimonials?status=pending|approved|declined`,
 `GET /api/testimonials/count`, `POST /api/testimonials/:id/approve`, `…/decline`,
-`…/withdraw`, `…/move` with `{"direction":"up"|"down"}`.
+`…/withdraw`, `…/move` with `{"direction":"up"|"down"}`, and
+`POST /api/testimonials/decline-all` with `{"ids":[…]}` (the Pending table's ids;
+only those still waiting are declined). The list answers `turningAway` beside the
+counts.
 
 **The trail.** The table is outside the audit trigger, as `enquiry` is (migration
 978 says why: a copy of the words in the append-only log would outlive a
@@ -95,7 +107,7 @@ Deleted once a day by the scheduler (`testimonial-retention`,
 cutoff sooner than either period. The periods are `domain/testimonial/retention.ts`.
 
 **A person asking for theirs to be taken down** is met by Withdraw: it leaves the
-website at once and is deleted within 30 days. They identify it by describing
+website within a minute and is deleted within 30 days. They identify it by describing
 what they wrote and the name they used; nothing else is held to match on. If
 they ask for it to go sooner than 30 days, that is not offered by the screen
 today; the database owner can delete the row.
@@ -122,9 +134,10 @@ Content-Type: application/json
 
 | Field | Rule |
 |---|---|
-| `display_name` | Required. 1–40 characters after trimming. No telephone number or email address. |
+| `display_name` | Required. 1–40 characters after trimming. No telephone number or email address. Nothing left once control and invisible characters are out is refused. |
 | `context` | Optional; empty or absent is none. Up to 60 characters. No telephone number or email address. |
 | `rating` | Required. Integer 1–5 (the digit as a string, `"5"`, is also accepted). |
+| (all text) | Control characters and invisible format characters (Unicode Cc and Cf: zero-width spaces, direction overrides, the byte-order mark) are taken out of `display_name`, `context` and `body`; a line break in `body` is kept, and a tab reads as a space. Limits are counted after. |
 | `body` | Required. 20–1200 characters after trimming, counted as characters (an Arabic letter or an emoji is one). No telephone number or email address. Never shortened: too long is refused. |
 | `language` | Required. `"en"` from `/testimonials.html`, `"ar"` from `/ar/testimonials.html`. |
 | `consent_to_publish` | Required. Must be `true` (`"true"` and `"on"` are accepted). |
@@ -145,8 +158,11 @@ Answers:
 Budgets: per address, 5 a minute at the door (the enquiry door's rate and its
 setting, `RATE_LIMIT_ENQUIRY_DOOR_PER_MINUTE`, halved by the operator on
 6 October 2026; each of the host's two worker processes counts its own),
-and 3 kept per 10 minutes in the database (further ones answer `201` and are not
-kept). The database stops keeping new reviews while 500 are pending.
+and 3 kept per 10 minutes and 3 per 24 hours in the database. For the whole
+practice, the database keeps at most 30 new reviews an hour, and none while 500
+are pending. Every refusal answers `201` and keeps nothing; a practice-wide one
+is recorded for the Reviews screen (section 5). No captcha: no third-party
+service is approved for it.
 
 The browser sends a preflight (`OPTIONS`) first, because the body is JSON. It is
 answered `204` with `Access-Control-Allow-Methods: POST, OPTIONS` and
@@ -175,11 +191,15 @@ GET https://app.mcwellnessuae.com/api/testimonials/published?lang=en
 ```
 
 Approved reviews in that language only, in the office's order (section 4), at
-most 30. `context` may be `null`. No ids and no dates. Render `body` as text,
-never as HTML, and keep its line breaks (`white-space: pre-line`).
+most 30. `context` may be `null`. No ids and no dates. Keep `body`'s line breaks
+(`white-space: pre-line`).
 
-`Cache-Control: public, max-age=300`: a newly approved or withdrawn review can
-take up to five minutes to change on the page. A simple `fetch` with no custom
+**The website must render every field — `display_name`, `context`, `rating` and
+`body` — with `textContent`, never with `innerHTML`.** They are what a stranger
+typed, published as written.
+
+`Cache-Control: public, max-age=60`: a newly approved or withdrawn review can
+take up to a minute to change on the page. A simple `fetch` with no custom
 headers; no preflight is needed.
 
 ## 9. Origins and headers, both routes

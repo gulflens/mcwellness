@@ -127,7 +127,7 @@ Testimonials page in English or Arabic.
 | **The language** | Which of the two pages it came from, so it is shown on that page. |
 | **The tick to publish** | The basis for holding and publishing it at all; a review without it is refused. |
 | **The decision** | Pending, approved or declined, who on the practice's side decided and when, and where it stands on the page. |
-| **An address hash** | SHA-256 of the sender's internet address under a fixed prefix, for the submission budget that stops one sender flooding the queue. Never the address itself; cleared the moment the review is decided. |
+| **An address hash** | A keyed hash (HMAC-SHA-256) of the sender's internet address, under a random key the application's own role cannot read, made inside the database for the submission budget that stops one sender flooding the queue. Never the address itself; cleared the moment the review is decided, and in any case after 24 hours. |
 
 **Deliberately not held:** an email address, a telephone number, a full name, or
 any link to a client record. The practice publishes a review or it does not and
@@ -167,7 +167,7 @@ office has said no there is no purpose left in keeping somebody's words.
 ### A person's request
 
 **To have theirs taken down:** Withdraw on the Reviews screen. It leaves the
-website at once and is deleted within 30 days. The person identifies it by the
+website within a minute and is deleted within 30 days. The person identifies it by the
 name they used and what they wrote; nothing else is held to match on.
 **To see what is held:** the row is the whole of it, and the office can read it
 out from the Reviews screen.

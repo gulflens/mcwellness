@@ -22,6 +22,10 @@ const SUBMIT = 'select app.submit_testimonial($1::jsonb) as id';
 const PUBLISHED = 'select * from app.published_testimonials($1)';
 const PURGE = 'select app.purge_stale_testimonials($1, $2) as deleted';
 const COUNT = 'select count(*)::int as n from testimonial';
+/** Documentation addresses (RFC 5737), nobody's. */
+const ADDR_A = '192.0.2.1';
+const ADDR_B = '192.0.2.2';
+/** A stored hash's shape, for rows the table's owner writes in directly. */
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
 const INSUFFICIENT_PRIVILEGE = '42501';
@@ -35,7 +39,7 @@ function submission(overrides: Record<string, unknown> = {}): string {
     body: 'The home visits fitted around our week, and the team explained every step.',
     language: 'en',
     consent_to_publish: true,
-    ip_hash: HASH_A,
+    address: ADDR_A,
     ...overrides,
   });
 }
@@ -144,9 +148,164 @@ describe('the door', () => {
       for (let i = 0; i < 3; i += 1) expect(await submit()).not.toBeNull();
       expect(await submit()).toBeNull();
       // Another address is its own budget.
-      expect(await submit({ ip_hash: HASH_B })).not.toBeNull();
+      expect(await submit({ address: ADDR_B })).not.toBeNull();
       const { rows } = await owner.query<{ n: number }>(COUNT);
       expect(rows[0]?.n).toBe(4);
+    });
+  });
+
+  it('holds an address to three in a day as well as three in ten minutes', async () => {
+    await rolledBack(owner, async () => {
+      const first = await submit();
+      const { rows } = await owner.query<{ ip_hash: string }>(
+        'select ip_hash from testimonial where id = $1',
+        [first],
+      );
+      // Two more from the same address earlier today, written in by the owner.
+      for (let i = 0; i < 2; i += 1) {
+        await owner.query(
+          'insert into testimonial (tenant_id, submitted_at, display_name, rating, body, ' +
+            "language, consent_to_publish, ip_hash) values ($1, now() - interval '3 hours', " +
+            "'Hazel H.', 5, $2, 'en', true, $3)",
+          [IDS.tenantA, 'Kind, punctual and clear about every step.', rows[0]?.ip_hash],
+        );
+      }
+      expect(await submit()).toBeNull();
+      expect(await submit({ address: ADDR_B })).not.toBeNull();
+    });
+  });
+
+  it('turns new reviews away past thirty an hour, and says so to the office alone', async () => {
+    await rolledBack(owner, async () => {
+      await owner.query(
+        'insert into testimonial (tenant_id, submitted_at, display_name, rating, body, language, ' +
+          "consent_to_publish) select $1, now() - interval '20 minutes', 'Reviewer ' || n, 5, $2, " +
+          "'en', true from generate_series(1, 30) n",
+        [IDS.tenantA, 'Kind, punctual and clear about every step.'],
+      );
+      const recently = async (roles: string) =>
+        asApiRole(
+          owner,
+          IDS.tenantA,
+          async () =>
+            (
+              await owner.query<{ yes: boolean }>(
+                'select app.testimonials_turned_away_recently() as yes',
+              )
+            ).rows[0]?.yes,
+          roles,
+        );
+      expect(await recently('admin')).toBe(false);
+      expect(await submit({ address: ADDR_B })).toBeNull();
+      expect(await recently('admin')).toBe(true);
+      expect(await recently('owner')).toBe(true);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        () =>
+          rejectsWith(
+            owner,
+            INSUFFICIENT_PRIVILEGE,
+            'select app.testimonials_turned_away_recently()',
+          ),
+        'lead_practitioner',
+      );
+    });
+  });
+
+  it('turns new reviews away while five hundred are waiting, and records it', async () => {
+    await rolledBack(owner, async () => {
+      await owner.query(
+        'insert into testimonial (tenant_id, submitted_at, display_name, rating, body, language, ' +
+          "consent_to_publish) select $1, now() - interval '2 days', 'Reviewer ' || n, 5, $2, " +
+          "'en', true from generate_series(1, 500) n",
+        [IDS.tenantA, 'Kind, punctual and clear about every step.'],
+      );
+      expect(await submit()).toBeNull();
+      const { rows } = await owner.query<{ n: number }>(
+        'select turned_away_count as n from app.testimonial_turned_away where tenant_id = $1',
+        [IDS.tenantA],
+      );
+      expect(rows[0]?.n).toBe(1);
+    });
+  });
+
+  it('refuses a name that is nothing once control and invisible characters are out', async () => {
+    await rolledBack(owner, async () => {
+      expect(await submit({ display_name: '\u200b\u200b' })).toBeNull();
+      expect(await submit({ display_name: '\u0007 \u202e' })).toBeNull();
+      expect(await submit({ display_name: 'Hazel\u200b H.' })).not.toBeNull();
+    });
+  });
+
+  it('keeps the address only as a keyed hash, the key out of the API role’s reach', async () => {
+    await rolledBack(owner, async () => {
+      const one = await submit();
+      const two = await submit({ display_name: 'Rowan M.' });
+      const { rows } = await owner.query<{ ip_hash: string }>(
+        'select ip_hash from testimonial where id = any($1::uuid[])',
+        [[one, two]],
+      );
+      // The same address, the same hash; and not one anybody could compute
+      // from the address without the key.
+      expect(rows).toHaveLength(2);
+      expect(rows[0]?.ip_hash).toBe(rows[1]?.ip_hash);
+      const unkeyed = await owner.query<{ a: string; b: string }>(
+        "select encode(extensions.digest($1, 'sha256'), 'hex') as a, " +
+          "encode(extensions.digest('testimonial:' || $1, 'sha256'), 'hex') as b",
+        [ADDR_A],
+      );
+      expect([unkeyed.rows[0]?.a, unkeyed.rows[0]?.b]).not.toContain(rows[0]?.ip_hash);
+
+      for (const roles of ['owner', 'admin', '']) {
+        await asApiRole(
+          owner,
+          IDS.tenantA,
+          () =>
+            rejectsWith(owner, INSUFFICIENT_PRIVILEGE, 'select pepper from app.testimonial_pepper'),
+          roles,
+        );
+      }
+    });
+  });
+
+  it('forgets every address hash older than a day, on the next submission and in the sweep', async () => {
+    await rolledBack(owner, async () => {
+      const old = await owner.query<{ id: string }>(
+        'insert into testimonial (tenant_id, submitted_at, display_name, rating, body, language, ' +
+          "consent_to_publish, ip_hash) values ($1, now() - interval '25 hours', 'Hazel H.', 5, $2, " +
+          "'en', true, $3) returning id",
+        [IDS.tenantA, 'Kind, punctual and clear about every step.', HASH_A],
+      );
+      expect(await submit({ address: ADDR_B })).not.toBeNull();
+      const after = await owner.query<{ ip_hash: string | null }>(
+        'select ip_hash from testimonial where id = $1',
+        [old.rows[0]?.id],
+      );
+      expect(after.rows[0]?.ip_hash).toBeNull();
+
+      const second = await owner.query<{ id: string }>(
+        'insert into testimonial (tenant_id, submitted_at, display_name, rating, body, language, ' +
+          "consent_to_publish, ip_hash) values ($1, now() - interval '30 hours', 'Rowan M.', 5, $2, " +
+          "'en', true, $3) returning id",
+        [IDS.tenantA, 'Kind, punctual and clear about every step.', HASH_B],
+      );
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          await owner.query(PURGE, [
+            new Date(Date.now() - 30 * 86_400_000),
+            new Date(Date.now() - 180 * 86_400_000),
+          ]);
+          const swept = await owner.query<{ ip_hash: string | null }>(
+            'select ip_hash from testimonial where id = $1',
+            [second.rows[0]?.id],
+          );
+          expect(swept.rows[0]?.ip_hash).toBeNull();
+        },
+        'admin',
+      );
     });
   });
 
@@ -202,7 +361,7 @@ describe('who reads and decides', () => {
   it('lets an admin approve, decline and withdraw, and nothing more', async () => {
     await rolledBack(owner, async () => {
       const first = await submit();
-      const second = await submit({ ip_hash: HASH_B });
+      const second = await submit({ address: ADDR_B });
       await asApiRole(
         owner,
         IDS.tenantA,
@@ -306,13 +465,13 @@ describe('the public read', () => {
     await rolledBack(owner, async () => {
       const waiting = await submit({ display_name: 'Rowan M.' });
       const declined = await submit({ display_name: 'Iris C.' });
-      const older = await submit({ display_name: 'Basil V.', ip_hash: HASH_B });
-      const newer = await submit({ display_name: 'Hazel V.', ip_hash: HASH_B });
-      const placed = await submit({ display_name: 'Pearl C.', ip_hash: HASH_B });
+      const older = await submit({ display_name: 'Basil V.', address: ADDR_B });
+      const newer = await submit({ display_name: 'Hazel V.', address: ADDR_B });
+      const placed = await submit({ display_name: 'Pearl C.', address: ADDR_B });
       const arabic = await submit({
         display_name: 'بندق م.',
         language: 'ar',
-        ip_hash: 'c'.repeat(64),
+        address: '192.0.2.3',
       });
       expect(waiting).not.toBeNull();
       await decide(declined!, 'declined');
@@ -351,9 +510,14 @@ describe('the public read', () => {
 
   it('sends thirty at most', async () => {
     await rolledBack(owner, async () => {
+      // Written in by the table's owner: the door itself takes thirty an hour.
       for (let i = 0; i < 32; i += 1) {
-        const id = await submit({ ip_hash: `${String(i).padStart(2, '0')}${'d'.repeat(62)}` });
-        await decide(id!, 'approved');
+        const { rows } = await owner.query<{ id: string }>(
+          'insert into testimonial (tenant_id, display_name, rating, body, language, ' +
+            "consent_to_publish) values ($1, $2, 5, $3, 'en', true) returning id",
+          [IDS.tenantA, `Reviewer ${i}`, 'Kind, punctual and clear about every step.'],
+        );
+        await decide(rows[0]!.id, 'approved');
       }
       const { rows } = await owner.query(PUBLISHED, ['en']);
       expect(rows).toHaveLength(30);
@@ -406,7 +570,7 @@ describe('the retention sweep', () => {
       const oldApproved = await arrivedLongAgo('Basil V.', HASH_A);
       // Waiting since long ago: due to go.
       await arrivedLongAgo('Hazel V.', HASH_B);
-      const freshPending = await submit({ display_name: 'Pearl C.', ip_hash: HASH_B });
+      const freshPending = await submit({ display_name: 'Pearl C.', address: ADDR_B });
       await decide(oldDeclined!, 'declined', "now() - interval '31 days'");
       await decide(freshDeclined!, 'declined', "now() - interval '29 days'");
       await decide(oldApproved!, 'approved', "now() - interval '399 days'");

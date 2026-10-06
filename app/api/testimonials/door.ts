@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 import {
   TESTIMONIAL_LANGUAGES,
@@ -41,35 +41,28 @@ import { PublishedTestimonialsResponse, TestimonialInvalidResponse } from './sch
  *    person sees is a form error, 400, naming the fields to fix.
  *
  * The published read sends four fields per review and nothing that names a
- * row or a time, and may be cached for five minutes by the browser and by
+ * row or a time, and may be cached for a minute by the browser and by
  * anything between, so the page costs the practice one query per visitor at
- * most and usually far fewer.
+ * most and usually far fewer. A minute and not longer, because Withdraw is how
+ * a person's request to take their review down is met, and the screen
+ * promises it is off the website within a minute.
+ *
+ * **The address goes to the database raw, and only there.** The definer
+ * hashes it under a key the API role cannot read (migration 978) and keeps
+ * nothing else of it; a hash made here, unkeyed, would be the address to
+ * anybody who could read the table.
  */
 
 export const TESTIMONIAL_DOOR_PATH = '/api/testimonials';
 export const PUBLISHED_TESTIMONIALS_PATH = '/api/testimonials/published';
-/** How long the page and anything in between may keep the published list. */
-export const PUBLISHED_CACHE_SECONDS = 300;
+/** How long the page and anything in between may keep the published list: a minute. */
+export const PUBLISHED_CACHE_SECONDS = 60;
 
 const STAMP_REQUEST_ID = "select set_config('app.request_id', $1, true)";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function requestIdOf(header: string | undefined): string {
   return header !== undefined && UUID.test(header) ? header : randomUUID();
-}
-
-/** sha256 of the address, under this door's own prefix so the two doors' budgets never share a key. */
-export function hashTestimonialAddress(address: string): string {
-  return createHash('sha256').update(`testimonial:${address}`).digest('hex');
-}
-
-/**
- * As the enquiry door's: an unknowable address gets a bucket of its own for
- * this one request rather than one shared "unknown" budget that every such
- * caller would spend between them.
- */
-function bucketFor(address: string | null): string {
-  return hashTestimonialAddress(address ?? `nobody:${randomUUID()}`);
 }
 
 /**
@@ -169,7 +162,9 @@ export function mountTestimonialDoor(api: Hono<ApiEnv>, options: TestimonialDoor
           body: parsed.testimonial.body,
           language: parsed.testimonial.language,
           consent_to_publish: true,
-          ip_hash: bucketFor(options.addressOf(c)),
+          // Null when it cannot be known: the definer gives that submission a
+          // bucket of its own rather than one shared "unknown" budget.
+          address: options.addressOf(c),
         }),
       ]);
       await client.query('commit');

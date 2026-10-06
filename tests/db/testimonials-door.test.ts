@@ -252,7 +252,7 @@ describe('GET /api/testimonials/published', () => {
     );
   }
 
-  it('sends the approved reviews in the language asked, four fields each, cacheable for a few minutes', async () => {
+  it('sends the approved reviews in the language asked, four fields each, cacheable for a minute', async () => {
     await owner.query('delete from testimonial');
     await approved('Basil V.', 'en', 2);
     await approved('Iris C.', 'en', 1);
@@ -264,7 +264,7 @@ describe('GET /api/testimonials/published', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('access-control-allow-origin')).toBe(APEX);
     expect(res.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
-    expect(res.headers.get('cache-control')).toBe('public, max-age=300');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=60');
     expect(await res.json()).toEqual({
       testimonials: [
         {

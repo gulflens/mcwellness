@@ -57,11 +57,30 @@ export type TestimonialParseResult =
   | { ok: false; reason: 'honeypot' }
   | { ok: false; reason: 'invalid'; fields: readonly TestimonialField[] };
 
+// Tabs, vertical tabs and form feeds: control characters that are also
+// white space, and read as a space.
+const CONTROL_SPACE = /[\t\v\f]/g;
+// Every other control character (Unicode Cc) and every invisible format
+// character (Cf: zero-width spaces and joiners, direction overrides, the soft
+// hyphen, the byte-order mark), but the line break. A direction override in a
+// published name turns the rest of the card around; a zero-width run makes a
+// name that shows as nothing, or pads a review past its minimum unseen.
+// domain/reports/external.ts has a `tidy` for titles, which turns these into
+// spaces and joins lines; here a character inside a word is taken out rather
+// than splitting it, and the words keep their paragraphs.
+const INVISIBLE = /(?!\n)[\p{Cc}\p{Cf}]/gu;
+
+/** The words as typed, less what cannot be seen; line breaks kept. */
 function text(value: unknown): string {
   if (typeof value !== 'string') return '';
   // One kind of line ending, so a review typed on Windows is not two
   // characters longer per paragraph than the same review typed anywhere else.
-  return value.replace(/\r\n?/g, '\n').trim();
+  return value.replace(/\r\n?/g, '\n').replace(CONTROL_SPACE, ' ').replace(INVISIBLE, '').trim();
+}
+
+/** A name or the line beneath it: as `text`, on one line. */
+function line(value: unknown): string {
+  return text(value).replace(/\s+/g, ' ');
 }
 
 function lengthOf(value: string): number {
@@ -109,7 +128,7 @@ export function parseTestimonial(body: Record<string, unknown>): TestimonialPars
 
   const wrong = new Set<TestimonialField>();
 
-  const displayName = text(body.display_name);
+  const displayName = line(body.display_name);
   if (
     displayName === '' ||
     lengthOf(displayName) > TESTIMONIAL_LIMITS.displayNameMax ||
@@ -118,7 +137,7 @@ export function parseTestimonial(body: Record<string, unknown>): TestimonialPars
     wrong.add('display_name');
   }
 
-  const context = text(body.context);
+  const context = line(body.context);
   if (lengthOf(context) > TESTIMONIAL_LIMITS.contextMax || carriesContactDetails(context)) {
     wrong.add('context');
   }

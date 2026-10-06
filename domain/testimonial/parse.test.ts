@@ -138,6 +138,50 @@ describe('parseTestimonial', () => {
   });
 });
 
+describe('control and invisible characters', () => {
+  it('takes them out of the name, the line under it and the words, keeping line breaks in the words', () => {
+    const parsed = parseTestimonial(
+      form({
+        display_name: 'Ha\u200bzel\u0007 H.\u202e',
+        context: 'Parent,\u00ad Dubai\ufeff',
+        body: 'The home visits\u200d fitted our week.\nThe team\u0000 explained every\u2066 step.',
+      }),
+    );
+    expect(parsed).toEqual({
+      ok: true,
+      testimonial: {
+        displayName: 'Hazel H.',
+        context: 'Parent, Dubai',
+        rating: 5,
+        body: 'The home visits fitted our week.\nThe team explained every step.',
+        language: 'en',
+      },
+    });
+  });
+
+  it('keeps a name on one line, and a tab as a space', () => {
+    const parsed = parseTestimonial(form({ display_name: 'Hazel\nH.', context: 'Parent,\tDubai' }));
+    expect(parsed.ok && parsed.testimonial.displayName).toBe('Hazel H.');
+    expect(parsed.ok && parsed.testimonial.context).toBe('Parent, Dubai');
+  });
+
+  it('refuses a name that is nothing once they are out', () => {
+    expect(parseTestimonial(form({ display_name: '\u200b\u200b\u202e' }))).toEqual({
+      ok: false,
+      reason: 'invalid',
+      fields: ['display_name'],
+    });
+  });
+
+  it('counts the words after they are out, so invisible padding cannot reach the minimum', () => {
+    const padded = `${'\u200b'.repeat(30)}Too short.`;
+    expect(parseTestimonial(form({ body: padded }))).toMatchObject({
+      ok: false,
+      fields: ['body'],
+    });
+  });
+});
+
 describe('carriesContactDetails', () => {
   it('finds a number of seven digits or more however it is spaced, and an address', () => {
     expect(carriesContactDetails('+971 50 000 0099')).toBe(true);
