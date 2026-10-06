@@ -3,6 +3,7 @@ import {
   ANNOUNCEMENT_STATES,
   APPOINTMENT_STATUSES,
   INVITE_KINDS,
+  PUSH_KINDS,
   REVIEW_MILESTONE_KINDS,
   VISIT_OUTCOMES,
 } from '../../../domain/portal';
@@ -608,3 +609,136 @@ export const PublishAnnouncementResponse = z.object({ announcement: OfficeAnnoun
 export type PublishAnnouncementResponse = z.infer<typeof PublishAnnouncementResponse>;
 
 export const WithdrawAnnouncementResponse = z.object({ ok: z.literal(true) });
+
+// ---------------------------------------------------------------------------
+// The marketing consent: the switch on Agreements (the push memo's decision 1,
+// docs/CONSENT/marketing.en.md; migration 706).
+// ---------------------------------------------------------------------------
+
+/** The practice's current marketing wording in one language. */
+const MarketingWording = z.object({ id: z.uuid(), version: z.string() });
+
+/**
+ * Where the person's own switch stands, and the wording it stands beside.
+ * `offered` is false for a young person's own login, who is shown no switch
+ * at all; `wordings` is null in a language the practice has not published.
+ */
+export const MarketingResponse = z.object({
+  offered: z.boolean(),
+  state: z.enum(['on', 'off', 'never']),
+  /** When the switch took its position: given, or withdrawn. */
+  since: z.string().nullable(),
+  wordings: z.object({ en: MarketingWording.nullable(), ar: MarketingWording.nullable() }),
+});
+export type MarketingResponse = z.infer<typeof MarketingResponse>;
+
+/** Turning it on: the wording the person read, by id, in the language they read it. */
+export const GiveMarketingInput = z.object({ wordingId: z.uuid() });
+export type GiveMarketingInput = z.infer<typeof GiveMarketingInput>;
+
+// ---------------------------------------------------------------------------
+// Phone notifications: the household's step (the push memo's decision 2;
+// migration 707).
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the step is offered at all, and the key a browser subscribes with.
+ * `configured` is false on a deployment without the practice's key pair,
+ * and then nothing is offered; `offered` is false for a young person's own
+ * login. `devices` counts this person's own, never anybody else's.
+ */
+export const NotificationsResponse = z.object({
+  configured: z.boolean(),
+  offered: z.boolean(),
+  publicKey: z.string().nullable(),
+  devices: z.number().int().nonnegative(),
+});
+export type NotificationsResponse = z.infer<typeof NotificationsResponse>;
+
+const Base64Url = (min: number, max: number) =>
+  z
+    .string()
+    .min(min)
+    .max(max)
+    .regex(/^[A-Za-z0-9_-]+={0,2}$/);
+
+/** What `PushSubscription.toJSON()` hands over, and nothing more. */
+export const SubscribeInput = z.object({
+  endpoint: z.string().min(1).max(2048),
+  keys: z.object({ p256dh: Base64Url(86, 90), auth: Base64Url(22, 26) }),
+});
+export type SubscribeInput = z.infer<typeof SubscribeInput>;
+
+export const UnsubscribeInput = z.object({ endpoint: z.string().min(1).max(2048) });
+export type UnsubscribeInput = z.infer<typeof UnsubscribeInput>;
+
+// ---------------------------------------------------------------------------
+// The Send screen: the practice's own side (Settings › Notifications; the push
+// memo's decision 3).
+// ---------------------------------------------------------------------------
+
+const Reach = z.object({
+  people: z.number().int().nonnegative(),
+  devices: z.number().int().nonnegative(),
+});
+
+/** One message as the practice's own record lists it. */
+export const OfficePushMessage = z.object({
+  id: z.uuid(),
+  kind: z.enum(PUSH_KINDS),
+  title: BilingualText,
+  body: BilingualText,
+  sentAt: z.string(),
+  sentBy: z.string().nullable(),
+  recipients: z.number().int().nonnegative(),
+  devices: z.number().int().nonnegative(),
+  /** What the delivery found; null until it has run. */
+  delivery: z
+    .object({
+      delivered: z.number().int().nonnegative(),
+      gone: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      at: z.string(),
+    })
+    .nullable(),
+});
+export type OfficePushMessage = z.infer<typeof OfficePushMessage>;
+
+export const OfficePushResponse = z.object({
+  configured: z.boolean(),
+  /** The practice's own today, which the month's offers are counted in. */
+  today: IsoDate,
+  audience: z.object({ announcement: Reach, offer: Reach }),
+  offersLeft: z.number().int().nonnegative(),
+  messages: z.array(OfficePushMessage),
+});
+export type OfficePushResponse = z.infer<typeof OfficePushResponse>;
+
+/** One person a message went to, as the record shows a regulator or a household. */
+export const OfficePushRecipient = z.object({
+  name: z.string(),
+  devices: z.number().int().positive(),
+  standing: z.enum(['on', 'off']),
+  /** The wording that person's consent stood on, when it stood. */
+  wordingVersion: z.string().nullable(),
+});
+export type OfficePushRecipient = z.infer<typeof OfficePushRecipient>;
+
+export const OfficePushRecordResponse = z.object({
+  message: OfficePushMessage,
+  recipients: z.array(OfficePushRecipient),
+});
+export type OfficePushRecordResponse = z.infer<typeof OfficePushRecordResponse>;
+
+/** What the Send screen sends: once, by an id the screen chose, so a second press is the same. */
+export const SendPushInput = z.object({
+  id: z.uuid(),
+  kind: z.enum(PUSH_KINDS),
+  title: z.object({ en: TypedText, ar: TypedText }),
+  body: z.object({ en: TypedText, ar: TypedText }),
+  confirmedWarnings: z.boolean().default(false),
+});
+export type SendPushInput = z.input<typeof SendPushInput>;
+
+export const SendPushResponse = z.object({ message: OfficePushMessage });
+export type SendPushResponse = z.infer<typeof SendPushResponse>;
