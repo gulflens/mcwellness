@@ -281,7 +281,6 @@ async function bringIn(c: Context<ApiEnv>, now: Date): Promise<Response> {
     return answer(c, 409, 'consent_missing', { missing: consentRefusals });
   }
 
-
   const found = await sameFile(db, input.clientId, input.sourceSha256);
   if (found) return alreadyImported(c, found);
 
