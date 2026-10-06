@@ -165,9 +165,18 @@ type WitnessCheck =
  * another practice finds nothing and is refused as "not staff" without this
  * route ever learning that such a person exists. The tenant is named in the
  * predicate as well, because a rule this route depends on should be legible
- * here and not only in a policy file. A client contact is not staff: they hold
- * a role like anyone else, and it is the one role that never counts.
+ * here and not only in a policy file. Staff is a working role, named
+ * (`WORKING_ROLE_SQL`): a client contact holds a role and is not staff, and
+ * since round 76 neither is a helper, a family member who drives on the day.
  */
+/**
+ * The working roles, named rather than "any role but a household's": a role
+ * added later — the helper, in round 76 — is not staff until somebody says so
+ * here.
+ */
+const WORKING_ROLE_SQL =
+  "r.role in ('owner', 'admin', 'lead_practitioner', 'practitioner', 'finance')";
+
 async function checkWitness(
   db: Db,
   actor: Actor,
@@ -193,7 +202,7 @@ async function checkWitness(
   const witness = await db.query(
     'select 1 from app_user u where u.id = $1 and u.tenant_id = app.current_tenant_id() ' +
       "and u.status = 'active' and exists (select 1 from user_role r where r.user_id = u.id " +
-      "and r.role <> 'client_contact')",
+      `and ${WORKING_ROLE_SQL})`,
     [witnessedByUserId],
   );
   if (witness.rows.length === 0) return { ok: false, code: 'witness_not_staff' };
@@ -679,7 +688,7 @@ export function mountConsentWitnesses(api: Hono<ApiEnv>): void {
     const { rows } = await db.query<{ id: string; display_name: string }>(
       'select u.id, u.display_name from app_user u ' +
         'where u.tenant_id = app.current_tenant_id() and u.status = $2 and u.id <> $1 ' +
-        "and exists (select 1 from user_role r where r.user_id = u.id and r.role <> 'client_contact') " +
+        `and exists (select 1 from user_role r where r.user_id = u.id and ${WORKING_ROLE_SQL}) ` +
         'order by u.display_name',
       [actor.userId, 'active'],
     );

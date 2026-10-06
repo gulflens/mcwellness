@@ -149,3 +149,32 @@ applied.
     core number. It locks the person's `app_user` row first so racing writes
     serialise, and raises 42501, which the role switch already answers as a
     refusal beneath it.
+
+## Review fix (PR 248, 6 October 2026)
+
+21. **`app/api/clients/consents.ts`** (client-record's) and
+    **`tests/client/db/consent_documents.test.ts`**: the consent witness's
+    write check (`witness_not_staff`) and the `GET /api/clients/consent-witnesses`
+    list counted "any role but `client_contact`" as staff, so a helper was
+    listed and accepted as a witness. Both now name the working roles,
+    `('owner', 'admin', 'lead_practitioner', 'practitioner', 'finance')`, and
+    the test proves a helper is neither listed nor accepted.
+22. **The sweep** of every other "any role but `client_contact`" test of
+    staff-ness, with its verdict for a helper:
+    - `app/api/portal/access.ts` (`has_practice_role`, twice) and migration
+      `700` (`not_a_household`, twice): refuse to give household access to an
+      account that holds a practice role. A helper counts as such and is
+      refused, the cautious direction (`app.name_helper` also refuses a
+      household contact). Safe.
+    - `app/api/team/routes.ts` (status and password) and `target.ts` (the list
+      and one colleague): the Team screen's reach. A helper is in it, so the
+      owner can suspend a helper or mint one a password. Intended. Safe.
+    - Migrations `968`, `971` and `972` (erasure spares a colleague's sign-in;
+      a colleague's account detached from a contact): a helper is spared
+      rather than archived, the cautious direction, and a helper's account is
+      never a contact's (700 and `app.name_helper` refuse it). Safe.
+    - `db/policies/core/role_guard.sql` (an admin updates only household-only
+      accounts): a helper's row is then the owner's alone to update, matching
+      the owner-only rule. Safe.
+    - `app/api/clients/consent-wording.ts` and `app/api/portal/household.ts`
+      name roles positively and never admit a helper. Safe.
