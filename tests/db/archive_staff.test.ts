@@ -418,7 +418,7 @@ describe('restoring', () => {
         ]);
         return rows[0]?.summary;
       });
-      expect(summary).toEqual({ restored: true, practitionerReactivated: true });
+      expect(summary).toEqual({ restored: true, status: 'active', practitionerReactivated: true });
       expect(await statusOf(PRACTITIONER_USER)).toBe('active');
       expect(await practitionerStatus()).toBe('active');
       const resolved = await owner.query('select * from app.resolve_actor($1)', [
@@ -436,6 +436,66 @@ describe('restoring', () => {
         [HELPER],
       );
       expect(standing.rowCount).toBe(0);
+    });
+  });
+
+  it('brings a suspended colleague back suspended, never quietly reactivated', async () => {
+    await rolledBack(owner, async () => {
+      await owner.query("update app_user set status = 'suspended' where id = $1", [
+        PRACTITIONER_USER,
+      ]);
+      await archived();
+      // What the archive found is kept on the person until the restore reads it.
+      const kept = await owner.query<{ from: string; deactivated: boolean }>(
+        'select archived_from_status::text as from, archive_deactivated_practitioner as deactivated ' +
+          'from app_user where id = $1',
+        [PRACTITIONER_USER],
+      );
+      expect(kept.rows).toEqual([{ from: 'suspended', deactivated: true }]);
+
+      const summary = await asOwnerKept(async () => {
+        const { rows } = await owner.query<{ summary: Record<string, unknown> }>(RESTORE, [
+          PRACTITIONER_USER,
+        ]);
+        return rows[0]?.summary;
+      });
+      expect(summary).toEqual({
+        restored: true,
+        status: 'suspended',
+        practitionerReactivated: true,
+      });
+      expect(await statusOf(PRACTITIONER_USER)).toBe('suspended');
+      // Suspend never touched the practitioner row; the archive did, and gives it back.
+      expect(await practitionerStatus()).toBe('active');
+      const resolved = await owner.query('select * from app.resolve_actor($1)', [
+        PRACTITIONER_AUTH,
+      ]);
+      expect(resolved.rowCount).toBe(0);
+      const cleared = await owner.query<{ from: string | null; deactivated: boolean | null }>(
+        'select archived_from_status::text as from, archive_deactivated_practitioner as deactivated ' +
+          'from app_user where id = $1',
+        [PRACTITIONER_USER],
+      );
+      expect(cleared.rows).toEqual([{ from: null, deactivated: null }]);
+    });
+  });
+
+  it('leaves a practitioner row the archive did not deactivate as it found it', async () => {
+    await rolledBack(owner, async () => {
+      // Already off the booking lists before the archive, for its own reasons.
+      await owner.query("update practitioner set status = 'inactive' where id = $1", [
+        PRACTITIONER,
+      ]);
+      await archived();
+      const summary = await asOwnerKept(async () => {
+        const { rows } = await owner.query<{ summary: Record<string, unknown> }>(RESTORE, [
+          PRACTITIONER_USER,
+        ]);
+        return rows[0]?.summary;
+      });
+      expect(summary).toEqual({ restored: true, status: 'active', practitionerReactivated: false });
+      expect(await statusOf(PRACTITIONER_USER)).toBe('active');
+      expect(await practitionerStatus()).toBe('inactive');
     });
   });
 

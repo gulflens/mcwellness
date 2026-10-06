@@ -311,9 +311,16 @@ reason)` (security definer, owner-only, every rule written in it):
 on a role without a status beside it: the fence resolves only an active person.
 
 **Restore** (`app.restore_staff`, owner-only, never oneself, only somebody
-archived) puts the person and their practitioner row back to active, with the
-roles they left with; accompaniments stay ended (the owner names a helper
-again) and positions stay gone. It writes `staff_restored`. Suspend's
+archived) puts the person back where the archive found them, with the roles
+they left with: the archive records on `app_user` the status it found
+(`archived_from_status`) and whether it made the practitioner row inactive
+(`archive_deactivated_practitioner`), so a suspended colleague comes back
+suspended and a practitioner row already inactive stays so; the route answers
+the status (`{ ok: true, status }`) and the screen shows it. Accompaniments
+stay ended (the owner names a helper again) and positions stay gone. It writes
+`staff_restored`. The archive's reason is kept in the trail and readable by
+admins, and the step says so: short and factual, no health or disciplinary
+detail. Suspend's
 Reactivate never undoes an archive; the two are separate doors.
 
 **The screen.** The drawer's Access tab ends with "Remove from the practice":

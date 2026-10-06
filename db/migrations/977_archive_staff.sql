@@ -57,11 +57,16 @@
 --          practitioner row, each accompaniment ended) carry it too.
 --
 --   2. `app.restore_staff(user)`. The owner's alone; never oneself; only a
---      person who is archived. The status goes back to `active` and their
---      practitioner row, if any, back to `active`; accompaniments stay ended
---      and positions stay gone. One audit row, `staff_restored`. The reason is
---      whatever the request stamped (`X-Reason`), optional, because bringing a
---      person back is not the act a trail has to explain.
+--      person who is archived. **Back to exactly where the archive found
+--      them**, which section 0 records on the person: the status they had
+--      (a suspended colleague comes back suspended — Suspend is its own
+--      decision, and a restore that quietly lifted it would undo it), and
+--      their practitioner row back to `active` only if the archive was what
+--      made it inactive (a row already inactive for its own reasons stays
+--      so). Accompaniments stay ended and positions stay gone. One audit row,
+--      `staff_restored`. The reason is whatever the request stamped
+--      (`X-Reason`), optional, because bringing a person back is not the act a
+--      trail has to explain.
 --
 -- **Roles are kept.** An archived person's `user_role` rows stay as they were:
 --   - the trail reads whole — "archived while holding Finance" is a fact;
@@ -99,11 +104,41 @@
 -- `appointment`, which is scheduling's table; recorded in the design's section
 -- 12 rather than reached into from here.
 --
--- Needs: 020 (app_user, user_role, user_status), 050 (practitioner), 070
+-- Needs: 020 (app_user, user_role, user_status — and the two columns section 0
+-- adds to app_user), 050 (practitioner), 070
 -- (audit_log), 080 (app.audit_row), 095 (app.resolve_actor — read, not
 -- changed), 200 (appointment), 211 and 213 (practitioner_position,
 -- helper_accompaniment), 923 (guard_owner_identity, which still binds beneath
 -- this).
+
+------------------------------------------------------------------------------
+-- 0. What an archive found, kept on the person until a restore reads it.
+--
+--    Two columns on `app_user` rather than a read of the trail: the restore
+--    must not depend on parsing audit rows, and the facts belong to the
+--    person while they are archived. Null on everybody else, and cleared by
+--    the restore. An account archived some other way (an erasure closing a
+--    household login, 968) carries neither, and a restore of it — which only
+--    a colleague can have — returns it to `active` and touches no
+--    practitioner row, because nothing says the archive made one inactive.
+------------------------------------------------------------------------------
+alter table public.app_user
+  add column archived_from_status             public.user_status,
+  add column archive_deactivated_practitioner boolean,
+  add constraint app_user_archive_record_together check (
+    (archived_from_status is null) = (archive_deactivated_practitioner is null)
+  ),
+  add constraint app_user_archive_record_only_archived check (
+    archived_from_status is null
+    or (status = 'archived' and archived_from_status <> 'archived')
+  );
+
+comment on column public.app_user.archived_from_status is
+  'The status an archive found (active or suspended), which app.restore_staff returns the person '
+  'to. Null unless archived through app.archive_staff (migration 977).';
+comment on column public.app_user.archive_deactivated_practitioner is
+  'Whether app.archive_staff made this person''s practitioner row inactive, so app.restore_staff '
+  'reactivates it only then. Null unless archived through app.archive_staff (migration 977).';
 
 ------------------------------------------------------------------------------
 -- 1. Archive.
@@ -217,8 +252,12 @@ begin
           or (v_practitioner is not null and pp.practitioner_id = v_practitioner));
   get diagnostics v_forgotten = row_count;
 
-  -- Last, so everything above is already true when the door shuts.
-  update public.app_user set status = 'archived'
+  -- Last, so everything above is already true when the door shuts. What was
+  -- found is kept beside the status, for the restore (section 0).
+  update public.app_user
+     set status = 'archived',
+         archived_from_status = v_status,
+         archive_deactivated_practitioner = v_deactivated > 0
    where id = p_user_id and tenant_id = v_tenant;
 
   v_summary := jsonb_build_object(
@@ -254,6 +293,8 @@ declare
   v_actor        uuid := nullif(current_setting('app.actor_id', true), '')::uuid;
   v_tenant       uuid := app.current_tenant_id();
   v_status       public.user_status;
+  v_from         public.user_status;
+  v_deactivated  boolean;
   v_reactivated  integer := 0;
   v_summary      jsonb;
 begin
@@ -267,7 +308,8 @@ begin
   if p_user_id is null or p_user_id = v_actor then
     raise exception 'nobody restores themselves' using errcode = '42501';
   end if;
-  select u.status into v_status
+  select u.status, u.archived_from_status, u.archive_deactivated_practitioner
+    into v_status, v_from, v_deactivated
     from public.app_user u
    where u.id = p_user_id and u.tenant_id = v_tenant
      and exists (select 1 from public.user_role r
@@ -282,15 +324,26 @@ begin
     raise exception 'that colleague is not archived' using errcode = '42501';
   end if;
 
-  -- The person first, so section 3's guard sees them active when their
-  -- practitioner row follows.
-  update public.app_user set status = 'active'
+  -- The person first, so section 3's guard sees them no longer archived when
+  -- their practitioner row follows. Back to what the archive found; active
+  -- where nothing was recorded (section 0).
+  v_from := coalesce(v_from, 'active');
+  update public.app_user
+     set status = v_from,
+         archived_from_status = null,
+         archive_deactivated_practitioner = null
    where id = p_user_id and tenant_id = v_tenant;
-  update public.practitioner set status = 'active'
-   where user_id = p_user_id and tenant_id = v_tenant and status = 'inactive';
-  get diagnostics v_reactivated = row_count;
+  -- Only the row the archive itself made inactive.
+  if coalesce(v_deactivated, false) then
+    update public.practitioner set status = 'active'
+     where user_id = p_user_id and tenant_id = v_tenant and status = 'inactive';
+    get diagnostics v_reactivated = row_count;
+  end if;
 
-  v_summary := jsonb_build_object('restored', true, 'practitionerReactivated', v_reactivated > 0);
+  v_summary := jsonb_build_object(
+    'restored', true,
+    'status', v_from::text,
+    'practitionerReactivated', v_reactivated > 0);
   insert into public.audit_log (
     tenant_id, actor_id, actor_type, actor_role, action, entity_type, entity_id, client_id,
     new_values, reason, request_id
@@ -334,6 +387,11 @@ create trigger guard_archived_practitioner before insert or update on public.pra
 alter table public.practitioner enable always trigger guard_archived_practitioner;
 
 -- rollback:
+--   alter table public.app_user
+--     drop constraint if exists app_user_archive_record_only_archived,
+--     drop constraint if exists app_user_archive_record_together,
+--     drop column if exists archive_deactivated_practitioner,
+--     drop column if exists archived_from_status;
 --   drop trigger if exists guard_archived_practitioner on public.practitioner;
 --   drop function if exists app.guard_archived_practitioner();
 --   drop function if exists app.restore_staff(uuid);

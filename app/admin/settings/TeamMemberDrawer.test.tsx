@@ -69,6 +69,8 @@ function mount(
     readsBeforeFailing?: number;
     /** What `POST /api/team/:id/archive` answers instead of `{ ok: true }`. */
     archiveRefusal?: { status: number; body: unknown };
+    /** The status `POST /api/team/:id/restore` says the person is back at. */
+    restoredTo?: 'active' | 'suspended';
   } = {},
 ) {
   const calls: Call[] = [];
@@ -123,7 +125,7 @@ function mount(
       return refused ? json(refused.body, refused.status) : json({ ok: true });
     }
     if (url.endsWith('/restore')) {
-      return json({ ok: true });
+      return json({ ok: true, status: options.restoredTo ?? 'active' });
     }
     if (url.endsWith('/password')) {
       return json({ userId: profile.id, temporaryPassword: '<shown-once-0002>' });
@@ -552,6 +554,28 @@ describe('TeamMemberDrawer', () => {
       contentType: 'application/json',
       body: {},
     });
+  });
+
+  it('shows a colleague restored to suspended as suspended, with Reactivate', async () => {
+    // A restore returns the person to the status the archive found them in.
+    mount({ profile: { roles: ['practitioner'], status: 'archived' }, restoredTo: 'suspended' });
+    await opened();
+    await onAccess();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reactivate' })).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Suspend' })).toBeNull();
+  });
+
+  it('says, beside the reason, who reads it and what not to write in it', async () => {
+    mount({ profile: { roles: ['practitioner'] } });
+    await opened();
+    await onAccess();
+    fireEvent.click(screen.getByRole('button', { name: 'Archive this person' }));
+    expect(
+      screen.getByText(
+        'Kept in the audit trail and readable by admins. Keep it short and factual — no health or disciplinary detail.',
+      ),
+    ).toBeTruthy();
   });
 
   it('offers no archive on an owner’s row or on the reader’s own', async () => {

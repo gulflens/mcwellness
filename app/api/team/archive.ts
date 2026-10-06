@@ -145,14 +145,20 @@ export function mountTeamArchive(api: Hono<ApiEnv>, now: () => Date): void {
       return refuse('not_archived');
     }
     await db.query('savepoint restore_staff');
+    let status: 'active' | 'suspended' = 'active';
     try {
-      await db.query('select app.restore_staff($1)', [target.id]);
+      const { rows } = await db.query<{ summary: { status?: string } }>(
+        'select app.restore_staff($1) as summary',
+        [target.id],
+      );
+      // Back where the archive found them, which the function says.
+      if (rows[0]?.summary.status === 'suspended') status = 'suspended';
     } catch (error) {
       if (sqlState(error) !== '42501') throw error;
       await db.query('rollback to savepoint restore_staff');
       return refuse('conflict');
     }
     await db.query('release savepoint restore_staff');
-    return c.json({ ok: true });
+    return c.json({ ok: true, status });
   });
 }

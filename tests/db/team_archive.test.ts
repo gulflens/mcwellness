@@ -157,7 +157,10 @@ describe('restoring a colleague', () => {
     expect((await restore(PORTAL.practitioner, PORTAL.adminAuth)).status).toBe(403);
     expect(await statusOf(PORTAL.practitioner)).toBe('archived');
 
-    expect((await restore(PORTAL.practitioner)).status).toBe(200);
+    const restored = await restore(PORTAL.practitioner);
+    expect(restored.status).toBe(200);
+    // The status the person is back at, so the screen shows it without guessing.
+    expect(await restored.json()).toEqual({ ok: true, status: 'active' });
     expect(await statusOf(PORTAL.practitioner)).toBe('active');
     expect((await h.callAs('GET', '/api/me', PORTAL.practitionerAuth)).status).toBe(200);
     const pickers = await h.callAs('GET', '/api/practitioners', OWNER_AUTH);

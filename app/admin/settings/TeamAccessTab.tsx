@@ -77,7 +77,7 @@ const ARCHIVE_LINES = [
   'They leave every booking list, the board and the dispatch view.',
   'A helper who goes with them is no longer named to them, and any shared location is forgotten.',
   'Their name stays on everything they already did, and the audit trail keeps every act.',
-  'An owner can restore them later, with the roles they hold now.',
+  'An owner can restore them later, as they are now: with the roles they hold, and suspended if they are suspended.',
 ];
 
 const LOCK_LINE = 'Owner. Full access. Cannot be changed.';
@@ -277,7 +277,10 @@ export function TeamAccessTab({
         body: JSON.stringify({}),
       });
       if (res.ok) {
-        onStatus('active');
+        // Back where the archive found them (migration 977): a suspended
+        // colleague comes back suspended, and the route says which.
+        const body = (await res.json().catch(() => null)) as { status?: unknown } | null;
+        onStatus(body?.status === 'suspended' ? 'suspended' : 'active');
         onChanged();
         return;
       }
@@ -517,7 +520,7 @@ export function TeamAccessTab({
               <Field
                 id="team-archive-reason"
                 label="Reason"
-                hint="Recorded in the audit trail with the archive."
+                hint="Kept in the audit trail and readable by admins. Keep it short and factual — no health or disciplinary detail."
                 value={archiveReason}
                 maxLength={500}
                 onChange={(e) => setArchiveReason(e.target.value)}
