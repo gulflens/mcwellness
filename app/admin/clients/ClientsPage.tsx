@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
 import {
   canSeeErased,
@@ -144,7 +144,9 @@ export function ClientsPage() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [params, setParams] = useSearchParams();
   const clientId = params.get('client');
-  const openReportId = handedOverReport(useLocation().state, clientId);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const openReportId = handedOverReport(location.state, clientId);
   const enrolling = params.get('enrol') === 'new' && mayEnrol;
   const inWorkspace = Boolean(clientId) || enrolling;
   const listPosition = useRef(0);
@@ -389,6 +391,14 @@ export function ClientsPage() {
           onSectionChange={(section) => setParams({ client: clientId, section }, { replace: true })}
           onClose={closeDrawer}
           openReportId={openReportId}
+          // The hand-over has done its work: off the history entry, so a
+          // remount or a return to this entry does not open it again.
+          onReportOpened={() =>
+            void navigate(
+              { pathname: location.pathname, search: location.search },
+              { replace: true, state: null },
+            )
+          }
         />
       ) : null}
       {enrolling ? (

@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
@@ -69,7 +69,10 @@ import './reports.css';
  * reached through the client page's router state): the tab opens it the way a
  * click on its row would — a draft in the editor, anything signed in the
  * viewer — once, and then behaves as it always has. An id that is not among
- * this client's reports opens nothing.
+ * this client's reports opens nothing. Once it has actually opened one it says
+ * so (`onHandedOpened`), and the page lets the hand-over go from the history
+ * entry: left there, every remount of this tab — a section switch, a reload,
+ * Back from another record — would open the same report again.
  */
 
 function coverageOf(report: ReportRow): string {
@@ -138,10 +141,13 @@ export function ReportsTab({
   clientId,
   erased = false,
   openReportId = null,
+  onHandedOpened,
 }: {
   clientId: string;
   /** A report to open as soon as the list has loaded; see above. */
   openReportId?: string | null;
+  /** Called once, after `openReportId` was found and opened; never when it was not. */
+  onHandedOpened?: () => void;
   /**
    * Whether this record has been erased. Passed rather than read back from the
    * server, because the drawer knows it one act before the record does
@@ -174,8 +180,15 @@ export function ReportsTab({
     prefilled: Prefilled | null;
   } | null>(null);
   const loadPrefill = usePrefill(clientId);
-  /** Which `openReportId` has been acted on, so it is opened once and not again. */
+  /** Which `openReportId` has been opened, so it is opened once and not again. */
   const [openedFrom, setOpenedFrom] = useState<string | null>(null);
+  // Told after the render that opened it, never during one: the page answers
+  // by navigating, which is not something a render may do.
+  useEffect(() => {
+    if (openedFrom !== null) onHandedOpened?.();
+    // Once per report opened; a new callback identity is not a new opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedFrom]);
 
   const mayWrite = canDraftReports(actor, now, clientId) && !erased;
   const maySupersede = canSupersedeReports(actor, now, clientId) && !erased;
@@ -357,10 +370,14 @@ export function ReportsTab({
   // during render rather than in an effect, React's own pattern for state that
   // follows a prop: the first paint is already the opened report, never the
   // table for a moment first.
+  // Marked only when it was there to open: an id the list does not hold is
+  // not consumed, so nothing tells the page it was.
   if (openReportId !== null && openedFrom !== openReportId) {
-    setOpenedFrom(openReportId);
     const handed = state.reports.find((report) => report.id === openReportId);
-    if (handed) open(handed);
+    if (handed) {
+      setOpenedFrom(openReportId);
+      open(handed);
+    }
   }
 
   const chains = inChains(state.reports);

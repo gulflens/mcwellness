@@ -579,7 +579,12 @@ describe('opening on the report a visit started', () => {
     beforeNextVisit: '',
   };
 
-  function mountOpening(openReportId: string, reports: unknown[], me: unknown = SIGNER) {
+  function mountOpening(
+    openReportId: string,
+    reports: unknown[],
+    me: unknown = SIGNER,
+    onHandedOpened?: () => void,
+  ) {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/me') return json(me);
@@ -613,7 +618,11 @@ describe('opening on the report a visit started', () => {
     });
     render(
       <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
-        <ReportsTab clientId={CLIENT} openReportId={openReportId} />
+        <ReportsTab
+          clientId={CLIENT}
+          openReportId={openReportId}
+          {...(onHandedOpened ? { onHandedOpened } : {})}
+        />
       </AuthProviderBoundary>,
     );
     return fetchImpl;
@@ -628,5 +637,21 @@ describe('opening on the report a visit started', () => {
   it('shows the list as usual when the report is not among this client’s', async () => {
     mountOpening('00000006-0000-4000-8000-0000000000ee', [row()]);
     expect(await screen.findByText('RPT-000001')).toBeTruthy();
+  });
+
+  it('says once that it opened the handed report, so the page can let the hand-over go', async () => {
+    // The hand-over rides on the history entry. Left there, every remount of
+    // the tab — a section switch, a reload — would open the report again.
+    const opened = vi.fn();
+    mountOpening(DRAFT, [sessionDraft], SIGNER, opened);
+    await waitFor(() => expect(screen.getByDisplayValue('Started from the visit.')).toBeTruthy());
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not say so when the report was not there to open', async () => {
+    const opened = vi.fn();
+    mountOpening('00000006-0000-4000-8000-0000000000ee', [row()], SIGNER, opened);
+    expect(await screen.findByText('RPT-000001')).toBeTruthy();
+    expect(opened).not.toHaveBeenCalled();
   });
 });
