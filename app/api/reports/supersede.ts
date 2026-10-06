@@ -118,7 +118,7 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
         if (!brainMap.success) {
           return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
         }
-        return supersedeQeeg(c, standing, brainMap.data, answer.reason);
+        return supersedeQeeg(c, standing, brainMap.data, answer.reason, now());
       default: {
         const unknown: never = standing.kind;
         return unknown;

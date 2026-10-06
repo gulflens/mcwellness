@@ -262,6 +262,8 @@ A value added to an enum cannot be used in the transaction that added it, and th
 
 `report_figure` is `audited: client`. Policies are declarative in `db/policies/reports/`. No `client_contact` policy grants a read of it.
 
+**The household's agreements** (added 6 October 2026, round 74). A brain-map report holds what a person's brain did, which is health data, so a draft is saved, and a past record brought in, only while the household's `participation` and `health_data` consents are active, and, for a minor or a person whose date of birth is unknown, a guardian's `minor_participation` (`brainMapConsentRefusals`, domain/reports/qeeg/consents.ts). They are read at the moment of writing, after the client is known to be visible and not erased, and a refusal is `409 consent_missing` with the missing purposes, written to the trail before the answer.
+
 ## 14. Routes
 
 All under `/api/reports`, behind the same fence and the same permissions as the two kinds that exist.

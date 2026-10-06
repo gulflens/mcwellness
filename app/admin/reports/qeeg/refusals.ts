@@ -38,6 +38,8 @@ export const DRAFT_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
     'A map the report names does not match the picture on file, so nothing was saved. Take it out where it is named, then add it again.',
   twin_fixed:
     'This is the other language of a signed report, so only its own language’s versions of what was typed can change, and nothing was saved. Load the draft again.',
+  consent_missing:
+    'This household has not yet agreed to everything a brain-map report needs: taking part, the practice holding brain data, and a guardian’s agreement for a child. Record their agreement on the client’s Consent tab first.',
 });
 
 /** Why the earlier report a follow-up names was refused (`prefillFollowUp`, and the route's own). */

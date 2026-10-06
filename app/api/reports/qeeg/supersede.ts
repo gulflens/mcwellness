@@ -5,6 +5,7 @@ import { logAction } from '../../_middleware/audit';
 import type { ApiEnv } from '../../_middleware/request-context';
 import { SupersedeResponse, type QeegSupersedeInput } from '../schema';
 import { asRow, readReport, type ReportRecord } from '../source';
+import { brainMapConsentGate } from './consentGate';
 
 /**
  * `POST /api/reports/:id/supersede` for a signed brain-map (qEEG) report
@@ -55,6 +56,7 @@ export async function supersedeQeeg(
   standing: ReportRecord,
   input: QeegSupersedeInput,
   reason: string,
+  at: Date,
 ): Promise<Response> {
   const requestId = c.get('requestId');
   const db = c.get('db');
@@ -92,6 +94,13 @@ export async function supersedeQeeg(
       },
       422,
     );
+  }
+  // The correction is a new brain-map draft: the household's agreements are
+  // asked as for any other (round 74).
+  const missing = await brainMapConsentGate(db, standing.client_id, at);
+  if (missing.length > 0) {
+    await refused('consent_missing');
+    return c.json({ error: 'conflict', code: 'consent_missing', missing, requestId }, 409);
   }
   await db.query('savepoint qeeg_supersede');
   let written: { rows: { id: string }[] };
