@@ -44,12 +44,14 @@ import type { Db } from '../_middleware/request-context';
  * (100–199), and a database without that range has no client to report on.
  */
 
+// Every completed visit of the client, whoever of the practice ran it and
+// whoever writes the report (the operator's decision of 6 October 2026):
+// read by `app.client_completed_visits` (migration 606) on the practice's
+// behalf, behind the same gate as drafting a report, because row security
+// would show a practitioner only her own.
 const VISITS_SQL =
-  "select s.id, to_char(s.checked_in_at at time zone $2, 'YYYY-MM-DD') as on_day, " +
-  's.signal_quality_score, s.telemetry ' +
-  'from session s ' +
-  "where s.tenant_id = app.current_tenant_id() and s.client_id = $1 and s.status = 'completed' " +
-  'order by s.checked_in_at, s.id';
+  'select id, on_day, signal_quality_score, telemetry ' +
+  'from app.client_completed_visits($1::uuid, $2::text)';
 
 const ENTITLEMENTS_SQL =
   'select id, status::text as status from entitlement ' +
