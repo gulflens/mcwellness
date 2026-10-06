@@ -8,7 +8,7 @@ import {
   canViewClient,
   type ClientStatus,
 } from '../../../domain/client';
-import { hasRole, isoDateIn } from '../../../domain/shared';
+import { hasRole } from '../../../domain/shared';
 import { logRead } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -36,12 +36,6 @@ import { logRefused } from './refused';
  */
 
 const Params = z.object({ id: z.uuid() });
-
-// Every date this module judges is the practice's own day, not the server's:
-// a request at 22:00 UTC is already tomorrow in Dubai, and the activation
-// gate must agree with the day sheet about which day that is (list.ts keeps
-// the same constant for the same reason).
-const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
 type ClientRow = {
   id: string;
@@ -576,36 +570,30 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
         // should never disagree. See the same fallback on GET /api/clients/:id.
         return c.json({ error: 'not_found', requestId }, 404);
       }
-      const gate = canActivate(
-        {
-          client: { id: record.id, status: current.status, dateOfBirth: record.dateOfBirth },
-          contacts: record.contacts.map((ct) => ({
-            id: ct.id,
-            relationship: ct.relationship,
-            isLegalGuardian: ct.isLegalGuardian,
-            canConsent: ct.canConsent,
-            userId: null,
-          })),
-          locations: record.locations.map((l) => ({
-            id: l.id,
-            emirate: l.emirate,
-            hasVerifiedPin: true,
-            label: l.label,
-            isPrimary: l.isPrimary,
-          })),
-          consents: record.consents.map((cs) => ({
-            purpose: cs.purpose,
-            status: cs.status,
-            givenByContactId: cs.givenByContactId,
-            givenAt: cs.givenAt,
-            expiresAt: cs.expiresAt,
-          })),
-        },
-        // The injected clock, in the practice's own time zone: this route takes `now`
-        // like every other, and reading Date directly here would make the one gate that
-        // decides activation the one thing a test cannot pin.
-        isoDateIn(now(), PRACTICE_TIME_ZONE),
-      );
+      const gate = canActivate({
+        client: { id: record.id, status: current.status, dateOfBirth: record.dateOfBirth },
+        contacts: record.contacts.map((ct) => ({
+          id: ct.id,
+          relationship: ct.relationship,
+          isLegalGuardian: ct.isLegalGuardian,
+          canConsent: ct.canConsent,
+          userId: null,
+        })),
+        locations: record.locations.map((l) => ({
+          id: l.id,
+          emirate: l.emirate,
+          hasVerifiedPin: true,
+          label: l.label,
+          isPrimary: l.isPrimary,
+        })),
+        consents: record.consents.map((cs) => ({
+          purpose: cs.purpose,
+          status: cs.status,
+          givenByContactId: cs.givenByContactId,
+          givenAt: cs.givenAt,
+          expiresAt: cs.expiresAt,
+        })),
+      });
       if (!gate.ok) {
         return c.json({ error: 'incomplete', missing: gate.missing, requestId }, 400);
       }

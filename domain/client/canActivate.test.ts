@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canActivate } from './canActivate';
+import { canActivate, consentsOutstanding } from './canActivate';
 import type {
   ClientRecord,
   ClientRecordConsent,
@@ -70,22 +70,29 @@ function minorRecord(overrides: Partial<ClientRecord> = {}): ClientRecord {
 
 describe('canActivate', () => {
   it('activates when a date of birth, a verified location, a consenting contact and every required consent are present', () => {
-    expect(canActivate(record(), TODAY)).toEqual({ ok: true, missing: [] });
+    expect(canActivate(record())).toEqual({ ok: true, missing: [] });
+  });
+
+  it('activates a lead before any consent is signed, which is signed at the first visit', () => {
+    // The practice's request of 29 September 2026, approved by the operator on
+    // 6 October: the household signs when the practitioner meets them, so a
+    // lead becomes active and can be booked without it. The check-in still
+    // refuses a visit until the consents are signed (domain/session canCheckIn).
+    expect(canActivate(record({ consents: [] }))).toEqual({ ok: true, missing: [] });
   });
 
   it('is missing date_of_birth when it is not yet known', () => {
     const result = canActivate(
       record({ client: { id: 'client-1', status: 'lead', dateOfBirth: null } }),
-      TODAY,
     );
     expect(result).toEqual({ ok: false, missing: ['date_of_birth'] });
   });
 
   it('is missing verified_location when no location has a verified pin', () => {
     expect(
-      canActivate(record({ locations: [{ ...VERIFIED_LOCATION, hasVerifiedPin: false }] }), TODAY),
+      canActivate(record({ locations: [{ ...VERIFIED_LOCATION, hasVerifiedPin: false }] })),
     ).toEqual({ ok: false, missing: ['verified_location'] });
-    expect(canActivate(record({ locations: [] }), TODAY)).toEqual({
+    expect(canActivate(record({ locations: [] }))).toEqual({
       ok: false,
       missing: ['verified_location'],
     });
@@ -93,26 +100,34 @@ describe('canActivate', () => {
 
   it('is missing consenting_contact when no contact may consent', () => {
     expect(
-      canActivate(record({ contacts: [{ ...CONSENTING_CONTACT, canConsent: false }] }), TODAY),
+      canActivate(record({ contacts: [{ ...CONSENTING_CONTACT, canConsent: false }] })),
     ).toEqual({ ok: false, missing: ['consenting_contact'] });
-    expect(canActivate(record({ contacts: [] }), TODAY)).toEqual({
+    expect(canActivate(record({ contacts: [] }))).toEqual({
       ok: false,
       missing: ['consenting_contact'],
     });
   });
+});
 
+describe('consentsOutstanding: what the household signs at the first visit', () => {
   it('is missing consent:health_data when the household has not agreed to it', () => {
     // Every other condition met. A household that has agreed to take part has
     // not thereby agreed to the practice holding what their brain is doing:
     // the advisor asked for that to be a separate yes, so it separately gates.
     expect(
-      canActivate(record({ consents: [consent('participation'), consent('home_visit')] }), TODAY),
+      consentsOutstanding(
+        record({ consents: [consent('participation'), consent('home_visit')] }),
+        TODAY,
+      ),
     ).toEqual({ ok: false, missing: ['consent:health_data'] });
   });
 
   it('is missing consent:participation when that consent is absent', () => {
     expect(
-      canActivate(record({ consents: [consent('health_data'), consent('home_visit')] }), TODAY),
+      consentsOutstanding(
+        record({ consents: [consent('health_data'), consent('home_visit')] }),
+        TODAY,
+      ),
     ).toEqual({
       ok: false,
       missing: ['consent:participation'],
@@ -123,19 +138,19 @@ describe('canActivate', () => {
     const consentsWithoutHomeVisit = {
       consents: [consent('health_data'), consent('participation')],
     };
-    expect(canActivate(record(consentsWithoutHomeVisit), TODAY)).toEqual({
+    expect(consentsOutstanding(record(consentsWithoutHomeVisit), TODAY)).toEqual({
       ok: false,
       missing: ['consent:home_visit'],
     });
     // A remote-only delivery never needs home_visit consent.
-    expect(canActivate(record(consentsWithoutHomeVisit), TODAY, ['remote'])).toEqual({
+    expect(consentsOutstanding(record(consentsWithoutHomeVisit), TODAY, ['remote'])).toEqual({
       ok: true,
       missing: [],
     });
   });
 
   it('is missing consent:minor_participation for a minor who lacks it, and not for an adult', () => {
-    expect(canActivate(minorRecord(), TODAY)).toEqual({
+    expect(consentsOutstanding(minorRecord(), TODAY)).toEqual({
       ok: false,
       missing: ['consent:minor_participation'],
     });
@@ -151,7 +166,7 @@ describe('canActivate', () => {
         consent('minor_participation', { givenByContactId: LEGAL_GUARDIAN_CONTACT.id }),
       ],
     };
-    expect(canActivate(withGuardianConsent, TODAY)).toEqual({ ok: true, missing: [] });
+    expect(consentsOutstanding(withGuardianConsent, TODAY)).toEqual({ ok: true, missing: [] });
   });
 
   it('does not satisfy consent:minor_participation when it was given by a contact who is not a legal guardian', () => {
@@ -170,7 +185,7 @@ describe('canActivate', () => {
         consent('minor_participation', { givenByContactId: notAGuardian.id }),
       ],
     };
-    expect(canActivate(withNonGuardianConsent, TODAY)).toEqual({
+    expect(consentsOutstanding(withNonGuardianConsent, TODAY)).toEqual({
       ok: false,
       missing: ['consent:minor_participation'],
     });
@@ -192,7 +207,7 @@ describe('canActivate', () => {
         consent('minor_participation', { givenByContactId: guardianWithoutConsentRight.id }),
       ],
     };
-    expect(canActivate(withConsent, TODAY)).toEqual({
+    expect(consentsOutstanding(withConsent, TODAY)).toEqual({
       ok: false,
       missing: ['consent:minor_participation'],
     });
@@ -207,7 +222,7 @@ describe('canActivate', () => {
         consent('minor_participation', { givenByContactId: 'no-such-contact' }),
       ],
     };
-    expect(canActivate(withDanglingConsent, TODAY)).toEqual({
+    expect(consentsOutstanding(withDanglingConsent, TODAY)).toEqual({
       ok: false,
       missing: ['consent:minor_participation'],
     });
@@ -216,7 +231,7 @@ describe('canActivate', () => {
   it('treats a withdrawn, expired or superseded consent as not active', () => {
     for (const status of ['withdrawn', 'expired', 'superseded'] as const) {
       expect(
-        canActivate(
+        consentsOutstanding(
           record({
             consents: [
               consent('health_data'),
@@ -238,7 +253,7 @@ describe('canActivate', () => {
         consent('home_visit'),
       ],
     });
-    expect(canActivate(beforeToday, TODAY)).toEqual({
+    expect(consentsOutstanding(beforeToday, TODAY)).toEqual({
       ok: false,
       missing: ['consent:participation'],
     });
@@ -250,7 +265,10 @@ describe('canActivate', () => {
         consent('home_visit'),
       ],
     });
-    expect(canActivate(onToday, TODAY)).toEqual({ ok: false, missing: ['consent:participation'] });
+    expect(consentsOutstanding(onToday, TODAY)).toEqual({
+      ok: false,
+      missing: ['consent:participation'],
+    });
 
     const afterToday = record({
       consents: [
@@ -259,7 +277,7 @@ describe('canActivate', () => {
         consent('home_visit'),
       ],
     });
-    expect(canActivate(afterToday, TODAY)).toEqual({ ok: true, missing: [] });
+    expect(consentsOutstanding(afterToday, TODAY)).toEqual({ ok: true, missing: [] });
   });
 
   it('treats a null expiry as never expiring', () => {
@@ -270,26 +288,29 @@ describe('canActivate', () => {
         consent('home_visit'),
       ],
     });
-    expect(canActivate(neverExpires, TODAY)).toEqual({ ok: true, missing: [] });
+    expect(consentsOutstanding(neverExpires, TODAY)).toEqual({ ok: true, missing: [] });
   });
 
-  it('lists every missing condition, in a stable order', () => {
+  it('lists every consent still to sign, in a stable order', () => {
+    const bare = record({ consents: [] });
+    expect(consentsOutstanding(bare, TODAY)).toEqual({
+      ok: false,
+      missing: ['consent:health_data', 'consent:home_visit', 'consent:participation'],
+    });
+  });
+});
+
+describe('canActivate, with nothing on the record', () => {
+  it('lists every missing condition, in a stable order, and no consent among them', () => {
     const bare = record({
       client: { id: 'client-1', status: 'lead', dateOfBirth: null },
       contacts: [],
       locations: [],
       consents: [],
     });
-    expect(canActivate(bare, TODAY)).toEqual({
+    expect(canActivate(bare)).toEqual({
       ok: false,
-      missing: [
-        'date_of_birth',
-        'verified_location',
-        'consenting_contact',
-        'consent:health_data',
-        'consent:home_visit',
-        'consent:participation',
-      ],
+      missing: ['date_of_birth', 'verified_location', 'consenting_contact'],
     });
   });
 });
