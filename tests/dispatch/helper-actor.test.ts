@@ -85,6 +85,7 @@ const EVERY: { [K in Action['type']]: Extract<Action, { type: K }> } = {
   'portal.request.handle': { type: 'portal.request.handle' },
   'portal.access.manage': { type: 'portal.access.manage' },
   'portal.announcement.write': { type: 'portal.announcement.write' },
+  'portal.push.send': { type: 'portal.push.send' },
   'kit.manage': { type: 'kit.manage' },
   'staff.manage': { type: 'staff.manage' },
   'staff.access.manage': { type: 'staff.access.manage' },
