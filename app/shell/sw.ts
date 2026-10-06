@@ -207,3 +207,88 @@ self.addEventListener('message', ((event: ExtendableMessageEvent) => {
     event.waitUntil(caches.delete(READS));
   }
 }) as EventListener);
+
+/**
+ * Phone notifications from the practice (the push memo's decisions 2 and 3;
+ * docs/CHANGE-REQUESTS/client-portal-07.md). The server seals each message
+ * for this device (app/api/portal/push/sender.ts) and the browser opens it
+ * before this listener runs, so what arrives is the practice's own small
+ * shape: a title and a body in one language, its direction, where pressing it
+ * leads, and — for an offer — the stop, as an action where the phone shows
+ * actions and in the body's last line where it does not.
+ *
+ * **Nothing here is cached or kept.** The message is shown and forgotten.
+ *
+ * **It opens a path of the portal on this origin and nothing else**, whatever
+ * a payload says: a sealed payload comes from the practice's own server, and
+ * this is the rule stated where the window is opened anyway.
+ */
+type PortalPush = {
+  v: 1;
+  kind: 'announcement' | 'offer';
+  lang: 'en' | 'ar';
+  dir: 'ltr' | 'rtl';
+  title: string;
+  body: string;
+  url: string;
+  stopUrl: string | null;
+  stopLabel: string | null;
+};
+
+function isPortalPath(path: unknown): path is string {
+  return (
+    typeof path === 'string' &&
+    (path === '/portal' || path.startsWith('/portal/') || path.startsWith('/portal#'))
+  );
+}
+
+function isPortalPush(data: unknown): data is PortalPush {
+  const shape = data as Partial<PortalPush> | null;
+  return (
+    shape !== null &&
+    typeof shape === 'object' &&
+    shape.v === 1 &&
+    (shape.kind === 'announcement' || shape.kind === 'offer') &&
+    (shape.lang === 'en' || shape.lang === 'ar') &&
+    typeof shape.title === 'string' &&
+    typeof shape.body === 'string' &&
+    isPortalPath(shape.url)
+  );
+}
+
+// `PushEvent` and `NotificationEvent` are named here by shape, as `SyncEvent`
+// is above: the standard lib's worker types vary by TypeScript version.
+type PushLikeEvent = ExtendableEvent & { data: { json(): unknown } | null };
+type NotificationLikeEvent = ExtendableEvent & {
+  action: string;
+  notification: { data: unknown; close(): void };
+};
+
+self.addEventListener('push', ((event: PushLikeEvent) => {
+  let data: unknown = null;
+  try {
+    data = event.data?.json() ?? null;
+  } catch {
+    data = null;
+  }
+  if (!isPortalPush(data)) return;
+  const stop = data.stopUrl !== null && isPortalPath(data.stopUrl) ? data.stopUrl : null;
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      lang: data.lang,
+      dir: data.dir,
+      icon: '/icon-192.png',
+      data: { url: data.url, stopUrl: stop },
+      actions: stop !== null && data.stopLabel ? [{ action: 'stop', title: data.stopLabel }] : [],
+    } as NotificationOptions),
+  );
+}) as EventListener);
+
+self.addEventListener('notificationclick', ((event: NotificationLikeEvent) => {
+  event.notification.close();
+  const data = (event.notification.data ?? {}) as { url?: unknown; stopUrl?: unknown };
+  const target = event.action === 'stop' && isPortalPath(data.stopUrl) ? data.stopUrl : data.url;
+  if (!isPortalPath(target)) return;
+  event.waitUntil(self.clients.openWindow(target).then(() => undefined));
+}) as EventListener);
