@@ -17,8 +17,16 @@
 // AUDIT_DEPS_STRICT=true makes an outage fail too, and a clean exit with no
 // report, for the scheduled run (.github/workflows/audit.yml) whose whole
 // purpose is to notice a week in which nothing was audited.
+//
+// The development dependencies are audited too, not only the production ones.
+// The host builds the app, so it installs them, and its own scanner reports
+// them: on 2026-10-06 it reported shell-quote under concurrently, which a
+// `--prod` audit had never looked at.
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+
+/** pnpm's arguments: every dependency the host installs, failing at high. */
+export const AUDIT_ARGS = ['audit', '--audit-level=high', '--json'];
 
 /**
  * What pnpm's error says when the advisory service could not be reached at
@@ -92,7 +100,7 @@ export function classify(exitCode, stdout, stderr = '') {
 }
 
 function main() {
-  const run = spawnSync('pnpm', ['audit', '--prod', '--audit-level=high', '--json'], {
+  const run = spawnSync('pnpm', AUDIT_ARGS, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: false,
@@ -108,7 +116,7 @@ function main() {
   switch (verdict) {
     case 'clean':
       if (readDocument(stdout)?.kind === 'report') {
-        console.log('audit:deps: no high or critical advisory applies to a production dependency.');
+        console.log('audit:deps: no high or critical advisory applies to any dependency.');
         return;
       }
       console.log('audit:deps: pnpm audit exited cleanly without a report.');
@@ -121,9 +129,7 @@ function main() {
       return;
     case 'advisory':
       process.stdout.write(stdout);
-      console.error(
-        '\naudit:deps: a high or critical advisory applies to a production dependency.',
-      );
+      console.error('\naudit:deps: a high or critical advisory applies to a dependency.');
       process.exit(run.status || 1);
       break;
     case 'unreachable': {

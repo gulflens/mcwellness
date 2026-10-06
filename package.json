@@ -44,7 +44,7 @@
     "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
     "@hono/node-server": "^2.1.1",
     "@supabase/supabase-js": "^2.112.4",
-    "hono": "^4.13.5",
+    "hono": "^4.13.13",
     "jose": "^6.2.10",
     "pg": "^8.23.0",
     "qrcode-generator": "2.0.4",
@@ -77,5 +77,8 @@
     "vitest": "^4.1.11",
     "workbox-precaching": "^7.4.1",
     "yaml": "^2.9.0"
+  },
+  "overrides": {
+    "shell-quote": "^1.11.0"
   }
 }

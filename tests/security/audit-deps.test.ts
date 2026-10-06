@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify, readDocument } from '../../scripts/audit-deps.mjs';
+import { AUDIT_ARGS, classify, readDocument } from '../../scripts/audit-deps.mjs';
 
 /**
  * The dependency audit fails a run for an advisory and never for an outage of
@@ -32,6 +32,20 @@ const failure = (code: string, message: string): string =>
   JSON.stringify({ error: { code, message } }, null, 2);
 
 const ENDPOINT = 'https://registry.npmjs.org/-/npm/v1/security/advisories/bulk';
+
+describe('audit:deps audits what the host installs', () => {
+  // The host runs `npm install` with the development dependencies, because it
+  // builds the app there; on 2026-10-06 its scanner reported shell-quote, under
+  // concurrently, which a `--prod` audit never looked at.
+  it('audits the development dependencies as well as the production ones', () => {
+    expect(AUDIT_ARGS).not.toContain('--prod');
+    expect(AUDIT_ARGS).not.toContain('--dev');
+  });
+
+  it('still fails at high and reads the JSON document', () => {
+    expect(AUDIT_ARGS).toEqual(expect.arrayContaining(['audit', '--audit-level=high', '--json']));
+  });
+});
 
 describe('audit:deps reads the report', () => {
   it('a report with nothing high or critical is clean whatever the exit code', () => {

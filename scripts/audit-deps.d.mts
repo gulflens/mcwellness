@@ -3,5 +3,6 @@ export type AuditVerdict = 'clean' | 'advisory' | 'unreachable' | 'failed';
 export type AuditDocument =
   | { kind: 'report'; high: number; critical: number }
   | { kind: 'error'; code: string; message: string };
+export const AUDIT_ARGS: readonly string[];
 export function readDocument(stdout: string): AuditDocument | null;
 export function classify(exitCode: number | null, stdout: string, stderr?: string): AuditVerdict;
