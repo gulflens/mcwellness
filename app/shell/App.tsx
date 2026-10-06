@@ -12,6 +12,7 @@ import {
   canOpenKit,
   canOpenPin,
   canOpenAnnouncements,
+  canOpenNotifications,
   canOpenPortalAccess,
   canOpenPractitioners,
   canOpenSchedule,
@@ -91,6 +92,10 @@ const PortalAccessPage = screen(
 const AnnouncementsPage = screen(
   () => import('../admin/portal/AnnouncementsPage'),
   'AnnouncementsPage',
+);
+const NotificationsPage = screen(
+  () => import('../admin/portal/NotificationsPage'),
+  'NotificationsPage',
 );
 const AgreementsScreen = screen(() => import('../client/AgreementsScreen'), 'AgreementsScreen');
 const FamilyScreen = screen(() => import('../client/FamilyScreen'), 'FamilyScreen');
@@ -554,6 +559,26 @@ export function App() {
                   {(actor) =>
                     canOpenAnnouncements(actor, new Date()) ? (
                       <AnnouncementsPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            {/*
+          The Send screen: phone notifications to the households
+          (docs/SPEC/client-portal.md section 3.12; the push memo's decision 3).
+          The portal stream's screen, under Settings beside Announcements; the
+          owner and an admin, as the routes say.
+        */}
+            <Route
+              path="settings/notifications"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenNotifications(actor, new Date()) ? (
+                      <NotificationsPage />
                     ) : (
                       <Navigate to={homeFor(actor)} replace />
                     )

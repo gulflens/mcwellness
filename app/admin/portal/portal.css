@@ -101,3 +101,46 @@
   align-items: flex-start;
   gap: var(--s-2);
 }
+
+/* Settings › Notifications (the push memo's decision 3): how many each kind
+   would reach today, as three plain facts above the record. */
+.push__reach {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-2) var(--s-6);
+  margin: 0;
+}
+
+.push__reach dt {
+  color: var(--ink-2);
+}
+
+.push__reach dd {
+  margin: 0;
+}
+
+.push__kinds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.push__kind {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  min-block-size: var(--row);
+  cursor: pointer;
+}
+
+.push__kind-note {
+  display: block;
+}
+
+/* An offer's stop sits on its own line, as the phone shows it. */
+.push__preview-body {
+  white-space: pre-line;
+}

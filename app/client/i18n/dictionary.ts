@@ -203,6 +203,73 @@ export const WORDS = {
   ),
   noAgreements: t('Nothing has been agreed yet.', 'لم تتم الموافقة على شيء بعد.'),
 
+  // The marketing switch (the push memo's decision 1; docs/CONSENT/
+  // marketing.en.md and .ar.md, approved 6 October 2026). The switch's own
+  // label is the wording's last paragraph, "Turning this on", in the person's
+  // own words; the rest says plainly what it is and that no is as easy as yes.
+  offersHeading: t('Offers on your phone', 'العروض على هاتفك'),
+  offersBody: t(
+    'Whether the practice may send you its offers: at most two a month, as notifications on your phone. It is separate from everything else you have agreed to, and saying no changes nothing.',
+    'هل يرسل إليك المركز عروضه: عرضان في الشهر على الأكثر، إشعاراتٍ على هاتفك. هذا منفصل عن كل ما وافقت عليه من قبل، والرفض لا يغيّر شيئًا.',
+  ),
+  offersSwitch: t(
+    'I would like the practice to send me its offers, at most two a month, as notifications on my phone from my portal, as the wording describes. I know I can stop them with one press at any time.',
+    'أودّ أن يرسل إليّ المركز عروضه، عرضين في الشهر على الأكثر، إشعاراتٍ على هاتفي من بوابتي، على النحو الموضّح في النص. وأعلم أنني أستطيع إيقافها بضغطة واحدة في أي وقت.',
+  ),
+  offersOff: t('Off. No offer is sent to you.', 'متوقّف. لا يُرسل إليك أي عرض.'),
+  offersNoWording: t(
+    'The practice has not published this wording yet.',
+    'لم ينشر المركز هذا النص بعد.',
+  ),
+  offersNeedNotifications: t(
+    'Offers arrive as notifications. Turn notifications on from Home, on the phone you want them on.',
+    'تصلك العروض إشعاراتٍ. فعّل الإشعارات من الصفحة الرئيسية، على الهاتف الذي تريدها عليه.',
+  ),
+
+  // Notifications on this phone (the push memo's decision 2): the practice's
+  // news, and its offers where the switch above is on. The iPhone step is one
+  // sentence and three plain steps, because from Safari's own tab an iPhone
+  // shows no notifications at all.
+  notificationsHeading: t('Notifications on this phone', 'الإشعارات على هذا الهاتف'),
+  notificationsBody: t(
+    'The practice’s news, and its offers if you turn those on under Agreements, as notifications on this phone.',
+    'أخبار المركز، وعروضه إن فعّلتها ضمن الموافقات، إشعاراتٍ على هذا الهاتف.',
+  ),
+  notificationsTurnOn: t('Turn on notifications', 'تفعيل الإشعارات'),
+  notificationsTurnOff: t('Turn them off on this phone', 'إيقافها على هذا الهاتف'),
+  notificationsOn: t(
+    'This phone receives the practice’s notifications.',
+    'يتلقّى هذا الهاتف إشعارات المركز.',
+  ),
+  notificationsBlocked: t(
+    'Notifications are blocked for this portal in the phone’s settings. Allow them there, then try again.',
+    'الإشعارات محظورة لهذه البوابة في إعدادات الهاتف. اسمح بها هناك ثم حاول مرة أخرى.',
+  ),
+  notificationsUnsupported: t(
+    'This browser cannot show the practice’s notifications.',
+    'لا يستطيع هذا المتصفح عرض إشعارات المركز.',
+  ),
+  notificationsFailed: t(
+    'Notifications could not be turned on. Try again.',
+    'تعذّر تفعيل الإشعارات. حاول مرة أخرى.',
+  ),
+  iphoneSentence: t(
+    'On an iPhone, notifications work once this portal is on your home screen.',
+    'على هاتف آيفون، تعمل الإشعارات بعد إضافة هذه البوابة إلى الشاشة الرئيسية.',
+  ),
+  iphoneStepShare: t(
+    'Open this page in Safari and press Share.',
+    'افتح هذه الصفحة في سفاري واضغط زر المشاركة.',
+  ),
+  iphoneStepAdd: t(
+    'Choose Add to Home Screen, then Add.',
+    'اختر «إضافة إلى الشاشة الرئيسية» ثم «إضافة».',
+  ),
+  iphoneStepOpen: t(
+    'Open the portal from its new icon and press Turn on notifications.',
+    'افتح البوابة من أيقونتها الجديدة واضغط «تفعيل الإشعارات».',
+  ),
+
   // Reports (docs/SPEC/reports-v1.md section 7.3).
   reports: t('Reports', 'التقارير'),
   reportsBody: t(
@@ -259,7 +326,7 @@ export const PURPOSES: Record<string, Phrase> = {
   // Retired on 2026-09-09; a household that agreed before then still sees it.
   photo_video: t('photos and video', 'الصور والفيديو'),
   research: t('research', 'البحث'),
-  marketing: t('marketing', 'التسويق'),
+  marketing: t('offers on your phone', 'العروض على هاتفك'),
 };
 
 /** How somebody is related to the client (section 3.6). */
@@ -314,6 +381,14 @@ export const PHRASES = {
    */
   waivedOn: (day: string): Phrase => t(`Waived ${day}`, `أُعفي بتاريخ ${day}`),
   practiceIs: (name: string): Phrase => t(name, name),
+  /** Where the marketing switch stands, and since when. */
+  offersOnSince: (day: string): Phrase =>
+    t(
+      `On since ${day}. You can turn it off at any time.`,
+      `مفعّل منذ ${day}. يمكنك إيقافه في أي وقت.`,
+    ),
+  offersOffSince: (day: string): Phrase =>
+    t(`Off since ${day}. No offer is sent to you.`, `متوقّف منذ ${day}. لا يُرسل إليك أي عرض.`),
 };
 
 /** One word, in one language. */

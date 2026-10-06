@@ -49,6 +49,10 @@ const AGREEMENTS_SQL =
   'from consent cs ' +
   'join contact ct on ct.id = cs.given_by_contact_id and ct.tenant_id = cs.tenant_id ' +
   'where cs.tenant_id = app.current_tenant_id() and cs.client_id = any($1::uuid[]) ' +
+  // The marketing consent is not a record's: it is each adult's own switch,
+  // shown once above these lists by marketing.ts and never as another
+  // adult's row on the same record (the push memo's decision 1).
+  "and cs.purpose <> 'marketing' " +
   'order by cs.client_id, cs.given_at desc, cs.id';
 
 const OPEN_REQUESTS_SQL =

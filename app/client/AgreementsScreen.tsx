@@ -9,6 +9,7 @@ import { useAuth } from '../shell/auth/AuthContext';
 import { Note } from '../shell/components/Controls';
 import { StatusChip, type StatusTone } from '../shell/components/StatusChip';
 import { Sections } from './Layout';
+import { OffersSwitch } from './OffersSwitch';
 import { useWords } from './i18n';
 import { usePortalRead } from './usePortal';
 
@@ -22,6 +23,11 @@ import { usePortalRead } from './usePortal';
  * a reason and an erasure is an irreversible act with a typed reason in front
  * of it. That separation is the whole design: the portal is where a family
  * speaks, not where something irreversible happens at eleven at night.
+ *
+ * **The one exception is the offers switch** (the push memo's decision 1,
+ * `OffersSwitch.tsx`): the marketing consent is given and withdrawn here, by
+ * the adult themselves, and nowhere else. It stands above the records' lists
+ * because it is the person's and not a record's.
  *
  * **"Read the wording" opens the exact text that person was shown**, retired or
  * not — a consent points at the version it was given against, which is the
@@ -214,6 +220,9 @@ export function AgreementsScreen() {
   return (
     <section className="portal__section">
       <h1>{words.t('agreements')}</h1>
+      {/* The one agreement a person makes here themselves, for themselves:
+          above every record's own list, because it is not a record's. */}
+      <OffersSwitch />
       {rows.length === 0 ? <Note>{words.t('noAgreements')}</Note> : null}
       <Sections
         clients={clients}

@@ -119,7 +119,7 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
     label: 'Settings',
     to: '/admin/settings/practice',
     icon: <SettingsIcon />,
-    // Four screens with three audiences, so AdminLayout keeps only the ones
+    // Five screens with three audiences, so AdminLayout keeps only the ones
     // this person may open — the same rule SettingsNav asks on the page
     // itself, and the same promise the rail has always made: it lists nothing
     // a route would bounce the reader out of. `base` is the family's root,
@@ -130,6 +130,7 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
       { key: 'practitioners', label: 'Practitioners', to: '/admin/settings/practitioners' },
       { key: 'team', label: 'Team', to: '/admin/settings/team' },
       { key: 'announcements', label: 'Announcements', to: '/admin/settings/announcements' },
+      { key: 'notifications', label: 'Notifications', to: '/admin/settings/notifications' },
     ],
   },
   // Who can open a household's own record. AdminLayout shows it only to an

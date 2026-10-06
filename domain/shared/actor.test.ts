@@ -584,6 +584,22 @@ describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 
     expect(canActor(actor([]), { type: 'portal.access.manage' }, {}, NOW)).toBe(false);
   });
 
+  it('gives sending a phone notification to the owner and an admin alone', () => {
+    const send = { type: 'portal.push.send' } as const;
+    for (const role of ['owner', 'admin'] as const) {
+      expect(canActor(actor([role]), send, {}, NOW), role).toBe(true);
+    }
+    for (const role of [
+      'lead_practitioner',
+      'practitioner',
+      'finance',
+      'client_contact',
+    ] as const) {
+      expect(canActor(actor([role]), send, {}, NOW), role).toBe(false);
+    }
+    expect(canActor(actor([]), send, {}, NOW)).toBe(false);
+  });
+
   it('gives writing and withdrawing an announcement to the owner and an admin alone', () => {
     const write = { type: 'portal.announcement.write' } as const;
     for (const role of ['owner', 'admin'] as const) {

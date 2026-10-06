@@ -52,13 +52,15 @@ afterAll(async () => {
 });
 
 describe('the seeded consent wording', () => {
-  it('files one document per purpose and language: eight, all approved', () => {
-    expect(rows).toHaveLength(8);
+  it('files one document per purpose and language: ten, all approved', () => {
+    expect(rows).toHaveLength(10);
     expect(rows.map((row) => `${row.purpose}.${row.locale}`).sort()).toEqual([
       'health_data.ar',
       'health_data.en',
       'home_visit.ar',
       'home_visit.en',
+      'marketing.ar',
+      'marketing.en',
       'minor_participation.ar',
       'minor_participation.en',
       'participation.ar',
@@ -82,6 +84,9 @@ describe('the seeded consent wording', () => {
         'home_visit.ar': '1.1',
         'health_data.en': '1.1',
         'health_data.ar': '1.2',
+        // The marketing consent, approved by the practice on 2026-10-06.
+        'marketing.en': '1.0',
+        'marketing.ar': '1.0',
       };
       expect(row.version, `${row.purpose}.${row.locale}`).toBe(
         expected[`${row.purpose}.${row.locale}`],
@@ -95,7 +100,7 @@ describe('the seeded consent wording', () => {
 
   it('fingerprints the file that is actually in the repository', () => {
     const texts = loadConsentTexts();
-    expect(texts).toHaveLength(8);
+    expect(texts).toHaveLength(10);
 
     for (const text of texts) {
       const onDisk = readFileSync(
