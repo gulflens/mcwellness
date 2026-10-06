@@ -129,6 +129,26 @@ describe('canActor', () => {
     expect(canActor(actor([]), { type: 'enquiry.list' }, {}, NOW)).toBe(false);
   });
 
+  it('lets the owner and an admin see and decide the website reviews, and nobody else', () => {
+    // docs/SPEC/testimonials.md section 3: what goes on the practice's public
+    // page is the office's call, so the lead practitioner, who sees enquiries,
+    // does not decide reviews.
+    for (const role of ['owner', 'admin'] as const) {
+      expect(canActor(actor([role]), { type: 'testimonial.list' }, {}, NOW)).toBe(true);
+      expect(canActor(actor([role]), { type: 'testimonial.decide' }, {}, NOW)).toBe(true);
+    }
+    for (const role of [
+      'lead_practitioner',
+      'finance',
+      'practitioner',
+      'client_contact',
+      'helper',
+    ] as const) {
+      expect(canActor(actor([role]), { type: 'testimonial.list' }, {}, NOW)).toBe(false);
+      expect(canActor(actor([role]), { type: 'testimonial.decide' }, {}, NOW)).toBe(false);
+    }
+  });
+
   it('lets the owner and an admin manage staff, and nobody else', () => {
     for (const role of ['owner', 'admin'] as const) {
       expect(canActor(actor([role]), { type: 'staff.manage' }, {}, NOW)).toBe(true);

@@ -108,6 +108,12 @@ export type Action =
   | { type: 'enquiry.list' }
   | { type: 'enquiry.action' }
   /**
+   * See the reviews sent from the website's Testimonials page, and approve,
+   * decline, withdraw or reorder one (docs/SPEC/testimonials.md section 3).
+   */
+  | { type: 'testimonial.list' }
+  | { type: 'testimonial.decide' }
+  /**
    * `team` is Today's "Whole practice" (the practice's request for equal
    * visibility, operator 2026-10-06): every practitioner's stops in the day
    * sheet's own shape. It is the practice scope's audience exactly, so the
@@ -332,6 +338,12 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'enquiry.list':
     case 'enquiry.action':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    // What goes on the practice's public page, under somebody's name, is the
+    // office's call: the owner and an admin. The lead practitioner, who sees
+    // enquiries in order to ring people back, has no part in publishing.
+    case 'testimonial.list':
+    case 'testimonial.decide':
+      return hasRole(actor, 'owner', 'admin');
     case 'appointment.list':
       if (action.scope === 'own') {
         // A practitioner's own day; the route and the row policies keep it to their rows.

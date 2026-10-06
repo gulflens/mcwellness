@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 import { positionsCutoff } from '@domain/scheduling';
+import { testimonialRetentionCutoffs } from '@domain/testimonial';
 import { postPendingEvents } from './accounting/poster';
 import { describeSweep, sweepErasureFiles } from './clients/erasure-file-sweep';
 import type { ServerStorageProvider } from './_middleware/storage';
@@ -39,15 +40,24 @@ import type { ServerStorageProvider } from './_middleware/storage';
  * "nothing deletes on a timer" is the household record's retention floor and
  * is untouched by it.
  *
+ * **A fourth, from migration 978** (docs/SPEC/testimonials.md section 6):
+ * once a day, with the posting, the website reviews nobody is publishing are
+ * deleted — a declined one thirty days after the decision, an undecided one a
+ * hundred and eighty after it arrived. Like the positions, it is not a
+ * household's record, and rule 8 does not reach it; the database refuses a
+ * cutoff sooner than either promise (`app.purge_stale_testimonials`).
+ *
  * Nothing here logs an id, a household or a figure beyond a count.
  */
 
-export type JobName = 'post-books' | 'erasure-files' | 'location-positions';
+export type JobName =
+  'post-books' | 'erasure-files' | 'location-positions' | 'testimonial-retention';
 
 export const JOB_REASONS: Record<JobName, string> = {
   'post-books': 'nightly posting',
   'erasure-files': 'erasure file sweep',
   'location-positions': 'two-day position limit',
+  'testimonial-retention': 'website review retention',
 };
 
 /**
@@ -61,6 +71,8 @@ export const JOB_ROLES: Record<JobName, string> = {
   'erasure-files': 'admin',
   // app.purge_practitioner_positions (migration 211) admits the office alone.
   'location-positions': 'admin',
+  // app.purge_stale_testimonials (migration 978) admits the office alone.
+  'testimonial-retention': 'admin',
 };
 
 export const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -105,6 +117,7 @@ export function localDayHour(at: Date, zone = PRACTICE_TIME_ZONE): { day: string
  *   promise "kept two days" is kept to within the hour.
  * - `post-books`: this tick is at or after the posting hour, and the previous
  *   one was before it (earlier the same day, or any earlier day).
+ * - `testimonial-retention`: with the posting, once a day.
  */
 export function dueJobs(previous: Date, now: Date, zone = PRACTICE_TIME_ZONE): JobName[] {
   const before = localDayHour(previous, zone);
@@ -114,7 +127,7 @@ export function dueJobs(previous: Date, now: Date, zone = PRACTICE_TIME_ZONE): J
     due.push('erasure-files', 'location-positions');
   }
   const wasBeforePosting = before.day !== at.day || before.hour < POSTING_HOUR;
-  if (at.hour >= POSTING_HOUR && wasBeforePosting) due.push('post-books');
+  if (at.hour >= POSTING_HOUR && wasBeforePosting) due.push('post-books', 'testimonial-retention');
   return due;
 }
 
@@ -179,6 +192,14 @@ export async function runJob(name: JobName, deps: SchedulerDeps): Promise<void> 
           );
           await client.query('commit');
           log(`Scheduler: practice ${ordinal}, ${rows[0]?.deleted ?? 0} old positions deleted.`);
+        } else if (name === 'testimonial-retention') {
+          const cutoffs = testimonialRetentionCutoffs((deps.now ?? (() => new Date()))());
+          const { rows } = await client.query<{ deleted: number }>(
+            'select app.purge_stale_testimonials($1, $2) as deleted',
+            [cutoffs.declinedBefore, cutoffs.pendingBefore],
+          );
+          await client.query('commit');
+          log(`Scheduler: practice ${ordinal}, ${rows[0]?.deleted ?? 0} stale reviews deleted.`);
         } else {
           const swept = await sweepErasureFiles(client, deps.storage);
           await client.query('commit');
