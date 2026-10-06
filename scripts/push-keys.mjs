@@ -32,7 +32,7 @@ export function pushKeyLines(subject = 'mailto:REPLACE-with-the-practice-address
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const subject = process.argv[2];
   console.log(
-    '# The practice\'s push key pair. Paste these three into the host\'s secret settings\n' +
+    "# The practice's push key pair. Paste these three into the host's secret settings\n" +
       '# for the API process, set PUSH_VAPID_SUBJECT to a mailto: address the practice\n' +
       '# reads, and restart the API. Never commit them.',
   );
