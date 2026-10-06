@@ -89,6 +89,9 @@ const REFUSED: readonly Term[] = [
   { term: 'شفاء', pattern: /شفاء|يشفي/ },
   { term: 'سريري', pattern: /سريري/ },
   { term: 'معالج', pattern: arabicWord('معالج(?:ون|ين|ك|ه|ها)?') },
+  { term: 'دكتور', pattern: arabicWord('دكتور(?:ة|ه)?') },
+  { term: 'مرض', pattern: arabicWord('(?:مرض|امراض)') },
+  { term: 'انتكاس', pattern: arabicWord('انتكاس(?:ة)?') },
   {
     term: 'condition name',
     pattern: new RegExp(

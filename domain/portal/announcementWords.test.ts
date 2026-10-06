@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ARABIC_STEMS, ENGLISH_STEMS } from '../reports/qeeg/testing/vocabulary';
 import { normaliseForCheck, wellnessWords } from './announcementWords';
 
 /**
@@ -64,6 +65,11 @@ describe('wellnessWords: refused', () => {
       ['مع القلق', 'condition name'],
       ['الاكتئاب', 'condition name'],
       ['الأرق ليلًا', 'condition name'],
+      ['دكتور الأسرة', 'دكتور'],
+      ['الدكتورة تزورك', 'دكتور'],
+      ['مرض مزمن', 'مرض'],
+      ['الأمراض الموسمية', 'مرض'],
+      ['تجنب الانتكاس', 'انتكاس'],
     ] as const) {
       expect(wellnessWords(text).refused, text).toContain(term);
     }
@@ -107,6 +113,33 @@ describe('wellnessWords: ordinary words pass', () => {
       'طبيعي',
     ]) {
       expect(wellnessWords(text), text).toEqual({ refused: [], warnings: [] });
+    }
+  });
+});
+
+describe("wellnessWords: no drift from the reports' list", () => {
+  // The brain-map report's list (domain/reports/qeeg/testing/vocabulary.ts) is
+  // the house's record of rule 1's words. Every stem on it is refused or
+  // warned here too, so the two lists cannot drift apart unseen.
+  const stems = (pattern: RegExp): string[] =>
+    (/\(([^)]*)\)/.exec(pattern.source)?.[1] ?? '').split('|').filter(Boolean);
+
+  it('reads the stems it checks, so it can never pass empty', () => {
+    expect(stems(ENGLISH_STEMS).length).toBeGreaterThan(10);
+    expect(stems(ARABIC_STEMS).length).toBeGreaterThan(10);
+  });
+
+  it('catches every English stem the reports refuse', () => {
+    for (const stem of stems(ENGLISH_STEMS)) {
+      const found = wellnessWords(`about ${stem}`);
+      expect([...found.refused, ...found.warnings], stem).not.toEqual([]);
+    }
+  });
+
+  it('catches every Arabic stem the reports refuse', () => {
+    for (const stem of stems(ARABIC_STEMS)) {
+      const found = wellnessWords(`عن ${stem}`);
+      expect([...found.refused, ...found.warnings], stem).not.toEqual([]);
     }
   });
 });
