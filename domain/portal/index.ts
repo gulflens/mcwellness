@@ -15,6 +15,26 @@ export type {
   InviteKind,
 } from './invite';
 export { reportsVisibleTo } from './reports';
+export {
+  ANNOUNCEMENT_BODY_MAX,
+  ANNOUNCEMENT_TITLE_MAX,
+  ANNOUNCEMENT_VOCABULARY,
+  ANNOUNCEMENTS_SHOWN,
+  announcementsFor,
+  announcementsVisibleTo,
+  checkAnnouncement,
+  isCurrentOn,
+  speaksMedically,
+} from './announcements';
+export type {
+  AnnouncementDraft,
+  AnnouncementField,
+  AnnouncementProblem,
+  AnnouncementProblemCode,
+  AnnouncementRow,
+  AnnouncementViewer,
+  Bilingual,
+} from './announcements';
 export type { ReportClient, ReportContact } from './reports';
 export { packageProgress } from './packages';
 export {
