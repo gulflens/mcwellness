@@ -148,10 +148,11 @@ export async function sweepWithdrawnReportFiles(
   );
   const swept: WithdrawnFilesSwept = { removed: 0, stillThere: 0, notOurs: 0 };
   for (const row of rows) {
-    let ours = false;
+    let ours: boolean;
     try {
       ours = row.storage_key === clientDocumentKey(row.tenant_id, row.client_id, row.document_id);
     } catch {
+      // clientDocumentKey refuses ids it would not have built a key from.
       ours = false;
     }
     if (!ours) {

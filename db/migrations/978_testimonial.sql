@@ -264,6 +264,8 @@ create table app.testimonial_pepper (
   pepper   bytea not null check (octet_length(pepper) >= 32)
 );
 insert into app.testimonial_pepper (pepper) values (extensions.gen_random_bytes(32));
+-- Row security on, with no policy: a second lock behind the missing grant.
+alter table app.testimonial_pepper enable row level security;
 revoke all on app.testimonial_pepper from public;
 do $$
 begin
@@ -285,6 +287,7 @@ create table app.testimonial_turned_away (
   last_turned_away_at  timestamptz not null,
   turned_away_count    integer not null default 1 check (turned_away_count > 0)
 );
+alter table app.testimonial_turned_away enable row level security;
 revoke all on app.testimonial_turned_away from public;
 do $$
 begin
