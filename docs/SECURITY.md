@@ -157,17 +157,24 @@ credential); every read and write of a record is logged, hash-chained.
 3. **Rate limits** (`app/api/_middleware/rate-limit.ts`), per minute, from
    the environment: `RATE_LIMIT_PER_MINUTE` per address (300),
    `RATE_LIMIT_ACTOR_PER_MINUTE` per signed-in person (600),
-   `RATE_LIMIT_AUTH_FAILURES_PER_MINUTE` refused sign-ins per address (20),
-   `RATE_LIMIT_DEV_DOOR_PER_MINUTE` on the laptop door (30). Over budget the
+   `RATE_LIMIT_AUTH_FAILURES_PER_MINUTE` refused sign-ins per address (10),
+   `RATE_LIMIT_INVITE_DOOR_PER_MINUTE` on the portal's invitation door (5),
+   `RATE_LIMIT_ENQUIRY_DOOR_PER_MINUTE` on the website's enquiry door (5),
+   `RATE_LIMIT_DEV_DOOR_PER_MINUTE` on the laptop door (30). The three budgets
+   that face somebody with no session are half the intended figure (the
+   operator's decision of 6 October 2026), because production runs two worker
+   processes and each keeps its own counters. Over budget the
    API answers 429 with `Retry-After`. The address budgets cost nothing beyond
    the check; the per-person budget is judged after sign-in, so a refusal there
    still costs the token check and one short transaction. The counters hold
    the caller's address or the signed-in person's id with timestamps, in this
    process's memory only: never written to disk or a log, dropped when the
    window empties, swept on request arrival once per window, and capped at
-   50,000 keys (past that, new callers are refused rather than stored). Right
-   for one instance; several instances need a shared store behind the same
-   interface, and a hosted store then enters the vendor register first. The
+   50,000 keys (past that, new callers are refused rather than stored).
+   Production runs two worker processes, each with its own counters, which is
+   why the three stranger-facing budgets are halved; a shared store behind the
+   same interface would make one ceiling exact, and a hosted store then enters
+   the vendor register first. The
    failure budget counts refused sign-ins (401) only, not a signed-in person's
    own forbidden screens.
 4. **Input hygiene.** Bodies are capped at 64 KB and must be JSON; every
