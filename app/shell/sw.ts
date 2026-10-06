@@ -265,7 +265,7 @@ type NotificationLikeEvent = ExtendableEvent & {
 };
 
 self.addEventListener('push', ((event: PushLikeEvent) => {
-  let data: unknown = null;
+  let data: unknown;
   try {
     data = event.data?.json() ?? null;
   } catch {
