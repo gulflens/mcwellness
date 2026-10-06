@@ -168,6 +168,51 @@ describe('Agreements: the offers switch', () => {
   });
 });
 
+/**
+ * The stop never vanishes (PR 247's review, finding 2): while offers can
+ * reach the adult, the switch to stop them is on the screen and works, even
+ * when the practice has no current wording to show or the switch would not be
+ * offered for turning on. Withdrawing needs no wording.
+ */
+describe('Agreements: the stop is always there while offers are on', () => {
+  const ON = { state: 'on' as const, since: '2026-10-06T08:00:00.000Z' };
+  const cases = [
+    {
+      name: 'with no current wording',
+      answer: marketing({ ...ON, wordings: { en: null, ar: null } }),
+    },
+    { name: 'when the switch is not offered', answer: marketing({ ...ON, offered: false }) },
+  ];
+
+  for (const { name, answer } of cases) {
+    for (const locale of ['en', 'ar'] as const) {
+      it(`offers a working off ${name}, in ${locale === 'en' ? 'English' : 'Arabic'}`, async () => {
+        const { calls } = mountPortal(<AgreementsScreen />, {
+          locale,
+          answers: agreements({
+            '/api/portal/marketing': () => json(answer),
+            '/api/portal/marketing/withdraw': () =>
+              json({ ...answer, state: 'off', since: '2026-10-06T09:00:00.000Z' }),
+          }),
+        });
+        const toggle = await screen.findByRole('switch');
+        expect(
+          screen.getByText(locale === 'en' ? 'Offers on your phone' : 'العروض على هاتفك'),
+        ).toBeTruthy();
+        expect(toggle.getAttribute('aria-checked')).toBe('true');
+        fireEvent.click(toggle);
+        // Stopped, and told so: "Off since …" in the language being read.
+        expect(
+          await screen.findByText(locale === 'en' ? /^Off since/ : /^متوقّف منذ/),
+        ).toBeTruthy();
+        const post = calls.find((call) => call.path === '/api/portal/marketing/withdraw');
+        expect(post?.init?.method).toBe('POST');
+        expect(post?.init?.body).toBe('{}');
+      });
+    }
+  }
+});
+
 describe('Home: notifications on this phone', () => {
   it('offers the step and turns it on with one press, handing the server this phone', async () => {
     const device = phone();

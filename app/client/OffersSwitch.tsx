@@ -19,8 +19,11 @@ import { usePortalRead } from './usePortal';
  * with no form and no reason asked: the wording promises "one press", and
  * an offer's own "stop" leads here (`#offers`).
  *
- * **Only for an adult.** A young person's own login is shown nothing at all —
- * no switch, no note — the way the money screen is an absence for them.
+ * **Only for an adult to turn on.** A young person's own login is shown
+ * nothing at all — the way the money screen is an absence for them. But
+ * **the stop never vanishes**: while the switch is on, it is shown and turns
+ * off, with or without a current wording and whether or not it would be
+ * offered for turning on (PR 247's review, finding 2).
  */
 export function OffersSwitch() {
   const words = useWords();
@@ -49,7 +52,7 @@ export function OffersSwitch() {
 
   const flip = useCallback(
     async (on: boolean) => {
-      if (on && wording === null) return;
+      if (on && (wording === null || current === null || !current.offered)) return;
       setPending(true);
       setFailed(null);
       try {
@@ -69,40 +72,47 @@ export function OffersSwitch() {
         setPending(false);
       }
     },
-    [apiFetch, wording],
+    [apiFetch, wording, current],
   );
 
-  if (current === null || !current.offered) return null;
+  if (current === null) return null;
   const on = current.state === 'on';
+  // Turning on needs the switch offered and a wording to stand beside.
+  // Turning off needs neither: while offers can reach this person, the stop
+  // is on the screen and works (PR 247's review, finding 2).
+  const canTurnOn = current.offered && wording !== null;
+  // Nothing to say to somebody who was never offered it — but a person who
+  // has just stopped offers here is told so, not left with a blank.
+  if (!on && !canTurnOn && state === null) return null;
 
   return (
     <section className="portal__section" id="offers" aria-labelledby="portal-offers">
       <h2 id="portal-offers">{words.t('offersHeading')}</h2>
       <p>{words.t('offersBody')}</p>
-      {wording === null ? (
-        <Note>{words.t('offersNoWording')}</Note>
-      ) : (
-        <>
-          <p className="portal__actions">
-            <button type="button" className="button button--quiet" onClick={openWording}>
-              {words.t('readTheWording')}
-            </button>
-          </p>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={on}
-            aria-busy={pending}
-            aria-describedby="portal-offers-state"
-            className="portal__switch"
-            onClick={() => {
-              if (!pending) void flip(!on);
-            }}
-          >
-            <span>{words.t('offersSwitch')}</span>
+      {wording !== null ? (
+        <p className="portal__actions">
+          <button type="button" className="button button--quiet" onClick={openWording}>
+            {words.t('readTheWording')}
           </button>
-        </>
-      )}
+        </p>
+      ) : !on && current.offered ? (
+        <Note>{words.t('offersNoWording')}</Note>
+      ) : null}
+      {on || canTurnOn ? (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-busy={pending}
+          aria-describedby="portal-offers-state"
+          className="portal__switch"
+          onClick={() => {
+            if (!pending) void flip(!on);
+          }}
+        >
+          <span>{words.t('offersSwitch')}</span>
+        </button>
+      ) : null}
       <p id="portal-offers-state" className="small muted">
         {on && current.since
           ? words.phrase(PHRASES.offersOnSince(words.date(current.since)))
