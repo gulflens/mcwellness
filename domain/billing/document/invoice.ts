@@ -3,12 +3,14 @@
  * (docs/superpowers/specs/2026-09-24-invoice-redesign-design.md, which is the
  * authority for every block below and describes his page top to bottom).
  *
- * **His two instructions bind the page.** His colours: the practice's violet
- * for bands and accents, white on violet, and the three tints of that violet
- * (`CARD`, `EDGE`, `PILL`, all derived from `VIOLET` in `sheet.ts`) for card
- * grounds, borders and the discount pill — text otherwise in the ink and the
- * two greys the documents already use, and no other hue. And simplicity: what
- * his page shows and nothing it does not. No shadows, no gradients, no icons,
+ * **His two instructions bind the page.** His colours — since 7 October 2026
+ * the practice's softer dress (docs/superpowers/specs/2026-10-07-soft-
+ * documents-design.md): the page painted with a lavender-to-blush wash, white
+ * cards edged in `LAVENDER_EDGE`, `LAVENDER` bands and blocks and the
+ * discount pill with violet type on them, violet for every accent — text
+ * otherwise in the ink and the two greys the documents already use, and no
+ * other hue. And simplicity: what his page shows and nothing it does not. No
+ * shadows, no gradient but the page's one wash, no icons,
  * no rows his page leaves out, no page number, and Arabic only where his
  * page keeps it — the title, the supplier block, the captions, the card
  * titles and the table's headings — never beside the bank account's rows or
@@ -16,7 +18,7 @@
  *
  * Seven blocks, top to bottom: the masthead (the mark left, the title right);
  * the supplier block and the number card; the billed-to card and the payment
- * method; the lines table under a violet header; the payment details and
+ * method; the lines table under a lavender header; the bank details and
  * invoice summary cards side by side; the tax information card; the footer,
  * pinned to the foot of the page.
  *
@@ -33,16 +35,17 @@
 
 import { chargesVat, type InvoiceDocument, type InvoiceLine } from './model';
 import type { DocumentImage, FontSet, Page } from '../../shared/document';
-import { INK, LEFT, MUTED, PILL, RIGHT, VIOLET, WHITE } from './sheet';
+import { INK, LEFT, MUTED, RIGHT, VIOLET } from './sheet';
 import {
   BAR_WIDTH,
   DocumentPage,
   GAP,
+  HEADER_HEIGHT,
   LEFT_WIDTH,
+  LOGO_INSET,
   LOGO_WIDTH,
   NUMBER_WIDTH,
   PAD,
-  RADIUS,
   RIGHT_WIDTH,
   SUPPLIER_WIDTH,
   TITLE_BAND,
@@ -68,8 +71,6 @@ import {
   type Phrase,
 } from './strings';
 
-/** The table's violet header band, English over Arabic. */
-const HEADER_HEIGHT = 40;
 /** The least a line of the table is tall: its description and the Arabic name beneath. */
 const ROW_HEIGHT = 44;
 /** The discount pill: fully rounded, so its radius is half this. */
@@ -82,6 +83,7 @@ const PILL_PAD = 9;
 /** The page's own measurements, for `GEOMETRY` and the tests that read it. */
 export const INVOICE_GEOMETRY = {
   LOGO_WIDTH,
+  LOGO_INSET,
   PAD,
   GAP,
   RIGHT_WIDTH,
@@ -179,8 +181,8 @@ class InvoicePage extends DocumentPage {
   // ------------------------------------------------------------------------
 
   /**
-   * A card whose header is a solid violet band with white headings, English
-   * over Arabic. The Discount column only when the invoice carries a
+   * A white card whose header is a lavender band with violet headings,
+   * English over Arabic. The Discount column only when the invoice carries a
    * discount; a registered practice's VAT column before Total, whose figure
    * is then the gross. A page taken mid-table draws the header again.
    */
@@ -209,9 +211,7 @@ class InvoicePage extends DocumentPage {
         end += 1;
       }
 
-      // The card's border first, from half-way down the band, so the band
-      // drawn over it hides its upper corners and the rows keep the lower two.
-      this.sheet.outline(LEFT, top - HEADER_HEIGHT / 2, WIDTH, top - HEADER_HEIGHT / 2 - bottom);
+      this.tableFrame(top, bottom);
       this.header(top, columns, descriptionWidth);
       let y = top - HEADER_HEIGHT;
       for (let index = next; index < end; index += 1) {
@@ -287,35 +287,11 @@ class InvoicePage extends DocumentPage {
   }
 
   private header(top: number, columns: readonly Column[], descriptionWidth: number): void {
-    // Rounded at the top as the card is, square where the rows meet it.
-    this.sheet.bandFill(LEFT, top, WIDTH, HEADER_HEIGHT, RADIUS);
-    this.sheet.bandFill(LEFT, top - HEADER_HEIGHT / 2, WIDTH, HEADER_HEIGHT / 2);
-    const english = top - 16;
-    const arabic = top - 30;
-    this.sheet.line(english, LEFT + PAD, WORDS.description.en, TYPE.heading, {
-      bold: true,
-      rgb: WHITE,
-    });
-    this.sheet.line(arabic, LEFT + PAD, WORDS.description.ar, TYPE.headingAr, {
-      bold: true,
-      rgb: WHITE,
-      rtl: true,
-      align: 'start',
-    });
+    // The Arabic of the description column reads from the left, under its English.
+    this.heading(top, LEFT + PAD, WORDS.description, 'start');
     let x = LEFT + descriptionWidth;
     for (const column of columns) {
-      const centre = x + column.width / 2;
-      this.sheet.line(english, centre, column.label.en, TYPE.heading, {
-        bold: true,
-        rgb: WHITE,
-        align: 'centre',
-      });
-      this.sheet.line(arabic, centre, column.label.ar, TYPE.headingAr, {
-        bold: true,
-        rgb: WHITE,
-        align: 'centre',
-        rtl: true,
-      });
+      this.heading(top, x + column.width / 2, column.label, 'centre');
       x += column.width;
     }
   }
@@ -366,10 +342,13 @@ class InvoicePage extends DocumentPage {
         this.sheet.line(middle - 3, centre, cell.text, TYPE.cell, { bold: true, align: 'centre' });
       } else if (cell.kind === 'pill') {
         const width = this.sheet.width(cell.text, TYPE.pill, { bold: true }) + PILL_PAD * 2;
-        this.sheet.rect(centre - width / 2, middle - PILL_HEIGHT / 2, width, PILL_HEIGHT, {
-          fill: { rgb: PILL },
-          radius: PILL_HEIGHT / 2,
-        });
+        this.sheet.lavenderFill(
+          centre - width / 2,
+          middle + PILL_HEIGHT / 2,
+          width,
+          PILL_HEIGHT,
+          PILL_HEIGHT / 2,
+        );
         this.sheet.line(middle - 2.8, centre, cell.text, TYPE.pill, {
           bold: true,
           rgb: VIOLET,
@@ -387,8 +366,8 @@ class InvoicePage extends DocumentPage {
   // ------------------------------------------------------------------------
 
   /**
-   * How to pay: Account name, the IBAN in violet bold grouped in fours,
-   * SWIFT / BIC and the bank address, each wrapping rather than being cut —
+   * How to pay, on the "Bank details" card: Account holder, the IBAN in
+   * violet bold grouped in fours, BIC and the bank address, each wrapping rather than being cut —
    * a truncated account name is a transfer that bounces. A strip at its foot
    * names the payment reference: the invoice's own number.
    */
@@ -401,7 +380,7 @@ class InvoicePage extends DocumentPage {
     if (bank.bankAddress) {
       rows.push({ label: WORDS.bankAddress.en, value: bank.bankAddress, options: {} });
     }
-    return this.rowsCard(WORDS.paymentDetails, rows, {
+    return this.rowsCard(WORDS.bankDetails, rows, {
       label: WORDS.paymentReference,
       value: this.document_.reference,
     });

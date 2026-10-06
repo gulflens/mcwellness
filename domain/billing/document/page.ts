@@ -23,16 +23,19 @@
  * cannot print one on the wrong document.
  *
  * His two instructions bind every block here as they bind the pages: his
- * colours (`VIOLET` and its three tints, white on violet, the greys the
- * documents already use) and his simplicity (what his page shows and nothing
- * it does not).
+ * colours and his simplicity (what his page shows and nothing it does not).
+ * Since 7 October 2026 the colours are the practice's softer dress
+ * (docs/superpowers/specs/2026-10-07-soft-documents-design.md): every page
+ * painted first with a wash (`wash`), white cards with a lavender edge,
+ * lavender bands and blocks with violet type on them, violet bars down the
+ * left edge of the number, bank, tax and note cards — and type otherwise in
+ * the ink and the greys the documents already use.
  */
 
 import type { SupplierSnapshot } from './model';
 import type { DocumentImage, FontSet, Page } from '../../shared/document';
 import {
   BAND,
-  CARD,
   GUTTER,
   INK,
   LEFT,
@@ -41,7 +44,7 @@ import {
   SMALL_LINE,
   Sheet,
   VIOLET,
-  WHITE,
+  wash,
   type TextOptions,
 } from './sheet';
 import { WORDMARK, WORDS, type Phrase } from './strings';
@@ -67,12 +70,20 @@ const NUMBER_X = RIGHT - NUMBER_WIDTH;
 export const SUPPLIER_WIDTH = WIDTH - NUMBER_WIDTH - GAP;
 /** The practice's lockup, set against the left margin as his page sets it. */
 export const LOGO_WIDTH = 165;
+/**
+ * The air between the lockup and the edge of the white card it sits on. The
+ * mark's file is opaque — white behind the lockup — and the writer has no
+ * transparency, so on the wash it is given a card of its own white.
+ */
+export const LOGO_INSET = 5;
 /** The summary card's title band, tinted, above its white body. */
 export const TITLE_BAND = 32;
 /** Corners on every card. */
 export const RADIUS = 6;
-/** The violet bar down the number card's and the bottom card's left edge. */
+/** The violet bar down the left edge of the number, bank, tax and note cards. */
 export const BAR_WIDTH = 4;
+/** A table's lavender header band, English over Arabic. */
+export const HEADER_HEIGHT = 40;
 /** The strip at the foot of the payment card that carries the payment reference. */
 const STRIP_HEIGHT = 26;
 /** From a card's left edge to the value column of its labelled rows. */
@@ -117,7 +128,6 @@ export type BlockName =
   | 'tableHeader'
   | 'tableRows'
   | 'paymentCard'
-  | 'receivedCard'
   | 'summaryCard'
   | 'taxCard'
   | 'noteCard'
@@ -160,9 +170,12 @@ export abstract class DocumentPage {
 
   abstract draw(logo: DocumentImage | null): void;
 
-  /** The finished pages, and per page the boxes its blocks were drawn in. */
+  /**
+   * The finished pages, each painted first with the wash so everything else
+   * lies on it, and per page the boxes its blocks were drawn in.
+   */
   laidOut(): { pages: Page[]; blocks: Block[][] } {
-    const pages = this.sheet.finish();
+    const pages = this.sheet.finish().map((page) => ({ ops: [wash(), ...page.ops] }));
     return { pages, blocks: pages.map((_, index) => this.blocks[index] ?? []) };
   }
 
@@ -188,8 +201,9 @@ export abstract class DocumentPage {
   // ------------------------------------------------------------------------
 
   /**
-   * The mark left, about 165 points wide as his page sets the lockup, its
-   * height from the file's own proportions so it is never stretched — or the
+   * The mark left, on a white card about 165 points wide as his page sets
+   * the lockup, its height from the file's own proportions so it is never
+   * stretched — or the
    * wordmark in type when the practice has none. The title right, in violet:
    * the English in capitals, bold and large, and the Arabic beneath it. The
    * capitals are his.
@@ -198,9 +212,12 @@ export abstract class DocumentPage {
     const top = this.sheet.baseline;
     let markBottom: number;
     if (logo && logo.width > 0) {
-      const height = (LOGO_WIDTH * logo.height) / logo.width;
-      this.sheet.image(LEFT, top - height, LOGO_WIDTH, height);
-      markBottom = top - height;
+      const width = LOGO_WIDTH - LOGO_INSET * 2;
+      const height = (width * logo.height) / logo.width;
+      const cardHeight = height + LOGO_INSET * 2;
+      this.sheet.card(LEFT, top, LOGO_WIDTH, cardHeight, { radius: RADIUS });
+      this.sheet.image(LEFT + LOGO_INSET, top - LOGO_INSET - height, width, height);
+      markBottom = top - cardHeight;
     } else {
       this.sheet.line(top - 14, LEFT, WORDMARK, TYPE.wordmark, { bold: true });
       markBottom = top - 14 - 5;
@@ -430,10 +447,10 @@ export abstract class DocumentPage {
   protected lowerCards(
     left: { laid: Laid; block: BlockName } | null,
     summary: Laid,
-    bottom: { laid: { height: number; draw: (top: number) => void }; block: BlockName },
+    bottom: { laid: { height: number; draw: (top: number) => void }; block: BlockName } | null,
   ): void {
     const cardsHeight = Math.max(left?.laid.height ?? 0, summary.height);
-    this.sheet.room(cardsHeight + GAP + bottom.laid.height);
+    this.sheet.room(cardsHeight + (bottom ? GAP + bottom.laid.height : 0));
 
     const top = this.sheet.baseline;
     if (left) {
@@ -445,6 +462,10 @@ export abstract class DocumentPage {
     summary.draw(top, cardsHeight);
     this.record('summaryCard', RIGHT_X, RIGHT, top, top - cardsHeight);
 
+    if (!bottom) {
+      this.sheet.down(cardsHeight);
+      return;
+    }
     const lowTop = top - cardsHeight - GAP;
     bottom.laid.draw(lowTop);
     this.record(bottom.block, LEFT, RIGHT, lowTop, lowTop - bottom.laid.height);
@@ -452,8 +473,9 @@ export abstract class DocumentPage {
   }
 
   /**
-   * The left lower card: its title bold with the Arabic right and a hairline
-   * under it, then rows with English labels only — an account number or a
+   * The left lower card, white with a violet bar down its left edge: its
+   * title bold with the Arabic right and a hairline under it, then rows with
+   * English labels only — an account number or a
    * payment reference read against a second language's labels is one a
    * reader misreads — each value wrapping within its column rather than being
    * cut. The invoice's payment card closes with a strip naming the payment
@@ -464,8 +486,9 @@ export abstract class DocumentPage {
     rows: readonly CardRow[],
     strip: { label: Phrase; value: string } | null,
   ): Laid {
-    const x = LEFT;
-    const width = LEFT_WIDTH;
+    // Everything inside starts past the bar.
+    const x = LEFT + BAR_WIDTH;
+    const width = LEFT_WIDTH - BAR_WIDTH;
     const valueAt = x + PAD + LABEL_COLUMN;
     const valueWidth = width - PAD * 2 - LABEL_COLUMN;
     const laid = rows.map((row) => ({
@@ -487,7 +510,8 @@ export abstract class DocumentPage {
     return {
       height,
       draw: (top, cardHeight) => {
-        this.sheet.outline(x, top, width, cardHeight, RADIUS);
+        this.sheet.card(LEFT, top, LEFT_WIDTH, cardHeight, { radius: RADIUS });
+        this.sheet.bandFill(LEFT, top, BAR_WIDTH, cardHeight);
         this.cardTitle(top - titleAt, x, width, title);
         for (const row of placed) {
           this.sheet.line(top - row.first, x + PAD, row.label, TYPE.label, { grey: MUTED });
@@ -500,10 +524,7 @@ export abstract class DocumentPage {
         // it has made the pair.
         const stripBottom = top - cardHeight + PAD;
         const stripAt = stripBottom + STRIP_HEIGHT;
-        this.sheet.rect(x + PAD, stripBottom, width - PAD * 2, STRIP_HEIGHT, {
-          fill: { rgb: CARD },
-          radius: 4,
-        });
+        this.sheet.lavenderFill(x + PAD, stripAt, width - PAD * 2, STRIP_HEIGHT, 4);
         const baseline = stripAt - 16;
         const label = strip.label;
         this.sheet.line(baseline, x + PAD + 10, label.en, TYPE.label, { grey: MUTED });
@@ -524,12 +545,11 @@ export abstract class DocumentPage {
   }
 
   /**
-   * The summary, under its title on a tinted band: rows of English labels
-   * and figures and no Arabic, as his page sets them; a hairline; and the
-   * violet block, its caption small in white in both languages over the
-   * figure large in white. Given no rows — a receipt, whose one figure is the
-   * block's — it draws no hairline either, and the block starts under the
-   * band.
+   * The summary, a white card under its title on a lavender band: rows of
+   * English labels and figures and no Arabic, as his page sets them; a
+   * hairline; and the lavender block, its caption small in violet in both
+   * languages over the figure large and bold in violet. Given no rows it
+   * draws no hairline either, and the block starts under the band.
    */
   protected summaryCard(
     title: Phrase,
@@ -551,13 +571,12 @@ export abstract class DocumentPage {
     return {
       height,
       draw: (top, cardHeight) => {
-        // The title on a tinted band, rounded at the top as the card is and
-        // square where the white body meets it; the border drawn over both.
-        this.sheet.rect(x, top - TITLE_BAND, width, TITLE_BAND, {
-          fill: { rgb: CARD },
-          radius: RADIUS,
-        });
-        this.sheet.rect(x, top - TITLE_BAND, width, TITLE_BAND / 2, { fill: { rgb: CARD } });
+        // The white card; the title on a lavender band, rounded at the top as
+        // the card is and square where the white body meets it; the border
+        // drawn again over both.
+        this.sheet.card(x, top, width, cardHeight, { radius: RADIUS });
+        this.sheet.lavenderFill(x, top, width, TITLE_BAND, RADIUS);
+        this.sheet.lavenderFill(x, top - TITLE_BAND / 2, width, TITLE_BAND / 2);
         this.sheet.outline(x, top, width, cardHeight, RADIUS);
         this.caption(top - titleAt, x + PAD, x + width - PAD, title, TYPE.cardTitle, {
           bold: true,
@@ -573,20 +592,20 @@ export abstract class DocumentPage {
         });
         if (rows.length > 0) this.sheet.hairline(x + PAD, top - ruleAt, width - PAD * 2);
 
-        // The violet block fills the card to its foot.
+        // The lavender block fills the card to its foot.
         const inset = 8;
         const bandTop = top - blockTop;
         const bandBottom = top - cardHeight + inset;
         const bandWidth = width - inset * 2;
-        this.sheet.bandFill(x + inset, bandTop, bandWidth, bandTop - bandBottom, RADIUS);
+        this.sheet.lavenderFill(x + inset, bandTop, bandWidth, bandTop - bandBottom, RADIUS);
         const captionAt = bandTop - 14;
         this.sheet.line(captionAt, x + inset + 10, block.en, TYPE.caption, {
           bold: true,
-          rgb: WHITE,
+          rgb: VIOLET,
         });
         this.sheet.line(captionAt, x + width - inset - 10, block.ar, TYPE.caption, {
           bold: true,
-          rgb: WHITE,
+          rgb: VIOLET,
           align: 'end',
           rtl: true,
         });
@@ -597,7 +616,7 @@ export abstract class DocumentPage {
         const middle = (captionAt - 6 + bandBottom) / 2;
         this.sheet.line(middle - size * 0.35, x + width / 2, figure, size, {
           bold: true,
-          rgb: WHITE,
+          rgb: VIOLET,
           align: 'centre',
         });
       },
@@ -605,16 +624,20 @@ export abstract class DocumentPage {
   }
 
   /**
-   * Full width, the card's ground with a violet bar down its left edge: the
-   * title, then each sentence in English and beneath it in Arabic, in the
-   * grey it is given.
+   * A white card with a violet bar down its left edge, `across` wide from the
+   * left margin (the full measure unless told): the title, then each
+   * sentence in English and beneath it in Arabic, in the grey it is given.
+   * `draw` takes an optional height, so a card set beside the summary can be
+   * as tall as it.
    */
   protected barCard(
     title: Phrase,
     sentences: readonly Sentence[],
-  ): { height: number; draw: (top: number) => void } {
+    across: number = WIDTH,
+  ): Laid & { draw: (top: number, height?: number) => void } {
     const x = LEFT + BAR_WIDTH + PAD;
-    const width = WIDTH - BAR_WIDTH - PAD * 2;
+    const width = across - BAR_WIDTH - PAD * 2;
+    const right = LEFT + across - PAD;
 
     const titleAt = PAD + 7;
     let at = titleAt + 16;
@@ -631,10 +654,10 @@ export abstract class DocumentPage {
 
     return {
       height,
-      draw: (top) => {
-        this.sheet.card(LEFT, top, WIDTH, height, { radius: RADIUS });
-        this.sheet.bandFill(LEFT, top, BAR_WIDTH, height);
-        this.caption(top - titleAt, x, RIGHT - PAD, title, TYPE.taxTitle, {
+      draw: (top, drawn = height) => {
+        this.sheet.card(LEFT, top, across, drawn, { radius: RADIUS });
+        this.sheet.bandFill(LEFT, top, BAR_WIDTH, drawn);
+        this.caption(top - titleAt, x, right, title, TYPE.taxTitle, {
           bold: true,
           rgb: VIOLET,
         });
@@ -645,7 +668,7 @@ export abstract class DocumentPage {
             });
           });
           sentence.arabic.forEach((line, index) => {
-            this.sheet.line(top - sentence.arabicAt - index * 12, RIGHT - PAD, line, TYPE.tax, {
+            this.sheet.line(top - sentence.arabicAt - index * 12, right, line, TYPE.tax, {
               grey: sentence.grey,
               align: 'end',
               rtl: true,
@@ -654,6 +677,35 @@ export abstract class DocumentPage {
         }
       },
     };
+  }
+
+  // ------------------------------------------------------------------------
+  // A table's frame
+  // ------------------------------------------------------------------------
+
+  /**
+   * A table's card, full width from `top` to `bottom`: white with a lavender
+   * edge, under a lavender header band rounded at the top as the card is and
+   * square where the rows meet it. The headings are the page's own to set.
+   */
+  protected tableFrame(top: number, bottom: number): void {
+    // The card from half-way down the band, so the band drawn over it hides
+    // its upper corners and the rows keep the lower two.
+    const cardTop = top - HEADER_HEIGHT / 2;
+    this.sheet.card(LEFT, cardTop, WIDTH, cardTop - bottom, { radius: RADIUS });
+    this.sheet.lavenderFill(LEFT, top, WIDTH, HEADER_HEIGHT, RADIUS);
+    this.sheet.lavenderFill(LEFT, top - HEADER_HEIGHT / 2, WIDTH, HEADER_HEIGHT / 2);
+  }
+
+  /** One heading of a table's band: English over Arabic, violet bold. */
+  protected heading(top: number, x: number, label: Phrase, align: 'start' | 'centre'): void {
+    this.sheet.line(top - 16, x, label.en, TYPE.heading, { bold: true, rgb: VIOLET, align });
+    this.sheet.line(top - 30, x, label.ar, TYPE.headingAr, {
+      bold: true,
+      rgb: VIOLET,
+      align,
+      rtl: true,
+    });
   }
 
   // ------------------------------------------------------------------------

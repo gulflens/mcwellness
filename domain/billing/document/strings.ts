@@ -113,7 +113,6 @@ export const WORDS = {
   totalPaid: { en: 'TOTAL PAID', ar: 'الإجمالي المدفوع' },
 
   paymentReference: { en: 'Payment reference', ar: 'مرجع الدفع' },
-  settlesInvoice: { en: 'Settles invoice', ar: 'سداد الفاتورة' },
   /**
    * The round 65 card beside billed-to (point 3): "PAYMENT METHOD" over the
    * method's own name in violet (`cash` / `transfer` / `link` below) — on an
@@ -122,8 +121,9 @@ export const WORDS = {
   paymentMethodCaption: { en: 'PAYMENT METHOD', ar: 'طريقة الدفع' },
 
   /**
-   * How to pay, on an invoice's "Payment details" card (round 61, the owner's
-   * ask of 23 September 2026, dressed in round 65, point 5). The values are
+   * How to pay, on an invoice's "Bank details" card (round 61, the owner's
+   * ask of 23 September 2026, dressed in round 65, point 5, and in the soft
+   * dress of 7 October 2026). The values are
    * the practice's own, and the IBAN is printed grouped in fours
    * (`groupIban`). Set **English only**, as the design itself says: "English
    * labels only, because an account number read against six labels is a
@@ -133,23 +133,35 @@ export const WORDS = {
   iban: { en: 'IBAN', ar: 'رقم الآيبان' },
   bankAddress: { en: 'Bank address', ar: 'عنوان البنك' },
 
-  paymentDetails: { en: 'Payment details', ar: 'تفاصيل الدفع' },
-  accountName: { en: 'Account name', ar: '' },
-  swiftBic: { en: 'SWIFT / BIC', ar: '' },
+  /**
+   * The card's title and two of its labels as the practice's mockups of
+   * October 2026 word them (docs/superpowers/specs/2026-10-07-soft-documents-
+   * design.md): "Bank details", "Account holder", "BIC". English only, as the
+   * mockup sets the whole card — no Arabic was written for them, and none is
+   * invented here.
+   */
+  bankDetails: { en: 'Bank details', ar: '' },
+  accountName: { en: 'Account holder', ar: '' },
+  swiftBic: { en: 'BIC', ar: '' },
 
   /**
-   * The receipt's own two lower cards (round 65, "The receipt"). Its title
-   * and its first two rows are what is new — the third, when there is one,
-   * already reads `settlesInvoice` above. `method` and `reference` are set
-   * **English only**, the same rule as the payment-details card's own rows;
-   * the value beside `method` is the payment's own name (`cash` /
-   * `transfer` / `link` below).
+   * The receipt summary's rows (round 65; since 7 October 2026 on the summary
+   * card itself). Set **English only**, the same rule as the bank details
+   * card's own rows; the value beside `method` is the payment's own name
+   * (`cash` / `transfer` / `link` below).
    */
-  paymentReceived: { en: 'Payment received', ar: 'الدفعة المستلمة' },
   method: { en: 'Method', ar: '' },
   reference: { en: 'Reference', ar: '' },
   /** The receipt's bottom card, carrying `receiptBasis` (round 65). */
   note: { en: 'Note', ar: 'ملاحظة' },
+
+  /**
+   * The receipt's table in the soft dress of 7 October 2026: one line saying
+   * what the money was, and its amount. The wording, both languages, is the
+   * practice's own mockup's; "against invoice" is `againstInvoice` below.
+   */
+  amount: { en: 'Amount', ar: 'المبلغ' },
+  paymentOnAccount: { en: 'Payment received on account', ar: 'دفعة مستلمة على الحساب' },
 
   /**
    * The ways money arrives, as the payment method, on a receipt's row and in
@@ -160,6 +172,11 @@ export const WORDS = {
   transfer: { en: 'Bank transfer', ar: 'تحويل مصرفي' },
   link: { en: 'Payment link', ar: 'رابط دفع' },
 } as const satisfies Record<string, Phrase>;
+
+/** The receipt table's second line: the invoice the payment settles, by its number. */
+export function againstInvoice(reference: string): Phrase {
+  return { en: `Against invoice ${reference}`, ar: `مقابل الفاتورة ${reference}` };
+}
 
 /**
  * The footer that says what kind of document this is under UAE VAT.

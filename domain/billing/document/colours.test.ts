@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { CARD, EDGE, PILL, Sheet, VIOLET } from './render';
+import { LAVENDER, LAVENDER_EDGE, Sheet, VIOLET, WASH_FROM, WASH_TO, WHITE, wash } from './render';
+import { PAGE_HEIGHT, PAGE_WIDTH } from '../../shared/document';
 import type { Font, FontSet, Op } from '../../shared/document';
 
 /**
- * The tints and the two card-shaped drawing primitives the practice's own
- * design needs (docs/superpowers/specs/2026-09-24-invoice-redesign-design.md,
- * "The page, top to bottom"): `CARD`, `EDGE` and `PILL` are arithmetic on
- * `VIOLET`, and `Sheet.card` / `Sheet.bandFill` are thin wrappers over the
- * writer's own `rect` op (`domain/shared/document/pdf.ts`).
+ * The named colours and the card-shaped drawing primitives of the practice's
+ * softer dress of 7 October 2026 (docs/superpowers/specs/2026-10-07-soft-
+ * documents-design.md): the violet ink, a lavender for bands and blocks, a
+ * lavender edge for cards, the two ends of the page's wash — and
+ * `Sheet.card` / `Sheet.bandFill` / `Sheet.lavenderFill`, thin wrappers over
+ * the writer's own `rect` op (`domain/shared/document/pdf.ts`).
  *
  * Both are testable with no font file, a database or a clock, which is
  * `render.ts`'s own rule for everything in it (its file-top comment) — so the
@@ -38,36 +40,51 @@ function opsOf(draw: (sheet: Sheet) => void): Op[] {
   return sheet.finish()[0]?.ops ?? [];
 }
 
-describe('the card tints VIOLET is mixed toward white by', () => {
-  it('pins CARD, the six per cent mix, to the design’s own #f3f0f7', () => {
-    expect(CARD[0]).toBeCloseTo(0.953, 3);
-    expect(CARD[1]).toBeCloseTo(0.941, 3);
-    expect(CARD[2]).toBeCloseTo(0.967, 3);
+/** A colour as the six hex digits a designer would write it in. */
+const hex = (rgb: readonly number[]): string =>
+  rgb
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('');
+
+describe('the named colours of the soft dress', () => {
+  it('keeps the practice’s own violet, #380473, as the ink and the accent', () => {
+    expect(hex(VIOLET)).toBe('380473');
   });
 
-  it('pins EDGE, the fifteen per cent mix, to the design’s own #e1d9ea', () => {
-    expect(EDGE[0]).toBeCloseTo(0.883, 3);
-    expect(EDGE[1]).toBeCloseTo(0.852, 3);
-    expect(EDGE[2]).toBeCloseTo(0.918, 3);
+  it('pins LAVENDER, the bands and blocks, to #dccfef', () => {
+    expect(hex(LAVENDER)).toBe('dccfef');
   });
 
-  it('pins PILL, the twelve per cent mix, to the design’s own #e7e1ee', () => {
-    expect(PILL[0]).toBeCloseTo(0.906, 3);
-    expect(PILL[1]).toBeCloseTo(0.882, 3);
-    expect(PILL[2]).toBeCloseTo(0.934, 3);
+  it('pins LAVENDER_EDGE, the cards’ borders and hairlines, to #e2d8ee', () => {
+    expect(hex(LAVENDER_EDGE)).toBe('e2d8ee');
   });
 
-  it('is the deeper mix wherever it is asked for more of the violet: EDGE < PILL < CARD in every channel', () => {
-    [0, 1, 2].forEach((channel) => {
-      const edge = EDGE[channel] as number;
-      const pill = PILL[channel] as number;
-      const card = CARD[channel] as number;
-      const violet = VIOLET[channel] as number;
-      expect(edge).toBeLessThan(pill);
-      expect(pill).toBeLessThan(card);
-      expect(card).toBeLessThan(1);
-      expect(edge).toBeGreaterThan(violet);
-    });
+  it('pins the wash from a lavender #e4daf2 to a warm near-white blush #fbf3f6', () => {
+    expect(hex(WASH_FROM)).toBe('e4daf2');
+    expect(hex(WASH_TO)).toBe('fbf3f6');
+  });
+
+  it('is lighter wherever it is less ink: LAVENDER < WASH_FROM < WASH_TO <= WHITE in lightness', () => {
+    const light = (rgb: readonly number[]): number => rgb.reduce((total, c) => total + c, 0);
+    expect(light(LAVENDER)).toBeLessThan(light(WASH_FROM));
+    expect(light(WASH_FROM)).toBeLessThan(light(WASH_TO));
+    expect(light(WASH_TO)).toBeLessThan(light(WHITE));
+  });
+});
+
+describe('the wash', () => {
+  it('covers the whole page, lavender at the top-right corner fading to blush toward the bottom-left', () => {
+    const op = wash();
+    expect(op).toMatchObject({ kind: 'shade', x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT });
+    expect(op.from).toEqual({ x: PAGE_WIDTH, y: PAGE_HEIGHT, rgb: WASH_FROM });
+    expect(op.to.rgb).toEqual(WASH_TO);
+    // Down and to the left of where it starts.
+    expect(op.to.x).toBeLessThan(op.from.x);
+    expect(op.to.y).toBeLessThan(op.from.y);
   });
 });
 
@@ -81,7 +98,7 @@ describe('Sheet.rect', () => {
 });
 
 describe('Sheet.card', () => {
-  it('pushes one rect op with the top edge converted to the op’s bottom-left corner, CARD filled and EDGE stroked', () => {
+  it('pushes one rect op with the top edge converted to the op’s bottom-left corner, WHITE filled and LAVENDER_EDGE stroked', () => {
     const ops = opsOf((sheet) => sheet.card(10, 100, 200, 40));
     expect(ops).toEqual([
       {
@@ -91,8 +108,8 @@ describe('Sheet.card', () => {
         y: 60,
         width: 200,
         height: 40,
-        fill: { rgb: CARD },
-        stroke: { rgb: EDGE },
+        fill: { rgb: WHITE },
+        stroke: { rgb: LAVENDER_EDGE },
         radius: 6,
       },
     ]);
@@ -112,8 +129,17 @@ describe('Sheet.bandFill', () => {
     ]);
   });
 
-  it('takes a radius for the pill and the tax card’s left-edge bar', () => {
+  it('takes a radius', () => {
     const ops = opsOf((sheet) => sheet.bandFill(0, 20, 40, 20, 10));
     expect(ops[0]).toMatchObject({ radius: 10 });
+  });
+});
+
+describe('Sheet.lavenderFill', () => {
+  it('pushes one rect op filled LAVENDER, the same top-edge conversion, and no stroke', () => {
+    const ops = opsOf((sheet) => sheet.lavenderFill(0, 500, 300, 24, 6));
+    expect(ops).toEqual([
+      { kind: 'rect', x: 0, y: 476, width: 300, height: 24, fill: { rgb: LAVENDER }, radius: 6 },
+    ]);
   });
 });

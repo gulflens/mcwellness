@@ -15,6 +15,7 @@ import {
   type ReceiptDocument,
   type SupplierSnapshot,
 } from '../../domain/billing/document';
+import { LAVENDER, WHITE } from '../../domain/billing/document/sheet';
 
 /**
  * The invoice in the operator's design of 24 September 2026, as geometry
@@ -704,10 +705,62 @@ describe('the summary card', () => {
       );
       if (!band || band.kind !== 'rect') throw new Error(`${laid.name}: no title band`);
       expect(band.height).toBeCloseTo(GEOMETRY.TITLE_BAND, 5);
+      expect(band.fill).toEqual({ rgb: LAVENDER });
       const text = boxesOf(laid.pages[index] as Page).filter(
         (box) => box.y < card.top && box.y > card.top - GEOMETRY.TITLE_BAND,
       );
       expect(text.map((box) => box.text)).toContain('Invoice summary');
+    }
+  });
+});
+
+describe('the soft dress', () => {
+  /** The rect ops of a page whose left edge and width are the ones given. */
+  const rectsAt = (page: Page, left: number, width: number) =>
+    page.ops.filter(
+      (op): op is Extract<Op, { kind: 'rect' }> =>
+        op.kind === 'rect' && Math.abs(op.x - left) < 0.01 && Math.abs(op.width - width) < 0.01,
+    );
+
+  it('draws a violet bar down the left edge of the bank card and the tax card', () => {
+    for (const laid of MATRIX.filter((each) => each.name.includes('bank'))) {
+      const index = laid.blocks.findIndex((each) => blocksNamed(each, 'taxCard').length > 0);
+      const page = laid.pages[index] as Page;
+      for (const name of ['paymentCard', 'taxCard'] as const) {
+        const card = blocksNamed(laid.blocks[index] ?? [], name)[0];
+        if (!card) continue;
+        const bars = rectsAt(page, card.left, GEOMETRY.BAR_WIDTH).filter(
+          (op) =>
+            Math.abs(op.y - card.bottom) < 0.01 && Math.abs(op.y + op.height - card.top) < 0.01,
+        );
+        expect(bars, `${laid.name}: ${name}`).toHaveLength(1);
+        expect(bars[0]?.fill, `${laid.name}: ${name}`).toEqual({ rgb: GEOMETRY.VIOLET });
+      }
+    }
+  });
+
+  it('grounds the table in white under a lavender header band on every page it touches', () => {
+    for (const laid of MATRIX) {
+      laid.blocks.forEach((blocks, index) => {
+        const header = blocksNamed(blocks, 'tableHeader')[0];
+        if (!header) return;
+        const page = laid.pages[index] as Page;
+        const full = rectsAt(page, GEOMETRY.LEFT, GEOMETRY.RIGHT - GEOMETRY.LEFT);
+        expect(
+          full.some((op) => op.fill !== undefined && 'rgb' in op.fill && op.fill.rgb === WHITE),
+          where(laid, index),
+        ).toBe(true);
+        expect(
+          full.some(
+            (op) =>
+              op.fill !== undefined &&
+              'rgb' in op.fill &&
+              op.fill.rgb === LAVENDER &&
+              Math.abs(op.y + op.height - header.top) < 0.01,
+          ),
+          where(laid, index),
+        ).toBe(true);
+      });
     }
   });
 });
@@ -860,19 +913,36 @@ describe('the inputs the final review tried', () => {
 });
 
 describe('the practice’s mark', () => {
-  it('is set against the left margin at the top, LOGO_WIDTH wide, in the proportions of the file', () => {
+  it('is set on a white card LOGO_WIDTH wide against the left margin at the top, inset, in the proportions of the file', () => {
+    // The mark's own file is opaque, white behind the lockup, and the writer
+    // has no transparency: on the wash it sits on a card of its own white,
+    // so its edge is a card's edge rather than a pasted rectangle's.
     const laid = LONG.find((each) => each.name.includes('mark')) as Laid;
     const page = laid.pages[0] as Page;
     const drawn = page.ops.filter((op) => op.kind === 'image');
     expect(drawn).toHaveLength(1);
     const mark = drawn[0];
     if (!mark || mark.kind !== 'image') throw new Error('The mark was not drawn.');
-    expect(mark.width).toBe(GEOMETRY.LOGO_WIDTH);
-    expect(mark.height).toBeCloseTo((GEOMETRY.LOGO_WIDTH * LOGO.height) / LOGO.width, 5);
-    expect(mark.x).toBeCloseTo(GEOMETRY.LEFT, 5);
-    expect(mark.y + mark.height).toBeCloseTo(GEOMETRY.TOP, 5);
+    const inset = GEOMETRY.LOGO_INSET;
+    expect(inset).toBeGreaterThan(0);
+    expect(mark.width).toBeCloseTo(GEOMETRY.LOGO_WIDTH - inset * 2, 5);
+    expect(mark.height).toBeCloseTo((mark.width * LOGO.height) / LOGO.width, 5);
+    expect(mark.x).toBeCloseTo(GEOMETRY.LEFT + inset, 5);
+    expect(mark.y + mark.height).toBeCloseTo(GEOMETRY.TOP - inset, 5);
+    const card = page.ops.find(
+      (op): op is Extract<Op, { kind: 'rect' }> =>
+        op.kind === 'rect' &&
+        Math.abs(op.x - GEOMETRY.LEFT) < 0.01 &&
+        Math.abs(op.y + op.height - GEOMETRY.TOP) < 0.01 &&
+        Math.abs(op.width - GEOMETRY.LOGO_WIDTH) < 0.01,
+    );
+    if (!card) throw new Error('The mark has no card.');
+    expect(card.fill).toEqual({ rgb: WHITE });
+    expect(card.y).toBeCloseTo(mark.y - inset, 5);
+    // Drawn beneath the mark, not over it.
+    expect(page.ops.indexOf(card)).toBeLessThan(page.ops.indexOf(mark));
     const masthead = blocksNamed(laid.blocks[0] ?? [], 'masthead')[0] as Block;
-    expect(mark.y).toBeGreaterThanOrEqual(masthead.bottom - TOLERANCE);
+    expect(card.y).toBeGreaterThanOrEqual(masthead.bottom - TOLERANCE);
   });
 
   it('gives way to the wordmark set in type when the practice has none', () => {
@@ -931,13 +1001,14 @@ describe('the receipt', () => {
     'numberCard',
     'receivedFrom',
     'paymentMethod',
-    'receivedCard',
+    'tableHeader',
+    'tableRows',
     'summaryCard',
     'noteCard',
     'footer',
   ];
 
-  it('is one page, made of exactly its nine blocks, once each', () => {
+  it('is one page, made of exactly its ten blocks, once each', () => {
     for (const laid of RECEIPTS) {
       expect(laid.pages, laid.name).toHaveLength(1);
       const names = (laid.blocks[0] ?? []).map((block) => block.name);
@@ -996,23 +1067,34 @@ describe('the receipt', () => {
     }
   });
 
-  it('sets the two lower cards side by side on one top edge, and the note card full width below both', () => {
+  it('sets the table under the received-from card, full width, its rows hanging from its header', () => {
     for (const laid of RECEIPTS) {
       const blocks = laid.blocks[0] ?? [];
       const one = (name: BlockName): Block => blocksNamed(blocks, name)[0] as Block;
-      const received = one('receivedCard');
+      const header = one('tableHeader');
+      const rows = one('tableRows');
+      expect(header.top, laid.name).toBeLessThan(
+        Math.min(one('receivedFrom').bottom, one('paymentMethod').bottom),
+      );
+      expect(rows.top, laid.name).toBeCloseTo(header.bottom, 5);
+      for (const block of [header, rows]) {
+        expect(block.left, laid.name).toBeCloseTo(GEOMETRY.LEFT, 5);
+        expect(block.right, laid.name).toBeCloseTo(GEOMETRY.RIGHT, 5);
+      }
+    }
+  });
+
+  it('sets the note card and the summary side by side on one top edge, below the table', () => {
+    for (const laid of RECEIPTS) {
+      const blocks = laid.blocks[0] ?? [];
+      const one = (name: BlockName): Block => blocksNamed(blocks, name)[0] as Block;
       const summary = one('summaryCard');
       const note = one('noteCard');
-      const party = one('receivedFrom');
-      const method = one('paymentMethod');
-      expect(received.top, laid.name).toBeCloseTo(summary.top, 5);
-      expect(received.top, laid.name).toBeLessThan(Math.min(party.bottom, method.bottom));
-      expect(received.left, laid.name).toBeCloseTo(GEOMETRY.LEFT, 5);
-      expect(summary.right, laid.name).toBeCloseTo(GEOMETRY.RIGHT, 5);
-      expect(received.right, laid.name).toBeLessThan(summary.left);
-      expect(note.top, laid.name).toBeLessThan(Math.min(received.bottom, summary.bottom));
+      expect(summary.top, laid.name).toBeLessThan(one('tableRows').bottom);
+      expect(note.top, laid.name).toBeCloseTo(summary.top, 5);
       expect(note.left, laid.name).toBeCloseTo(GEOMETRY.LEFT, 5);
-      expect(note.right, laid.name).toBeCloseTo(GEOMETRY.RIGHT, 5);
+      expect(summary.right, laid.name).toBeCloseTo(GEOMETRY.RIGHT, 5);
+      expect(note.right, laid.name).toBeLessThan(summary.left);
     }
   });
 
