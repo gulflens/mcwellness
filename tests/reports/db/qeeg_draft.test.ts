@@ -483,6 +483,30 @@ describe('the client’s details come from the record', () => {
     expect(await reportCount()).toBe(before);
   });
 
+  it('refuses a brain-map draft while the household has not agreed to the practice holding brain data', async () => {
+    // Round 74: a brain-map report holds health data, so the household's
+    // agreements are asked at the moment of writing.
+    const { rows } = await h.owner.query<{ id: string }>(
+      "update consent set status = 'withdrawn', withdrawn_at = now() " +
+        "where client_id = $1 and purpose = 'health_data' and status = 'active' returning id",
+      [clientId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    try {
+      const res = await save({ clientId, kind: 'qeeg', locale: 'en', content: sentInitial() });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        code: 'consent_missing',
+        missing: ['consent_missing_health_data'],
+      });
+    } finally {
+      await h.owner.query(
+        "update consent set status = 'active', withdrawn_at = null where id = any($1::uuid[])",
+        [rows.map((row) => row.id)],
+      );
+    }
+  });
+
   it('counts the age on the day of the recording, and gathers again on every save', async () => {
     const first = await created(
       sentInitial({ recording: { recordedOn: '2026-04-01', eyes: null, handedness: null } }),
@@ -492,7 +516,9 @@ describe('the client’s details come from the record', () => {
     // The record is corrected between two saves: the next save says so.
     const person = h.data.clients[clientIndex];
     if (!person) throw new Error('The seed is not what it was.');
-    await h.owner.query("update client set date_of_birth = '2016-01-15' where id = $1", [clientId]);
+    // An adult's date, so the age changes and no guardian's agreement is
+    // needed: a minor's brain-map report asks one (round 74).
+    await h.owner.query("update client set date_of_birth = '2000-01-15' where id = $1", [clientId]);
     try {
       const res = await save({
         id: first.report.id,
@@ -505,7 +531,7 @@ describe('the client’s details come from the record', () => {
       });
       expect(res.status).toBe(200);
       const again = (await res.json()) as QeegDraftResponse;
-      expect((again.content as QeegInitial).subject.ageYears).toBe(10);
+      expect((again.content as QeegInitial).subject.ageYears).toBe(26);
     } finally {
       await h.owner.query('update client set date_of_birth = $1 where id = $2', [
         person.dateOfBirth,

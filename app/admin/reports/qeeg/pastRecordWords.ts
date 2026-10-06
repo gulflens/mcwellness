@@ -27,6 +27,7 @@ export const PAST_RECORD_CODES = Object.freeze([
   'not_a_past_record',
   'maps_come_after',
   'client_erased',
+  'consent_missing',
   'already_imported',
   'storage_unavailable',
   'unlinked_figure',
@@ -60,6 +61,8 @@ export const IMPORT_REFUSALS: Readonly<Record<string, string>> = Object.freeze({
   not_a_past_record: 'This is not a past record read from the old tool.',
   maps_come_after: `The pictures of a past record are added after it is brought in. ${RELOAD}`,
   client_erased: 'This client’s record has been erased, so nothing can be kept about them.',
+  consent_missing:
+    'This household has not yet agreed to everything a brain-map report needs: taking part, the practice holding brain data, and a guardian’s agreement for a child. Record their agreement on the client’s Consent tab first.',
   already_imported: 'This file has already been brought in for this client.',
   storage_unavailable:
     'The store that keeps the maps cannot be reached just now, so nothing was changed. Try again shortly.',

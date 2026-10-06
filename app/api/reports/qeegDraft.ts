@@ -18,6 +18,7 @@ import { mayDraftReport } from './access';
 import { requiredReason } from './reason';
 import { practiceTimeZone } from './gather';
 import { brainMapService } from './qeeg/brainMapService';
+import { brainMapConsentGate } from './qeeg/consentGate';
 import { countedSessions } from './qeeg/sessionsCounted';
 import { QeegDraftInput, QeegDraftResponse } from './schema';
 import { asRow, readReport, type ReportRecord } from './source';
@@ -296,7 +297,6 @@ export async function saveQeegDraft(
   if ((await requiredReason(c.get('db'))) === null) {
     return c.json({ error: 'reason_required', requestId }, 400);
   }
-
   const sent = input.content;
   if (!isRecord(sent)) {
     return c.json(
@@ -366,6 +366,22 @@ export async function saveQeegDraft(
     // begin or go on writing, whoever asks.
     return c.json({ error: 'unprocessable', code: 'client_erased', requestId }, 422);
   }
+  // The household's agreements, at the moment of writing, asked only once the
+  // client is known to be visible and not erased: a brain-map report holds
+  // health data (round 74, domain/reports/qeeg/consents.ts).
+  const consentRefusals = await brainMapConsentGate(
+    c.get('db'),
+    input.clientId,
+    isoDateIn(now(), await practiceTimeZone(c.get('db'))),
+  );
+  if (consentRefusals.length > 0) {
+    await logDraftRefused(c.get('db'), input.clientId, consentRefusals[0] ?? 'consent_missing');
+    return c.json(
+      { error: 'conflict', code: 'consent_missing', missing: consentRefusals, requestId },
+      409,
+    );
+  }
+
   // The record was read, and its details are about to leave in the answer.
   await logRead(db, 'client', input.clientId, input.clientId);
 
