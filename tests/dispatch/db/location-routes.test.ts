@@ -37,12 +37,21 @@ const FINANCE_USER = '00000000-0000-4000-8000-000000007606';
 const AUTH_FINANCE = '00000000-0000-4000-8000-000000007607';
 const APPOINTMENT = '00000000-0000-4000-8000-000000007608';
 
-/** 10:30 in Dubai, half an hour into a visit that opened at 10:00: the shift is open. */
-const NOW = new Date('2026-10-06T10:30:00+04:00');
+/**
+ * 10:30 in Dubai, half an hour into a visit that opened at 10:00: the shift is
+ * open. A day in the past on purpose: since migration 212 the database stamps
+ * a position with its own clock, which is always later than this one, so a
+ * position is never "before the shift opened" whatever time the suite runs.
+ */
+const NOW = new Date('2026-09-04T10:30:00+04:00');
+/** The same day at 13:30: the visit is long over, the tail has passed, the shift is closed. */
+const AFTER_SHIFT = new Date('2026-09-04T13:30:00+04:00');
 
 let owner: pg.Client;
 let pool: ReturnType<typeof createPool>;
 let api: ReturnType<typeof createApi>;
+/** The same API with its clock after the shift has closed. */
+let evening: ReturnType<typeof createApi>;
 
 function mint(sub: string): Promise<string> {
   return new SignJWT({ role: 'authenticated' })
@@ -130,7 +139,7 @@ beforeAll(async () => {
   });
   await seedClient(owner, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
   await seedLocation(owner, IDS.tenantA, IDS.locationA, IDS.clientA, IDS.ownerA);
-  const start = new Date('2026-10-06T10:00:00+04:00');
+  const start = new Date('2026-09-04T10:00:00+04:00');
   await owner.query(
     'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
       'location_id, delivery_mode, window_start, window_end, status, created_by) ' +
@@ -155,6 +164,12 @@ beforeAll(async () => {
     keyOf: () => 'test',
     now: () => NOW,
   });
+  evening = createApi({
+    pool,
+    verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }),
+    keyOf: () => 'test',
+    now: () => AFTER_SHIFT,
+  });
 });
 
 afterAll(async () => {
@@ -166,7 +181,7 @@ describe('the practitioner, before consenting', () => {
   it('is told they can share, have not consented, and are on shift', async () => {
     expect(await me(AUTH.practitionerA)).toEqual({
       eligible: true,
-      noticeVersion: '1.0',
+      noticeVersion: '1.1',
       consent: null,
       sharingOn: false,
       shiftOpen: true,
@@ -198,7 +213,7 @@ describe('somebody with no day of their own', () => {
     for (const sub of [AUTH.ownerA, AUTH.adminA, AUTH_FINANCE, AUTH.contactA]) {
       expect((await me(sub)).eligible, sub).toBe(false);
       expect(
-        (await call(sub, 'POST', '/api/location/consent', { noticeVersion: '1.0' })).status,
+        (await call(sub, 'POST', '/api/location/consent', { noticeVersion: '1.1' })).status,
         sub,
       ).toBe(403);
       expect((await call(sub, 'PUT', '/api/location/sharing', { on: true })).status, sub).toBe(403);
@@ -210,11 +225,11 @@ describe('somebody with no day of their own', () => {
 describe('consenting, sharing and the board', () => {
   it('records the consent, turns sharing on, and writes a position on shift', async () => {
     const res = await call(AUTH.practitionerA, 'POST', '/api/location/consent', {
-      noticeVersion: '1.0',
+      noticeVersion: '1.1',
     });
     expect(res.status).toBe(204);
     const now = await me(AUTH.practitionerA);
-    expect(now.consent?.noticeVersion).toBe('1.0');
+    expect(now.consent?.noticeVersion).toBe('1.1');
     expect(now.sharingOn).toBe(true);
     expect((await call(AUTH.practitionerA, 'POST', '/api/location/positions', A_FIX)).status).toBe(
       204,
@@ -229,11 +244,20 @@ describe('consenting, sharing and the board', () => {
           latitude: A_FIX.latitude,
           longitude: A_FIX.longitude,
           accuracyMetres: A_FIX.accuracyMetres,
-          recordedAt: NOW.toISOString(),
+          // The database's own clock (migration 212), not the caller's.
+          recordedAt: expect.any(String),
           ageMinutes: 0,
         },
       ]);
     }
+  });
+
+  it("stops showing a position once that person's shift has closed", async () => {
+    const res = await evening.request('/api/location/positions', {
+      headers: { authorization: `Bearer ${await mint(AUTH.ownerA)}` },
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as SharedPositionsResponse).positions).toEqual([]);
   });
 
   it('refuses the board read to a practitioner, finance and a household', async () => {
@@ -266,7 +290,7 @@ describe('consenting, sharing and the board', () => {
 
   it('refuses a position from somebody with consent and no shift today', async () => {
     expect(
-      (await call(AUTH_IDLE, 'POST', '/api/location/consent', { noticeVersion: '1.0' })).status,
+      (await call(AUTH_IDLE, 'POST', '/api/location/consent', { noticeVersion: '1.1' })).status,
     ).toBe(204);
     const res = await call(AUTH_IDLE, 'POST', '/api/location/positions', A_FIX);
     expect(res.status).toBe(409);
@@ -315,5 +339,66 @@ describe('consenting, sharing and the board', () => {
     );
     expect(rows.length).toBeGreaterThanOrEqual(4);
     for (const row of rows) expect(row.reason, row.entity_type).toMatch(/location/);
+  });
+});
+
+describe('withdrawal always works, and a stale notice pauses sharing', () => {
+  it('lets somebody who is no longer eligible withdraw, switch off, and be forgotten', async () => {
+    // The idle practitioner consented above. Give them a position, then take
+    // away their role and their working row: they can no longer share, and
+    // they must still be able to stop.
+    await owner.query(
+      'insert into practitioner_position (tenant_id, practitioner_id, latitude, longitude, ' +
+        'accuracy_metres, created_by) values ($1, $2, 25.2, 55.27, 10, $3)',
+      [IDS.tenantA, IDLE, IDLE_USER],
+    );
+    await owner.query("delete from user_role where user_id = $1 and role = 'practitioner'", [
+      IDLE_USER,
+    ]);
+    await owner.query("update practitioner set status = 'inactive' where id = $1", [IDLE]);
+
+    expect((await me(AUTH_IDLE)).eligible).toBe(false);
+    expect((await me(AUTH_IDLE)).consent?.noticeVersion).toBe('1.1');
+    expect((await call(AUTH_IDLE, 'PUT', '/api/location/sharing', { on: false })).status).toBe(204);
+    expect((await call(AUTH_IDLE, 'POST', '/api/location/consent/withdraw', {})).status).toBe(204);
+    expect(await me(AUTH_IDLE)).toMatchObject({ consent: null, sharingOn: false });
+    const { rows } = await owner.query<{ n: number }>(
+      'select count(*)::int as n from practitioner_position where practitioner_id = $1',
+      [IDLE],
+    );
+    expect(rows[0]?.n).toBe(0);
+    // Turning sharing back on is still refused to somebody who cannot share.
+    expect((await call(AUTH_IDLE, 'PUT', '/api/location/sharing', { on: true })).status).toBe(403);
+  });
+
+  it('pauses sharing when the notice has changed since the person agreed', async () => {
+    // Practitioner A agrees again, then the practice's notice moves on: their
+    // consent now names an older version than the one in force.
+    expect(
+      (await call(AUTH.practitionerA, 'POST', '/api/location/consent', { noticeVersion: '1.1' }))
+        .status,
+    ).toBe(204);
+    expect((await call(AUTH.practitionerA, 'POST', '/api/location/positions', A_FIX)).status).toBe(
+      204,
+    );
+    expect(await shared()).toHaveLength(1);
+    await owner.query(
+      'update staff_consent set withdrawn_at = now() where user_id = $1 and withdrawn_at is null',
+      [MORE_IDS.practitionerUserA],
+    );
+    await owner.query(
+      'insert into staff_consent (tenant_id, user_id, purpose, notice_version, created_by) ' +
+        "values ($1, $2, 'location_sharing', '1.0', $2)",
+      [IDS.tenantA, MORE_IDS.practitionerUserA],
+    );
+
+    const status = await me(AUTH.practitionerA);
+    expect(status.consent?.noticeVersion).toBe('1.0');
+    expect(status.noticeVersion).toBe('1.1');
+    const res = await call(AUTH.practitionerA, 'POST', '/api/location/positions', A_FIX);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: 'notice_changed' });
+    // And the board no longer shows the position sent under the old notice.
+    expect(await shared()).toEqual([]);
   });
 });

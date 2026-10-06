@@ -16,6 +16,7 @@ import {
   seedUser,
   setAuditContext,
 } from '../../db/helpers';
+import { STAFF_LOCATION_NOTICE_VERSION } from '@domain/scheduling';
 
 /**
  * Live location in the database (migration 211, db/policies/dispatch/
@@ -62,7 +63,7 @@ async function outcome(sql: string, params: unknown[] = []): Promise<string> {
 
 const GIVE =
   'insert into staff_consent (tenant_id, user_id, purpose, notice_version, created_by) ' +
-  "values ($1, $2, 'location_sharing', '1.0', $2)";
+  "values ($1, $2, 'location_sharing', '1.1', $2)";
 const SWITCH_ON =
   'insert into location_sharing (tenant_id, user_id, sharing_on, created_by) values ($1, $2, true, $2)';
 const POSITION =
@@ -469,6 +470,8 @@ describe('the two-day limit', () => {
     } finally {
       await pool.end();
       await owner.query('delete from practitioner_position');
+      await owner.query('delete from location_sharing');
+      await owner.query('delete from staff_consent');
     }
   });
 
@@ -492,9 +495,6 @@ describe('the two-day limit', () => {
 describe('positions never reach the audit log', () => {
   it('writes no audit row for a position written, read or deleted; the consent is audited', async () => {
     await rolledBack(owner, async () => {
-      // The fixture of the two-day test above is not this test's.
-      await owner.query('delete from location_sharing');
-      await owner.query('delete from staff_consent');
       await setAuditContext(owner, SHARER_USER);
       const rows = await asApiRole(
         owner,
@@ -531,5 +531,98 @@ describe('positions never reach the audit log', () => {
       expect(everything).not.toContain('25.123456');
       expect(everything).not.toContain('55.654321');
     });
+  });
+});
+
+describe('fix round 1: the database floor', () => {
+  it("stamps recorded_at with the server's clock, whatever the writer sends", async () => {
+    await rolledBack(owner, async () => {
+      await seedSharing(SHARER_USER);
+      await setAuditContext(owner, SHARER_USER);
+      const stamps = await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          const future = new Date(Date.now() + 24 * 3_600_000);
+          const stale = new Date(Date.now() - 72 * 3_600_000);
+          await owner.query(POSITION, [IDS.tenantA, SHARER, 25.1, 55.27, future, SHARER_USER]);
+          await owner.query(POSITION, [IDS.tenantA, SHARER, 25.2, 55.27, stale, SHARER_USER]);
+          await owner.query('reset role');
+          return (
+            await owner.query<{ drift: number }>(
+              'select abs(extract(epoch from recorded_at - now()))::int as drift ' +
+                'from practitioner_position',
+            )
+          ).rows;
+        },
+        'practitioner',
+      );
+      expect(stamps).toHaveLength(2);
+      for (const stamp of stamps) expect(stamp.drift).toBeLessThan(5);
+    });
+  });
+
+  it('refuses a position and hides the last one when the consent names an older notice', async () => {
+    await rolledBack(owner, async () => {
+      await owner.query(
+        'insert into staff_consent (tenant_id, user_id, purpose, notice_version, created_by) ' +
+          "values ($1, $2, 'location_sharing', '1.0', $2)",
+        [IDS.tenantA, SHARER_USER],
+      );
+      await owner.query(SWITCH_ON, [IDS.tenantA, SHARER_USER]);
+      await seedPosition(SHARER, SHARER_USER, new Date());
+      await setAuditContext(owner, SHARER_USER);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          expect(
+            await outcome(POSITION, [IDS.tenantA, SHARER, 25.2, 55.27, new Date(), SHARER_USER]),
+          ).toBe('42501');
+        },
+        'practitioner',
+      );
+      await setAuditContext(owner, ADMIN_USER);
+      const seen = await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => (await owner.query('select id from practitioner_position')).rows,
+        'admin',
+      );
+      expect(seen).toEqual([]);
+    });
+  });
+
+  it('knows the notice version the domain asks consent to', async () => {
+    const { rows } = await owner.query<{ v: string }>(
+      'select app.staff_location_notice_version() as v',
+    );
+    expect(rows[0]?.v).toBe(STAFF_LOCATION_NOTICE_VERSION);
+  });
+
+  it('deletes a position stamped in the future, however it got there', async () => {
+    await owner.query('delete from practitioner_position');
+    await owner.query('delete from location_sharing');
+    await owner.query('delete from staff_consent');
+    await seedSharing(SHARER_USER);
+    // Only the table's owner — a restore, a data step — can write such a row;
+    // the API's own role is stamped with the server's clock.
+    await seedPosition(SHARER, SHARER_USER, new Date(Date.now() + 24 * 3_600_000), 25.8);
+    await seedPosition(SHARER, SHARER_USER, new Date(), 25.4);
+    const pool = createPool(process.env.API_DATABASE_URL ?? '');
+    try {
+      await runJob('location-positions', {
+        pool,
+        storage: {} as ServerStorageProvider,
+        log: () => undefined,
+      });
+      const { rows } = await owner.query<{ latitude: number }>(
+        'select latitude from practitioner_position',
+      );
+      expect(rows.map((row) => row.latitude)).toEqual([25.4]);
+    } finally {
+      await pool.end();
+      await owner.query('delete from practitioner_position');
+    }
   });
 });

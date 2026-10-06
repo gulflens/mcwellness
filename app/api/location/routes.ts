@@ -5,9 +5,10 @@ import {
   mayWritePosition,
   positionAgeMinutes,
   practiceDate,
-  shiftOpen,
+  shiftWindow,
   type AppointmentStatus,
   type ShiftStop,
+  type ShiftWindow,
 } from '@domain/scheduling';
 import { logReads } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -59,6 +60,11 @@ const STANDING_CONSENT_SQL =
 const SWITCH_SQL =
   'select sharing_on from location_sharing ' +
   'where user_id = app.current_actor_id() and tenant_id = app.current_tenant_id()';
+
+/** Off, for whoever asks, without creating a row for somebody who never had one. */
+const TURN_OFF_SQL =
+  'update location_sharing set sharing_on = false ' +
+  'where user_id = app.current_actor_id() and tenant_id = app.current_tenant_id() and sharing_on';
 
 const SET_SWITCH_SQL =
   'insert into location_sharing (tenant_id, user_id, sharing_on, created_by) ' +
@@ -125,7 +131,7 @@ async function sharingOn(db: Db): Promise<boolean> {
   return rows[0]?.sharing_on ?? false;
 }
 
-async function ownShiftOpen(db: Db, practitionerId: string, now: Date): Promise<boolean> {
+async function shiftOf(db: Db, practitionerId: string, now: Date): Promise<ShiftWindow | null> {
   const [start, end] = dayRange(practiceDate(now));
   const { rows } = await db.query<{
     window_start: Date;
@@ -141,7 +147,19 @@ async function ownShiftOpen(db: Db, practitionerId: string, now: Date): Promise<
     status: row.status as AppointmentStatus,
     closedAt: row.closed_at,
   }));
-  return shiftOpen(day, { start, end }, now);
+  return shiftWindow(day, { start, end });
+}
+
+function isOpen(window: ShiftWindow | null, now: Date): boolean {
+  return (
+    window !== null &&
+    now.getTime() >= window.opensAt.getTime() &&
+    now.getTime() < window.closesAt.getTime()
+  );
+}
+
+async function ownShiftOpen(db: Db, practitionerId: string, now: Date): Promise<boolean> {
+  return isOpen(await shiftOf(db, practitionerId, now), now);
 }
 
 /** A person with a day of visits of their own: a practitioner or a lead, with a working row. */
@@ -154,18 +172,22 @@ export function mountLocation(api: Hono<ApiEnv>, now: () => Date = () => new Dat
   api.get('/api/location/me', async (c) => {
     const db = c.get('db');
     const practitionerId = await eligible(db, c.get('actor'));
+    const consent = await standingConsent(db);
     if (practitionerId === null) {
+      // Somebody who can no longer share still sees what they agreed to and
+      // whether their switch is on, so they can withdraw and switch off.
       return c.json(
         LocationMeResponse.parse({
           eligible: false,
           noticeVersion: STAFF_LOCATION_NOTICE_VERSION,
-          consent: null,
-          sharingOn: false,
+          consent: consent
+            ? { noticeVersion: consent.notice_version, givenAt: consent.given_at.toISOString() }
+            : null,
+          sharingOn: await sharingOn(db),
           shiftOpen: false,
         }),
       );
     }
-    const consent = await standingConsent(db);
     return c.json(
       LocationMeResponse.parse({
         eligible: true,
@@ -219,11 +241,9 @@ export function mountLocation(api: Hono<ApiEnv>, now: () => Date = () => new Dat
    * request to stop holding it, not only to stop collecting it.
    */
   api.post('/api/location/consent/withdraw', async (c) => {
-    const requestId = c.get('requestId');
     const db = c.get('db');
-    if ((await eligible(db, c.get('actor'))) === null) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
+    // Never refused: withdrawing must be as easy as agreeing, whatever the
+    // person's role or practitioner row is now (fix round 1, finding 5).
     await stampReason(db, REASONS.withdraw);
     await db.query(
       'update staff_consent set withdrawn_at = now() ' +
@@ -231,7 +251,7 @@ export function mountLocation(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         "and purpose = 'location_sharing' and withdrawn_at is null",
     );
     await stampReason(db, REASONS.off);
-    await db.query(SET_SWITCH_SQL, [false]);
+    await db.query(TURN_OFF_SQL);
     await db.query('select app.forget_own_positions()');
     return c.body(null, 204);
   });
@@ -242,18 +262,22 @@ export function mountLocation(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const db = c.get('db');
     const body = SetSharingInput.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
+    if (!body.data.on) {
+      // Off is never refused, whoever the person is now (fix round 1, finding 5).
+      await stampReason(db, REASONS.off);
+      await db.query(TURN_OFF_SQL);
+      return c.body(null, 204);
+    }
     if ((await eligible(db, c.get('actor'))) === null) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    if (body.data.on) {
-      const consent = await standingConsent(db);
-      if (consent === null) return c.json({ error: 'no_consent', requestId }, 409);
-      if (consent.notice_version !== STAFF_LOCATION_NOTICE_VERSION) {
-        return c.json({ error: 'notice_changed', requestId }, 409);
-      }
+    const consent = await standingConsent(db);
+    if (consent === null) return c.json({ error: 'no_consent', requestId }, 409);
+    if (consent.notice_version !== STAFF_LOCATION_NOTICE_VERSION) {
+      return c.json({ error: 'notice_changed', requestId }, 409);
     }
-    await stampReason(db, body.data.on ? REASONS.on : REASONS.off);
-    await db.query(SET_SWITCH_SQL, [body.data.on]);
+    await stampReason(db, REASONS.on);
+    await db.query(SET_SWITCH_SQL, [true]);
     return c.body(null, 204);
   });
 
@@ -276,12 +300,13 @@ export function mountLocation(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'position_refused', code: decision.reason, requestId }, 409);
     }
     // No `returning`: the writer may not read the table back, by design.
-    // Recorded at the clock the shift was judged by, so the two cannot disagree.
+    // `recorded_at` is the database's own clock (migration 212): no writer,
+    // this route included, chooses when a position was taken.
     await db.query(
       'insert into practitioner_position (tenant_id, practitioner_id, latitude, longitude, ' +
-        'accuracy_metres, recorded_at, created_by) values (app.current_tenant_id(), $1, $2, ' +
-        '$3, $4, $5, app.current_actor_id())',
-      [practitionerId, body.data.latitude, body.data.longitude, body.data.accuracyMetres, at],
+        'accuracy_metres, created_by) values (app.current_tenant_id(), $1, $2, $3, $4, ' +
+        'app.current_actor_id())',
+      [practitionerId, body.data.latitude, body.data.longitude, body.data.accuracyMetres],
     );
     return c.body(null, 204);
   });
@@ -304,15 +329,26 @@ export function mountLocation(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       accuracy_metres: number;
       recorded_at: Date;
     }>(SHARED_POSITIONS_SQL, [dayStart]);
+    // Only somebody whose shift is open now, and only a position sent since
+    // it opened: once the shift closes the last position leaves the board
+    // rather than staying there, hours old, until midnight (fix round 1,
+    // finding 4). The same domain rule the write is judged by.
+    const shown: typeof rows = [];
+    for (const row of rows) {
+      const window = await shiftOf(db, row.practitioner_id, at);
+      if (isOpen(window, at) && window !== null && row.recorded_at >= window.opensAt) {
+        shown.push(row);
+      }
+    }
     // Before the answer leaves: whose position was looked at, by id, never where.
     await logReads(
       db,
       'practitioner_position',
-      rows.map((row) => ({ id: row.id, clientId: null })),
+      shown.map((row) => ({ id: row.id, clientId: null })),
     );
     return c.json(
       SharedPositionsResponse.parse({
-        positions: rows.map((row) => ({
+        positions: shown.map((row) => ({
           practitionerId: row.practitioner_id,
           latitude: row.latitude,
           longitude: row.longitude,
