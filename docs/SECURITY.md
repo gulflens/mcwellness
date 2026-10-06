@@ -170,9 +170,11 @@ credential); every read and write of a record is logged, hash-chained.
    the caller's address or the signed-in person's id with timestamps, in this
    process's memory only: never written to disk or a log, dropped when the
    window empties, swept on request arrival once per window, and capped at
-   50,000 keys (past that, new callers are refused rather than stored). Right
-   for one instance; several instances need a shared store behind the same
-   interface, and a hosted store then enters the vendor register first. The
+   50,000 keys (past that, new callers are refused rather than stored).
+   Production runs two worker processes, each with its own counters, which is
+   why the three stranger-facing budgets are halved; a shared store behind the
+   same interface would make one ceiling exact, and a hosted store then enters
+   the vendor register first. The
    failure budget counts refused sign-ins (401) only, not a signed-in person's
    own forbidden screens.
 4. **Input hygiene.** Bodies are capped at 64 KB and must be JSON; every
