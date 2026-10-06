@@ -24,8 +24,6 @@ import {
 import { asRow, readReport, type ReportRecord } from '../source';
 import { linksOf, picturesOf } from './pages';
 import { brainMapConsentGate } from './consentGate';
-import { practiceTimeZone } from '../gather';
-import { isoDateIn } from '../../../../domain/shared';
 
 /**
  * A past record from the practice's old report tool
@@ -266,11 +264,7 @@ async function bringIn(c: Context<ApiEnv>, now: Date): Promise<Response> {
   if (status === 'erased') return answer(c, 422, 'client_erased');
   // A past record holds health data too: the household's agreements are asked
   // as for a new brain-map report (round 74).
-  const consentRefusals = await brainMapConsentGate(
-    db,
-    input.clientId,
-    isoDateIn(now, await practiceTimeZone(db)),
-  );
+  const consentRefusals = await brainMapConsentGate(db, input.clientId, now);
   if (consentRefusals.length > 0) {
     await logAction(
       db,

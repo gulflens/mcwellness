@@ -398,6 +398,10 @@ describe('bringing a past record in', () => {
       const res = await bringIn(bodyFor(newFile()));
       expect(res.status).toBe(409);
       expect(await codeOf(res)).toBe('consent_missing');
+      // Written to the trail before the answer, against the client.
+      expect(await refusalsOnTrail(h.owner, 'report.import_refused', { clientId })).toContain(
+        'consent_missing_health_data',
+      );
     } finally {
       await h.owner.query(
         "update consent set status = 'active', withdrawn_at = null where id = any($1::uuid[])",

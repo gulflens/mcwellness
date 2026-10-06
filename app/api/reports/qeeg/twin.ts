@@ -4,6 +4,7 @@ import { validateQeegContent } from '../../../../domain/reports/qeeg/shape';
 import { logAction } from '../../_middleware/audit';
 import type { ApiEnv, Db } from '../../_middleware/request-context';
 import { isUuid } from '../../billing/ids';
+import { brainMapConsentGate } from './consentGate';
 import { mayDraftReport } from '../access';
 import { requiredReason } from '../reason';
 import { TwinInput, TwinResponse } from '../schema';
@@ -153,6 +154,10 @@ export function mountReportTwin(api: Hono<ApiEnv>, now: () => Date = () => new D
     const client = found.rows[0];
     if (!client) return c.json({ error: 'not_found', requestId }, 404);
     if (client.status === 'erased') return refuse(422, 'client_erased');
+    // The other language is a new brain-map draft: the household's agreements
+    // are asked as for any other (round 74).
+    const missing = await brainMapConsentGate(db, first.client_id, now());
+    if (missing.length > 0) return refuse(409, 'consent_missing', { missing });
 
     const checked = validateQeegContent(first.content);
     if (!checked.ok) {

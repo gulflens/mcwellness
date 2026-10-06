@@ -499,11 +499,80 @@ describe('the client’s details come from the record', () => {
         code: 'consent_missing',
         missing: ['consent_missing_health_data'],
       });
+      // Written to the trail before the answer, against the client.
+      expect(await refusalsOnTrail(h.owner, 'report.draft_refused', { clientId })).toContain(
+        'consent_missing_health_data',
+      );
     } finally {
       await h.owner.query(
         "update consent set status = 'active', withdrawn_at = null where id = any($1::uuid[])",
         [rows.map((row) => row.id)],
       );
+    }
+  });
+
+  it('refuses a brain-map draft once an agreement expired, even earlier the same day', async () => {
+    // An expiry is a moment, not a date: one that passed a minute ago no
+    // longer counts, though the practice's day has not turned.
+    const { rows } = await h.owner.query<{ id: string; expires_at: string | null }>(
+      "select id, expires_at::text from consent where client_id = $1 and purpose = 'participation' " +
+        "and status = 'active'",
+      [clientId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    // A minute before the route's own clock: the same day in Dubai.
+    const aMinuteAgo = new Date(NOW().getTime() - 60_000).toISOString();
+    await h.owner.query(
+      'update consent set expires_at = $2::timestamptz where id = any($1::uuid[])',
+      [rows.map((row) => row.id), aMinuteAgo],
+    );
+    try {
+      const res = await save({ clientId, kind: 'qeeg', locale: 'en', content: sentInitial() });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        code: 'consent_missing',
+        missing: ['consent_missing_participation'],
+      });
+    } finally {
+      for (const row of rows) {
+        await h.owner.query('update consent set expires_at = $2::timestamptz where id = $1', [
+          row.id,
+          row.expires_at,
+        ]);
+      }
+    }
+  });
+
+  it('asks a guardian’s agreement for a child, and for a client whose birth date is not known', async () => {
+    const { rows } = await h.owner.query<{ born: string | null }>(
+      "select to_char(date_of_birth, 'YYYY-MM-DD') as born from client where id = $1",
+      [clientId],
+    );
+    const born = rows[0]?.born ?? null;
+    const guardian = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from consent where client_id = $1 and purpose = 'minor_participation' " +
+        "and status = 'active'",
+      [clientId],
+    );
+    expect(guardian.rows[0]?.n).toBe('0');
+    try {
+      for (const date of ['2016-03-10', null]) {
+        await h.owner.query('update client set date_of_birth = $2::date where id = $1', [
+          clientId,
+          date,
+        ]);
+        const res = await save({ clientId, kind: 'qeeg', locale: 'en', content: sentInitial() });
+        expect(res.status, String(date)).toBe(409);
+        expect(await res.json()).toMatchObject({
+          code: 'consent_missing',
+          missing: ['consent_missing_minor_participation'],
+        });
+      }
+    } finally {
+      await h.owner.query('update client set date_of_birth = $2::date where id = $1', [
+        clientId,
+        born,
+      ]);
     }
   });
 

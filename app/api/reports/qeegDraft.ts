@@ -369,11 +369,7 @@ export async function saveQeegDraft(
   // The household's agreements, at the moment of writing, asked only once the
   // client is known to be visible and not erased: a brain-map report holds
   // health data (round 74, domain/reports/qeeg/consents.ts).
-  const consentRefusals = await brainMapConsentGate(
-    c.get('db'),
-    input.clientId,
-    isoDateIn(now(), await practiceTimeZone(c.get('db'))),
-  );
+  const consentRefusals = await brainMapConsentGate(c.get('db'), input.clientId, now());
   if (consentRefusals.length > 0) {
     await logDraftRefused(c.get('db'), input.clientId, consentRefusals[0] ?? 'consent_missing');
     return c.json(
