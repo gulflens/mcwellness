@@ -1,7 +1,7 @@
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { IDS, freshDatabase, rolledBack, seedTenant, setAuditContext } from '../../db/helpers';
-import { PORTAL, seedPortalHousehold, seedWording } from './support';
+import { PORTAL, seedConsent, seedPortalHousehold, seedWording } from './support';
 
 /**
  * The phone notifications' floor (migration 707, db/policies/portal/push.sql;
@@ -579,6 +579,84 @@ describe('migration 975: the trail and the erasure', () => {
         [PORTAL.admin],
       );
       expect(status.rows[0]?.status).toBe('active');
+    });
+  });
+});
+
+/**
+ * Only the switch counts (PR 247's review, finding 1): a marketing row the
+ * adult did not give with their own portal's switch — one the console filed
+ * before it was refused, or one on paper — never makes them a recipient of an
+ * offer, never stops them turning the switch on, and an offer never reaches a
+ * device through a consent on an erased record.
+ */
+describe('only the portal switch makes an offer’s recipient', () => {
+  const PAPER = '00000001-0000-4000-8000-0000000000bb';
+
+  async function offerTo(userId: string): Promise<void> {
+    await admin(async () => {
+      await sendAsAdmin(M.first, 'offer');
+      await owner.query(
+        'insert into push_recipient (tenant_id, message_id, user_id, devices, ' +
+          "marketing_standing, created_by) values ($1, $2, $3, 1, 'off', $4)",
+        [IDS.tenantA, M.first, userId, PORTAL.admin],
+      );
+    });
+  }
+
+  it('reads a marketing row not given with the switch as no consent at all', async () => {
+    await rolledBack(owner, async () => {
+      await seedConsent(owner, {
+        id: PAPER,
+        clientId: PORTAL.adultClient,
+        contactId: PORTAL.adultContact,
+        purpose: 'marketing',
+        wordingId: WORDING,
+      });
+      await household(PORTAL.adultUser, () => subscribe(31));
+      const audience = await admin(() =>
+        owner.query<{ marketing_consent_id: string | null }>(
+          'select marketing_consent_id from app.push_audience() where user_id = $1',
+          [PORTAL.adultUser],
+        ),
+      );
+      expect(audience.rows).toEqual([{ marketing_consent_id: null }]);
+      await offerTo(PORTAL.adultUser);
+      const targets = await admin(() =>
+        owner.query('select * from app.push_delivery_targets($1)', [M.first]),
+      );
+      expect(targets.rowCount).toBe(0);
+    });
+  });
+
+  it('lets the adult turn the switch on beside such a row', async () => {
+    await rolledBack(owner, async () => {
+      await seedConsent(owner, {
+        id: PAPER,
+        clientId: PORTAL.adultClient,
+        contactId: PORTAL.adultContact,
+        purpose: 'marketing',
+        wordingId: WORDING,
+      });
+      const given = await household(PORTAL.adultUser, () =>
+        owner.query('select app.portal_give_marketing_consent($1)', [WORDING]),
+      );
+      expect(given.rowCount).toBe(1);
+    });
+  });
+
+  it('never delivers an offer through a consent on an erased record', async () => {
+    await rolledBack(owner, async () => {
+      await household(PORTAL.adultUser, () => subscribe(32));
+      await household(PORTAL.adultUser, () =>
+        owner.query('select app.portal_give_marketing_consent($1)', [WORDING]),
+      );
+      await offerTo(PORTAL.adultUser);
+      await owner.query("update client set status = 'erased' where id = $1", [PORTAL.adultClient]);
+      const targets = await admin(() =>
+        owner.query('select * from app.push_delivery_targets($1)', [M.first]),
+      );
+      expect(targets.rowCount).toBe(0);
     });
   });
 });

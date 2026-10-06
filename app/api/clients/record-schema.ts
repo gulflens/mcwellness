@@ -580,7 +580,13 @@ export const CONSENT_ERROR_CODES = [
 export type ConsentErrorCode = (typeof CONSENT_ERROR_CODES)[number];
 
 export const RecordConsentBody = z.object({
-  purpose: z.enum(CONSENT_PURPOSES),
+  /**
+   * The purposes the console offers, as the bundle below: never `marketing`,
+   * which is the adult's own switch on their portal (migration 706; PR 247's
+   * review, finding 1), and never a retired purpose. A recorded consent of
+   * any purpose is still read back through `Consent` above.
+   */
+  purpose: z.enum(OFFERED_CONSENT_PURPOSES),
   givenByContactId: z.uuid(),
   textDocumentId: z.uuid(),
   method: z.enum(CONSENT_METHODS),

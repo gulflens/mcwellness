@@ -294,8 +294,9 @@ grant execute on function app.portal_subscribe_push(text, text, text) to app_rol
 --    records not erased (relationship and the client's date of birth, which
 --    is all the domain needs to tell a young person's own login), the
 --    language it reads in, and its own standing marketing consent, if any —
---    the most recently given of its own rows, never another adult's on the
---    same record. domain/portal/push.ts (`pushRecipients`) decides from
+--    the most recently given of its own rows given with the portal's switch
+--    (`portal_switch`, 706), never another adult's on the same record and
+--    never a row filed any other way. domain/portal/push.ts (`pushRecipients`) decides from
 --    these who receives what; this function decides nothing.
 --
 --    plpgsql for 706's reason: the consent's new method arrives in 706 and
@@ -333,6 +334,7 @@ begin
            where cs.tenant_id = u.tenant_id
              and cs.purpose = 'marketing'
              and cs.status = 'active'
+             and cs.method = 'portal_switch'
              and ct.user_id = u.id
              and cl.status <> 'erased'
            order by cs.given_at desc, cs.id
@@ -357,8 +359,9 @@ grant execute on function app.push_audience() to app_role;
 --    that runs in the API process straight after the send's own commit,
 --    stamped as the person who pressed Send (app/api/portal/push/sender.ts).
 --    Every device of every recipient the record names; for an offer, only
---    while that person's own marketing consent still stands, so a withdrawal
---    pressed between the send and the delivery is honoured too. This is the
+--    while that person's own marketing consent, given with the portal's
+--    switch on a record not erased, still stands — so a withdrawal pressed
+--    between the send and the delivery is honoured too. This is the
 --    one place a device's address leaves the table, and it leaves to be
 --    sealed and posted, never to a screen.
 ------------------------------------------------------------------------------
@@ -388,9 +391,12 @@ begin
              from public.consent cs
              join public.contact ct on ct.id = cs.given_by_contact_id
                                    and ct.tenant_id = cs.tenant_id
+             join public.client cl on cl.id = cs.client_id and cl.tenant_id = cs.tenant_id
             where cs.tenant_id = m.tenant_id
               and cs.purpose = 'marketing'
               and cs.status = 'active'
+              and cs.method = 'portal_switch'
+              and cl.status <> 'erased'
               and ct.user_id = r.user_id))
    order by s.user_id, s.id;
 end

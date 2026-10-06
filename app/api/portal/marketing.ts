@@ -46,7 +46,10 @@ const OWN_ROWS_SQL =
   'cs.text_document_id from consent cs ' +
   'join contact ct on ct.id = cs.given_by_contact_id and ct.tenant_id = cs.tenant_id ' +
   'join client cl on cl.id = cs.client_id and cl.tenant_id = cs.tenant_id ' +
+  // The switch's own rows: a marketing row filed any other way is not the
+  // person's switch, and the audience never reads it either (706, 707).
   "where cs.tenant_id = app.current_tenant_id() and cs.purpose = 'marketing' " +
+  "and cs.method = 'portal_switch' " +
   "and ct.user_id = $1 and cl.status <> 'erased' order by cs.given_at, cs.id";
 
 type OwnRow = {

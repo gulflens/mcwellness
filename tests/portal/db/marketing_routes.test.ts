@@ -225,3 +225,37 @@ describe('turning it on and off', () => {
     expect(other.rowCount).toBe(0);
   });
 });
+
+/**
+ * The practice never records the marketing consent (PR 247's review, finding
+ * 1): it is the adult's own switch. The console's consent route refuses the
+ * purpose by any method, so it can never supersede an adult's switch.
+ */
+describe('the practice cannot record it for somebody', () => {
+  it('refuses marketing from the console by any method, and leaves the adult’s switch standing', async () => {
+    const on = await h.callAs('POST', '/api/portal/marketing', PORTAL.adultAuth, {
+      wordingId: W.ar,
+    });
+    expect(on.status).toBe(201);
+    for (const method of ['app_signature', 'paper_scan', 'verbal_witnessed']) {
+      const res = await h.callAs(
+        'POST',
+        `/api/clients/${PORTAL.adultClient}/consents`,
+        OWNER_AUTH,
+        {
+          purpose: 'marketing',
+          givenByContactId: PORTAL.adultContact,
+          textDocumentId: W.ar,
+          method,
+        },
+        { 'x-reason': 'Synthetic test' },
+      );
+      expect(res.status, method).toBe(400);
+      // Refused at the shape, before any wording, evidence or witness is asked.
+      expect(((await res.json()) as { error: string }).error, method).toBe('bad_request');
+    }
+    expect(await rowsOf([PORTAL.adultContact])).toEqual([
+      { status: 'active', method: 'portal_switch', client_id: PORTAL.adultClient },
+    ]);
+  });
+});

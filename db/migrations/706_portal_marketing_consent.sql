@@ -93,7 +93,11 @@ grant execute on function app.portal_marketing_wording(locale) to app_role;
 --        (app.actor_reads_announcements, 705) — else 42501;
 --      * the wording named is the practice's current approved marketing
 --        wording, in either language — else 23514, hint `wording_not_current`;
---      * nothing already standing — else 23505, hint `already_given`.
+--      * nothing already standing from this switch — else 23505, hint
+--        `already_given`. Only a `portal_switch` row counts: a marketing row
+--        filed any other way (before the console refused the purpose, or on
+--        paper) is not the person's switch and neither blocks nor stands in
+--        for it (PR 247's review, finding 1).
 --    Then one row per record, not erased, the person is a contact of. Answers
 --    the ids it wrote. plpgsql, not sql, because the new enum value above may
 --    not be named in a statement parsed in this migration's own transaction.
@@ -139,6 +143,7 @@ begin
      where cs.tenant_id = v_tenant
        and cs.purpose = 'marketing'
        and cs.status = 'active'
+       and cs.method = 'portal_switch'
        and ct.user_id = v_actor
        and cl.status <> 'erased'
   ) then
