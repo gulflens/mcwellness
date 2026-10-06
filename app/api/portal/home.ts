@@ -16,6 +16,7 @@ import {
   readHousehold,
   type Household,
 } from './household';
+import { homeAnnouncements } from './announcements';
 import { logHouseholdRefusal } from './refused';
 import { householdMoney } from './money';
 import { HomeResponse, type Notice } from './schema';
@@ -220,10 +221,11 @@ export function mountPortalHome(api: Hono<ApiEnv>, now: () => Date = () => new D
       return c.json({ error: 'forbidden', requestId }, 403);
     }
 
-    const [{ upcoming }, money, notices] = await Promise.all([
+    const [{ upcoming }, money, notices, announcements] = await Promise.all([
       householdVisits(db, household),
       householdMoney(db, household),
       noticesFor(db, household),
+      homeAnnouncements(db, household),
     ]);
 
     const next = upcoming[0] ?? null;
@@ -270,6 +272,7 @@ export function mountPortalHome(api: Hono<ApiEnv>, now: () => Date = () => new D
           : null,
         money: money_,
         notices,
+        announcements,
       }),
     );
   });

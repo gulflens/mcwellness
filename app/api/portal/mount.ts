@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mountPortalAccess, type PortalAccessOptions } from './access';
 import { mountPortalAgreements } from './agreements';
+import { mountPortalAnnouncements } from './announcements';
 import { mountPortalFamily } from './family';
 import { mountPortalHome } from './home';
 import { mountPortalMoney } from './money';
@@ -44,4 +45,7 @@ export function mountPortal(
   mountPortalReviewPrompt(api, now);
   // The practice's own side of the same module: household access and the asks.
   mountPortalAccess(api, now, options);
+  // The practice's announcements on every household's home (section 3.10,
+  // amended 2026-10-06): Settings writes them, Home reads them.
+  mountPortalAnnouncements(api, now);
 }
