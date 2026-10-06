@@ -5,6 +5,9 @@ import {
   SHIFT_LATEST_HOUR,
   SHIFT_TAIL_MINUTES,
   STAFF_LOCATION_NOTICE_VERSION,
+  firstNameOf,
+  helperShiftOpen,
+  helperShiftWindow,
   mayWritePosition,
   positionAgeMinutes,
   positionsCutoff,
@@ -213,5 +216,65 @@ describe('positionAgeMinutes', () => {
 
   it('is never negative when a clock runs a little ahead of the server', () => {
     expect(positionAgeMinutes(at('10:01'), at('10:00'))).toBe(0);
+  });
+});
+
+describe('helperShiftWindow', () => {
+  // A helper has no day of their own: they go with a practitioner, so their
+  // shift is that practitioner's (docs/SPEC/dispatch.md section 15.12).
+  const accompanies = { practitionerId: '00000000-0000-4000-8000-000000007901' };
+  const day = [stop('09:00'), stop('11:00')];
+
+  it("is exactly the accompanied practitioner's shift", () => {
+    expect(helperShiftWindow(accompanies, day, DAY)).toEqual(shiftWindow(day, DAY));
+    expect(helperShiftWindow(accompanies, day, DAY)).not.toBeNull();
+  });
+
+  it('has no shift when the practitioner they accompany has no visit that day', () => {
+    expect(helperShiftWindow(accompanies, [], DAY)).toBeNull();
+  });
+
+  it('has no shift once the accompaniment is revoked, whatever the practitioner’s day', () => {
+    expect(helperShiftWindow(null, day, DAY)).toBeNull();
+  });
+
+  it('keeps the practitioner’s 21:00 cap and tail', () => {
+    const late = [stop('20:00')];
+    expect(helperShiftWindow(accompanies, late, DAY)?.closesAt).toEqual(
+      new Date(DAY.start.getTime() + SHIFT_LATEST_HOUR * 3_600_000),
+    );
+  });
+});
+
+describe('helperShiftOpen', () => {
+  const accompanies = { practitionerId: '00000000-0000-4000-8000-000000007901' };
+  const day = [stop('10:00')];
+
+  it('is open while the accompanied practitioner’s shift is open', () => {
+    expect(helperShiftOpen(accompanies, day, DAY, at('10:30'))).toBe(true);
+    expect(helperShiftOpen(accompanies, day, DAY, at('10:30'))).toBe(
+      shiftOpen(day, DAY, at('10:30')),
+    );
+  });
+
+  it('is closed outside it, on a day with no visit, and with no accompaniment', () => {
+    expect(helperShiftOpen(accompanies, day, DAY, at('20:00'))).toBe(false);
+    expect(helperShiftOpen(accompanies, [], DAY, at('10:30'))).toBe(false);
+    expect(helperShiftOpen(null, day, DAY, at('10:30'))).toBe(false);
+  });
+});
+
+describe('firstNameOf', () => {
+  it('is the first word of a display name, and nothing after it', () => {
+    expect(firstNameOf('Synthetic Practitioner A')).toBe('Synthetic');
+  });
+
+  it('ignores spaces around the name and between its words', () => {
+    expect(firstNameOf('   Synthetic    Practitioner ')).toBe('Synthetic');
+  });
+
+  it('is the whole name when it is one word, and empty for an empty one', () => {
+    expect(firstNameOf('Synthetic')).toBe('Synthetic');
+    expect(firstNameOf('   ')).toBe('');
   });
 });
