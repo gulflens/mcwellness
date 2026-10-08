@@ -195,6 +195,8 @@ is minimisation done where the typing happens.
 | `DELETE /api/team/:id/roles/:role` | owner | switch off, through `app.revoke_staff_role` |
 | `POST /api/team/:id/status` | owner | as today; an owner's row answers `locked` |
 | `POST /api/team/:id/password` | owner | as today; anybody else is refused and the refusal is a row (section 5) |
+| `POST /api/team/:id/archive` | owner | `X-Reason` required; through `app.archive_staff` (section 12) |
+| `POST /api/team/:id/restore` | owner | through `app.restore_staff` (section 12) |
 
 `POST /api/team/:id/roles` is replaced by the `PUT`; the screen is its only
 caller. Refusals carry a code the screen turns into a sentence: `locked`
@@ -270,3 +272,70 @@ by hand at each pass (a changed policy file is re-applied, not only a new
 migration), staging first, production on the operator's word. At the
 production pass the second owner's row is written by the audited step of
 section 3. The two admins lose buttons that day and are told beforehand.
+
+## 12. Archiving a person (added 6 October 2026)
+
+The practice asked for a way to remove a practitioner, or any other member of
+staff, should it ever be needed. Nothing is deleted: every row a colleague touched
+names them, and the trail is kept five years. **Removing is archiving**, built
+in migration 977, `app/api/team/archive.ts` and the drawer's Access tab.
+
+**What archiving does**, all in one transaction, in `app.archive_staff(user,
+reason)` (security definer, owner-only, every rule written in it):
+
+- refuses, in this order: nobody named; not an owner; no reason; oneself;
+  somebody who is not staff of this practice (a household contact is ended in
+  Settings › Portal or by an erasure); an owner; and — `55000`, the one refusal
+  a person can act on — a practitioner with visits still ahead (proposed,
+  confirmed or checked in, window not yet over). The route reads the same list
+  first and answers `409 future_visits` with the visits, and the screen says
+  "Reassign N future visits first" with a link to the first one's day on the
+  board;
+- sets `app_user.status` to `archived`. **That is the sign-in block**, and it
+  is Suspend's: `app.resolve_actor` answers nobody whose status is not
+  `active`, so the fence answers 403 before a role is read. The provider's
+  sign-in is left as Suspend leaves it;
+- sets their `practitioner.status` to `inactive`, which every booking picker,
+  the reassign list, the kit list and the helpers' list already filter on. A
+  trigger (`guard_archived_practitioner`, enabled always) keeps that row
+  inactive while the person is archived, because the policy on `practitioner`
+  admits three roles to the whole row;
+- ends every standing accompaniment — theirs as a helper, and every helper's
+  who went with them — in 213's own shape (ended, never edited), and deletes
+  their positions, as `app.revoke_helper` does;
+- writes `staff_archived` to the trail with the reason, and stamps the reason
+  on the transaction so the triggered rows of the same act carry it too.
+
+**Roles are kept.** The rows stay so the trail reads whole and so an erasure
+(968) still recognises the person as a colleague and spares them. Nothing acts
+on a role without a status beside it: the fence resolves only an active person.
+
+**Restore** (`app.restore_staff`, owner-only, never oneself, only somebody
+archived) puts the person back where the archive found them, with the roles
+they left with: the archive records on `app_user` the status it found
+(`archived_from_status`) and whether it made the practitioner row inactive
+(`archive_deactivated_practitioner`), so a suspended colleague comes back
+suspended and a practitioner row already inactive stays so; the route answers
+the status (`{ ok: true, status }`) and the screen shows it. Accompaniments
+stay ended (the owner names a helper again) and positions stay gone. It writes
+`staff_restored`. The archive's reason is kept in the trail and readable by
+admins, and the step says so: short and factual, no health or disciplinary
+detail. Suspend's
+Reactivate never undoes an archive; the two are separate doors.
+
+**The screen.** The drawer's Access tab ends with "Remove from the practice":
+Archive this person, then a step that says what happens and asks for a reason.
+An archived person's tab shows Archived and Restore. The team list hides
+archived people behind a "Show archived" switch; an archived row reads
+Archived and carries Restore for an owner instead of Open.
+
+**Where it stops.** A booking whose route read the practitioner as active just
+before the archive committed, and inserts just after, is not refused: the
+appointment's foreign key lock does not conflict with a committed status
+change. It would show on the board under the inactive practitioner and can be
+reassigned. Closing it needs a guard on `appointment`, which is scheduling's
+table and is left to that stream. Helpers are archived through the API only;
+the helpers' section keeps its own Revoke.
+
+**Going live.** Migration 977 by hand at the next pass, as section 11 says of
+923; no policy file changes.

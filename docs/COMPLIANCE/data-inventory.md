@@ -108,3 +108,73 @@ depends on, and nothing deletes on a timer. An emergency contact is the one
 field with a shorter natural life than the rest — it stops being needed the day
 the person stops working alone in households' homes — and it is removed by the
 edit described above rather than by a rule.
+
+---
+
+## Reviews sent from the website
+
+**Added:** 6 October 2026 (`docs/SPEC/testimonials.md`). **Where it lives:**
+`testimonial` (migration `978`), one row per review sent from the website's
+Testimonials page in English or Arabic.
+
+### What is held, and why each field is needed
+
+| Field | Why the practice needs it |
+|---|---|
+| **The name to show** | The name the person chose to be published under ("Hazel H."), as they typed it. A review is shown with a name; the person picks how much of theirs. |
+| **The context line** (optional) | A line under the name they chose to add, such as a job or a place. Published. |
+| **The rating and the review** | What is published, once approved. Never edited by the practice. |
+| **The language** | Which of the two pages it came from, so it is shown on that page. |
+| **The tick to publish** | The basis for holding and publishing it at all; a review without it is refused. |
+| **The decision** | Pending, approved or declined, who on the practice's side decided and when, and where it stands on the page. |
+| **An address hash** | A keyed hash (HMAC-SHA-256) of the sender's internet address, under a random key the application's own role cannot read, made inside the database for the submission budget that stops one sender flooding the queue. Never the address itself; cleared the moment the review is decided, and in any case after 24 hours. |
+
+**Deliberately not held:** an email address, a telephone number, a full name, or
+any link to a client record. The practice publishes a review or it does not and
+never replies to one, so it needs no way to reach the person. The door refuses a
+telephone number or an email address typed into any of the published fields,
+because whatever is typed there would be published.
+
+### Who may read it
+
+**The owner and an admin.** Row rule `db/policies/testimonial/readers.sql`, with
+the tenant fence beneath it. Approved reviews are public by design, through the
+website, in four fields: the name to show, the context line, the rating and the
+review — no id and no date.
+
+### What the trail keeps
+
+**Who read and who decided, never what was written.** The table is outside the
+audit trigger by decision (its comment begins `unaudited by decision`), for the
+same reason as `enquiry`: the trigger would copy the review into the append-only
+log, and a withdrawn review would then outlive its withdrawal there. The routes
+log each read of the list as a read of each review on it, and each approve,
+decline, withdraw and move under the person, by id.
+
+### Retention
+
+| State | Kept |
+|---|---|
+| Pending | 180 days after it arrived, then deleted |
+| Declined or withdrawn | 30 days after the decision, then deleted |
+| Approved | While it is published |
+
+Deleted once a day by the in-process scheduler (`app.purge_stale_testimonials`).
+This is a timer, unlike everywhere else on this platform, because a review is not
+a client record: CLAUDE.md rule 8 is the household record's floor, and once the
+office has said no there is no purpose left in keeping somebody's words.
+
+### A person's request
+
+**To have theirs taken down:** Withdraw on the Reviews screen. It leaves the
+website within a minute and is deleted within 30 days. The person identifies it by the
+name they used and what they wrote; nothing else is held to match on.
+**To see what is held:** the row is the whole of it, and the office can read it
+out from the Reviews screen.
+
+### Who else receives it
+
+Nobody new. It passes through the app at Hostinger and is stored in the practice
+system's database at Supabase, both already in `approved-vendors.md`, and once
+approved it is published on the practice's own website. The website's privacy policy should say so in both
+languages; as of 6 October 2026 it does not mention reviews.

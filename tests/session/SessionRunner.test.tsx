@@ -69,6 +69,29 @@ const VISIT: RunnerVisit = {
   shareLocation: false,
 };
 
+const CLIENT_ID = '00000008-0000-4000-8000-000000000001';
+const REPORT_ID = '00000006-0000-4000-8000-000000000001';
+
+/** The session report the visit starts, as the reports door answers it. */
+const REPORT_ROW = {
+  id: REPORT_ID,
+  clientId: CLIENT_ID,
+  kind: 'session',
+  status: 'draft',
+  locale: 'en',
+  reference: null,
+  issuedOn: null,
+  coverageFrom: null,
+  coverageTo: null,
+  signedByName: null,
+  version: 1,
+  supersedesId: null,
+  amendmentReason: null,
+  documentId: null,
+  deliveries: 0,
+  createdAt: '2026-09-03T07:21:00.000Z',
+};
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -93,6 +116,12 @@ function mount(
      * dock has to warn about (app/therapist/session/ExportStep.tsx).
      */
     uploadHangs?: boolean;
+    /** Who is signed in. Defaults to a practitioner. */
+    me?: unknown;
+    /** What POST /api/reports/session-draft answers: its status. Defaults to 201. */
+    sessionDraftStatus?: number;
+    /** Where the runner hands the started report on to. */
+    onOpenReport?: (clientId: string, reportId: string) => void;
   } = {},
 ) {
   const posted: Posted[] = [];
@@ -100,7 +129,13 @@ function mount(
   const store = options.store ?? createMemoryStore();
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === '/api/me') return json(ME);
+    if (url === '/api/me') return json(options.me ?? ME);
+    if (url === '/api/reports/session-draft') {
+      posted.push({ url, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      const status = options.sessionDraftStatus ?? 201;
+      if (status >= 400) return json({ error: 'internal', requestId: null }, status);
+      return json({ report: REPORT_ROW, content: { kind: 'session' } }, status);
+    }
     if (url.startsWith('/api/storage/')) {
       return new Response(new Uint8Array([255, 216, 255, 224]), {
         status: 200,
@@ -166,6 +201,7 @@ function mount(
         service={options.service === undefined ? SERVICE : options.service}
         recordReadings={options.recordReadings ?? true}
         onFinished={() => undefined}
+        onOpenReport={options.onOpenReport}
         createStore={async () => store}
       />
     </AuthProviderBoundary>,
@@ -772,3 +808,56 @@ describe('what the outbox is given', () => {
  * appears only under an active consent, the bytes wait behind their own event,
  * and the pre-flight offers the last placement only when there is one.
  */
+
+/**
+ * The session report, from the end of the visit. The practice asked whether
+ * what is done here reaches the client's Reports; it did not. The visit cannot
+ * start its report before it is checked out — a session report follows a
+ * completed visit — so the offer is on the last screen, after the close has
+ * landed, and it opens the report the server started (or the one already
+ * there) on the client's Reports tab.
+ */
+describe('the session report, from the end of the visit', () => {
+  async function checkedOut(options: Parameters<typeof mount>[0] = {}) {
+    const mounted = await reachSummary(options);
+    checkOut();
+    await screen.findByRole('heading', { name: 'Checked out' });
+    return mounted;
+  }
+
+  it('starts the report for this visit and hands it on to be opened', async () => {
+    const onOpenReport = vi.fn();
+    const { posted } = await checkedOut({ onOpenReport });
+    fireEvent.click(screen.getByRole('button', { name: 'Write the session report' }));
+    await waitFor(() => expect(onOpenReport).toHaveBeenCalledWith(CLIENT_ID, REPORT_ID));
+    const asked = posted.filter((call) => call.url === '/api/reports/session-draft');
+    // The visit and nothing else: the server resolves whose it is.
+    expect(asked).toEqual([{ url: '/api/reports/session-draft', body: { sessionId: SESSION_ID } }]);
+  });
+
+  it('is not offered before the visit is checked out', async () => {
+    await reachSummary({ onOpenReport: vi.fn() });
+    expect(screen.queryByRole('button', { name: 'Write the session report' })).toBeNull();
+  });
+
+  it('says so calmly when the report could not be started, and opens nothing', async () => {
+    const onOpenReport = vi.fn();
+    await checkedOut({ onOpenReport, sessionDraftStatus: 500 });
+    fireEvent.click(screen.getByRole('button', { name: 'Write the session report' }));
+    expect(
+      await screen.findByText(
+        "The report could not be started. It can be written from the client's Reports tab.",
+      ),
+    ).toBeTruthy();
+    expect(onOpenReport).not.toHaveBeenCalled();
+    // Still a way out of the visit.
+    expect(screen.getByRole('button', { name: 'Back to Today' })).toBeTruthy();
+  });
+
+  it('is not offered to somebody who may not draft a report', async () => {
+    // An administrator reads and sends reports and never drafts one
+    // (domain/shared/actor.ts's report.draft).
+    await checkedOut({ onOpenReport: vi.fn(), me: { ...ME, roles: ['admin'] } });
+    expect(screen.queryByRole('button', { name: 'Write the session report' })).toBeNull();
+  });
+});

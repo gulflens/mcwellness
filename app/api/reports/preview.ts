@@ -83,6 +83,10 @@ export function mountReportPreview(api: Hono<ApiEnv>, now: () => Date = () => ne
         // A brain-map report has pages, pictures and notes of its own
         // (docs/SPEC/reports-qeeg.md section 12), drawn by its own door.
         return previewQeeg(c, record, now());
+      case 'external':
+        // An uploaded PDF has no pages of this app's to draw: it is opened as
+        // it was filed (`GET /api/reports/:id`).
+        return c.json({ error: 'unprocessable', code: 'external_report', requestId }, 422);
       default: {
         const unknown: never = record.kind;
         return unknown;

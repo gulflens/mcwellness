@@ -36,6 +36,11 @@ import './settings.css';
  * person who pressed the button hands it over across a desk or by WhatsApp.
  * Nothing here deletes anybody.
  *
+ * **Archived people** (migration 977, the practice's "remove a person") are
+ * kept and hidden: the table shows who works here now, and a "Show archived"
+ * switch brings back everybody who has left, marked Archived, with Restore on
+ * the row for an owner. They are archived from the drawer's Access tab.
+ *
  * **Helpers** (round 76, docs/SPEC/dispatch.md section 15.12) are listed in a
  * section of their own below the staff — read by the owner and an admin,
  * changed by the owner alone (`staff.helper.manage`) — and are left out of the staff table: a helper has
@@ -65,6 +70,12 @@ export function TeamPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ name: string; password: string } | null>(null);
+  /**
+   * Archived people are kept (migration 977) and kept out of the way: the list
+   * is who works here now, and somebody who has left is one switch away.
+   */
+  const [showArchived, setShowArchived] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
   /** Whose profile is open, by id: the drawer reads the rest for itself. */
   const [openId, setOpenId] = useState<string | null>(null);
   /**
@@ -144,6 +155,28 @@ export function TeamPage() {
     }
   }
 
+  /** Restore, from the archived row itself: the owner's alone (migration 977). */
+  async function restore(member: TeamMember): Promise<void> {
+    setRowError(null);
+    setBusy(true);
+    try {
+      const res = await apiFetch(`/api/team/${member.id}/restore`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        setRowError(ACTION_ERROR);
+        return;
+      }
+      reload();
+    } catch {
+      setRowError(ACTION_ERROR);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Who is looking, from the list's own row for them: the same roles the API
   // will ask the same rule about, so no button is offered that it would refuse.
   const myRoles = ((members ?? []).find((member) => member.isYou)?.roles ?? []) as Role[];
@@ -151,9 +184,11 @@ export function TeamPage() {
   const canSeeHelpers = myRoles.includes('owner') || myRoles.includes('admin');
   // A person holding the helper role and nothing else is in the helpers'
   // section, not here.
-  const staff = (members ?? []).filter(
+  const everyone = (members ?? []).filter(
     (member) => !(member.roles.length === 1 && member.roles[0] === 'helper'),
   );
+  const archivedCount = everyone.filter((member) => member.status === 'archived').length;
+  const staff = showArchived ? everyone : everyone.filter((member) => member.status !== 'archived');
 
   const columns: readonly Column<TeamMember>[] = [
     {
@@ -203,13 +238,27 @@ export function TeamPage() {
                     read "Open, Open, Open, Open" with nothing to choose
                     between them. The visible text is inside the label, as
                     WCAG's Label in Name asks. */}
-                <Button
-                  variant="quiet"
-                  aria-label={`Open ${row.displayName}`}
-                  onClick={() => setOpenId(row.id)}
-                >
-                  Open
-                </Button>
+                {/* An archived person is restored from here and not opened:
+                    every control in the drawer is about somebody who works at
+                    the practice, and Restore is the one thing to do first. */}
+                {row.status === 'archived' ? (
+                  <Button
+                    variant="quiet"
+                    disabled={busy}
+                    aria-label={`Restore ${row.displayName}`}
+                    onClick={() => void restore(row)}
+                  >
+                    Restore
+                  </Button>
+                ) : (
+                  <Button
+                    variant="quiet"
+                    aria-label={`Open ${row.displayName}`}
+                    onClick={() => setOpenId(row.id)}
+                  >
+                    Open
+                  </Button>
+                )}
               </span>
             ),
           },
@@ -300,6 +349,20 @@ export function TeamPage() {
         </form>
       ) : null}
       {failed ? <Note tone="critical">{LOAD_ERROR}</Note> : null}
+      {rowError ? <Note tone="critical">{rowError}</Note> : null}
+      {archivedCount > 0 ? (
+        <div className="team__archived-switch">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showArchived}
+            className="access-switch"
+            onClick={() => setShowArchived((on) => !on)}
+          >
+            <span className="access-switch__label">Show archived ({archivedCount})</span>
+          </button>
+        </div>
+      ) : null}
       {!failed && members === null ? <Note>Loading.</Note> : null}
       {members !== null ? (
         <Table

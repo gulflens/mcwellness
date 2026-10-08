@@ -12,6 +12,7 @@ import {
 import { logAction, logReads } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isAuthAdminUnavailable, isEmailInUse, type AuthAdminProvider } from '../portal/auth-admin';
+import { mountTeamArchive } from './archive';
 import { mountTeamProfile } from './profile';
 import { mountTeamHelpers } from './helpers';
 import { GRANT_SQL, mountTeamRoles } from './roles';
@@ -63,8 +64,11 @@ import { membersSql, readTargetRoles, toMember, type Row } from './target';
  *
  * **Nothing is deleted.** A suspended sign-in is refused at the fence
  * (`app.resolve_actor` answers nobody for a status other than active) and can
- * be reactivated; an archived one cannot; the trail keeps every act, because
- * both tables carry the audit trigger.
+ * be reactivated. An archived one is refused the same way and does not come
+ * back through this route: archiving and restoring are their own two routes
+ * (`./archive.ts`, migration 977), because an archive also takes the person out
+ * of every booking picker and asks for a reason. The trail keeps every act,
+ * because both tables carry the audit trigger.
  *
  * **Why the password route keeps the wider first guard.** It asks
  * `staff.manage`, not `staff.access.manage`, on purpose. An admin's attempt is
@@ -196,8 +200,8 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
       return c.json({ error: 'locked', requestId }, 409);
     }
     // Row security decides the rest, and answers a refusal as nothing to
-    // update. An archived sign-in is the end of one and does not come back
-    // (canReactivate).
+    // update. An archived sign-in does not come back here (canReactivate):
+    // that is Restore, `./archive.ts`.
     const updated = await db.query(
       'update app_user set status = $2::user_status where id = $1 and tenant_id = app.current_tenant_id() ' +
         "and status <> 'archived' " +
@@ -268,4 +272,5 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
   mountTeamHelpers(api, { authAdmin: options.authAdmin, now });
   mountTeamProfile(api, { authAdmin: options.authAdmin, now });
   mountTeamRoles(api, now);
+  mountTeamArchive(api, now);
 }

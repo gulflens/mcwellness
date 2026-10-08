@@ -3,16 +3,24 @@ import {
   STAFF_ROLES,
   STAFF_ROLE_LABELS,
   STAFF_ROLE_OPENS,
+  canArchive,
   canReactivate,
   canResetPassword,
+  canRestore,
   canSuspend,
   canSwitchRole,
   type Role,
   type StaffRole,
 } from '@domain/shared';
-import { InviteResponse, type TeamProfile } from '../../api/team/schema';
+import {
+  FutureVisitsRefusal,
+  InviteResponse,
+  type FutureVisit,
+  type TeamProfile,
+} from '../../api/team/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Note } from '../../shell/components/Controls';
+import { Button, Field, Note } from '../../shell/components/Controls';
+import { dayOf, formatDay } from '../schedule/windows';
 
 /**
  * The Access tab of a colleague's drawer: the four working roles as switches,
@@ -48,6 +56,29 @@ const REFUSALS: Record<string, string> = {
     'A helper holds no other role. To make them a colleague, revoke them as a helper and add them as a person.',
   conflict: 'Somebody else changed this person’s access just now. Reload and try again.',
 };
+
+/**
+ * Archiving's own refusals (`ARCHIVE_REFUSALS`), each as one sentence.
+ * `future_visits` is not here: it carries the visits, and is said with their
+ * count and a way to the board (`blocked` below).
+ */
+const ARCHIVE_REFUSALS: Record<string, string> = {
+  not_yourself: 'You cannot archive yourself. Ask the other owner.',
+  locked: 'An owner is not archived.',
+  already_archived: 'This person is already archived. Reload to see it.',
+  not_archived: 'This person is not archived. Reload to see it.',
+  reason_required: 'Say why this person is being archived.',
+  conflict: 'Somebody else changed this person just now. Reload and try again.',
+};
+
+/** What archiving does, said before the press, in the order the database does it. */
+const ARCHIVE_LINES = [
+  'They can no longer sign in.',
+  'They leave every booking list, the board and the dispatch view.',
+  'A helper who goes with them is no longer named to them, and any shared location is forgotten.',
+  'Their name stays on everything they already did, and the audit trail keeps every act.',
+  'An owner can restore them later, as they are now: with the roles they hold, and suspended if they are suspended.',
+];
 
 const LOCK_LINE = 'Owner. Full access. Cannot be changed.';
 const ACTION_ERROR = 'That could not be done. Reload and try again.';
@@ -114,6 +145,11 @@ export function TeamAccessTab({
    * this ref, read synchronously where a state flag would still be false.
    */
   const inFlight = useRef(false);
+  /** The archive step: closed, or open with the reason being typed. */
+  const [archiving, setArchiving] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('');
+  /** Visits still ahead that held an archive up, as the server listed them. */
+  const [blocked, setBlocked] = useState<FutureVisit[] | null>(null);
 
   const held = profile.roles as Role[];
 
@@ -186,6 +222,77 @@ export function TeamAccessTab({
     }
   }
 
+  /**
+   * Archive: the practice's "remove a person", which is never a delete
+   * (migration 977). The reason goes as `X-Reason`, as every audited act with
+   * a reason does, on one line because a header holds one.
+   */
+  async function archive(): Promise<void> {
+    const reason = archiveReason.replace(/\s+/g, ' ').trim();
+    if (inFlight.current || reason === '') return;
+    inFlight.current = true;
+    setError(null);
+    setSwitchError(null);
+    setBlocked(null);
+    setBusy(true);
+    try {
+      const res = await apiFetch(`/api/team/${profile.id}/archive`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-reason': reason },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        setArchiving(false);
+        setArchiveReason('');
+        onStatus('archived');
+        onChanged();
+        return;
+      }
+      const body: unknown = await res.json().catch(() => null);
+      const visits = FutureVisitsRefusal.safeParse(body);
+      if (visits.success) {
+        setBlocked(visits.data.visits);
+        return;
+      }
+      const code = (body as { error?: string } | null)?.error ?? '';
+      setError(ARCHIVE_REFUSALS[code] ?? ACTION_ERROR);
+    } catch {
+      setError(ACTION_ERROR);
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function restore(): Promise<void> {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setError(null);
+    setSwitchError(null);
+    setBusy(true);
+    try {
+      const res = await apiFetch(`/api/team/${profile.id}/restore`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        // Back where the archive found them (migration 977): a suspended
+        // colleague comes back suspended, and the route says which.
+        const body = (await res.json().catch(() => null)) as { status?: unknown } | null;
+        onStatus(body?.status === 'suspended' ? 'suspended' : 'active');
+        onChanged();
+        return;
+      }
+      setError(ARCHIVE_REFUSALS[await refusalCode(res)] ?? ACTION_ERROR);
+    } catch {
+      setError(ACTION_ERROR);
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
   async function mintPassword(): Promise<void> {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -232,6 +339,21 @@ export function TeamAccessTab({
    */
   const maySuspend =
     !profile.locked && canSuspend(viewerUserId, profile.id) && profile.status !== 'archived';
+  /** The same pure rules the archive routes ask before they reach the database. */
+  const mayArchive =
+    canArchive({
+      actorUserId: viewerUserId,
+      targetUserId: profile.id,
+      targetRoles: held,
+      status: profile.status,
+    }) === null;
+  const mayRestore = canRestore({
+    actorUserId: viewerUserId,
+    targetUserId: profile.id,
+    status: profile.status,
+  });
+  /** The first visit still ahead, whose day the board link opens on. */
+  const firstDay = blocked?.[0] ? dayOf(blocked[0].windowStart) : null;
 
   return (
     <div className="team-access">
@@ -339,6 +461,99 @@ export function TeamAccessTab({
               deletes anybody.
             </p>
           ) : null}
+        </section>
+      ) : null}
+
+      {/*
+        Archive, last on the tab and behind a step of its own: the one act here
+        that takes a person out of the practice's lists. The heading carries the
+        critical tone (a status, which the brief lets hue carry); the buttons
+        stay ink, as every button on this console does.
+      */}
+      {mayRestore ? (
+        <section className="team-access__archive">
+          <h3 className="team-access__heading">Archived</h3>
+          <p className="small">
+            Archived. They cannot sign in and are left out of booking, the board and dispatch. Their
+            history is kept.
+          </p>
+          <div className="team__actions">
+            <Button disabled={busy} onClick={() => void restore()}>
+              Restore
+            </Button>
+          </div>
+        </section>
+      ) : null}
+      {mayArchive ? (
+        <section className="team-access__archive">
+          <h3 className="team-access__heading team-access__heading--critical">
+            Remove from the practice
+          </h3>
+          {!archiving ? (
+            <>
+              <p className="small muted">
+                For somebody who has left. Nobody is deleted: archiving keeps their history and can
+                be undone by an owner.
+              </p>
+              <div className="team__actions">
+                <Button disabled={busy} onClick={() => setArchiving(true)}>
+                  Archive this person
+                </Button>
+              </div>
+            </>
+          ) : (
+            <form
+              className="team-access__confirm"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void archive();
+              }}
+            >
+              <p className="small team-access__refusal">
+                This archives {profile.displayName}. Here is what happens.
+              </p>
+              <ul className="small team-access__list">
+                {ARCHIVE_LINES.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              <Field
+                id="team-archive-reason"
+                label="Reason"
+                hint="Kept in the audit trail and readable by admins. Keep it short and factual — no health or disciplinary detail."
+                value={archiveReason}
+                maxLength={500}
+                onChange={(e) => setArchiveReason(e.target.value)}
+              />
+              {blocked && firstDay ? (
+                <Note tone="attention">
+                  Reassign {blocked.length} future {blocked.length === 1 ? 'visit' : 'visits'}{' '}
+                  first. The first is on {formatDay(firstDay)}.{' '}
+                  <a href={`/admin/schedule/board?date=${firstDay}`}>Open the board on that day</a>
+                </Note>
+              ) : null}
+              <div className="team__actions">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={busy || archiveReason.trim() === ''}
+                  aria-label={`Archive ${profile.displayName}`}
+                >
+                  {busy ? 'Archiving…' : 'Archive'}
+                </Button>
+                <Button
+                  variant="quiet"
+                  disabled={busy}
+                  onClick={() => {
+                    setArchiving(false);
+                    setBlocked(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
         </section>
       ) : null}
     </div>

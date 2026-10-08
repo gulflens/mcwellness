@@ -27,6 +27,11 @@ describe('the household’s report row', () => {
     expect(PortalReport.safeParse({ ...ROW, kind: 'qeeg' }).success).toBe(true);
   });
 
+  it('admits an uploaded report, with its title', () => {
+    const parsed = PortalReport.safeParse({ ...ROW, kind: 'external', title: 'Brain map' });
+    expect(parsed.success && parsed.data.title).toBe('Brain map');
+  });
+
   it('still admits the two kinds that were there before', () => {
     expect(PortalReport.safeParse({ ...ROW, kind: 'session' }).success).toBe(true);
     expect(PortalReport.safeParse({ ...ROW, kind: 'progress' }).success).toBe(true);

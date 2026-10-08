@@ -70,12 +70,18 @@ export function ClientDrawer({
   section,
   onSectionChange,
   onClose,
+  openReportId = null,
+  onReportOpened,
 }: {
   client?: ClientRow;
   clientId?: string;
   section?: string;
   onSectionChange?: (section: string) => void;
   onClose: () => void;
+  /** A report for the Reports tab to open on arrival (ReportsTab's own note). */
+  openReportId?: string | null;
+  /** Called once the Reports tab has opened `openReportId`. */
+  onReportOpened?: () => void;
 }) {
   const id = clientId ?? client!.id;
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -283,7 +289,12 @@ export function ClientDrawer({
                 <AssessmentsTab clientId={id} />
               </TabPanel>
               <TabPanel id="reports" idPrefix="client" selected={tab}>
-                <ReportsTab clientId={id} erased={erased} />
+                <ReportsTab
+                  clientId={id}
+                  erased={erased}
+                  openReportId={openReportId}
+                  {...(onReportOpened ? { onHandedOpened: onReportOpened } : {})}
+                />
               </TabPanel>
             </>
           ) : null}

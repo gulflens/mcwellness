@@ -125,6 +125,7 @@ export function mountReportTwin(api: Hono<ApiEnv>, now: () => Date = () => new D
         break;
       case 'session':
       case 'progress':
+      case 'external':
         // One language each: only a brain map is written once and signed in two.
         return refuse(422, 'wrong_kind');
       default: {

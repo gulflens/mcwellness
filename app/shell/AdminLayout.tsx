@@ -12,6 +12,7 @@ import {
   canOpenKit,
   canOpenPortalAccess,
   canOpenPractitioners,
+  canOpenReviews,
   canOpenSchedule,
   canOpenSettings,
   canOpenTeam,
@@ -34,6 +35,7 @@ import {
 } from './railState';
 import { describeRoles } from './routing';
 import { useNewEnquiryCount } from './useNewEnquiryCount';
+import { usePendingReviewCount } from './usePendingReviewCount';
 
 /** The browser's own store, where there is one; a test environment may have none. */
 function store(): Storage | undefined {
@@ -72,6 +74,7 @@ export function visibleSections(actor: Actor, now: Date): readonly RailSection[]
     if (section.key === 'kit') return canOpenKit(actor, now);
     if (section.key === 'audit') return canOpenAudit(actor, now);
     if (section.key === 'enquiries') return canOpenEnquiries(actor, now);
+    if (section.key === 'reviews') return canOpenReviews(actor, now);
     return true;
   })
     .map((section) =>
@@ -195,6 +198,14 @@ export function AdminLayout({ actorName }: { actorName: string }) {
   const newEnquiries = useNewEnquiryCount(
     session.status === 'signed-in' && canOpenEnquiries(session.actor, new Date()),
   );
+  // And the website reviews waiting for a decision, for the two roles that
+  // decide them, by the same rule the rail shows Reviews by.
+  const pendingReviews = usePendingReviewCount(
+    session.status === 'signed-in' && canOpenReviews(session.actor, new Date()),
+  );
+  const badges: Record<string, number> = {};
+  if (newEnquiries !== null) badges.enquiries = newEnquiries;
+  if (pendingReviews !== null) badges.reviews = pendingReviews;
   return (
     // data-rail stays: shell.css and tests/lint/layout-tokens.test.ts both read
     // it, and it still says whether the labels are showing. data-rail-mode says
@@ -210,7 +221,7 @@ export function AdminLayout({ actorName }: { actorName: string }) {
         pinned={pinned}
         onTogglePin={tier === 'desk' ? undefined : togglePin}
         onChoose={chooseSection}
-        badges={newEnquiries === null ? undefined : { enquiries: newEnquiries }}
+        badges={Object.keys(badges).length === 0 ? undefined : badges}
       />
       {mode === 'overlay' ? (
         // A press anywhere on the page closes the rail. It is not announced and

@@ -354,6 +354,7 @@ async function openRecord(c: Context<ApiEnv>, now: Date): Promise<Opened> {
       break;
     case 'session':
     case 'progress':
+    case 'external':
       return { ok: false, response: await refuse(422, 'not_a_past_record') };
     default: {
       const unknown: never = record.kind;

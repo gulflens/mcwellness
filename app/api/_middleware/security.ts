@@ -183,6 +183,12 @@ export function securityHeaders(
      * overwrite a header the handler set itself.
      */
     crossOriginResourcePaths?: readonly string[];
+    /**
+     * The same for a path the website reads rather than posts to: its GET and
+     * its preflight. Today one, the published reviews
+     * (app/api/testimonials/door.ts, migration 978).
+     */
+    crossOriginReadPaths?: readonly string[];
   } = {},
 ): MiddlewareHandler {
   const connectSrc = connectSources(options.supabaseUrl);
@@ -218,6 +224,7 @@ export function securityHeaders(
 
   const mapPaths = new Set(options.mapDocumentPaths ?? []);
   const crossOriginPaths = new Set(options.crossOriginResourcePaths ?? []);
+  const crossOriginReads = new Set(options.crossOriginReadPaths ?? []);
   return createMiddleware<ApiEnv>(async (c, next) => {
     if (c.req.method !== 'GET' || !mapPaths.has(c.req.path)) {
       c.set('cspDocumentPolicy', strictDocument);
@@ -234,6 +241,12 @@ export function securityHeaders(
     if (
       crossOriginPaths.has(c.req.path) &&
       (c.req.method === 'POST' || c.req.method === 'OPTIONS')
+    ) {
+      c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
+    if (
+      crossOriginReads.has(c.req.path) &&
+      (c.req.method === 'GET' || c.req.method === 'OPTIONS')
     ) {
       c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
     }

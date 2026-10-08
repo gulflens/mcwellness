@@ -184,3 +184,36 @@ export const HelpersResponse = z.object({
   practitioners: z.array(z.object({ practitionerId: z.uuid(), displayName: z.string() })),
 });
 export type HelpersResponse = z.infer<typeof HelpersResponse>;
+
+/**
+ * Archiving a colleague, and restoring one (migration 977; the practice's ask
+ * of 6 October 2026 to be able to remove a person). Never a delete: the person
+ * stays named everywhere they already are, and is refused at the door and left
+ * out of every picker from then on.
+ *
+ * The codes a refusal carries, which the screen turns into a sentence.
+ * `future_visits` is the one a person can act on, so it carries the visits
+ * themselves (`FutureVisitsRefusal`): the screen says how many and links to the
+ * first one's day on the board.
+ */
+export const ARCHIVE_REFUSALS = [
+  'not_yourself',
+  'locked',
+  'already_archived',
+  'not_archived',
+  'reason_required',
+  'future_visits',
+  'conflict',
+] as const;
+export type ArchiveRefusalCode = (typeof ARCHIVE_REFUSALS)[number];
+
+/** One visit still ahead of a practitioner: which, and when its window opens. */
+export const FutureVisit = z.object({ appointmentId: z.uuid(), windowStart: z.iso.datetime() });
+export type FutureVisit = z.infer<typeof FutureVisit>;
+
+export const FutureVisitsRefusal = z.object({
+  error: z.literal('future_visits'),
+  visits: z.array(FutureVisit).min(1),
+  requestId: z.string(),
+});
+export type FutureVisitsRefusal = z.infer<typeof FutureVisitsRefusal>;

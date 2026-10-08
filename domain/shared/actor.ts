@@ -107,7 +107,20 @@ export type Action =
   /** See the website's enquiries, and turn one into a lead or dismiss it (operator, 2026-09-09). */
   | { type: 'enquiry.list' }
   | { type: 'enquiry.action' }
-  | { type: 'appointment.list'; scope: 'practice' | 'own' }
+  /**
+   * See the reviews sent from the website's Testimonials page, and approve,
+   * decline, withdraw or reorder one (docs/SPEC/testimonials.md section 3).
+   */
+  | { type: 'testimonial.list' }
+  | { type: 'testimonial.decide' }
+  /**
+   * `team` is Today's "Whole practice" (the practice's request for equal
+   * visibility, operator 2026-10-06): every practitioner's stops in the day
+   * sheet's own shape. It is the practice scope's audience exactly, so the
+   * switch shows nobody anything the row policies would not already let them
+   * read.
+   */
+  | { type: 'appointment.list'; scope: 'practice' | 'own' | 'team' }
   | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
   | { type: 'appointment.move' }
   // The dispatcher (docs/SPEC/dispatch.md section 9): the same three roles
@@ -325,11 +338,18 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'enquiry.list':
     case 'enquiry.action':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    // What goes on the practice's public page, under somebody's name, is the
+    // office's call: the owner and an admin. The lead practitioner, who sees
+    // enquiries in order to ring people back, has no part in publishing.
+    case 'testimonial.list':
+    case 'testimonial.decide':
+      return hasRole(actor, 'owner', 'admin');
     case 'appointment.list':
       if (action.scope === 'own') {
         // A practitioner's own day; the route and the row policies keep it to their rows.
         return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner');
       }
+      // 'practice' and 'team' alike: the whole practice's day, in either shape.
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.create':
       // Booking takes the booking role and, for the assignee, a credential that lets

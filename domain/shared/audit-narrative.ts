@@ -1382,6 +1382,16 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         ),
         locale,
       );
+    // Archiving and restoring a colleague (migration 977's two doors, which
+    // write these rows by name). The reason is the trail's own column and the
+    // person is its entity, so the sentence names neither.
+    case 'app_user.staff_archived':
+      return pick(t(`${actor} archived a colleague`, `${actor} أرشف موظفًا`), locale);
+    case 'app_user.staff_restored':
+      return pick(
+        t(`${actor} restored an archived colleague`, `${actor} أعاد موظفًا من الأرشيف`),
+        locale,
+      );
     case 'client.erase':
       // The act itself, written by app/api/clients/erasure.ts after
       // app.erase_client returns: everything the erasure touched is already

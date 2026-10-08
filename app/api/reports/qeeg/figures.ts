@@ -140,6 +140,7 @@ async function openDoor(
       break;
     case 'session':
     case 'progress':
+    case 'external':
       await refuse('wrong_kind');
       return {
         ok: false,

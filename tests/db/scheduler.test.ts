@@ -95,4 +95,36 @@ describe('the scheduler', () => {
       expect(line).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
     }
   });
+
+  it('deletes the stale website reviews as the API role, and keeps an approved one', async () => {
+    // Migration 978, docs/SPEC/testimonials.md section 6. Written as old by
+    // the table's owner: when a review arrived never changes once it is in.
+    const insert = async (status: 'pending' | 'approved' | 'declined', age: string) => {
+      const decided = status === 'pending' ? null : IDS.ownerA;
+      await h.owner.query(
+        'insert into testimonial (tenant_id, submitted_at, display_name, rating, body, language, ' +
+          'consent_to_publish, status, decided_by, decided_at, ip_hash) values ' +
+          `($1, now() - interval '${age}', 'Hazel H.', 5, $2, 'en', true, $3, $4, ` +
+          `case when $4::uuid is null then null else now() - interval '${age}' end, ` +
+          "case when $4::uuid is null then repeat('a', 64) else null end)",
+        [IDS.tenantA, 'Kind, punctual and clear about every step.', status, decided],
+      );
+    };
+    await h.owner.query('delete from testimonial');
+    await insert('declined', '40 days');
+    await insert('pending', '200 days');
+    await insert('approved', '400 days');
+    await insert('declined', '10 days');
+    const lines: string[] = [];
+    await runJob('testimonial-retention', {
+      pool: h.pool,
+      storage: h.storage,
+      log: (line) => lines.push(line),
+    });
+    expect(lines).toEqual(['Scheduler: practice 1, 2 stale reviews deleted.']);
+    const { rows } = await h.owner.query<{ status: string }>(
+      'select status from testimonial order by status',
+    );
+    expect(rows.map((row) => row.status)).toEqual(['approved', 'declined']);
+  });
 });
