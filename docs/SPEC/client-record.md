@@ -22,14 +22,15 @@ One record per client from first enquiry to close. Everything else in the system
 
 ```
 lead ──► active ──► paused ──► active
-              └──► closed
+              └──► closed ◄──┘
+closed ──► active   (with a reason)
 any ──► erased   (erasure request)
 ```
 
 - `lead`: created from an enquiry. Minimum: one name, one contact phone. No goals or session data on a lead.
 - `lead → active` requires: date of birth, at least one `location` with verified coordinate, and at least one contact who may consent. Emirates ID is optional and never required.
-- **No consent is required to activate** (the practice's request of 29 September 2026, approved by the operator on 6 October): the household signs when the practitioner meets them at the first visit, so a lead must be active, and bookable, first. The consents — `participation` (plus `minor_participation` if under 18, given by a contact who is a legal guardian and may consent, plus `home_visit` if any home delivery, plus `health_data`) — are still required **before a visit starts**: the check-in gate (`canCheckIn`, session-capture) refuses one without them. `consentsOutstanding(client)` lists what is still to sign, and the enrolment summary and the Overview show it as "To sign at the first visit".
-- `active → paused`: no scheduling allowed; entitlements don't expire while paused (see FINANCE).
+- **No consent is required to activate** (the practice's request of 29 September 2026, approved by the operator on 6 October): the household signs when the practitioner meets them at the first visit, so a lead may be booked before it is activated (the practice's list of 6 October 2026: book first, sign at the first visit); a visit for a lead still needs its date of birth and consents at check-in. The consents — `participation` (plus `minor_participation` if under 18, given by a contact who is a legal guardian and may consent, plus `home_visit` if any home delivery, plus `health_data`) — are still required **before a visit starts**: the check-in gate (`canCheckIn`, session-capture) refuses one without them. `consentsOutstanding(client)` lists what is still to sign, and the enrolment summary and the Overview show it as "To sign at the first visit".
+- `active → paused`, `paused → closed` (6 October 2026): the Overview offers Pause, Close and Reactivate. No scheduling while paused or closed; entitlements don't expire while paused (see FINANCE).
 - `closed`: read-only except documents. Reactivation creates an audit event with reason.
 - `erased`: see §8.
 

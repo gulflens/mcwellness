@@ -1650,3 +1650,40 @@ a.rail__item.rail__item--active:active {
   color: var(--brand);
   box-shadow: none;
 }
+
+/* A count beside a section: the enquiries waiting for somebody
+   (app/shell/useNewEnquiryCount.ts). The rail's own inversion, a white pill
+   with the brand's violet on it, so it reads on the violet without a hue of
+   its own; on the section you are on, which is already the white pill, it
+   turns the other way. Closed to icons, it sits on the icon's corner. */
+.rail__item {
+  position: relative;
+}
+
+.rail__badge {
+  margin-inline-start: auto;
+  min-inline-size: var(--s-5);
+  padding-inline: var(--s-1);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  color: var(--brand);
+  font-size: var(--t-micro);
+  line-height: var(--lh-micro);
+  font-weight: var(--w-medium);
+  text-align: center;
+}
+
+.rail__item--active .rail__badge {
+  background: var(--brand);
+  color: var(--surface);
+}
+
+.admin[data-rail='closed'] .rail__badge {
+  position: absolute;
+  inset-block-start: var(--s-1);
+  inset-inline-end: var(--s-1);
+}
+
+.admin[data-rail-mode='overlay'] .rail__badge {
+  position: static;
+}

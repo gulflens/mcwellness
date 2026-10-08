@@ -5,23 +5,28 @@ import {
   type AppointmentRow,
   type DeliveryMode,
 } from '../../api/appointments/schema';
-import { isVoidableRow } from '@domain/session';
-import { canActor } from '@domain/shared';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { canOpenSettings } from '../../shell/adminAccess';
 import { Button, Note, PageHeader } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { StatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
-import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from './appointmentStatus';
-import { CancelAppointmentDrawer } from './CancelAppointmentDrawer';
+import {
+  APPOINTMENT_STATUS_LABELS,
+  APPOINTMENT_STATUS_TONES,
+  isCalledOff,
+} from './appointmentStatus';
 import { CancellationPolicyDrawer } from './CancellationPolicyDrawer';
-import { LogPastSessionDrawer, type ReplacedVisit } from './LogPastSessionDrawer';
-import { MoveAppointmentDrawer } from './MoveAppointmentDrawer';
+import { LogPastSessionDrawer } from './LogPastSessionDrawer';
 import { NewAppointmentDrawer } from './NewAppointmentDrawer';
 import { ScheduleClientDrawer } from './ScheduleClientDrawer';
-import { VoidSessionDrawer } from './VoidSessionDrawer';
-import { dayOf, formatMovedTo, formatWindow, practiceDay, timeOf } from './windows';
+import {
+  ShowCalledOff,
+  useVisitActions,
+  VisitActionButtons,
+  VisitActionDrawers,
+} from './visitActions';
+import { dayOf, formatMovedTo, formatWindow, practiceDay } from './windows';
 import './schedule.css';
 
 /**
@@ -30,54 +35,6 @@ import './schedule.css';
  * map are later work). One tenant-local calendar day, across every
  * practitioner, with an "Add appointment" door onto `POST /api/appointments`.
  */
-
-/**
- * The two statuses a visit can still be moved or called off from: it is
- * either on the calendar unannounced, or agreed with the household. Anything
- * further on — checked in, delivered, missed, already called off, already
- * moved — has happened, and what happened is not undone from this screen
- * (docs/SPEC/scheduling-manual.md section 3). The routes hold the same line,
- * and they are the ones that matter; this only keeps the screen from
- * offering an action that would be refused.
- */
-const OPEN_STATUSES: readonly AppointmentRow['status'][] = ['proposed', 'confirmed'];
-
-/** The row as the correction drawer pre-fills from it. */
-function replacedVisit(row: AppointmentRow & { sessionId: string }): ReplacedVisit {
-  return {
-    sessionId: row.sessionId,
-    client: {
-      id: row.client.id,
-      givenName: row.client.givenName,
-      familyName: row.client.familyName,
-    },
-    serviceTypeId: row.serviceType.id,
-    locationId: row.location.id,
-    practitionerId: row.practitioner.id,
-    on: dayOf(row.windowStart),
-    startTime: timeOf(row.windowStart),
-    durationMinutes: row.sessionMinutes,
-    billing: row.settledOutsideApp ? 'settled_outside' : 'credit',
-  };
-}
-
-/**
- * What "Confirm" means, and why it is a button rather than an automatic
- * consequence of booking. `proposed` is "placed on the calendar, client not
- * yet informed" and `confirmed` is "client informed (manual toggle in Phase
- * 1; WhatsApp in Phase 2)" — docs/SPEC/scheduling-manual.md section 3. The
- * telling itself happens on the telephone or on WhatsApp; this records that
- * it happened, and until it is recorded the visit is on nobody's Today
- * (`OWN_STATUS_FILTER`, app/api/appointments/list.ts), which is the whole
- * point of the distinction and was the whole of the defect
- * (docs/CHANGE-REQUESTS/qa-01.md item 1).
- */
-const CONFIRM_FAILED =
-  'The visit could not be confirmed. Reload the day to see where it stands, then try again.';
-
-const ALREADY_MOVED_ON =
-  'This visit is no longer waiting to be confirmed — it has been confirmed, moved or called ' +
-  'off already. Reload the day to see where it stands.';
 
 const DELIVERY_LABELS: Record<DeliveryMode, string> = {
   home: 'Home',
@@ -103,34 +60,20 @@ export function SchedulePage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [selectedClient, setSelectedClient] = useState<AppointmentRow['client'] | null>(null);
-  // One drawer at a time: the schedule has one inline-end slot, and two
-  // drawers stacked in it would be two dialogs fighting over the same focus.
-  const [acting, setActing] = useState<{
-    kind: 'move' | 'cancel' | 'void' | 'correct';
-    row: AppointmentRow;
-  } | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
   // A visit that happened before the app, typed up from the records: offered
   // only on a day that has passed, to the same three roles that book
   // (trunk round 51). Today's visits are checked in at the door.
   const [pastOpen, setPastOpen] = useState(false);
   const isPastDay = date < practiceDay(new Date());
-  // The one row being confirmed, so its own button says so and no other row's
-  // does; and what to say when it could not be. Neither is a drawer: telling
-  // a household is a thing that has already happened by the time somebody
-  // reaches for this, so there is nothing to ask them.
-  const [confirming, setConfirming] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  // Called-off visits stay on the day's list on purpose
+  // (app/api/appointments/list.ts) and are folded away here until asked for.
+  const [showCalledOff, setShowCalledOff] = useState(false);
   // The two figures the cancel drawer quotes are the owner's and an admin's to
   // change — the same audience the practice's own identity has, and the same
   // one `scheduling_setting_write` admits beneath the route.
   const canEditPolicy =
     session.status === 'signed-in' && canOpenSettings(session.actor, new Date());
-  // Void and Correct: the office's three roles (`session.void`), the same
-  // three the route admits.
-  const canVoid =
-    session.status === 'signed-in' &&
-    canActor(session.actor, { type: 'session.void' }, {}, new Date());
 
   useEffect(() => {
     let live = true;
@@ -167,52 +110,16 @@ export function SchedulePage() {
 
   const reload = useCallback(() => setReloadToken((token) => token + 1), []);
 
-  const openAction = useCallback(
-    (kind: NonNullable<typeof acting>['kind'], row: AppointmentRow) => {
-      setDrawerOpen(false);
-      setPastOpen(false);
-      setSelectedClient(null);
-      setPolicyOpen(false);
-      setActionError(null);
-      setActing({ kind, row });
-    },
-    [],
-  );
-
-  const confirm = useCallback(
-    async (row: AppointmentRow) => {
-      setActionError(null);
-      setConfirming(row.id);
-      try {
-        const res = await apiFetch(`/api/appointments/${row.id}/confirm`, {
-          method: 'POST',
-          // The route reads no body — confirming carries no choices — but the
-          // API declines a POST that does not declare itself JSON
-          // (`jsonOnly`, app/api/_middleware/security.ts), so an empty object
-          // is what is sent rather than nothing at all.
-          headers: { 'content-type': 'application/json' },
-          body: '{}',
-        });
-        if (res.ok) {
-          reload();
-          return;
-        }
-        const body = (await res.json().catch(() => null)) as { code?: string } | null;
-        setActionError(
-          body?.code === 'appointment_not_proposed' || res.status === 404
-            ? ALREADY_MOVED_ON
-            : res.status === 403
-              ? 'You do not have permission to confirm this appointment.'
-              : CONFIRM_FAILED,
-        );
-      } catch {
-        setActionError(CONFIRM_FAILED);
-      } finally {
-        setConfirming(null);
-      }
-    },
-    [apiFetch, reload],
-  );
+  // One drawer at a time: the schedule has one inline-end slot, and two
+  // drawers stacked in it would be two dialogs fighting over the same focus.
+  const closeOthers = useCallback(() => {
+    setDrawerOpen(false);
+    setPastOpen(false);
+    setSelectedClient(null);
+    setPolicyOpen(false);
+  }, []);
+  const { acting, openAction, closeAction, confirm, confirming, actionError, canVoid } =
+    useVisitActions({ onChanged: reload, beforeOpen: closeOthers });
 
   const columns = useMemo<Column<AppointmentRow>[]>(
     () => [
@@ -277,61 +184,29 @@ export function SchedulePage() {
         key: 'actions',
         header: 'Change',
         align: 'end',
-        render: (row) =>
-          canVoid && isVoidableRow(row) ? (
-            <span className="schedule__row-actions">
-              <Button
-                variant="quiet"
-                aria-label={`Correct ${row.client.givenName} ${row.client.familyName}'s visit`}
-                onClick={() => openAction('correct', row)}
-              >
-                Correct
-              </Button>
-              <Button
-                variant="quiet"
-                aria-label={`Void ${row.client.givenName} ${row.client.familyName}'s visit`}
-                onClick={() => openAction('void', row)}
-              >
-                Void
-              </Button>
-            </span>
-          ) : OPEN_STATUSES.includes(row.status) ? (
-            <span className="schedule__row-actions">
-              {/* The accessible name carries whose visit it is: eight
-                  identical "Move" buttons down a column are eight identical
-                  buttons to anything that reads them aloud. */}
-              {row.status === 'proposed' ? (
-                <Button
-                  variant="quiet"
-                  disabled={confirming !== null}
-                  aria-label={`Confirm ${row.client.givenName} ${row.client.familyName}'s appointment`}
-                  onClick={() => void confirm(row)}
-                >
-                  {confirming === row.id ? 'Confirming…' : 'Confirm'}
-                </Button>
-              ) : null}
-              <Button
-                variant="quiet"
-                aria-label={`Move ${row.client.givenName} ${row.client.familyName}'s appointment`}
-                onClick={() => openAction('move', row)}
-              >
-                Move
-              </Button>
-              <Button
-                variant="quiet"
-                aria-label={`Call off ${row.client.givenName} ${row.client.familyName}'s appointment`}
-                onClick={() => openAction('cancel', row)}
-              >
-                Call off
-              </Button>
-            </span>
-          ) : null,
+        render: (row) => (
+          <VisitActionButtons
+            row={row}
+            canVoid={canVoid}
+            confirming={confirming}
+            onConfirm={(visit) => void confirm(visit)}
+            onOpen={openAction}
+          />
+        ),
       },
     ],
     [canVoid, confirm, confirming, openAction],
   );
 
-  const count = state.kind === 'ready' ? state.appointments.length : null;
+  const calledOff =
+    state.kind === 'ready' ? state.appointments.filter((row) => isCalledOff(row.status)).length : 0;
+  const shown =
+    state.kind === 'ready'
+      ? showCalledOff
+        ? state.appointments
+        : state.appointments.filter((row) => !isCalledOff(row.status))
+      : [];
+  const count = state.kind === 'ready' ? shown.length : null;
 
   return (
     <section className="page">
@@ -387,7 +262,7 @@ export function SchedulePage() {
             onClick={() => {
               setDrawerOpen(false);
               setSelectedClient(null);
-              setActing(null);
+              closeAction();
               setPolicyOpen(false);
               setPastOpen(true);
             }}
@@ -402,7 +277,7 @@ export function SchedulePage() {
             onClick={() => {
               setDrawerOpen(false);
               setSelectedClient(null);
-              setActing(null);
+              closeAction();
               setPastOpen(false);
               setPolicyOpen(true);
             }}
@@ -410,6 +285,12 @@ export function SchedulePage() {
             Cancellation policy
           </Button>
         ) : null}
+        <ShowCalledOff
+          id="schedule-show-called-off"
+          checked={showCalledOff}
+          hidden={calledOff}
+          onChange={setShowCalledOff}
+        />
       </div>
       {state.kind === 'loading' ? <Note>Loading the day's appointments.</Note> : null}
       {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
@@ -418,9 +299,13 @@ export function SchedulePage() {
         <Table
           caption="The day's appointments"
           columns={columns}
-          rows={state.appointments}
+          rows={shown}
           rowKey={(row) => row.id}
-          empty="No appointments are booked for this day."
+          empty={
+            calledOff > 0 && !showCalledOff
+              ? 'Every visit on this day has been called off.'
+              : 'No appointments are booked for this day.'
+          }
         />
       ) : null}
       {drawerOpen ? (
@@ -432,16 +317,6 @@ export function SchedulePage() {
       ) : null}
       {selectedClient ? (
         <ScheduleClientDrawer client={selectedClient} onClose={() => setSelectedClient(null)} />
-      ) : null}
-      {acting?.kind === 'move' ? (
-        <MoveAppointmentDrawer
-          appointment={acting.row}
-          onClose={() => setActing(null)}
-          onMoved={() => {
-            setActing(null);
-            reload();
-          }}
-        />
       ) : null}
       {policyOpen ? (
         <CancellationPolicyDrawer onClose={() => setPolicyOpen(false)} onSaved={reload} />
@@ -456,37 +331,7 @@ export function SchedulePage() {
           }}
         />
       ) : null}
-      {acting?.kind === 'void' ? (
-        <VoidSessionDrawer
-          appointment={acting.row}
-          onClose={() => setActing(null)}
-          onVoided={() => {
-            setActing(null);
-            reload();
-          }}
-        />
-      ) : null}
-      {acting?.kind === 'correct' && isVoidableRow(acting.row) ? (
-        <LogPastSessionDrawer
-          // One drawer per visit: a correction opened from another row
-          // starts from that row, not from what was typed into this one.
-          key={acting.row.id}
-          date={date}
-          replaces={replacedVisit(acting.row)}
-          onClose={() => setActing(null)}
-          onRecorded={() => {
-            setActing(null);
-            reload();
-          }}
-        />
-      ) : null}
-      {acting?.kind === 'cancel' ? (
-        <CancelAppointmentDrawer
-          appointment={acting.row}
-          onClose={() => setActing(null)}
-          onCancelled={reload}
-        />
-      ) : null}
+      <VisitActionDrawers acting={acting} onClose={closeAction} onChanged={reload} />
     </section>
   );
 }

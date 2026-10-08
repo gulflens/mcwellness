@@ -129,19 +129,32 @@ function mount(options: { listStatus?: number } = {}) {
 }
 
 describe('the register', () => {
-  it('shows every item with its serial, who carries it and its calibration', async () => {
+  it('shows every item in service with its serial, who carries it and its calibration', async () => {
     mount();
     expect(await screen.findByText('0000000e-0000-4000-8000-000000000001')).toBeTruthy();
-    expect(screen.getByText('0000000e-0000-4000-8000-000000000003')).toBeTruthy();
+    expect(screen.getByText('0000000e-0000-4000-8000-000000000002')).toBeTruthy();
     expect(screen.getByText('Rowan Meadow')).toBeTruthy();
     // An unassigned item says so rather than showing a blank.
     expect(screen.getAllByText('Nobody').length).toBeGreaterThan(0);
+  });
+
+  it('keeps stood-down items out of the register until asked for', async () => {
+    mount();
+    await screen.findByText('0000000e-0000-4000-8000-000000000001');
+    expect(screen.queryByText('0000000e-0000-4000-8000-000000000003')).toBeNull();
+    const toggle = screen.getByRole('checkbox', { name: /Show stood down/ });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    // The switch says how many it is holding back.
+    expect(toggle.closest('label')?.textContent).toContain('(1)');
+    fireEvent.click(toggle);
+    expect(screen.getByText('0000000e-0000-4000-8000-000000000003')).toBeTruthy();
   });
 
   it('says which item is overdue, which is in service and which is stood down', async () => {
     mount();
     expect(await screen.findByText('Calibration overdue')).toBeTruthy();
     expect(screen.getByText('In service')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Show stood down/ }));
     expect(screen.getByText('Stood down')).toBeTruthy();
   });
 

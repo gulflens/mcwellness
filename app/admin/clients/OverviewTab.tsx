@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
+import { canTransition } from '@domain/client';
 import { ageOn } from '@domain/shared';
 import type { ClientRecordResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ActivationSummary } from './ActivationSummary';
 import { ErasureSection } from './ErasureSection';
+import { Textarea } from './FormAtoms';
 import { IdentityForm } from './IdentityForm';
 import { contactDisplayName } from './contactName';
 import { canActivate, consentsOutstanding, practiceToday, toActivationRecord } from './activation';
@@ -31,6 +33,18 @@ const SEX_LABELS: Record<string, string> = { female: 'Female', male: 'Male', unk
 
 const ACTIVATION_ERROR = 'This client could not be activated. Try again.';
 const FORBIDDEN_ERROR = "You don't have permission to activate this client.";
+const STATUS_ERROR = "This client's status could not be changed. Try again.";
+const STATUS_FORBIDDEN = "You don't have permission to change this client's status.";
+const STATUS_INCOMPLETE =
+  'This record is missing something activation needs. Complete it, then reactivate.';
+
+/** The moves this tab offers once a client is past lead, in the order the buttons stand. */
+type StatusMove = 'active' | 'paused' | 'closed';
+const MOVE_LABELS: Record<StatusMove, string> = {
+  active: 'Reactivate',
+  paused: 'Pause',
+  closed: 'Close',
+};
 
 /**
  * Demographics, status, MRN, key contacts and the primary location as text —
@@ -52,7 +66,8 @@ export function OverviewTab({
 }: {
   record: ClientRecordResponse;
   onChanged: () => void;
-  /** False for a role the status route would refuse: the gate is shown, Activate is not. */
+  /** False for a role the status route would refuse: the gate is shown, Activate and the
+   * other status moves are not. */
   mayWrite: boolean;
   /** The reason an erased record was opened with, passed on to the routes that ask for one. */
   reason?: string;
@@ -71,6 +86,57 @@ export function OverviewTab({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  // The status moves past lead (domain/client canTransition). Closing asks
+  // first, and reactivating a closed record asks why: client-record.md
+  // section 9 lists it among the sensitive actions, and the route refuses it
+  // without a reason (app/api/clients/record.ts).
+  const [confirming, setConfirming] = useState<'close' | 'reactivate' | null>(null);
+  const [moveReason, setMoveReason] = useState('');
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const moves: StatusMove[] =
+    mayWrite && record.status !== 'lead'
+      ? (['active', 'paused', 'closed'] as const).filter((to) => canTransition(record.status, to))
+      : [];
+
+  async function move(to: StatusMove, reason?: string) {
+    setMoveBusy(true);
+    setMoveError(null);
+    try {
+      const res = await apiFetch(`/api/clients/${record.id}/status`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          // One line: a header cannot carry the newline a textarea allows.
+          ...(reason ? { 'x-reason': reason.replace(/\s+/g, ' ').trim() } : {}),
+        },
+        body: JSON.stringify({ to }),
+      });
+      if (res.status === 200) {
+        setConfirming(null);
+        setMoveReason('');
+        onChanged();
+        return;
+      }
+      if (res.status === 403) {
+        setMoveError(STATUS_FORBIDDEN);
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      setMoveError(body?.error === 'incomplete' ? STATUS_INCOMPLETE : STATUS_ERROR);
+    } catch {
+      setMoveError(STATUS_ERROR);
+    } finally {
+      setMoveBusy(false);
+    }
+  }
+
+  function press(to: StatusMove) {
+    setMoveError(null);
+    if (to === 'closed') setConfirming('close');
+    else if (to === 'active' && record.status === 'closed') setConfirming('reactivate');
+    else void move(to);
+  }
 
   async function activate() {
     setBusy(true);
@@ -115,6 +181,56 @@ export function OverviewTab({
           <ActivationSummary missing={[]} toSign={toSign} activated />
         </div>
       ) : null}
+      {moves.length > 0 && confirming === null ? (
+        <div className="drawer__actions">
+          {moves.map((to) => (
+            <Button key={to} variant="secondary" disabled={moveBusy} onClick={() => press(to)}>
+              {MOVE_LABELS[to]}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      {confirming === 'close' ? (
+        <div className="tab-section">
+          <Note>
+            Closing makes record {record.mrn} read-only except for documents. It can be reactivated
+            later, with a reason.
+          </Note>
+          <div className="drawer__actions">
+            <Button variant="primary" disabled={moveBusy} onClick={() => void move('closed')}>
+              {moveBusy ? 'Closing…' : 'Close record'}
+            </Button>
+            <Button variant="quiet" disabled={moveBusy} onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {confirming === 'reactivate' ? (
+        <div className="tab-section">
+          <Textarea
+            id="reactivate-reason"
+            label="Reason"
+            rows={3}
+            hint="Recorded with the reactivation."
+            value={moveReason}
+            onChange={(event) => setMoveReason(event.target.value)}
+          />
+          <div className="drawer__actions">
+            <Button
+              variant="primary"
+              disabled={moveBusy || !moveReason.trim()}
+              onClick={() => void move('active', moveReason.trim())}
+            >
+              {moveBusy ? 'Reactivating…' : 'Reactivate record'}
+            </Button>
+            <Button variant="quiet" disabled={moveBusy} onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {moveError ? <Note tone="critical">{moveError}</Note> : null}
       {mayWrite && record.status !== 'erased' && !editing ? (
         <div className="drawer__actions">
           <Button variant="secondary" onClick={() => setEditing(true)}>

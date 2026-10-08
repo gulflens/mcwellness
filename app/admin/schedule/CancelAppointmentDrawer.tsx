@@ -118,15 +118,36 @@ type State =
   | { kind: 'error'; message: string }
   | { kind: 'done'; outcome: CancelAppointmentResponse };
 
+/**
+ * As much of a visit as calling it off needs: which one, where it stands,
+ * when it is, and whose. The office's schedule row carries all of it; so does
+ * a practitioner's own stop, whose family name is an initial and never more
+ * (app/api/appointments/schema.ts's `DayStop`).
+ */
+export type CancellableVisit = Pick<
+  AppointmentRow,
+  'id' | 'status' | 'windowStart' | 'windowEnd'
+> & { client: { givenName: string; familyName: string } };
+
 export function CancelAppointmentDrawer({
   appointment,
   onClose,
   onCancelled,
+  practitionerOwn = false,
 }: {
-  appointment: AppointmentRow;
+  appointment: CancellableVisit;
   onClose: () => void;
   /** Called once the day behind should be reloaded, not on every keystroke. */
   onCancelled: () => void;
+  /**
+   * Opened by the practitioner on their own Today rather than by the office.
+   * The act and its consequences are the same; what differs is what comes
+   * after it. Billing is the office's — a practitioner has no Billing to open
+   * and may not forgive a charge — so neither is offered, and the note about
+   * who still has to hear of it names the office rather than the practitioner,
+   * who is the one reading it.
+   */
+  practitionerOwn?: boolean;
 }) {
   const { apiFetch } = useAuth();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -345,7 +366,9 @@ export function CancelAppointmentDrawer({
                   {`A call-out fee of AED ${formatFils(charged.fils)}${
                     charged.includesVat ? ', including VAT,' : ''
                   } is on the client’s account, and no session was taken. If the fee should not ` +
-                    'stand, waive it now.'}
+                    (practitionerOwn
+                      ? 'stand, ask the office to waive it.'
+                      : 'stand, waive it now.')}
                 </Note>
               ) : null}
               {waiver.kind === 'given' ? (
@@ -356,7 +379,9 @@ export function CancelAppointmentDrawer({
                 <Note>Nothing was charged for it, and no session was taken.</Note>
               ) : null}
               <div className="stepper__submit">
-                {state.outcome.feeInvoiceId !== null && waiver.kind !== 'given' ? (
+                {!practitionerOwn &&
+                state.outcome.feeInvoiceId !== null &&
+                waiver.kind !== 'given' ? (
                   <Button
                     variant="primary"
                     disabled={
@@ -374,9 +399,11 @@ export function CancelAppointmentDrawer({
                     (app/admin/schedule/map/documentBoundary.tsx). There it is a
                     plain anchor and the browser loads Billing afresh; here it
                     stays the client-side link it always was. */}
-                <BoundaryLink className="button button--secondary" to="/admin/billing">
-                  Open Billing
-                </BoundaryLink>
+                {practitionerOwn ? null : (
+                  <BoundaryLink className="button button--secondary" to="/admin/billing">
+                    Open Billing
+                  </BoundaryLink>
+                )}
                 <Button variant="quiet" onClick={onClose}>
                   Close
                 </Button>
@@ -445,11 +472,14 @@ export function CancelAppointmentDrawer({
               </div>
 
               <Note>
-                {told
-                  ? 'The household still has to be told the visit is off, and the practitioner ' +
-                    'sees it on their next Today.'
-                  : 'There is nothing to tell the household: this visit was never announced to ' +
-                    'them, and it was on no practitioner’s Today.'}
+                {told && practitionerOwn
+                  ? 'The household still has to be told the visit is off, and the office sees it ' +
+                    'on the day’s schedule.'
+                  : told
+                    ? 'The household still has to be told the visit is off, and the practitioner ' +
+                      'sees it on their next Today.'
+                    : 'There is nothing to tell the household: this visit was never announced to ' +
+                      'them, and it was on no practitioner’s Today.'}
               </Note>
 
               {told && policy === 'loading' ? (

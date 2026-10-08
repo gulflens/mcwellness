@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkConflicts,
   CLIENT_OVERLAP_MESSAGE,
+  isClientBookable,
   PRACTITIONER_OVERLAP_MESSAGE,
   type ExistingAppointment,
   type SchedulingCandidate,
@@ -61,7 +62,7 @@ function baseContext() {
     practitionerAppointments: [] as ExistingAppointment[],
     clientAppointments: [] as ExistingAppointment[],
     practitionerCredentials: [validCredential()],
-    clientActive: true,
+    clientBookable: true,
     requiredConsentPurposes: [] as string[],
     activeConsentPurposes: [] as string[],
   };
@@ -238,10 +239,10 @@ describe('checkConflicts', () => {
     expect(beforeStart.blocking.map((i) => i.code)).toEqual(['credential_invalid']);
   });
 
-  it('blocks a client whose record is not active', () => {
-    const report = checkConflicts(baseCandidate(), { ...baseContext(), clientActive: false });
+  it('blocks a client whose record is not bookable', () => {
+    const report = checkConflicts(baseCandidate(), { ...baseContext(), clientBookable: false });
     expect(report.blocking).toEqual([
-      { code: 'client_inactive', message: "This client's record is not active." },
+      { code: 'client_inactive', message: "This client's record is paused, closed or erased." },
     ]);
   });
 
@@ -249,7 +250,7 @@ describe('checkConflicts', () => {
     const report = checkConflicts(baseCandidate(), {
       ...baseContext(),
       practitionerCredentials: [],
-      clientActive: false,
+      clientBookable: false,
     });
     expect(report.blocking.map((i) => i.code).sort()).toEqual([
       'client_inactive',
@@ -394,5 +395,23 @@ describe('checkConflicts (property): practitioner overlap matches a reference bu
         `aStart=${aStart} bStart=${bStart} aBuffer=${aBuffer} bBuffer=${bBuffer}`,
       ).toBe(expected);
     }
+  });
+});
+
+describe('isClientBookable', () => {
+  // The practice's request: a lead is booked before consent, then activated.
+  it('books a lead or an active client', () => {
+    expect(isClientBookable('lead')).toBe(true);
+    expect(isClientBookable('active')).toBe(true);
+  });
+
+  it('refuses a paused, closed or erased client', () => {
+    expect(isClientBookable('paused')).toBe(false);
+    expect(isClientBookable('closed')).toBe(false);
+    expect(isClientBookable('erased')).toBe(false);
+  });
+
+  it('refuses a status it does not recognise', () => {
+    expect(isClientBookable('not_a_real_status')).toBe(false);
   });
 });

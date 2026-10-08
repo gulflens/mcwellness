@@ -25,13 +25,16 @@ const CONFLICT_MESSAGES: Record<Exclude<ConflictIssue['code'], 'consent_missing'
   client_overlap: 'This client already has an appointment at this time. Choose a different time.',
   credential_invalid:
     'This practitioner is not certified for this service on this date. Choose a different practitioner.',
-  client_inactive:
-    "This client's record is not active. Reactivate the client's record before booking.",
+  // A lead books as well as an active client (domain/scheduling isClientBookable);
+  // an erased record never reaches the booking search (app/api/clients/list.ts).
+  client_inactive: "This client's record is paused or closed. Reactivate it before booking.",
 };
 
-/** The three purposes `requiredConsentPurposes` (create.ts) can ask for, named
- * the way a coordinator asking a family for consent would say them, not the
- * database's own purpose codes. */
+/** The purposes a booking could ask for, named the way a coordinator asking a
+ * family for consent would say them, not the database's own purpose codes.
+ * `requiredConsentPurposes` (create.ts) asks for none today (the operator's
+ * decision of 6 October 2026), so `consent_missing` is not raised at present;
+ * this stays because that function is kept as the switch to require one again. */
 const CONSENT_PURPOSE_LABELS: Record<string, string> = {
   participation: 'participation',
   minor_participation: 'guardian',

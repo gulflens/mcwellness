@@ -430,3 +430,37 @@ describe('Rail', () => {
     }
   });
 });
+
+describe('Rail: the waiting enquiries', () => {
+  function renderWith(badges?: Record<string, number>) {
+    return render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+          badges={badges}
+        />
+      </MemoryRouter>,
+    );
+  }
+
+  it('shows how many are waiting, and says so in words to anything reading it aloud', () => {
+    renderWith({ enquiries: 2 });
+    const link = screen.getByRole('link', { name: 'Enquiries, 2 new' });
+    expect(link.querySelector('.rail__badge')?.textContent).toBe('2');
+  });
+
+  it('shows nothing when none are waiting, and nothing beside any other section', () => {
+    renderWith({ enquiries: 0 });
+    expect(screen.getByRole('link', { name: 'Enquiries' })).toBeTruthy();
+    expect(document.querySelector('.rail__badge')).toBeNull();
+  });
+
+  it('caps the figure where the strip has no room for more', () => {
+    renderWith({ enquiries: 140 });
+    const link = screen.getByRole('link', { name: 'Enquiries, 140 new' });
+    expect(link.querySelector('.rail__badge')?.textContent).toBe('99+');
+  });
+});

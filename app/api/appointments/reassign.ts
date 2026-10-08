@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { canActor, hasRole, isoDateIn, type Capability } from '@domain/shared';
 import {
   checkConflicts,
+  isClientBookable,
   windowFor,
   CLIENT_OVERLAP_MESSAGE,
   PRACTITIONER_OVERLAP_MESSAGE,
@@ -284,7 +285,7 @@ export function mountAppointmentReassign(
         practitionerAppointments: target.existing,
         clientAppointments: context.clientAppointments,
         practitionerCredentials: target.capabilities,
-        clientActive: context.client.status === 'active',
+        clientBookable: isClientBookable(context.client.status),
         requiredConsentPurposes: requiredConsentPurposes(),
         activeConsentPurposes: context.activeConsentPurposes,
       },

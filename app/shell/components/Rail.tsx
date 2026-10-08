@@ -271,6 +271,7 @@ export function Rail({
   pinned = false,
   onTogglePin,
   onChoose,
+  badges,
 }: {
   sections?: readonly RailSection[];
   person: { name: string; roles: string };
@@ -290,6 +291,12 @@ export function Rail({
   onTogglePin?: () => void;
   /** Called when a section is chosen, so the layout may put the rail away. */
   onChoose?: () => void;
+  /**
+   * A count beside a section, by its key: today the enquiries waiting for
+   * somebody (useNewEnquiryCount.ts). Nothing is drawn for nought, and nothing
+   * for a section the layout did not list.
+   */
+  badges?: Readonly<Record<string, number>>;
 }) {
   const rail = useRef<HTMLElement | null>(null);
   const toggle = useRef<HTMLButtonElement | null>(null);
@@ -353,32 +360,45 @@ export function Rail({
             <div className="rail__group" key={group.label}>
               <p className="rail__group-label rail__label micro">{group.label}</p>
               <ul aria-label={group.label}>
-                {items.map((section) => (
-                  <li key={section.key}>
-                    <NavLink
-                      to={section.to}
-                      title={section.label}
-                      onClick={onChoose}
-                      reloadDocument={fresh}
-                      className={({ isActive }) =>
-                        isActive ? 'rail__item rail__item--active' : 'rail__item'
-                      }
-                    >
-                      {section.icon}
-                      <span className="rail__label">{section.label}</span>
-                    </NavLink>
-                    {section.children !== undefined &&
-                    section.children.length > 0 &&
-                    sectionHolds(section.base ?? section.to, pathname) ? (
-                      <Pages
-                        section={section}
-                        pathname={pathname}
-                        hash={hash}
-                        onChoose={onChoose}
-                      />
-                    ) : null}
-                  </li>
-                ))}
+                {items.map((section) => {
+                  const badge = badges?.[section.key] ?? 0;
+                  // Said in words as well as drawn: "Enquiries, 2 new" to
+                  // anything reading the rail aloud, and on hover over the
+                  // strip, where the figure is all there is room for.
+                  const named = badge > 0 ? `${section.label}, ${badge} new` : undefined;
+                  return (
+                    <li key={section.key}>
+                      <NavLink
+                        to={section.to}
+                        title={named ?? section.label}
+                        aria-label={named}
+                        onClick={onChoose}
+                        reloadDocument={fresh}
+                        className={({ isActive }) =>
+                          isActive ? 'rail__item rail__item--active' : 'rail__item'
+                        }
+                      >
+                        {section.icon}
+                        <span className="rail__label">{section.label}</span>
+                        {badge > 0 ? (
+                          <span className="rail__badge numeric" aria-hidden="true">
+                            {badge > 99 ? '99+' : badge}
+                          </span>
+                        ) : null}
+                      </NavLink>
+                      {section.children !== undefined &&
+                      section.children.length > 0 &&
+                      sectionHolds(section.base ?? section.to, pathname) ? (
+                        <Pages
+                          section={section}
+                          pathname={pathname}
+                          hash={hash}
+                          onChoose={onChoose}
+                        />
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           );

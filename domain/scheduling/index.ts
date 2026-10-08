@@ -1,6 +1,11 @@
 export { WINDOW_MINUTES, formatArrivalWindow, windowFor } from './window';
 export type { ArrivalWindow } from './window';
-export { checkConflicts, CLIENT_OVERLAP_MESSAGE, PRACTITIONER_OVERLAP_MESSAGE } from './conflicts';
+export {
+  checkConflicts,
+  CLIENT_OVERLAP_MESSAGE,
+  isClientBookable,
+  PRACTITIONER_OVERLAP_MESSAGE,
+} from './conflicts';
 export type {
   ConflictCode,
   ConflictIssue,

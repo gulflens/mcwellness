@@ -56,3 +56,13 @@ export function canPerformErasure(actor: Actor): boolean {
 export function canRecordErasureRequest(actor: Actor): boolean {
   return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
 }
+
+/**
+ * Listing erased records at all: the owner and the lead practitioner
+ * (docs/SPEC/client-record.md section 2, "erased records stay with the lead
+ * practitioner"). Even for them the list leaves erased rows out unless the
+ * status filter asks for them (app/api/clients/list.ts).
+ */
+export function canListErasedClients(actor: Actor): boolean {
+  return hasRole(actor, 'owner', 'lead_practitioner');
+}

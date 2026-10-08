@@ -33,6 +33,7 @@ import {
   writeRail,
 } from './railState';
 import { describeRoles } from './routing';
+import { useNewEnquiryCount } from './useNewEnquiryCount';
 
 /** The browser's own store, where there is one; a test environment may have none. */
 function store(): Storage | undefined {
@@ -188,6 +189,12 @@ export function AdminLayout({ actorName }: { actorName: string }) {
   const roles = session.status === 'signed-in' ? describeRoles(session.actor.roles) : '';
   const sections =
     session.status === 'signed-in' ? visibleSections(session.actor, new Date()) : ADMIN_SECTIONS;
+  // The enquiries waiting for somebody, beside their entry on the rail. Asked
+  // only for the three roles the rail shows Enquiries to: the same rule, so a
+  // badge never sits on a section the reader cannot open.
+  const newEnquiries = useNewEnquiryCount(
+    session.status === 'signed-in' && canOpenEnquiries(session.actor, new Date()),
+  );
   return (
     // data-rail stays: shell.css and tests/lint/layout-tokens.test.ts both read
     // it, and it still says whether the labels are showing. data-rail-mode says
@@ -203,6 +210,7 @@ export function AdminLayout({ actorName }: { actorName: string }) {
         pinned={pinned}
         onTogglePin={tier === 'desk' ? undefined : togglePin}
         onChoose={chooseSection}
+        badges={newEnquiries === null ? undefined : { enquiries: newEnquiries }}
       />
       {mode === 'overlay' ? (
         // A press anywhere on the page closes the rail. It is not announced and

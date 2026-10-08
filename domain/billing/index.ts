@@ -10,6 +10,8 @@ export type { AllocatedEntitlement, PackageComponent } from './allocation';
 export { EXPIRY_WARNING_DAYS, daysBetween, expiryOn, expiryWarningFor, isUsableOn } from './expiry';
 export type { ExpiryTerm, ExpiryUnit, ExpiryWarning } from './expiry';
 export { termWords } from './term';
+export { earliestSaleOn, unsellableReason } from './saleDate';
+export type { UnsellableReason } from './saleDate';
 export {
   CONSUMPTION_KINDS,
   ENTITLEMENT_STATUSES,

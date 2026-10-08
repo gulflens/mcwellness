@@ -1,5 +1,6 @@
 import type { Actor } from '@domain/shared';
 import {
+  canListErasedClients,
   canPerformErasure,
   canRecordErasureRequest,
   canWriteClientRecord,
@@ -74,4 +75,9 @@ export function canAskForErasure(actor: Actor | null): boolean {
 /** Pressing the button that erases them: the owner and an admin, and nobody else. */
 export function canErase(actor: Actor | null): boolean {
   return actor !== null && canPerformErasure(actor);
+}
+
+/** Whether the clients list may be asked for erased records: the owner and the lead practitioner. */
+export function canSeeErased(actor: Actor | null): boolean {
+  return actor !== null && canListErasedClients(actor);
 }

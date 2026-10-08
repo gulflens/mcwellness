@@ -511,3 +511,75 @@ describe('giving a package away free', () => {
     expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(false);
   });
 });
+
+/**
+ * The sale refused, and the reason said for what it is.
+ *
+ * Every 422 from the sale route used to read "set the missing price first" —
+ * including a sale dated 18/08 against prices that start in September, where
+ * no price was missing at all. Each refusal now has its own words.
+ */
+describe('SellPackageDrawer: why a sale was refused', () => {
+  function mountRefused(answer: Record<string, unknown>) {
+    return mountWith(
+      OWNER,
+      <SellPackageDrawer bundle={SILVER} onClose={() => undefined} onSold={() => undefined} />,
+      (url, init) => {
+        if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+        if (url === '/api/billing/package-purchases' && init?.method === 'POST') {
+          return json({ error: 'unprocessable', requestId: 'r', ...answer }, 422);
+        }
+        return null;
+      },
+    );
+  }
+
+  async function sellOn(display: string) {
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Bought on'), { target: { value: display } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+  }
+
+  it('names the date chosen and the first date prices start, in DD/MM/YYYY', async () => {
+    const { requests } = mountRefused({ code: 'no_price_on_date', earliestOn: '2026-09-15' });
+    await sellOn('18/08/2026');
+    expect(
+      await screen.findByText(
+        'No price was in force on 18/08/2026. Prices for this package start on 15/09/2026 — choose that date or later.',
+      ),
+    ).toBeTruthy();
+    expect(saleBody(requests)).toMatchObject({ purchasedOn: '2026-08-18' });
+    expect(screen.queryByText(/Set the missing price/)).toBeNull();
+  });
+
+  it('keeps the bought-on date from going below the first date it now knows', async () => {
+    const { requests } = mountRefused({ code: 'no_price_on_date', earliestOn: '2026-09-15' });
+    await sellOn('18/08/2026');
+    await screen.findByText(/No price was in force/);
+    // A date still before the start is not sent for a second refusal.
+    fireEvent.change(screen.getByLabelText('Bought on'), { target: { value: '01/09/2026' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    expect(await screen.findByText('Choose 15/09/2026 or later.')).toBeTruthy();
+    expect(requests.filter((r) => r.url === '/api/billing/package-purchases')).toHaveLength(1);
+  });
+
+  it('still asks for the missing price when a price is truly missing', async () => {
+    mountRefused({ code: 'not_sellable' });
+    await sellOn('18/09/2026');
+    expect(
+      await screen.findByText(
+        'This package cannot be sold until every service in it has a price. Set the missing price first.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('says plainly when the price cannot be shared between services priced at nothing', async () => {
+    mountRefused({ code: 'not_allocatable' });
+    await sellOn('18/09/2026');
+    expect(
+      await screen.findByText(
+        'Every service in this package is priced at nothing, so its price cannot be shared between them. Give at least one service a price first.',
+      ),
+    ).toBeTruthy();
+  });
+});

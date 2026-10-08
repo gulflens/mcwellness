@@ -2,11 +2,13 @@ import type { Hono } from 'hono';
 import {
   allocateEntitlements,
   combineDiscounts,
+  earliestSaleOn,
   expiryOn,
   resolveSaleVat,
   termWords,
   type AppliedDiscount,
   type PackageComponent,
+  unsellableReason,
 } from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
@@ -86,6 +88,27 @@ const INSERT_PURCHASE_SQL =
 
 /** The practice opened in 2024; a sale before that is a mistyped year. */
 const EARLIEST_SALE_ON = '2024-01-01';
+
+const JURISDICTION = 'AE';
+const RECIPIENT_TYPE = 'individual';
+
+// When each price the sale needs first started: the package's own first price
+// and, per component in line order, its service's first standalone price
+// (null where one has never been written). Read only after a refusal, to say
+// whether a later "Bought on" date would have sold (domain/billing/saleDate.ts).
+// Text, not dates, so the array comes back as plain ISO strings.
+const FIRST_PRICES_SQL =
+  'select (select min(pp.valid_from)::text from package_price pp ' +
+  '    where pp.tenant_id = app.current_tenant_id() and pp.package_id = $1) as package_from, ' +
+  // A retired service has no price the catalogue will use, so it answers null
+  // ("never priced") rather than a date that would still be refused.
+  '  array(select (select min(p.valid_from)::text from price p ' +
+  "      where st.status = 'active' and p.tenant_id = pc.tenant_id " +
+  '        and p.service_type_id = pc.service_type_id ' +
+  '        and p.jurisdiction = $2 and p.recipient_type = $3) ' +
+  '    from package_component pc join service_type st on st.id = pc.service_type_id ' +
+  '    where pc.tenant_id = app.current_tenant_id() and pc.package_id = $1 ' +
+  '    order by pc.line_no) as component_froms';
 
 /** The key a repeated press collides with (migration 403's `unique (tenant_id, idempotency_key)`). */
 const PURCHASE_IDEMPOTENCY_CONSTRAINT = 'package_purchase_tenant_id_idempotency_key_key';
@@ -286,6 +309,40 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
       // Withdrawn, empty, unpriced, or holding a component with no price of
       // its own: any of the four means a share of the price cannot honestly
       // be worked out, so nothing is sold rather than something guessed.
+      //
+      // Unpriced *on the date chosen* is a different refusal from unpriced
+      // at all: a sale dated 18 August against prices that start in
+      // September has every price it needs, only later. That one names the
+      // first date that would sell, so the drawer can say it rather than
+      // send the person looking for a price that is already there.
+      if (bundle.status === 'active') {
+        const first = await db.query<{
+          package_from: string | null;
+          component_froms: (string | null)[];
+        }>(FIRST_PRICES_SQL, [bundle.id, JURISDICTION, RECIPIENT_TYPE]);
+        const row = first.rows[0];
+        const reason = unsellableReason(
+          input.purchasedOn,
+          row
+            ? earliestSaleOn({
+                packagePriceFrom: row.package_from,
+                componentPriceFroms: row.component_froms,
+              })
+            : null,
+          today,
+        );
+        if (reason.code === 'no_price_on_date') {
+          return c.json(
+            {
+              error: 'unprocessable',
+              code: reason.code,
+              earliestOn: reason.earliestOn,
+              requestId,
+            },
+            422,
+          );
+        }
+      }
       return c.json({ error: 'unprocessable', code: 'not_sellable', requestId }, 422);
     }
 

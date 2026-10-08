@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 import { canActor, hasRole, isoDateIn, type Capability } from '@domain/shared';
 import {
   checkConflicts,
+  isClientBookable,
   windowFor,
   CLIENT_OVERLAP_MESSAGE,
   PRACTITIONER_OVERLAP_MESSAGE,
@@ -251,7 +252,7 @@ export function mountAppointmentCreate(
         practitionerAppointments: toExisting(practitionerAppointmentsResult.rows),
         clientAppointments: toExisting(clientAppointmentsResult.rows),
         practitionerCredentials: assigneeCapabilities,
-        clientActive: client.status === 'active',
+        clientBookable: isClientBookable(client.status),
         requiredConsentPurposes: requiredConsentPurposes(),
         activeConsentPurposes: consentResult.rows.map((r) => r.purpose),
       },

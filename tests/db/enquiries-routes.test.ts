@@ -595,3 +595,38 @@ describe('actioning', () => {
     ).toBe(404);
   });
 });
+
+describe("the rail's count of waiting enquiries", () => {
+  it('counts the waiting ones only, for the three roles that may list them, and logs no read', async () => {
+    await h.owner.query('delete from enquiry');
+    await lodge('Hazel Harbour', 'c'.repeat(64));
+    const handled = await lodge('Rowan Meadow', 'd'.repeat(64));
+    const dismissed = await h.callAs(
+      'POST',
+      `/api/enquiries/${handled}/dismiss`,
+      PORTAL.adminAuth,
+      {
+        reason: 'A wrong number',
+      },
+    );
+    expect(dismissed.status).toBe(200);
+
+    const before = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where entity_type = 'enquiry' and action = 'list'",
+    );
+    const res = await h.callAs('GET', '/api/enquiries/count', PORTAL.adminAuth);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ new: 1 });
+    // A number names nobody, so asking for it reads nobody.
+    const after = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where entity_type = 'enquiry' and action = 'list'",
+    );
+    expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
+
+    expect((await h.callAs('GET', '/api/enquiries/count', PORTAL.leadAuth)).status).toBe(200);
+    expect((await h.callAs('GET', '/api/enquiries/count', PORTAL.practitionerAuth)).status).toBe(
+      403,
+    );
+    expect((await h.callAs('GET', '/api/enquiries/count', PORTAL.financeAuth)).status).toBe(403);
+  });
+});

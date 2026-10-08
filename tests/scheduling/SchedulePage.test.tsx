@@ -443,3 +443,59 @@ describe('SchedulePage: a visit logged from the records', () => {
     expect((screen.getByLabelText('Start time') as HTMLInputElement).value).toBe('15:30');
   });
 });
+
+describe('SchedulePage: called-off visits', () => {
+  /** A visit the family called off, still on the day's list on purpose. */
+  const calledOff = {
+    ...appointment,
+    id: '00000008-0000-4000-8000-000000000111',
+    status: 'cancelled' as const,
+    client: proposed.client,
+  };
+
+  function dayWith(rows: unknown[]): typeof fetch {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: rows }), { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+  }
+
+  it('folds called-off visits away by default, and the switch brings them back', async () => {
+    renderPage(dayWith([appointment, calledOff]));
+    await screen.findByRole('button', { name: 'Iris Cliff' });
+    expect(screen.queryByRole('button', { name: 'Juniper Valley' })).toBeNull();
+    expect(screen.getByText('1 appointment')).toBeTruthy();
+
+    const toggle = screen.getByRole('checkbox', { name: /Show called-off visits/ });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    // The switch says how many it is holding back, so nothing is hidden silently.
+    expect(toggle.closest('label')?.textContent).toContain('(1)');
+
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Juniper Valley' })).toBeTruthy();
+    expect(screen.getByText('Cancelled')).toBeTruthy();
+    expect(screen.getByText('2 appointments')).toBeTruthy();
+  });
+
+  it('keeps a moved visit on the list: it says where the visit went', async () => {
+    const moved = {
+      ...appointment,
+      id: '00000008-0000-4000-8000-000000000112',
+      status: 'rescheduled' as const,
+      movedTo: {
+        id: '00000008-0000-4000-8000-000000000113',
+        windowStart: '2026-09-11T06:00:00.000Z',
+      },
+    };
+    renderPage(dayWith([moved]));
+    expect(await screen.findByText('Rescheduled')).toBeTruthy();
+  });
+
+  it('says so when every visit on the day has been called off', async () => {
+    renderPage(dayWith([calledOff]));
+    expect(await screen.findByText('Every visit on this day has been called off.')).toBeTruthy();
+  });
+});

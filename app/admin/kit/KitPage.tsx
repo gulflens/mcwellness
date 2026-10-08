@@ -347,6 +347,11 @@ export function KitPage() {
     open: false,
     item: null,
   });
+  // Stood-down items stay on the register for good — a visit that ran on one
+  // still names it — but they are not what the register is read for, so they
+  // are folded away until asked for. Remembered nowhere: the next visit opens
+  // on the instruments in service.
+  const [showStoodDown, setShowStoodDown] = useState(false);
   // A minute is plenty: a calibration lapses at a moment, and the row it
   // affects should not need a reload to say so.
   const [now, setNow] = useState(() => new Date());
@@ -416,6 +421,15 @@ export function KitPage() {
     },
   ];
 
+  const stoodDown =
+    state.kind === 'ready' ? state.data.filter((row) => row.status === 'inactive').length : 0;
+  const shown =
+    state.kind === 'ready'
+      ? showStoodDown
+        ? state.data
+        : state.data.filter((row) => row.status !== 'inactive')
+      : [];
+
   return (
     <section className="page">
       <PageHeader
@@ -438,13 +452,35 @@ export function KitPage() {
         <Note tone="critical">The register could not be loaded. Try again.</Note>
       ) : null}
       {state.kind === 'ready' ? (
-        <Table
-          caption="Every instrument the practice owns, with its calibration"
-          columns={columns}
-          rows={state.data}
-          rowKey={(row) => row.id}
-          empty={<Note>Nothing is on the register yet.</Note>}
-        />
+        <>
+          <div className="toolbar">
+            <label htmlFor="kit-show-stood-down" className="checkbox">
+              <input
+                id="kit-show-stood-down"
+                type="checkbox"
+                checked={showStoodDown}
+                onChange={(e) => setShowStoodDown(e.target.checked)}
+              />
+              <span>
+                Show stood down
+                {stoodDown > 0 ? <span className="numeric"> ({stoodDown})</span> : null}
+              </span>
+            </label>
+          </div>
+          <Table
+            caption="Every instrument the practice owns, with its calibration"
+            columns={columns}
+            rows={shown}
+            rowKey={(row) => row.id}
+            empty={
+              <Note>
+                {stoodDown > 0 && !showStoodDown
+                  ? 'Every item on the register has been stood down.'
+                  : 'Nothing is on the register yet.'}
+              </Note>
+            }
+          />
+        </>
       ) : null}
 
       {drawer.open ? (

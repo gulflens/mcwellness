@@ -331,7 +331,7 @@ describe('NewAppointmentDrawer', () => {
       },
       {
         code: 'client_inactive',
-        message: "This client's record is not active.",
+        message: "This client's record is paused, closed or erased.",
         conflictsWithAppointmentId: null,
       },
       {
@@ -360,9 +360,7 @@ describe('NewAppointmentDrawer', () => {
       ).toBeTruthy(),
     );
     expect(
-      screen.getByText(
-        "This client's record is not active. Reactivate the client's record before booking.",
-      ),
+      screen.getByText("This client's record is paused or closed. Reactivate it before booking."),
     ).toBeTruthy();
     // consent_missing is the one exception that still reads the purpose out of
     // the server's message, because the coordinator needs to know which
