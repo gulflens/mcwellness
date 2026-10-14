@@ -32,6 +32,7 @@ import {
   writePinned,
   writeRail,
 } from './railState';
+import { staffNotificationsOffered } from '@domain/portal';
 import { describeRoles } from './routing';
 import { useNewEnquiryCount } from './useNewEnquiryCount';
 
@@ -211,6 +212,10 @@ export function AdminLayout({ actorName }: { actorName: string }) {
         onTogglePin={tier === 'desk' ? undefined : togglePin}
         onChoose={chooseSection}
         badges={newEnquiries === null ? undefined : { enquiries: newEnquiries }}
+        notifications={
+          session.status === 'signed-in' &&
+          staffNotificationsOffered(session.actor.roles, new Date())
+        }
       />
       {mode === 'overlay' ? (
         // A press anywhere on the page closes the rail. It is not announced and

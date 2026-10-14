@@ -77,6 +77,13 @@ export const KeyIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const BellIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M5.5 13.5V9a4.5 4.5 0 0 1 9 0v4.5l1.25 1.5H4.25z" />
+    <path d="M8.5 16.75a1.75 1.75 0 0 0 3 0" />
+  </Icon>
+);
+
 export const AuditIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M10 2.75 4 5v4.5c0 3.4 2.5 6.2 6 7.75 3.5-1.55 6-4.35 6-7.75V5z" />

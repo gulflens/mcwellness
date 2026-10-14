@@ -24,6 +24,7 @@ import { useAuth, type Actor } from './auth/AuthContext';
 import { Note } from './components/Controls';
 import { ScreenBoundary } from './ScreenBoundary';
 import { NoAccessPage } from './pages/NoAccessPage';
+import { PhoneNotificationsPage } from './pages/PhoneNotificationsPage';
 import { PasswordPage } from './pages/PasswordPage';
 import { SignInPage } from './pages/SignInPage';
 import { HELPER_HOME, homeFor, isHelperOnly } from './routing';
@@ -678,6 +679,12 @@ export function App() {
           <Route
             path="/account/password"
             element={<RequireAuth>{() => <PasswordPage />}</RequireAuth>}
+          />
+          {/* A member of staff's own switch for phone notifications: the
+          console's, in English; a household's is the portal's Home step. */}
+          <Route
+            path="/account/notifications"
+            element={<RequireAuth>{() => <PhoneNotificationsPage />}</RequireAuth>}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
