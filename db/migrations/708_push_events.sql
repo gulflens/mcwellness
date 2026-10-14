@@ -40,7 +40,16 @@
 -- Needs: 000 (schema app, app.current_tenant_id, app.set_updated_at), 010
 -- (tenant), 020 (app_user, user_role, locale), 060 (client, contact), 080
 -- (app.audit_row), 095 (app.actor_has_role), 100 (app.current_actor_id),
--- 707 (push_subscription, whose devices the household events go to).
+-- 707 (push_subscription, whose devices the household events go to). Not a
+-- Needs, because it sorts later and checkNeeds refuses a higher number: at run
+-- time 975's app.audit_redact drops the three device columns from the trail
+-- by name; 975's header says no other table had them, and this one now does,
+-- deliberately.
+
+-- Note: the event delivery runs with **no actor** (nobody pressed Send). The
+-- three functions below that hand out device addresses or clear them refuse a
+-- session that names a person, so no request — not even the owner's — can
+-- read another person's device address through them.
 
 create type push_event_kind as enum (
   'visit_booked', 'visit_moved', 'visit_called_off', 'report_ready', 'enquiry_new'
@@ -168,7 +177,8 @@ begin
                                               push_auth, created_by)
   values (v_tenant, v_actor, p_endpoint, p_p256dh, p_auth, v_actor)
   on conflict (tenant_id, push_endpoint) do update
-     set push_p256dh = excluded.push_p256dh, push_auth = excluded.push_auth
+     set user_id = excluded.user_id, created_by = excluded.created_by,
+         push_p256dh = excluded.push_p256dh, push_auth = excluded.push_auth
   returning id into v_id;
   return v_id;
 end
@@ -180,8 +190,8 @@ grant execute on function app.staff_subscribe_push(text, text, text) to app_role
 -- 4. app.push_event_household_targets(client) — the devices of one record's
 --    portal logins, with the facts the domain decides from.
 --
---    For the owner and an admin (42501 otherwise) — in practice the event
---    delivery, which runs in the API process after the act's own commit,
+--    For the event delivery alone: the `admin` role and no actor (42501
+--    otherwise) — the delivery, which runs in the API process after the act's own commit,
 --    stamped `admin` with no actor (app/api/portal/push/events.ts). One row
 --    per device of every active login holding the `client_contact` role that
 --    is a contact of this record, the record not erased: the login's language,
@@ -200,8 +210,9 @@ language plpgsql stable security definer
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  if not (app.actor_has_role('owner') or app.actor_has_role('admin')) then
-    raise exception 'delivering a notification is the owner''s and an admin''s'
+  if not (app.actor_has_role('owner') or app.actor_has_role('admin'))
+     or app.current_actor_id() is not null then
+    raise exception 'delivering an event notice is the delivery''s alone'
       using errcode = 'insufficient_privilege';
   end if;
   return query
@@ -237,7 +248,7 @@ grant execute on function app.push_event_household_targets(uuid) to app_role;
 
 ------------------------------------------------------------------------------
 -- 5. app.push_event_staff_targets() — every staff browser, with the roles its
---    person holds now. The owner and an admin, as the delivery runs (42501
+--    person holds now. The delivery alone: `admin` and no actor (42501
 --    otherwise). Active people only; the domain decides which roles hear of
 --    what (`staffEventRecipients`).
 ------------------------------------------------------------------------------
@@ -248,8 +259,9 @@ language plpgsql stable security definer
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  if not (app.actor_has_role('owner') or app.actor_has_role('admin')) then
-    raise exception 'delivering a notification is the owner''s and an admin''s'
+  if not (app.actor_has_role('owner') or app.actor_has_role('admin'))
+     or app.current_actor_id() is not null then
+    raise exception 'delivering an event notice is the delivery''s alone'
       using errcode = 'insufficient_privilege';
   end if;
   return query
@@ -271,8 +283,8 @@ grant execute on function app.push_event_staff_targets() to app_role;
 ------------------------------------------------------------------------------
 -- 6. app.staff_push_subscriptions_gone(ids) — the staff browsers a push
 --    service said are no longer there (404 or 410), as 707's
---    app.push_subscriptions_gone does for a household's. The owner and an
---    admin, as the delivery runs. Answers how many went.
+--    app.push_subscriptions_gone does for a household's. The delivery alone:
+--    `admin` and no actor. Answers how many went.
 ------------------------------------------------------------------------------
 create function app.staff_push_subscriptions_gone(p_ids uuid[])
 returns integer
@@ -282,8 +294,9 @@ as $$
 declare
   v_count integer;
 begin
-  if not (app.actor_has_role('owner') or app.actor_has_role('admin')) then
-    raise exception 'clearing a device is the delivery''s, for the owner and an admin'
+  if not (app.actor_has_role('owner') or app.actor_has_role('admin'))
+     or app.current_actor_id() is not null then
+    raise exception 'clearing a device is the delivery''s alone'
       using errcode = 'insufficient_privilege';
   end if;
   delete from public.staff_push_subscription s

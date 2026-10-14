@@ -245,7 +245,7 @@ describe('what the delivery reaches', () => {
     });
   });
 
-  it('refuses every target list to anybody but the owner or an admin', async () => {
+  it('refuses every target list to anybody but the delivery itself', async () => {
     await rolledBack(owner, async () => {
       for (const sql of [
         `select * from app.push_event_household_targets('${PORTAL.childA}')`,
@@ -258,6 +258,10 @@ describe('what the delivery reaches', () => {
         expect(await as(PORTAL.motherUser, 'client_contact', () => codeOf(sql))).toBe(
           RLS_VIOLATION,
         );
+        // The owner and an admin themselves, in a request that names them:
+        // the device addresses are the delivery's alone.
+        expect(await as(IDS.ownerA, 'owner', () => codeOf(sql))).toBe(RLS_VIOLATION);
+        expect(await as(PORTAL.admin, 'admin', () => codeOf(sql))).toBe(RLS_VIOLATION);
       }
     });
   });
