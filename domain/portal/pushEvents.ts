@@ -151,6 +151,20 @@ export function staffEventRecipients(
     .map((candidate) => ({ userId: candidate.userId, devices: candidate.devices }));
 }
 
+/**
+ * At most one new-enquiry notice in this many minutes. The website's form is
+ * a public door: without a quiet spell, a burst of enquiries (or somebody
+ * scripting the form) is a burst of lock-screen notices on every office
+ * phone. One notice says "go and look"; the list says how many.
+ */
+export const ENQUIRY_NOTICE_QUIET_MINUTES = 10;
+
+/** Whether a new enquiry may be told now, given when the last notice went (or never). */
+export function enquiryNoticeDue(lastNoticeAt: Date | null, now: Date): boolean {
+  if (lastNoticeAt === null) return true;
+  return now.getTime() - lastNoticeAt.getTime() >= ENQUIRY_NOTICE_QUIET_MINUTES * 60_000;
+}
+
 /** What the words of an event are written from, and nothing more. */
 export type EventFacts =
   | { kind: VisitEventKind; startsAt: Date; timeZone: string }
@@ -189,7 +203,9 @@ const isolate = (text: string) => `${LTR_ISOLATE}${text}${POP_ISOLATE}`;
 
 /**
  * The words, in one language. Staff messages are English only (the console
- * is), whatever language is asked for.
+ * is), whatever language is asked for. The Arabic needs a native speaker's
+ * check before the practice switches notifications on
+ * (docs/OPERATOR/2026-10-15-event-notifications.md).
  */
 export function eventMessage(facts: EventFacts, locale: 'en' | 'ar'): EventMessage {
   switch (facts.kind) {

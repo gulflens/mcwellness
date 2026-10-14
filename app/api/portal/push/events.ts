@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  enquiryNoticeDue,
   eventPayload,
   householdEventRecipients,
   staffEventRecipients,
@@ -206,11 +207,22 @@ async function planned(
       const seen = counts.get(target.user_id);
       counts.set(target.user_id, { roles: target.roles, devices: (seen?.devices ?? 0) + 1 });
     }
-    const recipients = staffEventRecipients(
-      [...counts].map(([userId, facts]) => ({ userId, ...facts })),
-      event.kind,
-      now,
-    );
+    // One notice per quiet spell: a burst of enquiries is recorded, each by
+    // id, and told once (enquiryNoticeDue).
+    const last =
+      (
+        await client.query<{ last: Date | null }>(
+          'select max(created_at) as last from push_event ' +
+            "where tenant_id = app.current_tenant_id() and kind = 'enquiry_new' and device_count > 0",
+        )
+      ).rows[0]?.last ?? null;
+    const recipients = enquiryNoticeDue(last, now)
+      ? staffEventRecipients(
+          [...counts].map(([userId, facts]) => ({ userId, ...facts })),
+          event.kind,
+          now,
+        )
+      : [];
     const chosen = new Set(recipients.map((recipient) => recipient.userId));
     people = chosen.size;
     devices = targets

@@ -98,8 +98,10 @@ export type {
   PushWarning,
 } from './push';
 export {
+  ENQUIRY_NOTICE_QUIET_MINUTES,
   EVENT_OPENS,
   PUSH_EVENT_KINDS,
+  enquiryNoticeDue,
   eventMessage,
   eventPayload,
   householdEventRecipients,

@@ -3,6 +3,8 @@ import { PUSH_BODY_MAX, PUSH_TITLE_MAX } from './push';
 import {
   PUSH_EVENT_KINDS,
   eventMessage,
+  ENQUIRY_NOTICE_QUIET_MINUTES,
+  enquiryNoticeDue,
   eventPayload,
   householdEventRecipients,
   staffEventRecipients,
@@ -355,5 +357,23 @@ describe('eventPayload', () => {
       dir: 'ltr',
       url: '/admin/enquiries',
     });
+  });
+});
+
+describe('enquiryNoticeDue', () => {
+  const NOW = new Date('2026-10-15T08:00:00Z');
+  const minutesAgo = (n: number) => new Date(NOW.getTime() - n * 60_000);
+
+  it('tells the first enquiry at once', () => {
+    expect(enquiryNoticeDue(null, NOW)).toBe(true);
+  });
+
+  it('keeps quiet for the quiet spell after a notice, so a burst is one notice', () => {
+    expect(enquiryNoticeDue(minutesAgo(ENQUIRY_NOTICE_QUIET_MINUTES - 1), NOW)).toBe(false);
+    expect(enquiryNoticeDue(minutesAgo(0), NOW)).toBe(false);
+  });
+
+  it('tells again once the quiet spell is over', () => {
+    expect(enquiryNoticeDue(minutesAgo(ENQUIRY_NOTICE_QUIET_MINUTES), NOW)).toBe(true);
   });
 });

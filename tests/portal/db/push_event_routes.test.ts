@@ -503,6 +503,18 @@ describe('a member of staff’s browser, and a new website enquiry', () => {
       false,
     );
     expect(await events('enquiry_new')).toEqual([{ recipient_count: 2, device_count: 2 }]);
+
+    // A second enquiry inside the quiet spell is recorded and told to nobody:
+    // a burst at the public door is one notice, never one per enquiry.
+    posted.length = 0;
+    const again = await api.request('/api/enquiries', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://mcwellnessuae.com' },
+      body: JSON.stringify({ ...ENQUIRY, phone: '50 000 0097' }),
+    });
+    expect(again.status).toBe(200);
+    expect(await delivered()).toEqual([]);
+    expect(await events('enquiry_new')).toHaveLength(2);
     await h.owner.query("update user_role set role = 'lead_practitioner' where user_id = $1", [
       PORTAL.leadPractitioner,
     ]);
