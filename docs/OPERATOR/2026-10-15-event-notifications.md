@@ -52,7 +52,8 @@ told of a visit their portal does not show.
 ### 2. "Moved" only for a confirmed visit whose time changes
 
 A proposed visit that moves says nothing (nobody was told the first time).
-Changing the practitioner on the same time says nothing. The day map's
+Changing the practitioner on the same time says nothing; a handover that also
+changes the time is told as a move. The day map's
 reorder only ever moves proposed visits, so it says nothing either.
 
 ### 3. "Called off" only when the practice calls off a confirmed visit
@@ -85,6 +86,11 @@ the console under **Phone notifications** (beside Password, at the bottom of
 the menu). A colleague's browser is theirs alone; nobody can see or switch off
 anyone else's. Someone who loses the role stops being told at once.
 
+A burst of website enquiries is told once: after a notice, the next one waits
+ten minutes, so a busy morning (or somebody misusing the website's form)
+cannot fill the office's phones. Every enquiry is still in the list. Reply
+"every enquiry" to send one notice each.
+
 ### 7. Sent after the act, once, never retried
 
 The notice is sent only after the booking, move, cancellation, report or
@@ -106,8 +112,29 @@ That work is not merged. The "report ready" notice follows the moment any
 report is issued on this branch, brain maps included; if 253 brings reports in
 some other way, they will be hooked when it merges.
 
+### 10. A colleague who leaves keeps nothing, but their browser address stays
+
+Someone suspended or archived is never sent anything again. The address of the
+browser they turned on is kept in its table until the browser itself goes away
+(the push service then says so and it is deleted) or until they turn it off.
+Reply "remove on archive" to have it deleted the moment a colleague is
+archived.
+
+### 11. A shared computer belongs to whoever turned it on last
+
+If two colleagues turn notifications on in the same browser, it becomes the
+second one's. The first is not told; they stop receiving notices on that
+browser.
+
 ## Before switching on
 
-1. A native Arabic check of the four Arabic messages above.
+1. A native Arabic check of the four Arabic messages above, and of the five
+   new Arabic lines in the practice's activity trail (the record of who turned
+   notifications on or off and of each notice delivered):
+   - سُجِّل إشعار بحدث للهواتف
+   - سُلِّم إشعار بحدث إلى الهواتف
+   - … فعّل الإشعارات على متصفح
+   - … أوقف الإشعارات على متصفح
+   - خرج متصفح من إشعارات الفريق
 2. The practice's key pair set on the host (the step in the 17 September
    memo). Without it, nothing is sent and nothing changes.

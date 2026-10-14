@@ -934,6 +934,8 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
     // Event notices (migration 708): a visit booked, moved or called off, a
     // report ready, a website enquiry. Sent by nobody in particular, so no
     // actor; recorded by kind, id and counts, never a word of what was sent.
+    // The Arabic of these five needs a native speaker's check
+    // (docs/OPERATOR/2026-10-15-event-notifications.md).
     case 'push_event.insert':
       return pick(
         t('An event notice was recorded for the phones', 'سُجِّل إشعار بحدث للهواتف'),
