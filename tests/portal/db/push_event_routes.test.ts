@@ -165,7 +165,7 @@ beforeAll(async () => {
     id: SECOND.user,
     tenantId: IDS.tenantA,
     authId: SECOND.auth,
-    displayName: 'Rowan Vale',
+    displayName: 'Rowan Harbour',
     roles: ['practitioner'],
   });
   await h.owner.query('insert into practitioner (id, tenant_id, user_id) values ($1, $2, $3)', [
