@@ -511,6 +511,12 @@ describe('phone notifications', () => {
     expect(opened).toEqual(['/admin/enquiries', '/admin/enquiries']);
   });
 
+  it('shows no announcement or offer that would open the console', async () => {
+    await push({ ...ANNOUNCEMENT, url: '/admin/enquiries' });
+    await push({ ...OFFER, url: '/admin/enquiries' });
+    expect(shown).toEqual([]);
+  });
+
   it('opens nothing but a portal path on this origin, whatever the payload says', async () => {
     for (const url of [
       'https://example.com/portal',

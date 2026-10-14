@@ -262,7 +262,9 @@ function isPortalPush(data: unknown): data is PortalPush {
     (shape.lang === 'en' || shape.lang === 'ar') &&
     typeof shape.title === 'string' &&
     typeof shape.body === 'string' &&
-    isOpenablePath(shape.url)
+    // The console's Enquiries is an event's only (the staff notice); an
+    // announcement or an offer opens the portal and nothing else.
+    (shape.kind === 'event' ? isOpenablePath(shape.url) : isPortalPath(shape.url))
   );
 }
 
