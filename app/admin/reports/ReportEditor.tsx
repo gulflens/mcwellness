@@ -144,6 +144,7 @@ export function ReportEditor({
   const [loading, setLoading] = useState(reportId !== null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blockedPreview, setBlockedPreview] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   // Reading and setting are separate so an effect never calls setState in its
@@ -333,6 +334,7 @@ export function ReportEditor({
     if (!id) return;
     setBusy(true);
     setError(null);
+    setBlockedPreview(null);
     try {
       const res = await apiFetch(`/api/reports/${id}/preview`);
       if (!res.ok) {
@@ -342,10 +344,22 @@ export function ReportEditor({
       // Held as an object URL and revoked on the next tick: a preview carries
       // a household's own figures and has no business outliving the click.
       const url = URL.createObjectURL(await res.blob());
-      if (window.open(url, '_blank', 'noopener,noreferrer') === null) {
-        setError('The preview could not be opened. Your browser blocked the window.');
+      // No "noopener" in the features: with it, the HTML standard has
+      // `window.open` answer null whether or not the tab opened, so a null
+      // could not tell a blocked window from an open one and every preview
+      // said it was blocked. The opener is cut by hand instead, so the page
+      // still cannot reach back into the console. A blob URL carries no
+      // referrer to withhold.
+      const opened = window.open(url, '_blank');
+      if (opened === null) {
+        setBlockedPreview(url);
+      } else {
+        opened.opener = null;
       }
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        setBlockedPreview((shown) => (shown === url ? null : shown));
+      }, 60_000);
     } catch {
       setError('The preview could not be rendered.');
     } finally {
@@ -651,6 +665,14 @@ export function ReportEditor({
       {gathered === null ? <Note>Reading the record.</Note> : null}
 
       {error ? <Note tone="critical">{error}</Note> : null}
+      {blockedPreview ? (
+        <Note tone="critical">
+          Your browser blocked the preview window.{' '}
+          <a href={blockedPreview} target="_blank" rel="noopener noreferrer">
+            Open the page
+          </a>
+        </Note>
+      ) : null}
 
       {confirming ? (
         <div className="report-editor__sign">

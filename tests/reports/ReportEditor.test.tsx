@@ -580,3 +580,39 @@ describe('the practice’s day', () => {
     expect(gather.searchParams.get('from')).toBe('2026-06-05');
   });
 });
+
+describe('opening the preview', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('says nothing is wrong when the browser opened the page', async () => {
+    // With "noopener" a browser returns null from window.open whether or not
+    // it opened the tab (the HTML standard says so), so asking for it made
+    // every preview report itself blocked.
+    const opened = { opener: {} as unknown } as Window;
+    const open = vi
+      .spyOn(window, 'open')
+      .mockImplementation((_url, _target, features) =>
+        typeof features === 'string' && features.includes('noopener') ? null : opened,
+      );
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+    mountEditor();
+    fireEvent.click(await screen.findByRole('button', { name: 'See the page' }));
+    await waitFor(() => expect(open).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText(/blocked/)).toBeNull());
+    // And the page opened cannot reach back into the console.
+    expect(opened.opener).toBeNull();
+  });
+
+  it('says the browser blocked the page, and offers it, when the browser did', async () => {
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+    mountEditor();
+    fireEvent.click(await screen.findByRole('button', { name: 'See the page' }));
+    expect(await screen.findByText(/blocked/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open the page' }).getAttribute('href')).toBe(
+      'blob:preview',
+    );
+  });
+});
