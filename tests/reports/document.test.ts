@@ -6,6 +6,7 @@ import { NOT_A_DIAGNOSIS as SCREEN_SENTENCE } from '../../app/admin/assessments/
 import { extractAll, extractText, toVisualOrder } from '../../domain/shared/document';
 import {
   COMPARISON_NOT_A_DIAGNOSIS,
+  formatDifference,
   layout,
   NOT_A_CLINIC,
   NOT_A_DIAGNOSIS,
@@ -618,5 +619,16 @@ describe('Arabic values on an Arabic report', () => {
   it('leaves an English value on an Arabic report left to right', () => {
     const op = opsOf(session).find((each) => each.text === SIGNER_NAME);
     expect(op?.rtl).toBeUndefined();
+  });
+});
+
+describe('a difference finer than the page prints', () => {
+  it('prints without a sign when it rounds to nought, whichever way it went', () => {
+    // A difference is kept to six places (as the comparison view keeps it)
+    // and printed to three; 0.0004 printed "+0" beside a "0" for -0.0004.
+    expect(formatDifference(0.0004)).toBe('0');
+    expect(formatDifference(-0.0004)).toBe('0');
+    expect(formatDifference(0.0006)).toBe('+0.001');
+    expect(formatDifference(-0.7)).toBe('-0.7');
   });
 });

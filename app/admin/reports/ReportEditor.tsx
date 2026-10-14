@@ -529,7 +529,7 @@ export function ReportEditor({
             ) : (
               <Note>
                 {brainMapsRead
-                  ? 'This client has fewer than two brain maps of one kind, so the report says nothing about them.'
+                  ? 'This client has no two brain maps of one kind whose figures compare, so the report says nothing about them.'
                   : 'Brain maps are not recorded on this system yet, so the report says nothing about them.'}
               </Note>
             )}

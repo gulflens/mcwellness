@@ -186,7 +186,7 @@ describe('the draft editor', () => {
     mountEditor(SIGNER, true);
     expect(
       await screen.findByText(
-        'This client has fewer than two brain maps of one kind, so the report says nothing about them.',
+        'This client has no two brain maps of one kind whose figures compare, so the report says nothing about them.',
       ),
     ).toBeTruthy();
   });
