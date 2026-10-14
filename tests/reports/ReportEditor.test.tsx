@@ -556,3 +556,27 @@ describe('view and deliver', () => {
     ).toBeTruthy();
   });
 });
+
+describe('the practice’s day', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('covers ninety days back to today in Dubai, not in Greenwich', async () => {
+    // 21:30 on 2 September in Greenwich is 01:30 on 3 September in Dubai: a
+    // progress report started then covers up to the 3rd. `toISOString` read
+    // the day in UTC and gave the 2nd, a day short, for four hours each night.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-02T21:30:00Z'));
+    const { calls } = mountEditor();
+    await waitFor(() =>
+      expect(calls.some((call) => call.url.startsWith('/api/reports/gather'))).toBe(true),
+    );
+    const gather = new URL(
+      calls.find((call) => call.url.startsWith('/api/reports/gather'))?.url ?? '',
+      'http://localhost',
+    );
+    expect(gather.searchParams.get('to')).toBe('2026-09-03');
+    expect(gather.searchParams.get('from')).toBe('2026-06-05');
+  });
+});

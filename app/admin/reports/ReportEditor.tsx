@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ProgressReportContent, SessionReportContent } from '@domain/reports';
+import { isoDateIn } from '@domain/shared';
 import {
   DraftResponse,
   GatherResponse,
@@ -11,6 +12,7 @@ import {
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
+import { isoFromParts, partsFromIso, shiftDays } from '../../shell/components/calendar';
 import { Ribbon } from './Ribbon';
 import { mayOfferSigning } from './reportsAccess';
 
@@ -67,11 +69,22 @@ type Editing = {
   movementByGoal: Record<string, string>;
 };
 
+/**
+ * Today, as the practice's own calendar has it. Not `toISOString`, which reads
+ * the day in Greenwich: from midnight to four in the morning in Dubai that is
+ * still yesterday, so a report started then covered a day short and the
+ * certificate check was asked about the wrong day.
+ */
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+function practiceToday(now: Date): string {
+  return isoDateIn(now, PRACTICE_TIME_ZONE);
+}
+
 /** Ninety days back to today, which is the stretch a programme is read over. */
 function defaultCoverage(now: Date): { from: string; to: string } {
-  const to = now.toISOString().slice(0, 10);
-  const back = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-  return { from: back.toISOString().slice(0, 10), to };
+  const to = practiceToday(now);
+  const today = partsFromIso(to);
+  return { from: today ? isoFromParts(shiftDays(today, -90)) : to, to };
 }
 
 const REFUSALS: Record<string, string> = {
@@ -120,7 +133,7 @@ export function ReportEditor({
   const { apiFetch, session } = useAuth();
   const actor = session.status === 'signed-in' ? session.actor : null;
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = practiceToday(now);
 
   const [editing, setEditing] = useState<Editing>(() => empty(now, kind));
   const [gathered, setGathered] = useState<ProgressReportContent | SessionReportContent | null>(
