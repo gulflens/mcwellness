@@ -39,6 +39,11 @@ export type { PushEvent } from './events';
  *
  * Nothing here logs an address, a key, an id or a word of a message — a line
  * per delivery with counts and nothing else.
+ *
+ * **Events, too** (migration 708): `notify` hands a committed act — a visit
+ * booked, moved or called off, a report ready, a website enquiry — to
+ * ./events.ts, tracked beside the messages so `idle` waits for both. The
+ * sealed post itself is ./post.ts, shared by the two.
  */
 
 export type DeliverJob = { tenantId: string; messageId: string; senderId: string };
