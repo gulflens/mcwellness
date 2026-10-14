@@ -431,7 +431,7 @@ export function Rail({
             reloadDocument={fresh}
           >
             <BellIcon />
-            <span className="rail__label">Notifications</span>
+            <span className="rail__label">Phone notifications</span>
           </NavLink>
         ) : null}
         <button type="button" className="rail__signout" onClick={onSignOut} title="Sign out">
