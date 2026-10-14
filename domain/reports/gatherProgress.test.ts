@@ -213,18 +213,44 @@ describe('compareBrainMaps', () => {
     expect(compareBrainMaps([earlier, map({ ...later, instrument: 'vendor-two' })])).toBeNull();
   });
 
-  it('leaves out a figure whose units disagree, and one only half the pair carries', () => {
+  it('leaves out a figure only half the pair carries', () => {
     const odd = map({
       id: MAP_TWO,
       performedOn: '2026-08-30',
       figures: [
-        { label: 'Frontal ratio', labelAr: null, unit: 'percent', value: 2.1 },
         { label: 'Peak frequency', labelAr: null, unit: 'Hz', value: 9.8 },
         { label: 'Something new', labelAr: null, unit: 'Hz', value: 1 },
       ],
     });
     const comparison = compareBrainMaps([earlier, odd]);
     expect(comparison?.lines.map((line) => line.label)).toEqual(['Peak frequency']);
+  });
+
+  it('refuses the comparison where a figure’s units disagree, as the comparison view does', () => {
+    // docs/SPEC/assessment.md section 5, rule 3: `compare` refuses a pair
+    // whose units disagree, and the comparison view then shows no figures.
+    // The report prints "the same figures the comparison view shows"
+    // (docs/SPEC/reports-v1.md section 5), so it prints none either — it
+    // used to drop that one line and print the rest.
+    const odd = map({
+      id: MAP_TWO,
+      performedOn: '2026-08-30',
+      figures: [
+        { label: 'Frontal ratio', labelAr: null, unit: 'percent', value: 2.1 },
+        { label: 'Peak frequency', labelAr: null, unit: 'Hz', value: 9.8 },
+      ],
+    });
+    expect(compareBrainMaps([earlier, odd])).toBeNull();
+  });
+
+  it('rounds a difference to six places, as the comparison view does', () => {
+    const fine = (id: string, performedOn: string, value: number) =>
+      map({ id, performedOn, figures: [{ label: 'x', labelAr: null, unit: 'u', value }] });
+    const comparison = compareBrainMaps([
+      fine(MAP_ONE, '2026-06-02', 1.0001),
+      fine(MAP_TWO, '2026-08-30', 1.0003),
+    ]);
+    expect(comparison?.lines[0]?.difference).toBe(0.0002);
   });
 
   it('answers nothing where no figure survives the pairing', () => {
