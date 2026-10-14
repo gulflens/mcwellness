@@ -510,3 +510,32 @@ describe('the people in this file', () => {
     }
   });
 });
+
+/**
+ * Figures typed on an Arabic keyboard, drawn the way round they are read
+ * (docs/CHANGE-REQUESTS/reports-02.md, noted 5; docs/CHANGE-REQUESTS/docfix-01.md).
+ * Read off a rendered page, in the order the glyphs are drawn: a figure is
+ * drawn left to right inside a right-to-left line, so "١٥" comes off the page
+ * as "١٥" and never as "٥١".
+ */
+describe('an Arabic report with figures typed in Arabic', () => {
+  const bytes = renderReport(
+    report({
+      kind: 'session',
+      locale: 'ar',
+      content: { ...SESSION_CONTENT, note: 'زيارة رقم ١٥ من ۲۴.' },
+    }),
+    fonts,
+  );
+  const drawn = extractText(bytes).join('');
+
+  it('draws ١٥ as fifteen, not fifty-one', () => {
+    expect(drawn).toContain('١٥');
+    expect(drawn).not.toContain('٥١');
+  });
+
+  it('draws ۲۴ as twenty-four, not forty-two', () => {
+    expect(drawn).toContain('۲۴');
+    expect(drawn).not.toContain('۴۲');
+  });
+});
