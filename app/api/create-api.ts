@@ -500,6 +500,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     pool: deps.pool,
     origins: deps.enquiryOrigins,
     addressOf: byAddress,
+    ...(deps.push?.configured ? { push: deps.push } : {}),
   });
 
   api.use('/api/*', withRequestContext(deps));
@@ -517,6 +518,16 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // read c.get('identityKeys'), even by accident (security review, round 3).
   if (deps.identityKeys) {
     api.use('/api/*', withIdentityKeys(deps.identityKeys));
+  }
+  // Phone notifications for events (app/api/portal/push/events.ts): handed to
+  // the routes only when the key pair is configured, so a deployment without
+  // one sends nothing and nothing asks it to.
+  const push = deps.push;
+  if (push?.configured) {
+    api.use('/api/*', async (c, next) => {
+      c.set('notifyEvent', (event) => push.notify(event));
+      await next();
+    });
   }
   api.use(
     '/api/*',

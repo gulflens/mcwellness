@@ -10,6 +10,7 @@ import { ResolvedActorRow } from './actor-schema';
 import type { RoutingProvider } from '../../../domain/shared/routing';
 import type { ServerStorageProvider } from './storage/types';
 import type { TokenVerifier } from './token-verifier';
+import type { PushEvent } from '../portal/push/events';
 
 /**
  * The audit session-context middleware (docs/SPEC/audit.md section 5).
@@ -71,6 +72,13 @@ export type ApiEnv = {
     identityKeys: IdentityKeys | undefined;
     storage: ServerStorageProvider | undefined;
     routing: RoutingProvider | undefined;
+    /**
+     * Hands an event to the phone notifications (app/api/portal/push/events.ts),
+     * set by createApi only when the practice's key pair is configured. A route
+     * never calls it directly: `queuePushEvent` registers it with afterCommit,
+     * so a notice follows only an act that committed.
+     */
+    notifyEvent: ((event: PushEvent) => void) | undefined;
     /**
      * The content security policy nonce this response was minted with, on the
      * one document that loads a third-party map (docs/SPEC/route-planning.md

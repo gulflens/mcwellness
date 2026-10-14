@@ -2,13 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { pushPayload, type PushKind } from '../../../../domain/portal';
 import { logAction } from '../../_middleware/audit';
 import type { PoolClientLike, PoolLike } from '../../_middleware/request-context';
-import {
-  encryptPayload,
-  fromBase64Url,
-  vapidAuthorization,
-  vapidKeysFromEnv,
-  type VapidKeys,
-} from './webpush';
+import { deliverEvent, type PushEvent } from './events';
+import { AT_ONCE, sealAndPost, type Fetch, type Outcome } from './post';
+import { vapidKeysFromEnv, type VapidKeys } from './webpush';
+
+export type { PushEvent } from './events';
 
 /**
  * Delivering a sent message to every device it is for, from inside the API
@@ -43,12 +41,6 @@ import {
  * per delivery with counts and nothing else.
  */
 
-/** How long a service keeps a message for a phone that is off: four days. */
-export const PUSH_TTL_SECONDS = 4 * 24 * 60 * 60;
-const POST_TIMEOUT_MS = 10_000;
-/** Devices posted to at once. A practice's households, not a newsletter. */
-const AT_ONCE = 6;
-
 export type DeliverJob = { tenantId: string; messageId: string; senderId: string };
 
 export type PushSender = {
@@ -58,12 +50,16 @@ export type PushSender = {
   readonly publicKey: string | null;
   /** Starts delivering a committed message; returns at once. */
   deliver(job: DeliverJob): void;
+  /**
+   * Starts notifying an event whose act has committed (./events.ts): a visit
+   * booked, moved or called off, a report ready, a website enquiry. Returns
+   * at once, and never throws: the act that caused it has already happened.
+   */
+  notify(event: PushEvent): void;
   /** Resolves once every delivery started so far has finished. */
   idle(): Promise<void>;
   describe(): string;
 };
-
-type Fetch = (input: string, init: RequestInit) => Promise<{ status: number }>;
 
 export type PushSenderDeps = {
   pool: PoolLike;
@@ -91,8 +87,6 @@ type Message = {
   body_ar: string;
 };
 
-type Outcome = 'delivered' | 'gone' | 'failed';
-
 const CONTEXT_SQL =
   "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
   "set_config('app.actor_roles', 'admin', true), set_config('app.request_id', $3, true), " +
@@ -107,6 +101,9 @@ export function pushSenderOff(): PushSender {
       // Nothing is sent from a deployment with no key pair; the Send route
       // refuses before anything is written, so this is never reached.
     },
+    notify() {
+      // No key pair, no event notices: silently, as the memo's switch says.
+    },
     idle: async () => undefined,
     describe: () => 'off (PUSH_VAPID_* not set)',
   };
@@ -119,6 +116,21 @@ export function pushSender(deps: PushSenderDeps): PushSender {
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? ((line: string) => console.log(line));
   const running = new Set<Promise<void>>();
+
+  /** Keeps an event's delivery where `idle` can wait for it; never lets it throw. */
+  function track(promise: Promise<void>): void {
+    const work = promise
+      .catch((error: unknown) => {
+        const shape = (error ?? {}) as { name?: string; code?: string };
+        log(
+          `Push: an event notice did not finish. ${[shape.name, shape.code].filter(Boolean).join(' ')}`,
+        );
+      })
+      .finally(() => {
+        running.delete(work);
+      });
+    running.add(work);
+  }
 
   async function inContext<T>(
     job: DeliverJob,
@@ -141,32 +153,7 @@ export function pushSender(deps: PushSenderDeps): PushSender {
   }
 
   async function postOne(target: Target, message: Message, key: VapidKeys): Promise<Outcome> {
-    try {
-      const payload = Buffer.from(JSON.stringify(pushPayload(draftOf(message), target.locale)));
-      const body = encryptPayload(
-        payload,
-        fromBase64Url(target.push_p256dh),
-        fromBase64Url(target.push_auth),
-      );
-      const answer = await post(target.push_endpoint, {
-        method: 'POST',
-        headers: {
-          authorization: vapidAuthorization(target.push_endpoint, key, now()),
-          'content-encoding': 'aes128gcm',
-          'content-type': 'application/octet-stream',
-          ttl: String(PUSH_TTL_SECONDS),
-          urgency: 'normal',
-        },
-        body: new Uint8Array(body),
-        redirect: 'error',
-        signal: AbortSignal.timeout(POST_TIMEOUT_MS),
-      });
-      if (answer.status === 404 || answer.status === 410) return 'gone';
-      if (answer.status >= 200 && answer.status < 300) return 'delivered';
-      return 'failed';
-    } catch {
-      return 'failed';
-    }
+    return sealAndPost(post, now(), target, pushPayload(draftOf(message), target.locale), key);
   }
 
   async function run(job: DeliverJob, key: VapidKeys): Promise<void> {
@@ -226,6 +213,9 @@ export function pushSender(deps: PushSenderDeps): PushSender {
   return {
     configured: true,
     publicKey: keys.publicKey,
+    notify(event) {
+      track(deliverEvent({ pool: deps.pool, key: keys, post, now, log }, event));
+    },
     deliver(job) {
       const work = run(job, keys)
         .catch((error: unknown) => {
