@@ -219,13 +219,14 @@ self.addEventListener('message', ((event: ExtendableMessageEvent) => {
  *
  * **Nothing here is cached or kept.** The message is shown and forgotten.
  *
- * **It opens a path of the portal on this origin and nothing else**, whatever
- * a payload says: a sealed payload comes from the practice's own server, and
+ * **It opens a path of the portal on this origin and nothing else** (or, for
+ * the staff's one event notice, the console's Enquiries), whatever a payload
+ * says: a sealed payload comes from the practice's own server, and
  * this is the rule stated where the window is opened anyway.
  */
 type PortalPush = {
   v: 1;
-  kind: 'announcement' | 'offer';
+  kind: 'announcement' | 'offer' | 'event';
   lang: 'en' | 'ar';
   dir: 'ltr' | 'rtl';
   title: string;
@@ -242,17 +243,26 @@ function isPortalPath(path: unknown): path is string {
   );
 }
 
+/**
+ * Where a notification may open: a path of the portal, or — for the one
+ * staff notice, a new website enquiry (app/api/portal/push/events.ts) — the
+ * console's Enquiries, and nowhere else.
+ */
+function isOpenablePath(path: unknown): path is string {
+  return isPortalPath(path) || path === '/admin/enquiries';
+}
+
 function isPortalPush(data: unknown): data is PortalPush {
   const shape = data as Partial<PortalPush> | null;
   return (
     shape !== null &&
     typeof shape === 'object' &&
     shape.v === 1 &&
-    (shape.kind === 'announcement' || shape.kind === 'offer') &&
+    (shape.kind === 'announcement' || shape.kind === 'offer' || shape.kind === 'event') &&
     (shape.lang === 'en' || shape.lang === 'ar') &&
     typeof shape.title === 'string' &&
     typeof shape.body === 'string' &&
-    isPortalPath(shape.url)
+    isOpenablePath(shape.url)
   );
 }
 
@@ -289,6 +299,6 @@ self.addEventListener('notificationclick', ((event: NotificationLikeEvent) => {
   event.notification.close();
   const data = (event.notification.data ?? {}) as { url?: unknown; stopUrl?: unknown };
   const target = event.action === 'stop' && isPortalPath(data.stopUrl) ? data.stopUrl : data.url;
-  if (!isPortalPath(target)) return;
+  if (!isOpenablePath(target)) return;
   event.waitUntil(self.clients.openWindow(target).then(() => undefined));
 }) as EventListener);
