@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { NotificationsResponse } from '../../../app/api/portal/schema';
 import { pushSender, type PushSender } from '../../../app/api/portal/push/sender';
 import { generateVapidKeys } from '../../../app/api/portal/push/webpush';
-import { IDS, seedCredential } from '../../db/helpers';
+import { IDS, seedCredential, seedUser } from '../../db/helpers';
 import { PORTAL, seedAppointment, startPortalHarness, type PortalHarness } from './support';
 
 /**
@@ -116,6 +116,15 @@ const VISIT = {
   householdCalled: '00000001-0000-4000-8000-0000000000e4',
   quiet: '00000001-0000-4000-8000-0000000000e5',
   proposedMove: '00000001-0000-4000-8000-0000000000e6',
+  handedOver: '00000001-0000-4000-8000-0000000000e8',
+  handedOverMoved: '00000001-0000-4000-8000-0000000000e9',
+} as const;
+
+/** A second practitioner, to hand a visit to. */
+const SECOND = {
+  user: '00000001-0000-4000-8000-0000000000f6',
+  auth: '00000001-0000-4000-8000-0000000000f7',
+  practitioner: '00000001-0000-4000-8000-0000000000f8',
 } as const;
 
 async function events(kind: string): Promise<{ recipient_count: number; device_count: number }[]> {
@@ -145,6 +154,28 @@ beforeAll(async () => {
   await seedCredential(h.owner, {
     tenantId: IDS.tenantA,
     practitionerId: PORTAL.practitionerRow,
+    serviceTypeId: PORTAL.serviceType,
+    certification: 'bcia_bcn',
+    validFrom: '2026-01-01',
+    validTo: null,
+    canExecuteSession: true,
+  });
+
+  await seedUser(h.owner, {
+    id: SECOND.user,
+    tenantId: IDS.tenantA,
+    authId: SECOND.auth,
+    displayName: 'Rowan Vale',
+    roles: ['practitioner'],
+  });
+  await h.owner.query('insert into practitioner (id, tenant_id, user_id) values ($1, $2, $3)', [
+    SECOND.practitioner,
+    IDS.tenantA,
+    SECOND.user,
+  ]);
+  await seedCredential(h.owner, {
+    tenantId: IDS.tenantA,
+    practitionerId: SECOND.practitioner,
     serviceTypeId: PORTAL.serviceType,
     certification: 'bcia_bcn',
     validFrom: '2026-01-01',
@@ -185,6 +216,8 @@ beforeAll(async () => {
     [VISIT.householdCalled, 6, 13, 'confirmed'],
     [VISIT.quiet, 7, 14, 'proposed'],
     [VISIT.proposedMove, 8, 15, 'proposed'],
+    [VISIT.handedOver, 11, 10, 'confirmed'],
+    [VISIT.handedOverMoved, 12, 10, 'confirmed'],
   ] as const) {
     await seedAppointment(h.owner, { id, clientId: PORTAL.childA, inDays, hour, status });
   }
@@ -290,6 +323,40 @@ describe('a visit, told to the household’s phones', () => {
     );
     expect(res.status).toBe(201);
     expect(await delivered()).toEqual([]);
+  });
+
+  it('says nothing when a confirmed visit changes hands at the same time', async () => {
+    const res = await call(
+      api,
+      'POST',
+      `/api/appointments/${VISIT.handedOver}/reassign`,
+      PORTAL.adminAuth,
+      { practitionerId: SECOND.practitioner },
+      REASON,
+    );
+    expect(res.status).toBe(201);
+    expect(await delivered()).toEqual([]);
+  });
+
+  it('says a visit moved when a handover also gives it a new time', async () => {
+    const res = await call(
+      api,
+      'POST',
+      `/api/appointments/${VISIT.handedOverMoved}/reassign`,
+      PORTAL.adminAuth,
+      {
+        practitionerId: SECOND.practitioner,
+        windowStart: `${PRACTICE_DAY.format(new Date(Date.now() + 13 * 86_400_000))}T07:00:00Z`,
+      },
+      REASON,
+    );
+    expect(res.status).toBe(201);
+    const sent = await delivered();
+    expect(sent).toHaveLength(2);
+    expect(sent[0]?.message).toMatchObject({
+      title: 'Visit moved',
+      body: `Your visit has moved to ${shownAs(13, 11)}.`,
+    });
   });
 
   it('says a confirmed visit was called off when the practice calls it off', async () => {
