@@ -8,6 +8,7 @@ import { isUuid } from '../billing/ids';
 import { documentFonts } from '../billing/fonts';
 import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
+import { queuePushEvent } from '../portal/push/queue';
 import { mayDraftReport } from './access';
 import { issueQeeg } from './qeeg/issue';
 import { practiceTimeZone } from './gather';
@@ -100,12 +101,22 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
       case 'session':
       case 'progress':
         break;
-      case 'qeeg':
+      case 'qeeg': {
         // A brain-map report is signed through its own door, which asks what
         // this one cannot: its wording approved in that language, its maps
         // present and placed, its pages not running over
         // (docs/SPEC/reports-qeeg.md section 14).
-        return issueQeeg(c, draft, raw, now());
+        const answer = await issueQeeg(c, draft, raw, now());
+        if (answer.status === 201) {
+          queuePushEvent(c, {
+            kind: 'report_ready',
+            tenantId: actor.tenantId,
+            subjectId: reportId,
+            clientId: draft.client_id,
+          });
+        }
+        return answer;
+      }
       default: {
         const unknown: never = draft.kind;
         return unknown;
@@ -214,6 +225,16 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
       { type: 'report', id: reportId, clientId: draft.client_id },
       { reference: record.reference ?? '', kind: record.kind, version: String(record.version) },
     );
+
+    // Issued is the moment the household's portal shows it (app/api/portal/
+    // reports.ts): those who may read it are told on their phones, once this
+    // has committed — that a report is ready, and never which kind.
+    queuePushEvent(c, {
+      kind: 'report_ready',
+      tenantId: actor.tenantId,
+      subjectId: reportId,
+      clientId: draft.client_id,
+    });
 
     const answered = await readReport(db, reportId);
     return c.json(IssueResponse.parse({ report: asRow(answered ?? record) }), 201);

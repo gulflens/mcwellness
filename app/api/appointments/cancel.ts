@@ -9,7 +9,9 @@ import {
   reasonCanBeGivenAt,
 } from '@domain/scheduling';
 import { cleanText } from '../_middleware/text';
+import { visitEventFor } from '../../../domain/portal';
 import type { ApiEnv, Db } from '../_middleware/request-context';
+import { queuePushEvent } from '../portal/push/queue';
 import {
   CancelAppointmentRequest,
   CancelAppointmentResponse,
@@ -265,6 +267,20 @@ export function mountAppointmentCancel(
     // error to raise, since the transaction is otherwise sound.
     if (!cancelled) {
       return badRequest(c, requestId, 'appointment_settled');
+    }
+
+    // A confirmed visit the practice itself called off is told to the
+    // household's phones once this has committed; one they called off
+    // themselves, or that could not go ahead at the door, they already know of.
+    const kind = visitEventFor({ act: 'cancelled', from: appointment.status, reason });
+    if (kind !== null) {
+      queuePushEvent(c, {
+        kind,
+        tenantId: actor.tenantId,
+        subjectId: appointmentId,
+        clientId: appointment.client_id,
+        startsAt: appointment.window_start,
+      });
     }
 
     // Billing's trigger has already run, in this same transaction. What it
