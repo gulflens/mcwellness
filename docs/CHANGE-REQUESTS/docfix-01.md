@@ -108,7 +108,9 @@ The stored file is unaffected. Only the recovery from a lost file is.
   client-record and assessment streams.
 - A progress report prints each figure to at most three places
   (`formatFigure`). The comparison screen prints the stored value. The two
-  agree for any figure typed to three places or fewer.
+  agree for any figure typed to three places or fewer. The review of this
+  round found that a difference kept to six places could print "+0", so
+  `formatDifference` now takes its sign from the printed figure.
 - Items 2, 3 and 4 of reports-02.md's "noted" list (`%`, `+`, `@` and the en
   dash ordered right to left; the "about" sign; the isolated alef wasla) are
   not touched.
