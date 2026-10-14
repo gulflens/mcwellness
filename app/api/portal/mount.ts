@@ -12,6 +12,7 @@ import { pushSenderOff, type PushSender } from './push/sender';
 import { mountPortalReports } from './reports';
 import { mountPortalReviewPrompt } from './review-prompt';
 import { mountPortalVisits } from './visits';
+import { mountStaffPush } from './staffPush';
 
 export { mountPortalDoor, type PortalDoorOptions } from './door';
 export { authAdminFromEnv, fakeAuthAdmin, type AuthAdminProvider } from './auth-admin';
@@ -65,4 +66,7 @@ export function mountPortal(
   // Phone notifications: the household's step and the practice's Send screen
   // (decisions 2 and 3, migration 707).
   mountPortalPush(api, now, options.push ?? pushSenderOff());
+  // The console's own switch for a member of staff's browser, for the event
+  // notices that are theirs: a new website enquiry (migration 708).
+  mountStaffPush(api, now, options.push ?? pushSenderOff());
 }
