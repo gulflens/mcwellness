@@ -539,3 +539,84 @@ describe('an Arabic report with figures typed in Arabic', () => {
     expect(drawn).not.toContain('۴۲');
   });
 });
+
+/**
+ * Every Arabic value on an Arabic report is set right to left, and so shaped
+ * (docs/CHANGE-REQUESTS/reports-02.md, noted 6; docs/CHANGE-REQUESTS/docfix-01.md).
+ *
+ * The labelled values, the rating labels, the observation words, a goal's
+ * description and status and a comparison's measurement were drawn as
+ * left-to-right text whatever language they were in, so an Arabic one came
+ * out as separate, unjoined letters in typed order — backwards on the page.
+ * Read off the rendered page: a right-to-left run comes off it in drawn order
+ * (`asCopied`), and each op that draws Arabic carries the flag.
+ */
+describe('Arabic values on an Arabic report', () => {
+  const SERVICE = 'جلسة تدريب';
+  const RATING = 'ما مدى شعورك بالهدوء؟';
+  const GOAL_AREA = 'النوم';
+  const CHIP = 'هدأ بسرعة';
+  const GOAL = 'النوم طوال الليل دون استيقاظ';
+  const STATUS = 'نشط';
+  const MEASUREMENT = 'النسبة الأمامية';
+
+  const session = report({
+    kind: 'session',
+    locale: 'ar',
+    content: {
+      ...SESSION_CONTENT,
+      serviceNameAr: SERVICE,
+      goalArea: GOAL_AREA,
+      observationChips: [CHIP],
+    },
+  });
+  const progress = report({
+    locale: 'ar',
+    content: {
+      ...PROGRESS_CONTENT,
+      goals: [
+        {
+          id: '00000009-0000-4000-8000-000000000001',
+          description: GOAL,
+          status: STATUS,
+          movement: '',
+        },
+      ],
+    },
+  });
+
+  const opsOf = (document_: ReportDocument) =>
+    layout(document_, fonts).flatMap((page) =>
+      page.ops.filter((op): op is Extract<typeof op, { kind: 'text' }> => op.kind === 'text'),
+    );
+  // Runs joined as drawn: Arabic and Latin in one line are two runs, two faces.
+  const sessionText = extractText(renderReport(session, fonts)).join('');
+  const progressText = extractText(renderReport(progress, fonts)).join('');
+
+  it.each([
+    ['the service', SERVICE],
+    ['a rating’s question', RATING],
+    ['the goal worked on', GOAL_AREA],
+    ['what was noticed', CHIP],
+    ['the duration', `60 ${WORDS.minutes.ar}`],
+  ])('sets %s right to left on a session report', (_name, value) => {
+    const op = opsOf(session).find((each) => each.text === value);
+    expect(op?.rtl).toBe(true);
+    expect(sessionText).toContain(asCopied(value));
+  });
+
+  it.each([
+    ['a goal’s description', GOAL],
+    ['a goal’s status', STATUS],
+    ['a measurement’s name', `${MEASUREMENT} (ratio)`],
+  ])('sets %s right to left on a progress report', (_name, value) => {
+    const op = opsOf(progress).find((each) => each.text === value);
+    expect(op?.rtl).toBe(true);
+    expect(progressText).toContain(asCopied(value));
+  });
+
+  it('leaves an English value on an Arabic report left to right', () => {
+    const op = opsOf(session).find((each) => each.text === SIGNER_NAME);
+    expect(op?.rtl).toBeUndefined();
+  });
+});
