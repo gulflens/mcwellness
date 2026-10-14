@@ -22,7 +22,7 @@
  * modules that render documents import this one by its own path.
  */
 
-export { measure, PAGE_HEIGHT, PAGE_WIDTH, renderPdf } from './pdf';
+export { measure, PAGE_HEIGHT, PAGE_WIDTH, renderPdf, undrawable } from './pdf';
 export type {
   Align,
   DocumentImage,

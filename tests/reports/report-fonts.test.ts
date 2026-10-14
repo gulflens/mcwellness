@@ -18,9 +18,17 @@ describe('the report faces', () => {
     expect(report.arabicBold?.arabic).toBe(true);
   });
 
-  it('leave the document faces at three', () => {
+  it('leave the bold Arabic face out of the document faces', () => {
     expect(documentFonts().arabicBold).toBeUndefined();
-    expect(Object.keys(documentFonts()).sort()).toEqual(['arabic', 'bold', 'regular']);
+    // Three, and the two extended Latin faces a name beyond Latin-1 needs
+    // (docs/CHANGE-REQUESTS/docfix-01.md).
+    expect(Object.keys(documentFonts()).sort()).toEqual([
+      'arabic',
+      'bold',
+      'boldExt',
+      'regular',
+      'regularExt',
+    ]);
   });
 
   it('are read once', () => {

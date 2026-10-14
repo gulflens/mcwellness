@@ -44,7 +44,7 @@ import { glyphFor, widthOf, type Font } from './truetype';
 export const PAGE_WIDTH = 595.28;
 export const PAGE_HEIGHT = 841.89;
 
-export type FontSlot = 'regular' | 'bold' | 'arabic' | 'arabicBold';
+export type FontSlot = 'regular' | 'bold' | 'arabic' | 'arabicBold' | 'regularExt' | 'boldExt';
 
 /**
  * The faces a document is set in: three always, and a bold Arabic one when the
@@ -59,11 +59,37 @@ export type FontSlot = 'regular' | 'bold' | 'arabic' | 'arabicBold';
  */
 export type FontSet = Readonly<Record<'regular' | 'bold' | 'arabic', Font>> & {
   readonly arabicBold?: Font;
+  /**
+   * The Latin letters the first two faces do not carry, at the regular and
+   * the bold weight (docs/CHANGE-REQUESTS/docfix-01.md). The packaged IBM Plex
+   * Sans `latin` subset stops at Latin-1, so a name with ş, ğ, ł or š in it
+   * lost those letters; `latin-ext` carries them. A character goes to one of
+   * these only when the face it would otherwise be drawn in has no glyph for
+   * it — a character that was always dropped — so a page that never needs one
+   * embeds neither, names its faces as it always did, and renders to the
+   * bytes it was filed as.
+   */
+  readonly regularExt?: Font;
+  readonly boldExt?: Font;
 };
 
 /** The face a slot names, or the regular Arabic one for a bold slot the set lacks. */
 function faceOf(fonts: FontSet, slot: FontSlot): Font {
-  return slot === 'arabicBold' ? (fonts.arabicBold ?? fonts.arabic) : fonts[slot];
+  if (slot === 'arabicBold') return fonts.arabicBold ?? fonts.arabic;
+  if (slot === 'regularExt') return fonts.regularExt ?? fonts.regular;
+  if (slot === 'boldExt') return fonts.boldExt ?? fonts.bold;
+  return fonts[slot];
+}
+
+/**
+ * The face a Latin character is drawn in: its own weight's first face, unless
+ * that face has no glyph for it and the extended face of the same weight does.
+ */
+function latinSlotFor(code: number, latin: FontSlot, fonts: FontSet): FontSlot {
+  const ext: FontSlot = latin === 'bold' ? 'boldExt' : 'regularExt';
+  const extFace = latin === 'bold' ? fonts.boldExt : fonts.regularExt;
+  if (!extFace || glyphFor(faceOf(fonts, latin), code) !== null) return latin;
+  return glyphFor(extFace, code) !== null ? ext : latin;
 }
 
 /**
@@ -266,11 +292,17 @@ function runsOf(text: string, latin: FontSlot, rtl: boolean, fonts: FontSet): Ru
       });
   const runs: Run[] = [];
   for (const glyph of glyphs) {
-    const slot: FontSlot = isArabic(glyph.code) ? arabic : latin;
+    const slot: FontSlot = isArabic(glyph.code) ? arabic : latinSlotFor(glyph.code, latin, fonts);
     const last = runs[runs.length - 1];
     // A space belongs to the run it follows: starting a new one on every space
-    // would split a phrase into a run per word for no gain.
-    if (last && (last.slot === slot || glyph.code === 0x20)) {
+    // would split a phrase into a run per word for no gain. Only when that
+    // run's face can draw a space, though: the extended Latin subset carries
+    // none, and a space handed to it would be dropped and close the gap.
+    const spaceJoins =
+      glyph.code === 0x20 &&
+      last !== undefined &&
+      glyphFor(faceOf(fonts, last.slot), 0x20) !== null;
+    if (last && (last.slot === slot || spaceJoins)) {
       last.glyphs.push(glyph);
       continue;
     }
@@ -297,6 +329,33 @@ export function measure(text: string, style: Style, fonts: FontSet, rtl = false)
     (total, run) => total + widthOfRun(run, fonts, style.size),
     0,
   );
+}
+
+/**
+ * Every character the pages hold that the face the writer would draw it in
+ * cannot draw, as code points in ascending order.
+ *
+ * The writer leaves such a character out rather than drawing a box (see
+ * `contentOf`), so this is how a caller — or a test — learns that a page is
+ * missing a letter before anybody reads it. Asked exactly as the writer asks:
+ * the same runs, the same faces, and a right-to-left line shaped first, so a
+ * code point here is the glyph that would have been drawn.
+ */
+export function undrawable(pages: readonly Page[], fonts: FontSet): number[] {
+  const missing = new Set<number>();
+  for (const page of pages) {
+    for (const op of page.ops) {
+      if (op.kind !== 'text') continue;
+      const latin: FontSlot = op.style.font === 'bold' ? 'bold' : 'regular';
+      for (const run of runsOf(op.text, latin, op.rtl === true, fonts)) {
+        const font = faceOf(fonts, run.slot);
+        for (const placed of run.glyphs) {
+          if (glyphFor(font, placed.code) === null) missing.add(placed.code);
+        }
+      }
+    }
+  }
+  return [...missing].sort((a, b) => a - b);
 }
 
 // --------------------------------------------------------------------------
@@ -713,9 +772,10 @@ export function renderPdf(
   title: string,
   images: ImageSet = {},
 ): Uint8Array {
-  // The fourth is last, so it is /F4 and every document that never draws it
-  // numbers its faces and objects exactly as before it existed.
-  const slots: FontSlot[] = ['regular', 'bold', 'arabic', 'arabicBold'];
+  // The fourth is last of the first four, so it is /F4 and every document that
+  // never draws it numbers its faces and objects exactly as before it existed;
+  // the two extended Latin faces follow it as /F5 and /F6 for the same reason.
+  const slots: FontSlot[] = ['regular', 'bold', 'arabic', 'arabicBold', 'regularExt', 'boldExt'];
   const resourceOf = new Map<FontSlot, string>(slots.map((slot, index) => [slot, `F${index + 1}`]));
 
   // Only the images a page actually draws, named in the order they are first
