@@ -13,6 +13,7 @@ import { Sections } from './Layout';
 import { PHRASES, useWords } from './i18n';
 import { moneyIsShown, usePortalHome } from './PortalRoot';
 import { usePortalRead } from './usePortal';
+import { openInNewTab } from '../shell/openInNewTab';
 
 /**
  * `/portal/money` — what is owed, what is left, and the papers
@@ -57,9 +58,9 @@ function DocumentButton({ documentId }: { documentId: string }) {
           return;
         }
         const { url } = DocumentLinkResponse.parse(await res.json());
-        // A blocked popup is null and silent; the state says so rather than
-        // leaving a button that appears to do nothing.
-        if (window.open(url, '_blank', 'noopener,noreferrer') === null) setState('failed');
+        // A blocked popup is silent; the state says so rather than leaving a
+        // button that appears to do nothing (`openInNewTab` says which).
+        if (!openInNewTab(url)) setState('failed');
         else setState('idle');
       })
       .catch(() => setState('failed'));
