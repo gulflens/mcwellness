@@ -37,6 +37,7 @@ export type {
   Stroke,
   Style,
 } from './pdf';
+export { mirrorPages } from './mirror';
 export { readPng } from './png';
 export { glyphFor, readFont, widthOf } from './truetype';
 export type { Font } from './truetype';
