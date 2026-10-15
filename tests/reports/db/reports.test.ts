@@ -1011,3 +1011,80 @@ describe('delivering', () => {
     expect((await res.json()) as { code: string }).toMatchObject({ code: 'contact_not_found' });
   });
 });
+
+/**
+ * One language per report, the client's own unless the practitioner chooses
+ * otherwise (the operator's decision of 15 October 2026).
+ */
+describe('the language a report is set in', () => {
+  async function preferring(clientIndex: number, locale: 'en' | 'ar'): Promise<void> {
+    await h.owner.query('update client set preferred_locale = $2::locale where id = $1', [
+      h.clientId(clientIndex),
+      locale,
+    ]);
+  }
+
+  it('is the client’s preferred language when the draft does not say', async () => {
+    await preferring(7, 'ar');
+    try {
+      const id = await draftFor(7, { locale: undefined });
+      expect((await readReport(h.owner, id))?.locale).toBe('ar');
+    } finally {
+      await preferring(7, 'en');
+    }
+  });
+
+  it('is what the practitioner chose, whatever the client prefers', async () => {
+    await preferring(7, 'ar');
+    try {
+      const id = await draftFor(7, { locale: 'en' });
+      expect((await readReport(h.owner, id))?.locale).toBe('en');
+    } finally {
+      await preferring(7, 'en');
+    }
+  });
+
+  it('stays what the draft has when a later save does not say', async () => {
+    const id = await draftFor(7, { locale: 'ar' });
+    const res = await h.call('POST', '/api/reports/draft', SEEDED.owner, {
+      id,
+      clientId: h.clientId(7),
+      kind: 'progress',
+      coverageFrom: '2026-06-01',
+      coverageTo: '2026-09-01',
+      content: progressBody(),
+    });
+    expect(res.status).toBe(200);
+    expect((await readReport(h.owner, id))?.locale).toBe('ar');
+  });
+
+  it('is offered to the editor as the client’s own', async () => {
+    await preferring(7, 'ar');
+    try {
+      const res = await h.call(
+        'GET',
+        `/api/reports/gather?clientId=${h.clientId(7)}&from=2026-06-01&to=2026-09-01`,
+        SEEDED.owner,
+      );
+      expect(((await res.json()) as { preferredLocale?: string }).preferredLocale).toBe('ar');
+    } finally {
+      await preferring(7, 'en');
+    }
+  });
+
+  it('is marked one-language when the report is issued, and renders so from its row', async () => {
+    const id = await issued(8);
+    const record = await readReport(h.owner, id);
+    expect((record?.content as { layout?: string }).layout).toBe('single');
+    expect(record ? documentFrom(record)?.bilingual : null).toBe(false);
+  });
+
+  it('renders a report issued before the decision in both languages, as it was filed', async () => {
+    const id = await issued(9);
+    const record = await readReport(h.owner, id);
+    if (!record) throw new Error('The issued report is not there.');
+    const { layout: _mark, ...unmarked } = record.content as Record<string, unknown>;
+    void _mark;
+    expect(documentFrom({ ...record, content: unmarked })?.bilingual).toBe(true);
+  });
+});
