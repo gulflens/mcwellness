@@ -10,6 +10,7 @@ import {
   type VisitChoice,
 } from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { openInNewTab } from '../../shell/openInNewTab';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { isoFromParts, partsFromIso, shiftDays } from '../../shell/components/calendar';
@@ -344,18 +345,9 @@ export function ReportEditor({
       // Held as an object URL and revoked on the next tick: a preview carries
       // a household's own figures and has no business outliving the click.
       const url = URL.createObjectURL(await res.blob());
-      // No "noopener" in the features: with it, the HTML standard has
-      // `window.open` answer null whether or not the tab opened, so a null
-      // could not tell a blocked window from an open one and every preview
-      // said it was blocked. The opener is cut by hand instead, so the page
-      // still cannot reach back into the console. A blob URL carries no
-      // referrer to withhold.
-      const opened = window.open(url, '_blank');
-      if (opened === null) {
-        setBlockedPreview(url);
-      } else {
-        opened.opener = null;
-      }
+      // `openInNewTab` answers whether the tab really opened: asking for
+      // "noopener" made every preview say it was blocked.
+      if (!openInNewTab(url)) setBlockedPreview(url);
       setTimeout(() => {
         URL.revokeObjectURL(url);
         setBlockedPreview((shown) => (shown === url ? null : shown));

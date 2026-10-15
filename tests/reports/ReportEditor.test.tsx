@@ -506,6 +506,20 @@ describe('view and deliver', () => {
     expect(screen.getByRole('button', { name: 'Open the report' })).toBeTruthy();
   });
 
+  it('says nothing about a block when the browser opened the report', async () => {
+    // With "noopener" a standard browser answers null from window.open
+    // whether or not the tab opened, so every report "was blocked".
+    const tab = { opener: {} } as unknown as Window;
+    vi.spyOn(window, 'open').mockImplementation((_url, _target, features) =>
+      typeof features === 'string' && features.includes('noopener') ? null : tab,
+    );
+    mountView();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open the report' }));
+    await waitFor(() => expect(tab.opener).toBeNull());
+    expect(screen.queryByText(/blocked/)).toBeNull();
+    vi.restoreAllMocks();
+  });
+
   it('says a superseded version is kept because a household may hold it', async () => {
     mountView({ status: 'superseded' });
     expect(

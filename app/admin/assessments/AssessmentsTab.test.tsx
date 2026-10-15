@@ -659,8 +659,26 @@ describe('the export', () => {
     expect(sent.some((call) => call.url.includes('/link'))).toBe(false);
 
     fireEvent.click(button);
-    await waitFor(() => expect(open).toHaveBeenCalledWith(SIGNED, '_blank', 'noopener,noreferrer'));
+    await waitFor(() => expect(open).toHaveBeenCalledWith(SIGNED, '_blank'));
     expect(sent.some((call) => call.url === `/api/assessments/file/${CLIENT}/link`)).toBe(true);
+  });
+
+  it('says nothing about a block when the browser opened the tab', async () => {
+    // With "noopener" a standard browser answers null whether or not the tab
+    // opened, so every file that opened also said it had been stopped.
+    const tab = { opener: {} } as unknown as Window;
+    vi.stubGlobal(
+      'open',
+      vi.fn((_url: string, _target?: string, features?: string) =>
+        features?.includes('noopener') ? null : tab,
+      ),
+    );
+    mount();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'The recording, eyes open, opens in a new tab' }),
+    );
+    await waitFor(() => expect(tab.opener).toBeNull());
+    expect(screen.queryByText(/Your browser stopped the file opening/)).toBeNull();
   });
 
   it('hands the link over when the browser blocks the tab', async () => {

@@ -6,6 +6,7 @@ import {
   type ErasureRequestRecord,
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { openInNewTab } from '../../shell/openInNewTab';
 import { Button, Note } from '../../shell/components/Controls';
 import { useFocusOnOpen } from '../../shell/components/useFocusOnOpen';
 import { Textarea } from './FormAtoms';
@@ -278,10 +279,9 @@ export function ErasureSection({
     if (!request.notifyPhone || !request.performedAt) return;
     const digits = request.notifyPhone.replace(/\D/g, '');
     const url = `https://wa.me/${digits}?text=${encodeURIComponent(draftMessage(record, request.performedAt))}`;
-    const opened = window.open(url, '_blank', 'noopener,noreferrer');
-    // A blocked popup is null and silent; hand the link over rather than leave
-    // a button that appears to do nothing (DocumentLink does the same).
-    if (!opened) setWhatsAppUrl(url);
+    // A blocked popup is silent; hand the link over rather than leave a
+    // button that appears to do nothing (DocumentLink does the same).
+    if (!openInNewTab(url)) setWhatsAppUrl(url);
     // Saying the letter has gone starts the clock on the number it went to:
     // the sweep clears it once the files are confirmed gone as well. Nothing
     // depends on the answer — the message is already open in front of them.

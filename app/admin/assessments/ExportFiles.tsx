@@ -14,6 +14,7 @@ import {
   type AssessmentFileRole,
 } from '../../api/assessments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { openInNewTab } from '../../shell/openInNewTab';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import {
   ATTACH_MESSAGES,
@@ -139,12 +140,11 @@ function OpenExport({ file }: { file: AssessmentFile }) {
         return;
       }
       const { url } = FileLinkResponse.parse(await res.json());
-      // noreferrer as well as noopener: the link carries a signature, and the
-      // page it opens has no business knowing which screen sent it.
-      const opened = window.open(url, '_blank', 'noopener,noreferrer');
-      // A blocked popup is null and silent, and a button that appears to do
-      // nothing reads as a missing file. Hand the link over instead.
-      if (!opened) setBlockedUrl(url);
+      // The link carries a signature: the tab it opens is cut off from the
+      // console and told nothing of which screen sent it (`openInNewTab`).
+      // A blocked popup is silent, and a button that appears to do nothing
+      // reads as a missing file. Hand the link over instead.
+      if (!openInNewTab(url)) setBlockedUrl(url);
     } catch {
       setError(ATTACH_MESSAGES.link_failed);
     } finally {
