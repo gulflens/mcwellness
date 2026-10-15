@@ -208,3 +208,79 @@ describe('a document issued before the decision', () => {
     expect(texts).toContain(WORDS.totalDue.ar);
   });
 });
+
+/**
+ * The practice's own words in Arabic (migration 980), and dates in a line the
+ * way the page writes dates (the coordinator's review of 15 October 2026).
+ */
+describe('the Arabic page names the practice in Arabic', () => {
+  const ARABIC_SUPPLIER: SupplierSnapshot = {
+    ...SUPPLIER,
+    addressAr: 'الوحدة 1، البرج التجريبي، دبي',
+    licensingAuthorityAr: 'دائرة الاقتصاد والسياحة التجريبية',
+  };
+
+  it.each([
+    ['invoice', invoice],
+    ['receipt', receipt],
+  ] as const)(
+    'prints the Arabic address and authority on an Arabic %s, and no English for them',
+    (_kind, make) => {
+      const texts = textsOf({ ...make('ar'), supplier: ARABIC_SUPPLIER }).map((op) => op.text);
+      const all = texts.join(' ');
+      expect(all).toContain('دائرة الاقتصاد والسياحة التجريبية');
+      expect(all).toContain('البرج التجريبي');
+      expect(all).not.toContain('Synthetic Tower');
+      expect(all).not.toContain('Synthetic Department of Economy and Tourism');
+    },
+  );
+
+  it('prints the English address on an Arabic invoice while the practice has no Arabic one', () => {
+    const all = textsOf(invoice('ar'))
+      .map((op) => op.text)
+      .join(' ');
+    expect(all).toContain('Synthetic Tower');
+  });
+
+  it('never prints the Arabic on an English invoice', () => {
+    const all = textsOf({ ...invoice('en'), supplier: ARABIC_SUPPLIER })
+      .map((op) => op.text)
+      .join(' ');
+    expect(all).toContain('Synthetic Tower');
+    expect(all).not.toContain('البرج التجريبي');
+  });
+});
+
+describe('a date inside a line', () => {
+  const withCallOut = (locale: 'en' | 'ar'): InvoiceDocument => {
+    const base = invoice(locale);
+    const line = base.lines[0]!;
+    return {
+      ...base,
+      lines: [
+        {
+          ...line,
+          description: 'Call-out fee — visit on 2026-10-14',
+          descriptionAr: 'رسوم الاستدعاء — زيارة بتاريخ 2026-10-14',
+        },
+      ],
+    };
+  };
+
+  it('is written as the page writes dates, never as ISO, in English', () => {
+    const texts = textsOf(withCallOut('en')).map((op) => op.text);
+    expect(texts).toContain('Call-out fee — visit on 14 October 2026');
+    expect(texts.join(' ')).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it('is written as the page writes dates, never as ISO, in Arabic', () => {
+    const texts = textsOf(withCallOut('ar')).map((op) => op.text);
+    expect(texts).toContain('رسوم الاستدعاء — زيارة بتاريخ 14 أكتوبر 2026');
+    expect(texts.join(' ')).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it('is left as it was filed on a document in both languages', () => {
+    const texts = textsOf({ ...withCallOut('en'), locale: null }).map((op) => op.text);
+    expect(texts).toContain('Call-out fee — visit on 2026-10-14');
+  });
+});

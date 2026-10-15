@@ -56,6 +56,7 @@ const INVOICE_SQL =
   "to_char(i.waived_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as waived_on, " +
   'i.client_id, i.supplier_legal_name, i.supplier_legal_name_ar, i.supplier_address, ' +
   'i.supplier_licence_number, i.supplier_licensing_authority, i.supplier_trn, ' +
+  'i.supplier_address_ar, i.supplier_licensing_authority_ar, ' +
   'i.supplier_vat_registered, i.supplier_vat_trn, ' +
   'i.supplier_contact_phone, i.supplier_contact_email, i.supplier_website, ' +
   "c.mrn as client_mrn, c.given_name || ' ' || c.family_name as client_name " +
@@ -80,6 +81,7 @@ const PAYMENT_SQL =
 const SUPPLIER_COLUMNS =
   'supplier_legal_name, supplier_legal_name_ar, supplier_address, ' +
   'supplier_licence_number, supplier_licensing_authority, supplier_trn, ' +
+  'supplier_address_ar, supplier_licensing_authority_ar, ' +
   'supplier_vat_registered, supplier_vat_trn, ' +
   'supplier_contact_phone, supplier_contact_email, supplier_website';
 
@@ -135,6 +137,9 @@ type SupplierColumns = {
   supplier_address: string | null;
   supplier_licence_number: string | null;
   supplier_licensing_authority: string | null;
+  /** The two Arabic halves migration 980 snapshots; null on an invoice from before it. */
+  supplier_address_ar: string | null;
+  supplier_licensing_authority_ar: string | null;
   supplier_trn: string | null;
   supplier_vat_registered: boolean | null;
   supplier_vat_trn: string | null;
@@ -150,6 +155,8 @@ function supplierOf(row: SupplierColumns): SupplierSnapshot {
     address: row.supplier_address,
     licenceNumber: row.supplier_licence_number,
     licensingAuthority: row.supplier_licensing_authority,
+    addressAr: row.supplier_address_ar,
+    licensingAuthorityAr: row.supplier_licensing_authority_ar,
     // Named for what it is. `supplier_trn` is the corporate-tax registration
     // and the renderer never prints it as a VAT number.
     corporateTaxNumber: row.supplier_trn,

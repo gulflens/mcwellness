@@ -86,8 +86,17 @@ export type PracticeSnapshot = {
   legalName: string;
   legalNameAr: string | null;
   address: string | null;
+  /**
+   * The same in Arabic (migration 980), printed on a document in Arabic in its
+   * place. Absent or null — never typed, or a document from before — and an
+   * Arabic document prints the English one; a document in English or in both
+   * never reads it.
+   */
+  addressAr?: string | null;
   licenceNumber: string | null;
   licensingAuthority: string | null;
+  /** As `addressAr`, for the licensing authority. */
+  licensingAuthorityAr?: string | null;
 };
 
 /** Who the report is about. A household, which is a private individual. */

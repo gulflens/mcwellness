@@ -41,6 +41,8 @@ export const REPORT_COLUMNS =
   'r.recipient_name, r.recipient_record_number, ' +
   'r.practice_legal_name, r.practice_legal_name_ar, r.practice_address, ' +
   'r.practice_licence_number, r.practice_licensing_authority, ' +
+  // The two Arabic halves migration 980 snapshots at issue.
+  'r.practice_address_ar, r.practice_licensing_authority_ar, ' +
   'to_char(r.created_at, \'YYYY-MM-DD"T"HH24:MI:SSOF\') as created_at, ' +
   // The stamp a save is made over (`savedAt`), to the microsecond the column
   // holds, so it compares equal to itself and to nothing later.
@@ -89,6 +91,8 @@ export type ReportRecord = {
   practice_address: string | null;
   practice_licence_number: string | null;
   practice_licensing_authority: string | null;
+  practice_address_ar: string | null;
+  practice_licensing_authority_ar: string | null;
   created_at: string;
   /** When the row was last written, as the brain-map draft route compares it. */
   saved_at: string;
@@ -244,6 +248,8 @@ export function documentFrom(record: ReportRecord): ReportDocument | null {
       address: record.practice_address,
       licenceNumber: record.practice_licence_number,
       licensingAuthority: record.practice_licensing_authority,
+      addressAr: record.practice_address_ar,
+      licensingAuthorityAr: record.practice_licensing_authority_ar,
     },
     signer: {
       name: record.signed_by_name,

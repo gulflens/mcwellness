@@ -1079,6 +1079,27 @@ describe('the language a report is set in', () => {
     expect(record ? documentFrom(record)?.bilingual : null).toBe(false);
   });
 
+  it('copies the practice’s own Arabic onto the report when it is issued (migration 980)', async () => {
+    await h.owner.query(
+      'update tenant set address_ar = $2, licensing_authority_ar = $3 where id = $1',
+      [h.data.tenant.id, 'الوحدة 1، البرج التجريبي، دبي', 'دائرة الاقتصاد والسياحة التجريبية'],
+    );
+    let id: string;
+    try {
+      id = await issued(11);
+    } finally {
+      await h.owner.query(
+        'update tenant set address_ar = null, licensing_authority_ar = null where id = $1',
+        [h.data.tenant.id],
+      );
+    }
+    const record = await readReport(h.owner, id);
+    expect(record?.practice_address_ar).toBe('الوحدة 1، البرج التجريبي، دبي');
+    expect(record ? documentFrom(record)?.practice.licensingAuthorityAr : null).toBe(
+      'دائرة الاقتصاد والسياحة التجريبية',
+    );
+  });
+
   it('previews a report issued before the decision in both languages, as it was filed', async () => {
     const id = await issued(10);
     // Standing in for a row issued before 15 October 2026: its content has

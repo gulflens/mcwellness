@@ -109,6 +109,11 @@ export type PracticeLines = {
   readonly name: string;
   readonly nameAr: string | null;
   readonly address: string | null;
+  /**
+   * The address in Arabic (migration 980), printed in its place on an Arabic
+   * report; absent or blank, the Arabic report prints the English one.
+   */
+  readonly addressAr?: string | null;
   readonly phone: string | null;
   readonly email: string | null;
   readonly website: string | null;
@@ -251,9 +256,11 @@ export function footerOf(input: ReportInput): {
     locale === 'ar' && practice.nameAr !== null && !isBlank(practice.nameAr)
       ? practice.nameAr
       : practice.name;
-  const where = [name, practice.address].filter(
-    (each): each is string => each !== null && !isBlank(each),
-  );
+  const address =
+    locale === 'ar' && practice.addressAr != null && !isBlank(practice.addressAr)
+      ? practice.addressAr
+      : practice.address;
+  const where = [name, address].filter((each): each is string => each !== null && !isBlank(each));
   const contacts: readonly (readonly [string, string | null])[] = [
     ['footer.phone', practice.phone],
     ['footer.email', practice.email],

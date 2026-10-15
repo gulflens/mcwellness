@@ -134,3 +134,42 @@ describe('the filed document', () => {
     expect(page).toContain('INV-');
   });
 });
+
+/** Migration 980: an invoice copies the practice's own Arabic as it is written. */
+describe('the practice’s Arabic on an invoice', () => {
+  /** The practice's own details are an owner's to change; this is the test's maintenance, under no role. */
+  const asNobody = () => h.owner.query("select set_config('app.actor_roles', '', false)");
+
+  it('is copied from the practice when the invoice is written, and kept when the practice changes it', async () => {
+    await asNobody();
+    await h.owner.query(
+      'update tenant set address_ar = $2, licensing_authority_ar = $3 where id = $1',
+      [h.data.tenant.id, 'الوحدة 1، البرج التجريبي، دبي', 'دائرة الاقتصاد والسياحة التجريبية'],
+    );
+    const invoiceId = await deliverVisit(h.clientId(7));
+    await asNobody();
+    await h.owner.query(
+      'update tenant set address_ar = null, licensing_authority_ar = null where id = $1',
+      [h.data.tenant.id],
+    );
+    const { rows } = await h.owner.query<{
+      supplier_address_ar: string | null;
+      supplier_licensing_authority_ar: string | null;
+    }>('select supplier_address_ar, supplier_licensing_authority_ar from invoice where id = $1', [
+      invoiceId,
+    ]);
+    expect(rows[0]).toEqual({
+      supplier_address_ar: 'الوحدة 1، البرج التجريبي، دبي',
+      supplier_licensing_authority_ar: 'دائرة الاقتصاد والسياحة التجريبية',
+    });
+  });
+
+  it('is empty on an invoice written while the practice had none', async () => {
+    const invoiceId = await deliverVisit(h.clientId(7));
+    const { rows } = await h.owner.query<{ supplier_address_ar: string | null }>(
+      'select supplier_address_ar from invoice where id = $1',
+      [invoiceId],
+    );
+    expect(rows[0]?.supplier_address_ar).toBeNull();
+  });
+});

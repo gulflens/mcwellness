@@ -382,8 +382,13 @@ export abstract class DocumentPage {
       },
     ];
     if (supplier.licenceNumber) rows.push(labelled(WORDS.licenceNumber, supplier.licenceNumber));
-    if (supplier.licensingAuthority) {
-      rows.push(labelled(WORDS.licensingAuthority, supplier.licensingAuthority));
+    // In Arabic alone, the practice's own Arabic where it has typed one
+    // (migration 980); the English where it has not, and always on a page in
+    // both, as it was filed.
+    const authority =
+      (this.lang === 'ar' ? supplier.licensingAuthorityAr : null) || supplier.licensingAuthority;
+    if (authority) {
+      rows.push(labelled(WORDS.licensingAuthority, authority));
     }
     if (taxRows && supplier.corporateTaxNumber) {
       rows.push(labelled(WORDS.corporateTaxNumber, supplier.corporateTaxNumber));
@@ -979,10 +984,11 @@ export abstract class DocumentPage {
     const supplier = this.supplier;
     const centre = (LEFT + RIGHT) / 2;
     const spacer = '   ';
+    const address = (this.lang === 'ar' ? supplier.addressAr : null) || supplier.address;
     const pieces = [
       this.legalName(),
-      ...(supplier.address ?? '')
-        .split(',')
+      ...(address ?? '')
+        .split(/[,،]/)
         .map((part) => part.trim())
         .filter((part) => part.length > 0),
     ];

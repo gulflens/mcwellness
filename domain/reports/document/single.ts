@@ -186,17 +186,21 @@ class ReportPage {
     sheet.room(rows * LINE);
     sheet.paragraph(sheet.baseline, LEFT, name, RIGHT - LEFT, SIZE.body, nameOptions);
     sheet.down(rows * LINE);
-    if (practice.address) {
-      const options = typed(practice.address, { grey: MUTED });
-      const lines = sheet.wrap(practice.address, RIGHT - LEFT, SIZE.body, options).length;
+    // In Arabic, the practice's own Arabic where it has typed one (migration
+    // 980), and the English where it has not.
+    const arabic = this.lang === 'ar';
+    const address = (arabic ? practice.addressAr : null) || practice.address;
+    const authority =
+      (arabic ? practice.licensingAuthorityAr : null) || practice.licensingAuthority;
+    if (address) {
+      const options = typed(address, { grey: MUTED });
+      const lines = sheet.wrap(address, RIGHT - LEFT, SIZE.body, options).length;
       sheet.room(lines * LINE);
-      sheet.paragraph(sheet.baseline, LEFT, practice.address, RIGHT - LEFT, SIZE.body, options);
+      sheet.paragraph(sheet.baseline, LEFT, address, RIGHT - LEFT, SIZE.body, options);
       sheet.down(lines * LINE);
     }
     if (practice.licenceNumber) this.labelled(WORDS.licenceNumber, practice.licenceNumber);
-    if (practice.licensingAuthority) {
-      this.labelled(WORDS.licensingAuthority, practice.licensingAuthority);
-    }
+    if (authority) this.labelled(WORDS.licensingAuthority, authority);
     // And no tax number, ever (section 10, decision 4).
     sheet.down(4);
     sheet.rule();

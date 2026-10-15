@@ -281,3 +281,35 @@ describe('a report issued before the decision', () => {
     expect(texts).toContain(WORDS.client.ar);
   });
 });
+
+/** The practice's own words in Arabic (migration 980). */
+describe('the practice in Arabic on an Arabic report', () => {
+  const ARABIC_PRACTICE: PracticeSnapshot = {
+    ...PRACTICE,
+    addressAr: 'الوحدة 1، البرج التجريبي، دبي',
+    licensingAuthorityAr: 'دائرة الاقتصاد والسياحة التجريبية',
+  };
+
+  it('prints the Arabic address and authority, and no English for them', () => {
+    const texts = textsOf({ ...report('ar', SESSION), practice: ARABIC_PRACTICE }).map(
+      (op) => op.text,
+    );
+    expect(texts).toContain('الوحدة 1، البرج التجريبي، دبي');
+    expect(texts).toContain('دائرة الاقتصاد والسياحة التجريبية');
+    expect(texts).not.toContain(PRACTICE.address);
+    expect(texts).not.toContain(PRACTICE.licensingAuthority);
+  });
+
+  it('prints the English ones while the practice has none in Arabic', () => {
+    const texts = textsOf(report('ar', SESSION)).map((op) => op.text);
+    expect(texts).toContain(PRACTICE.address);
+  });
+
+  it('never prints the Arabic on an English report', () => {
+    const texts = textsOf({ ...report('en', SESSION_EN), practice: ARABIC_PRACTICE }).map(
+      (op) => op.text,
+    );
+    expect(texts).toContain(PRACTICE.address);
+    expect(texts).not.toContain('الوحدة 1، البرج التجريبي، دبي');
+  });
+});

@@ -36,11 +36,13 @@ import { signerFor, signingCredentials } from './signer';
 
 const PRACTICE_SQL =
   'select t.legal_name, t.legal_name_ar, t.licence_number, t.licensing_authority, ' +
+  't.address_ar, t.licensing_authority_ar, ' +
   'l.display_address from tenant t left join location l on l.id = t.location_id ' +
   'where t.id = app.current_tenant_id()';
 
-/** What the page says where a number has not been allocated yet. */
+/** What the page says where a number has not been allocated yet, in the page's language. */
 export const PREVIEW_REFERENCE = 'Not yet signed';
+const PREVIEW_REFERENCE_AR = 'لم يُوقَّع بعد';
 
 type PracticeRow = {
   legal_name: string;
@@ -48,6 +50,8 @@ type PracticeRow = {
   licence_number: string | null;
   licensing_authority: string | null;
   display_address: string | null;
+  address_ar: string | null;
+  licensing_authority_ar: string | null;
 };
 
 async function practiceSnapshot(db: Db): Promise<PracticeRow | null> {
@@ -142,6 +146,8 @@ export function mountReportPreview(api: Hono<ApiEnv>, now: () => Date = () => ne
           address: practice.display_address,
           licenceNumber: practice.licence_number,
           licensingAuthority: practice.licensing_authority,
+          addressAr: practice.address_ar,
+          licensingAuthorityAr: practice.licensing_authority_ar,
         },
         signer: {
           name: record.signed_by_name ?? signer?.name ?? '',
@@ -151,7 +157,8 @@ export function mountReportPreview(api: Hono<ApiEnv>, now: () => Date = () => ne
             record.signed_by_certificate_number ?? would?.certificateNumber ?? null,
         },
         recipient,
-        reference: record.reference ?? PREVIEW_REFERENCE,
+        reference:
+          record.reference ?? (record.locale === 'ar' ? PREVIEW_REFERENCE_AR : PREVIEW_REFERENCE),
         issuedOn: record.issued_on ?? today,
         version: record.version,
         amendmentReason: record.amendment_reason,

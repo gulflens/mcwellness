@@ -29,8 +29,17 @@ export type SupplierSnapshot = {
   legalName: string;
   legalNameAr: string | null;
   address: string | null;
+  /**
+   * The same in Arabic (migration 980), printed on a document in Arabic in its
+   * place. Absent or null — never typed, or a document from before — and an
+   * Arabic document prints the English one; a document in English or in both
+   * never reads it.
+   */
+  addressAr?: string | null;
   licenceNumber: string | null;
   licensingAuthority: string | null;
+  /** As `addressAr`, for the licensing authority. */
+  licensingAuthorityAr?: string | null;
   /**
    * `invoice.supplier_trn` — the **corporate-tax** registration the practice
    * held. Never a VAT number, and never printed as one: the column comment on
