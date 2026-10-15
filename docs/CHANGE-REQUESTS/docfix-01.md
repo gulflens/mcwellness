@@ -99,13 +99,8 @@ The stored file is unaffected. Only the recovery from a lost file is.
 
 ### Seen, not changed here
 
-- `app/admin/clients/DocumentLink.tsx`, `app/admin/clients/ErasureSection.tsx`
-  and `app/admin/assessments/ExportFiles.tsx` call
-  `window.open(…, 'noopener,noreferrer')` and treat null as a block. A
-  browser following the standard returns null every time. Each one then
-  shows its fallback link ("Your browser stopped the file opening") even
-  after the tab opened. This is the same defect as item 5, in the
-  client-record and assessment streams.
+- The same defect as item 5 in eight more screens, four of them the
+  household's, is answered in `docfix-02.md`.
 - A progress report prints each figure to at most three places
   (`formatFigure`). The comparison screen prints the stored value. The two
   agree for any figure typed to three places or fewer. The review of this
