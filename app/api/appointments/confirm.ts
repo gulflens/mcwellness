@@ -2,7 +2,9 @@ import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import { hasRole } from '@domain/shared';
 import { canBeConfirmed } from '@domain/scheduling';
+import { visitEventFor } from '../../../domain/portal';
 import type { ApiEnv } from '../_middleware/request-context';
+import { queuePushEvent } from '../portal/push/queue';
 import { ConfirmAppointmentResponse, type AppointmentRow, type ConfirmActionCode } from './schema';
 
 /**
@@ -52,13 +54,19 @@ import { ConfirmAppointmentResponse, type AppointmentRow, type ConfirmActionCode
  */
 
 const APPOINTMENT_SQL =
-  'select id, status from appointment where id = $1 and tenant_id = app.current_tenant_id()';
+  'select id, status, client_id, window_start from appointment ' +
+  'where id = $1 and tenant_id = app.current_tenant_id()';
 
 const CONFIRM_SQL =
   "update appointment set status = 'confirmed' where id = $1 " +
   "and tenant_id = app.current_tenant_id() and status = 'proposed'";
 
-type AppointmentDbRow = { id: string; status: AppointmentRow['status'] };
+type AppointmentDbRow = {
+  id: string;
+  status: AppointmentRow['status'];
+  client_id: string;
+  window_start: Date;
+};
 
 function badRequest(c: Context<ApiEnv>, requestId: string | null, code: ConfirmActionCode) {
   return c.json({ error: 'bad_request', code, requestId }, 400);
@@ -102,6 +110,19 @@ export function mountAppointmentConfirm(api: Hono<ApiEnv>): void {
       // the write. Not an error to raise: the transaction is sound and the
       // answer is the same one the caller would have had a moment earlier.
       return badRequest(c, requestId, 'appointment_not_proposed');
+    }
+
+    // The household is told on its phones once this has committed: confirming
+    // is the moment a visit becomes theirs to see (domain/portal/pushEvents.ts).
+    const kind = visitEventFor({ act: 'confirmed', from: appointment.status });
+    if (kind !== null) {
+      queuePushEvent(c, {
+        kind,
+        tenantId: actor.tenantId,
+        subjectId: appointmentId,
+        clientId: appointment.client_id,
+        startsAt: appointment.window_start,
+      });
     }
 
     // No separate read row: the update carries the whole story into the audit

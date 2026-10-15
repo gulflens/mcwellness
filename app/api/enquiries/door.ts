@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Context, Hono } from 'hono';
 import { parseEnquiry } from '@domain/enquiry';
 import type { ApiEnv, PoolLike } from '../_middleware/request-context';
+import type { PushSender } from '../portal/push/sender';
 import { IncompleteResponse, LodgeResponse } from './schema';
 
 /**
@@ -51,6 +52,13 @@ export type EnquiryDoorOptions = {
    * Null means the address could not be known; see `bucketFor`.
    */
   addressOf: (c: Context<ApiEnv>) => string | null;
+  /**
+   * The phone notifications, when the practice's key pair is configured: a
+   * lodged enquiry is told to the staff who see Enquiries, once this door's
+   * own transaction has committed, and never a word of who sent it
+   * (app/api/portal/push/events.ts). Absent: nothing is sent.
+   */
+  push?: PushSender;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -147,28 +155,34 @@ export function mountEnquiryDoor(api: Hono<ApiEnv>, options: EnquiryDoorOptions)
       await client.query(STAMP_REQUEST_ID, [requestId]);
       // The budget answers null exactly as success answers an id; neither is
       // reported. What was refused was never a person's enquiry to lose.
-      await client.query('select app.lodge_enquiry($1::jsonb) as id', [
-        JSON.stringify({
-          source: parsed.enquiry.source,
-          name: parsed.enquiry.name,
-          whatsapp_e164: parsed.enquiry.whatsappE164,
-          email: parsed.enquiry.email,
-          area: parsed.enquiry.area,
-          message: parsed.enquiry.message,
-          concern: parsed.enquiry.concern,
-          preferred_time: parsed.enquiry.preferredTime,
-          contact_method: parsed.enquiry.contactMethod,
-          consent: parsed.enquiry.consent,
-          ip_hash: bucketFor(options.addressOf(c)),
-          enquiring_for: parsed.enquiry.enquiringFor,
-          notice_version: String(parsed.enquiry.noticeVersion),
-          marketing_opt_in: parsed.enquiry.marketingOptIn === true ? 'true' : 'false',
-          interest: parsed.enquiry.interest,
-        }),
-      ]);
+      const lodged = await client.query<{ id: string | null }>(
+        'select app.lodge_enquiry($1::jsonb) as id',
+        [
+          JSON.stringify({
+            source: parsed.enquiry.source,
+            name: parsed.enquiry.name,
+            whatsapp_e164: parsed.enquiry.whatsappE164,
+            email: parsed.enquiry.email,
+            area: parsed.enquiry.area,
+            message: parsed.enquiry.message,
+            concern: parsed.enquiry.concern,
+            preferred_time: parsed.enquiry.preferredTime,
+            contact_method: parsed.enquiry.contactMethod,
+            consent: parsed.enquiry.consent,
+            ip_hash: bucketFor(options.addressOf(c)),
+            enquiring_for: parsed.enquiry.enquiringFor,
+            notice_version: String(parsed.enquiry.noticeVersion),
+            marketing_opt_in: parsed.enquiry.marketingOptIn === true ? 'true' : 'false',
+            interest: parsed.enquiry.interest,
+          }),
+        ],
+      );
       await client.query('commit');
       inTransaction = false;
       client.release();
+      // Only a real, kept enquiry: the budget's null is never told to anybody.
+      const enquiryId = lodged.rows[0]?.id ?? null;
+      if (enquiryId !== null) options.push?.notify({ kind: 'enquiry_new', subjectId: enquiryId });
       return c.json(LodgeResponse.parse({ ok: true }));
     } catch (error) {
       if (inTransaction) await client.query('rollback').catch(() => undefined);

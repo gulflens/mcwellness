@@ -173,6 +173,40 @@ const CASES: { name: string; event: AuditEvent; en: string; ar: string }[] = [
     ar: 'خرج هاتف من إشعارات المركز',
   },
   {
+    name: 'an event notice recorded',
+    event: event({ entityType: 'push_event', actor: null }),
+    en: 'An event notice was recorded for the phones',
+    ar: 'سُجِّل إشعار بحدث للهواتف',
+  },
+  {
+    name: 'an event notice delivered',
+    event: event({
+      entityType: 'push_event',
+      action: 'portal.push.event_delivered',
+      actor: null,
+    }),
+    en: 'An event notice was delivered to the phones',
+    ar: 'سُلِّم إشعار بحدث إلى الهواتف',
+  },
+  {
+    name: 'a member of staff turning notifications on for a browser',
+    event: event({ entityType: 'staff_push_subscription', action: 'staff.push.subscribed' }),
+    en: 'Hazel Harbour turned notifications on for a browser',
+    ar: 'Hazel Harbour فعّل الإشعارات على متصفح',
+  },
+  {
+    name: 'a member of staff turning them off',
+    event: event({ entityType: 'staff_push_subscription', action: 'staff.push.unsubscribed' }),
+    en: 'Hazel Harbour turned notifications off for a browser',
+    ar: 'Hazel Harbour أوقف الإشعارات على متصفح',
+  },
+  {
+    name: 'a browser leaving the staff notifications',
+    event: event({ entityType: 'staff_push_subscription', action: 'delete' }),
+    en: 'A browser left the staff’s notifications',
+    ar: 'خرج متصفح من إشعارات الفريق',
+  },
+  {
     name: 'turning offers on, on the portal',
     event: event({ entityType: 'consent', action: 'portal.marketing.given' }),
     en: 'Hazel Harbour turned offers on, on the portal',

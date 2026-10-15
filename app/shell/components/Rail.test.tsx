@@ -463,4 +463,34 @@ describe('Rail: the waiting enquiries', () => {
     const link = screen.getByRole('link', { name: 'Enquiries, 140 new' });
     expect(link.querySelector('.rail__badge')?.textContent).toBe('99+');
   });
+
+  it('links the console’s phone notifications only for a person who may turn them on', () => {
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Admin', roles: 'Admin' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+          notifications
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Phone notifications' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/account/notifications'),
+    );
+    unmount();
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Finance', roles: 'Finance' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('link', { name: 'Phone notifications' })).toBeNull();
+  });
 });

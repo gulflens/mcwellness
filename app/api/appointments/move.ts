@@ -10,7 +10,9 @@ import {
   PRACTITIONER_OVERLAP_MESSAGE,
 } from '@domain/scheduling';
 import { cleanText } from '../_middleware/text';
+import { visitEventFor } from '../../../domain/portal';
 import type { ApiEnv } from '../_middleware/request-context';
+import { queuePushEvent } from '../portal/push/queue';
 import { requiredConsentPurposes } from './create';
 import {
   appointmentRow,
@@ -266,6 +268,24 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
     }
     if (!created) {
       return c.json({ error: 'internal', requestId }, 500);
+    }
+
+    // A confirmed visit at a new time is told to the household's phones once
+    // this has committed, about the new row; a proposed one they never heard of.
+    const kind = visitEventFor({
+      act: 'moved',
+      from: appointment.status,
+      previousStart: appointment.window_start,
+      newStart: windowStart,
+    });
+    if (kind !== null) {
+      queuePushEvent(c, {
+        kind,
+        tenantId: actor.tenantId,
+        subjectId: created.id,
+        clientId: appointment.client_id,
+        startsAt: windowStart,
+      });
     }
 
     return c.json(

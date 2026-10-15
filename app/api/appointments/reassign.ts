@@ -11,7 +11,9 @@ import {
   type ExistingAppointment,
 } from '@domain/scheduling';
 import { cleanText } from '../_middleware/text';
+import { visitEventFor } from '../../../domain/portal';
 import type { ApiEnv, Db } from '../_middleware/request-context';
+import { queuePushEvent } from '../portal/push/queue';
 import { requiredConsentPurposes } from './create';
 import {
   appointmentRow,
@@ -350,6 +352,25 @@ export function mountAppointmentReassign(
       );
     }
     if (!created) return c.json({ error: 'internal', requestId }, 500);
+
+    // A handover that also moves a confirmed visit's time is a move to the
+    // household: told on their phones once this has committed. The same time
+    // in other hands says nothing (the practitioner is never named to them).
+    const kind = visitEventFor({
+      act: 'moved',
+      from: appointment.status,
+      previousStart: appointment.window_start,
+      newStart: windowStart,
+    });
+    if (kind !== null) {
+      queuePushEvent(c, {
+        kind,
+        tenantId: actor.tenantId,
+        subjectId: created.id,
+        clientId: appointment.client_id,
+        startsAt: windowStart,
+      });
+    }
 
     return c.json(
       MoveAppointmentResponse.parse({

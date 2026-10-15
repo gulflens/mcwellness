@@ -9,7 +9,9 @@ import {
   type ExistingAppointment,
 } from '@domain/scheduling';
 import { logRead } from '../_middleware/audit';
+import { visitEventFor } from '../../../domain/portal';
 import type { ApiEnv } from '../_middleware/request-context';
+import { queuePushEvent } from '../portal/push/queue';
 import {
   AppointmentRow,
   ConflictResponse,
@@ -328,6 +330,20 @@ export function mountAppointmentCreate(
     }
     if (!created) {
       return c.json({ error: 'internal', requestId }, 500);
+    }
+
+    // Placed as `proposed`, a visit is not yet the household's to see, and
+    // this says nothing; the notice goes when it is confirmed (./confirm.ts).
+    // Asked all the same, so a booking ever placed already confirmed is told.
+    const kind = visitEventFor({ act: 'created', status: created.status });
+    if (kind !== null) {
+      queuePushEvent(c, {
+        kind,
+        tenantId: actor.tenantId,
+        subjectId: created.id,
+        clientId,
+        startsAt: created.window_start,
+      });
     }
 
     return c.json(

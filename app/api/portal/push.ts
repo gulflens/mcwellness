@@ -164,7 +164,7 @@ function reasonOf(header: string | undefined): string | null {
 const IdParams = z.object({ id: z.uuid() });
 
 /** A device key as the browser hands it over: a P-256 point, and 16 bytes. */
-function keysAreSound(p256dh: string, auth: string): boolean {
+export function keysAreSound(p256dh: string, auth: string): boolean {
   const point = fromBase64Url(p256dh);
   return point.length === 65 && point[0] === 0x04 && fromBase64Url(auth).length === 16;
 }

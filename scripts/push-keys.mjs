@@ -15,6 +15,7 @@
 // browser's applicationServerKey takes, the private key as its 32-byte
 // scalar, both base64url. app/api/portal/push/webpush.ts (vapidKeysFromEnv)
 // reads them back and refuses a pair that does not belong together.
+import { Buffer } from 'node:buffer';
 import { createECDH } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
@@ -22,9 +23,12 @@ import { pathToFileURL } from 'node:url';
 export function pushKeyLines(subject = 'mailto:REPLACE-with-the-practice-address@example.com') {
   const ecdh = createECDH('prime256v1');
   ecdh.generateKeys();
+  // Node drops a scalar's leading zero bytes; restored to its 32, so one
+  // pair in 256 is not refused at startup as the wrong length.
+  const scalar = Buffer.from(ecdh.getPrivateKey().toString('hex').padStart(64, '0'), 'hex');
   return [
     `PUSH_VAPID_PUBLIC_KEY=${ecdh.getPublicKey().toString('base64url')}`,
-    `PUSH_VAPID_PRIVATE_KEY=${ecdh.getPrivateKey().toString('base64url')}`,
+    `PUSH_VAPID_PRIVATE_KEY=${scalar.toString('base64url')}`,
     `PUSH_VAPID_SUBJECT=${subject}`,
   ];
 }

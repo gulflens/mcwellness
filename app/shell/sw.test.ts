@@ -476,6 +476,47 @@ describe('phone notifications', () => {
     expect(opened).toEqual(['/portal', '/portal/agreements#offers']);
   });
 
+  it('shows an event notice and opens the screen it names', async () => {
+    await push({
+      ...ANNOUNCEMENT,
+      kind: 'event',
+      lang: 'en',
+      dir: 'ltr',
+      title: 'Visit booked',
+      body: 'Your visit is booked for 20/10/2026 at 09:30.',
+      url: '/portal/visits',
+    });
+    expect(shown[0]?.options).toMatchObject({
+      data: { url: '/portal/visits', stopUrl: null },
+      actions: [],
+    });
+    await press({ url: '/portal/visits', stopUrl: null });
+    expect(opened).toEqual(['/portal/visits']);
+  });
+
+  it('opens the console’s Enquiries for the staff’s new-enquiry notice, and no other console path', async () => {
+    await push({
+      ...ANNOUNCEMENT,
+      kind: 'event',
+      lang: 'en',
+      dir: 'ltr',
+      title: 'New website enquiry',
+      body: 'Open Enquiries in the console to read it.',
+      url: '/admin/enquiries',
+    });
+    expect(shown).toHaveLength(1);
+    await press({ url: '/admin/enquiries', stopUrl: null });
+    await press({ url: '/admin/enquiries/poster', stopUrl: null });
+    await press({ url: '/admin/enquiries', stopUrl: '/admin/clients' }, 'stop');
+    expect(opened).toEqual(['/admin/enquiries', '/admin/enquiries']);
+  });
+
+  it('shows no announcement or offer that would open the console', async () => {
+    await push({ ...ANNOUNCEMENT, url: '/admin/enquiries' });
+    await push({ ...OFFER, url: '/admin/enquiries' });
+    expect(shown).toEqual([]);
+  });
+
   it('opens nothing but a portal path on this origin, whatever the payload says', async () => {
     for (const url of [
       'https://example.com/portal',

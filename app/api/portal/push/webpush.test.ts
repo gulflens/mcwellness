@@ -10,6 +10,7 @@ import {
   encryptPayload,
   fromBase64Url,
   generateVapidKeys,
+  padScalar,
   toBase64Url,
   vapidAuthorization,
   vapidKeysFromEnv,
@@ -143,6 +144,17 @@ describe('vapidAuthorization (RFC 8292)', () => {
         fromBase64Url(signature ?? ''),
       ),
     ).toBe(true);
+  });
+});
+
+describe('padScalar', () => {
+  it('restores the leading zeros Node drops from a private scalar', () => {
+    const short = Buffer.alloc(31, 7);
+    const padded = padScalar(short);
+    expect(padded.length).toBe(32);
+    expect(padded[0]).toBe(0);
+    expect(padded.subarray(1)).toEqual(short);
+    expect(padScalar(Buffer.alloc(32, 7))).toEqual(Buffer.alloc(32, 7));
   });
 });
 

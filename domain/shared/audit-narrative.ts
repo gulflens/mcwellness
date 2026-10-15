@@ -931,6 +931,38 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         t('A phone left the practice’s notifications', 'خرج هاتف من إشعارات المركز'),
         locale,
       );
+    // Event notices (migration 708): a visit booked, moved or called off, a
+    // report ready, a website enquiry. Sent by nobody in particular, so no
+    // actor; recorded by kind, id and counts, never a word of what was sent.
+    // The Arabic of these five needs a native speaker's check
+    // (docs/OPERATOR/2026-10-15-event-notifications.md).
+    case 'push_event.insert':
+      return pick(
+        t('An event notice was recorded for the phones', 'سُجِّل إشعار بحدث للهواتف'),
+        locale,
+      );
+    case 'push_event.update':
+    case 'push_event.portal.push.event_delivered':
+      return pick(
+        t('An event notice was delivered to the phones', 'سُلِّم إشعار بحدث إلى الهواتف'),
+        locale,
+      );
+    case 'staff_push_subscription.insert':
+    case 'staff_push_subscription.staff.push.subscribed':
+      return pick(
+        t(`${actor} turned notifications on for a browser`, `${actor} فعّل الإشعارات على متصفح`),
+        locale,
+      );
+    case 'staff_push_subscription.staff.push.unsubscribed':
+      return pick(
+        t(`${actor} turned notifications off for a browser`, `${actor} أوقف الإشعارات على متصفح`),
+        locale,
+      );
+    case 'staff_push_subscription.delete':
+      return pick(
+        t('A browser left the staff’s notifications', 'خرج متصفح من إشعارات الفريق'),
+        locale,
+      );
     case 'consent.portal.marketing.given':
       return pick(
         t(`${actor} turned offers on, on the portal`, `${actor} فعّل العروض من البوابة`),

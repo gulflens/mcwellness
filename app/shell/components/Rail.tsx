@@ -10,6 +10,7 @@ import {
   BooksIcon,
   ClientsIcon,
   EnquiriesIcon,
+  BellIcon,
   KeyIcon,
   KitIcon,
   PinIcon,
@@ -272,6 +273,7 @@ export function Rail({
   onTogglePin,
   onChoose,
   badges,
+  notifications = false,
 }: {
   sections?: readonly RailSection[];
   person: { name: string; roles: string };
@@ -297,6 +299,11 @@ export function Rail({
    * for a section the layout did not list.
    */
   badges?: Readonly<Record<string, number>>;
+  /**
+   * Whether this person may turn on phone notifications in the console: the
+   * people who see Enquiries (domain/portal/pushEvents.ts). Absent, no link.
+   */
+  notifications?: boolean;
 }) {
   const rail = useRef<HTMLElement | null>(null);
   const toggle = useRef<HTMLButtonElement | null>(null);
@@ -416,6 +423,17 @@ export function Rail({
           <KeyIcon />
           <span className="rail__label">Password</span>
         </NavLink>
+        {notifications ? (
+          <NavLink
+            to="/account/notifications"
+            className="rail__signout"
+            title="Phone notifications"
+            reloadDocument={fresh}
+          >
+            <BellIcon />
+            <span className="rail__label">Phone notifications</span>
+          </NavLink>
+        ) : null}
         <button type="button" className="rail__signout" onClick={onSignOut} title="Sign out">
           <SignOutIcon />
           <span className="rail__label">Sign out</span>
