@@ -115,3 +115,44 @@ also opens in the client's language.
   its rebuild.
 - The only documents that cannot be rebuilt are those docfix-01 already
   named.
+
+### Follow-up: the practice's own Arabic, and no ISO dates (15 October 2026)
+
+- **Migration `980_practice_arabic_words.sql`** is in the trunk range. 976 is
+  left alone, because round 77 reserved it for another session.
+  - It adds `tenant.address_ar` and `tenant.licensing_authority_ar`. These are
+    the two practice fields a document prints as words. The licence number,
+    the registrations, the telephone, email and website are codes or
+    addresses, and so are the bank's details; they stay as stored.
+  - An invoice copies the two values at insert (`supplier_*_ar`). A report
+    copies them at issue (`practice_*_ar`). Each copy is made by its own
+    trigger, so 959's stamp and `app.issue_report` are untouched.
+  - Nothing is invented and nothing is backfilled.
+  - An Arabic invoice, receipt, session report, progress report or brain-map
+    report prints the Arabic value, and the English one while the Arabic is
+    empty.
+  - English documents never read these columns. Neither do documents from
+    before the change, so their bytes are unchanged.
+- **Settings › Practice** gains "Licensing authority in Arabic" and
+  "Registered address in Arabic".
+  - The labels are English and the inputs use `dir="auto"`.
+  - The fields use the same PATCH, reason and audit as the rest of the form.
+  - While either Arabic field is empty, the page says plainly that Arabic
+    documents will show the English until the Arabic is filled in.
+  - The trunk's `app/shell/App.test.tsx` fixture gains the two fields.
+- **The Arabic legal name still has no field.** This follows the operator's
+  decision of 7 September 2026 (see `PracticeDrawer.tsx`). It is set at
+  bootstrap and is already printed.
+- **A day inside an invoice line is never printed as ISO.** The call-out fee
+  line is stored as "visit on 2026-10-14". On a document in one language it
+  prints as "14 October 2026" or "14 أكتوبر 2026", matching the page. A
+  document in both languages keeps its line as filed.
+- **Other date sweeps found nothing.** Every other date on a document is
+  formatted: reports and receipts use month names, and the brain-map report
+  uses DD/MM/YYYY.
+- **An Arabic draft's preview** now says "لم يُوقَّع بعد" ("not yet signed")
+  where the reference will go.
+- **Seen, not changed:** the console sends a save's reason in an `x-reason`
+  header. A reason containing a curly apostrophe (’) is refused by the
+  browser's Headers API before it is sent, so that save fails with "could not
+  be saved". This predates this round.
