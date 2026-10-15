@@ -257,5 +257,8 @@ export function documentFrom(record: ReportRecord): ReportDocument | null {
     version: record.version,
     amendmentReason: record.amendment_reason,
     content: parsed.content as ReportContent,
+    // Issued before 15 October 2026, so set in both languages and filed so:
+    // re-rendered the same way, or a lost file could never be put back.
+    bilingual: (parsed.content as ReportContent).layout !== 'single',
   };
 }

@@ -204,10 +204,23 @@ describe('a rendered session report', () => {
     expect(text).toContain('SYN-0001');
   });
 
-  it('sets every fixed label in Arabic beside its English', () => {
-    expect(text).toContain(asCopied(WORDS.sessionReport.ar));
-    expect(text).toContain(asCopied(WORDS.client.ar));
-    expect(text).toContain(asCopied(WORDS.signedBy.ar));
+  it('sets every fixed label in English alone, its language, and none in Arabic', () => {
+    // The operator's decision of 15 October 2026: one language per report.
+    expect(text).toContain(WORDS.sessionReport.en);
+    expect(text).not.toContain(asCopied(WORDS.client.ar));
+    expect(text).not.toContain(asCopied(WORDS.signedBy.ar));
+  });
+
+  it('sets both, as it was filed, when it was issued before that decision', () => {
+    const legacy = extractAll(
+      renderReport(
+        { ...report({ kind: 'session', content: SESSION_CONTENT }), bilingual: true },
+        fonts,
+      ),
+    );
+    expect(legacy).toContain(asCopied(WORDS.sessionReport.ar));
+    expect(legacy).toContain(asCopied(WORDS.client.ar));
+    expect(legacy).toContain(asCopied(WORDS.signedBy.ar));
   });
 
   it('carries the two standing sentences, in the consent’s own words', () => {
@@ -291,24 +304,21 @@ describe('a rendered progress report', () => {
   });
 
   it('says the age and sex the comparison was made against', () => {
-    expect(text).toContain('10 years, female');
+    expect(text).toContain('10 years, Female');
   });
 
   it('carries the not-a-diagnosis sentence beside the comparison as well as in the footer', () => {
     expect(text.match(/is not a diagnosis\./g)?.length).toBe(2);
   });
 
-  it('prints the comparison’s own sentence beneath the figures, in both languages', () => {
+  it('prints the comparison’s own sentence beneath the figures, in the report’s language', () => {
     // The Compare screen's fixed sentence, word for word
     // (`app/admin/assessments/copy.ts`), which docs/SPEC/assessment.md section
     // 3.3 puts on anything printed from the comparison. The footer's line
     // about what a brain map is says something else and stays where it is, so
     // both are asserted here rather than one standing in for the other.
     expect(text).toContain(COMPARISON_NOT_A_DIAGNOSIS.en);
-    // Set as an RTL run, so it is read back a clause at a time: the writer
-    // starts a fresh run at each full stop.
-    expect(text).toContain(asCopied('هذه مقارنة بين قياسات أُخذت في أيام مختلفة'));
-    expect(text).toContain(asCopied('وهي ليست تشخيصاً'));
+    expect(text).not.toContain(asCopied('هذه مقارنة بين قياسات أُخذت في أيام مختلفة'));
     // And it is the screen's sentence, not merely one like it.
     expect(COMPARISON_NOT_A_DIAGNOSIS.en).toBe(SCREEN_SENTENCE.en);
     expect(COMPARISON_NOT_A_DIAGNOSIS.ar).toBe(SCREEN_SENTENCE.ar);
@@ -388,9 +398,9 @@ describe('a rendered progress report', () => {
     expect(coloured).toHaveLength(3);
   });
 
-  it('carries the ribbon’s legend in both languages', () => {
+  it('carries the ribbon’s legend in the report’s language', () => {
     expect(text).toContain('One mark per session delivered.');
-    expect(text).toContain(asCopied(WORDS.theProgramme.ar));
+    expect(text).not.toContain(asCopied(WORDS.theProgramme.ar));
   });
 
   it('says nothing about brain maps where a household has only one', () => {
@@ -452,9 +462,16 @@ describe('the Arabic edition', () => {
     expect(text).toContain(asCopied('ينام لفترة أطول'));
   });
 
-  it('still sets every fixed label in both languages', () => {
-    expect(text).toContain('Progress report');
+  it('sets every fixed label in Arabic alone', () => {
+    expect(text).not.toContain('Progress report');
     expect(text).toContain(asCopied(WORDS.progressReport.ar));
+  });
+
+  it('prints the comparison’s own sentence in Arabic, a clause at a time', () => {
+    // Set as an RTL run, so it is read back a clause at a time: the writer
+    // starts a fresh run at each full stop.
+    expect(text).toContain(asCopied('هذه مقارنة بين قياسات أُخذت في أيام مختلفة'));
+    expect(text).toContain(asCopied('وهي ليست تشخيصاً'));
   });
 
   it('names no band in Arabic either', () => {

@@ -18,6 +18,7 @@
  */
 
 export { layout, titleOf } from './render';
+export { singleLanguageLayout } from './single';
 export {
   arabicReportDate,
   COMPARISON_NOT_A_DIAGNOSIS,

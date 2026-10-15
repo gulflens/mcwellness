@@ -63,6 +63,8 @@ export const SessionReportShape = z
     engagement: z.number().int().min(0).max(10).nullable(),
     note: narrative(2000),
     beforeNextVisit: narrative(2000),
+    /** Set at issue from 15 October 2026: one language on the page (`ReportLayoutMark`). */
+    layout: z.literal('single').optional(),
   })
   .strict();
 

@@ -37,6 +37,7 @@ import {
   VALUE,
   type TextOptions,
 } from './sheet';
+import { singleLanguageLayout } from './single';
 
 /**
  * The look of a report: the console's quiet ledger, on paper, with one figure
@@ -657,8 +658,13 @@ function progressPage(
   return sheet.finish();
 }
 
-/** Lays out a report, across as many pages as its sections need. */
+/**
+ * Lays out a report, across as many pages as its sections need: in its own
+ * language alone (`single.ts`), or — for a report issued before 15 October
+ * 2026, which said both — in both, exactly as it was filed.
+ */
 export function layout(document_: ReportDocument, fonts: FontSet): Page[] {
+  if (document_.bilingual !== true) return singleLanguageLayout(document_, fonts);
   return document_.content.kind === 'session'
     ? sessionPage(document_, document_.content, fonts)
     : progressPage(document_, document_.content, fonts);

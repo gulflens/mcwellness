@@ -95,6 +95,8 @@ export const ProgressReportShape = z
     comparison: BrainMapComparisonShape.nullable(),
     summary: narrative(4000),
     suggestion: narrative(2000),
+    /** Set at issue from 15 October 2026: one language on the page (`ReportLayoutMark`). */
+    layout: z.literal('single').optional(),
   })
   .strict()
   .refine((value) => value.coverageFrom <= value.coverageTo, {

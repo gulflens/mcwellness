@@ -94,6 +94,35 @@ export const WORDS = {
 } as const satisfies Record<string, Phrase>;
 
 /**
+ * A goal's status as a reader reads it (migration 100's `goal_status`). The
+ * English is the console's own (`app/admin/clients/GoalsTab.tsx`); the Arabic
+ * is new with the single-language report of 15 October 2026, when an Arabic
+ * page could no longer print the English enum beside its Arabic label. A
+ * status this does not know is printed as the row holds it.
+ */
+export const GOAL_STATUS_WORDS: Readonly<Record<string, Phrase>> = {
+  active: { en: 'Active', ar: 'نشط' },
+  achieved: { en: 'Achieved', ar: 'تحقّق' },
+  dropped: { en: 'Dropped', ar: 'متوقّف' },
+};
+
+/**
+ * The sex a brain map's software compared a recording against (migration
+ * 060's `sex_at_birth`). The words are the brain-map report's own approved
+ * pair (`domain/reports/qeeg/wording/v1.ts`, `value.sex.*`); "unknown" says
+ * nothing and is left off the page.
+ */
+export const SEX_WORDS: Readonly<Record<string, Phrase>> = {
+  female: { en: 'Female', ar: 'أنثى' },
+  male: { en: 'Male', ar: 'ذكر' },
+};
+
+/** "Page 1 of 2", on a report in one language, in that language. */
+export function folioWords(page: number, of: number, locale: 'en' | 'ar'): string {
+  return locale === 'ar' ? `الصفحة ${page} من ${of}` : `Page ${page} of ${of}`;
+}
+
+/**
  * The reference is the practice's own and nothing else. Said on the page,
  * because a number in a box on a document from a business in the UAE is read
  * as a tax number unless it says otherwise, and this one is not (section 10,
