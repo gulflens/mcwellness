@@ -279,6 +279,15 @@ describe('a date inside a line', () => {
     expect(texts.join(' ')).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 
+  it('is left alone inside a code somebody typed', () => {
+    const base = withCallOut('en');
+    const coded = {
+      ...base,
+      lines: [{ ...base.lines[0]!, description: 'Programme PKG-2026-10-14' }],
+    };
+    expect(textsOf(coded).map((op) => op.text)).toContain('Programme PKG-2026-10-14');
+  });
+
   it('is left as it was filed on a document in both languages', () => {
     const texts = textsOf({ ...withCallOut('en'), locale: null }).map((op) => op.text);
     expect(texts).toContain('Call-out fee — visit on 2026-10-14');

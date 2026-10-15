@@ -208,7 +208,9 @@ export function PracticePage() {
               <Fact label="Licensing authority">{text(practice.licensingAuthority)}</Fact>
               {/* What an Arabic document prints in its place (migration 980). */}
               <Fact label="Licensing authority in Arabic">
-                {text(practice.licensingAuthorityAr)}
+                {practice.licensingAuthorityAr ? (
+                  <span dir="auto">{practice.licensingAuthorityAr}</span>
+                ) : null}
               </Fact>
               <Fact label="Licence expires">
                 {practice.licenceExpiresOn ? (
@@ -263,7 +265,9 @@ export function PracticePage() {
             ) : null}
             <dl className="practice__facts">
               <Fact label="Address">{text(address?.displayAddress ?? null)}</Fact>
-              <Fact label="Address in Arabic">{text(practice.addressAr)}</Fact>
+              <Fact label="Address in Arabic">
+                {practice.addressAr ? <span dir="auto">{practice.addressAr}</span> : null}
+              </Fact>
               <Fact label="Emirate">{address ? EMIRATE_LABELS[address.emirate] : null}</Fact>
               <Fact label="Coordinates">
                 {coordinates ? <span className="numeric">{coordinates}</span> : null}
