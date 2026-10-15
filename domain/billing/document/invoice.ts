@@ -355,7 +355,12 @@ class InvoicePage extends DocumentPage {
     if (this.lang !== 'both') {
       // The line by its name in the page's language: the Arabic one where the
       // catalogue holds one, the English as it was typed where it does not.
-      const text = this.lang === 'ar' && line.descriptionAr ? line.descriptionAr : line.description;
+      const named =
+        this.lang === 'ar' && line.descriptionAr ? line.descriptionAr : line.description;
+      // A day inside a line — the call-out fee's visit, which its trigger
+      // writes as ISO (`callOutFeeDescription`, 408) — is written the way the
+      // rest of the page writes a day: never as ISO on a document.
+      const text = named.replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (iso) => this.date(iso));
       const options = this.typed(text, { bold: true });
       const lines = this.sheet.wrap(text, inner, TYPE.description, options);
       const deepest = 17 + (lines.length - 1) * 12;
