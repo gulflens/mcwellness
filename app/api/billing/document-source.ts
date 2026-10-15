@@ -46,6 +46,9 @@ import type { Db } from '../_middleware/request-context';
 
 const INVOICE_SQL =
   'select i.id, i.reference, i.issued_on, i.supplied_on, i.net_fils, i.vat_fils, i.gross_fils, ' +
+  // The one language the invoice was issued in (migration 413), or null for
+  // one issued before 15 October 2026 and filed in both.
+  'i.locale::text as locale, ' +
   // The day the charge was forgiven, in the practice's own time zone, so the
   // page can say so. A waived fee keeps its number and its figures — the row
   // is append-only — and a document that did not say it had been forgiven
@@ -66,6 +69,7 @@ const LINES_SQL =
 
 const PAYMENT_SQL =
   'select p.id, p.client_id, p.receipt_reference, p.method, p.amount_fils, p.reference, ' +
+  'p.locale::text as locale, ' +
   "to_char(p.received_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as received_on, " +
   'p.invoice_id, i.reference as invoice_reference, i.issued_on as invoice_issued_on, ' +
   "c.mrn as client_mrn, c.given_name || ' ' || c.family_name as client_name " +
@@ -169,6 +173,7 @@ type InvoiceRow = SupplierColumns & {
   vat_fils: number;
   gross_fils: number;
   waived_on: string | null;
+  locale: 'en' | 'ar' | null;
   client_id: string;
   client_mrn: string;
   client_name: string;
@@ -202,6 +207,7 @@ export async function invoiceDocument(
     clientId: row.client_id,
     document: {
       kind: 'invoice',
+      locale: row.locale,
       supplier: supplierOf(row),
       recipient: { name: row.client_name, recordNumber: row.client_mrn },
       reference: row.reference,
@@ -247,6 +253,7 @@ type PaymentRow = {
   amount_fils: number;
   reference: string | null;
   received_on: string;
+  locale: 'en' | 'ar' | null;
   invoice_id: string | null;
   invoice_reference: string | null;
   invoice_issued_on: string | null;
@@ -281,6 +288,7 @@ export async function receiptDocument(
     clientId: row.client_id,
     document: {
       kind: 'receipt',
+      locale: row.locale,
       supplier: supplierOf(supplier),
       recipient: { name: row.client_name, recordNumber: row.client_mrn },
       reference: row.receipt_reference,
