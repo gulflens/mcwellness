@@ -15,6 +15,8 @@
  */
 
 export { canIssue, credentialValidOn } from './canIssue';
+export { CERTIFICATION_NAMES, certificationName } from './certificationName';
+export type { CertificationName } from './certificationName';
 export type { IssueAnswer, IssueRefusalCode, SigningCredential } from './canIssue';
 export { canDeliver, DELIVERY_CHANNELS } from './canDeliver';
 export type {
