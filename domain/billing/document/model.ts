@@ -80,8 +80,19 @@ export type InvoiceLine = {
   grossFils: number;
 };
 
+/**
+ * The one language a money document is set in, fixed when it was issued
+ * (migration 413, from the client's `preferred_locale`): the operator's
+ * decision of 15 October 2026 that a document is English or Arabic, never
+ * both. Null — or absent — on a document issued before then, which was set in
+ * both and is still drawn so, because a filed document must re-render to the
+ * bytes it was filed as.
+ */
+export type DocumentLocale = 'en' | 'ar';
+
 export type InvoiceDocument = {
   kind: 'invoice';
+  locale?: DocumentLocale | null;
   supplier: SupplierSnapshot;
   recipient: Recipient;
   /** "INV-000001". */
@@ -133,6 +144,8 @@ export type PaymentMethod = 'cash' | 'transfer' | 'link';
 
 export type ReceiptDocument = {
   kind: 'receipt';
+  /** As `InvoiceDocument.locale`. */
+  locale?: DocumentLocale | null;
   supplier: SupplierSnapshot;
   recipient: Recipient;
   /** "RCP-000004" — its own book, never the invoice sequence. */

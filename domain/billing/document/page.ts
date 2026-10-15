@@ -28,8 +28,14 @@
  * it does not).
  */
 
-import type { SupplierSnapshot } from './model';
-import type { DocumentImage, FontSet, Page } from '../../shared/document';
+import type { DocumentLocale, SupplierSnapshot } from './model';
+import {
+  mirrorPages,
+  PAGE_WIDTH,
+  type DocumentImage,
+  type FontSet,
+  type Page,
+} from '../../shared/document';
 import {
   BAND,
   CARD,
@@ -44,7 +50,21 @@ import {
   WHITE,
   type TextOptions,
 } from './sheet';
-import { WORDMARK, WORDS, type Phrase } from './strings';
+import { arabicDocumentDate, formatDocumentDate, WORDMARK, WORDS, type Phrase } from './strings';
+
+/**
+ * The language a page is drawn in: one, the document's own, or — for a
+ * document issued before 15 October 2026 — both, as it was filed.
+ */
+export type PageLanguage = DocumentLocale | 'both';
+
+/** Whether a string reads right to left: whether its first letter is Arabic (UAX 9, P2 and P3). */
+export function readsRightToLeft(text: string): boolean {
+  for (const character of text) {
+    if (/\p{L}/u.test(character)) return /\p{Script=Arabic}/u.test(character);
+  }
+  return false;
+}
 
 /** The measure: everything on the page lies between the two margins. */
 export const WIDTH = RIGHT - LEFT;
@@ -152,10 +172,29 @@ export abstract class DocumentPage {
   readonly sheet: Sheet;
   readonly blocks: Block[][] = [];
   protected readonly supplier: SupplierSnapshot;
+  /**
+   * `both` for a document issued before 15 October 2026, drawn exactly as it
+   * was filed. Otherwise the document's one language: laid out left to right
+   * in that language's words, and — for Arabic — turned over on the page's
+   * centre line when it is finished (`mirrorPages`), so the design reads from
+   * the right.
+   */
+  protected readonly lang: PageLanguage;
 
-  protected constructor(fonts: FontSet, supplier: SupplierSnapshot, reference: string) {
+  protected constructor(
+    fonts: FontSet,
+    supplier: SupplierSnapshot,
+    reference: string,
+    locale: DocumentLocale | null | undefined,
+  ) {
     this.supplier = supplier;
-    this.sheet = new Sheet(fonts, { practice: supplier.legalName, reference });
+    this.lang = locale ?? 'both';
+    const practice = this.lang === 'both' ? supplier.legalName : this.legalName();
+    this.sheet = new Sheet(fonts, {
+      practice,
+      reference,
+      ...(this.lang !== 'both' && readsRightToLeft(practice) ? { practiceRtl: true } : {}),
+    });
   }
 
   abstract draw(logo: DocumentImage | null): void;
@@ -163,7 +202,58 @@ export abstract class DocumentPage {
   /** The finished pages, and per page the boxes its blocks were drawn in. */
   laidOut(): { pages: Page[]; blocks: Block[][] } {
     const pages = this.sheet.finish();
-    return { pages, blocks: pages.map((_, index) => this.blocks[index] ?? []) };
+    const blocks = pages.map((_, index) => this.blocks[index] ?? []);
+    if (this.lang !== 'ar') return { pages, blocks };
+    return {
+      pages: mirrorPages(pages),
+      blocks: blocks.map((page) =>
+        page.map((block) => ({
+          ...block,
+          left: PAGE_WIDTH - block.right,
+          right: PAGE_WIDTH - block.left,
+        })),
+      ),
+    };
+  }
+
+  // ------------------------------------------------------------------------
+  // One language
+  // ------------------------------------------------------------------------
+
+  /** A fixed phrase in the page's one language. Never called on a page in both. */
+  protected say(phrase: Phrase): string {
+    return this.lang === 'ar' ? phrase.ar : phrase.en;
+  }
+
+  /**
+   * Options for a fixed word in the page's language. Laid out left to right,
+   * so an Arabic line is anchored by its start until the page is turned; and
+   * every one says its alignment, because the writer's own default for a
+   * right-to-left line is its end.
+   */
+  protected fixed(options: TextOptions = {}): TextOptions {
+    return this.lang === 'ar'
+      ? { ...options, rtl: true, align: options.align ?? 'start' }
+      : { ...options, align: options.align ?? 'start' };
+  }
+
+  /** Options for a value as somebody typed it, in its own direction. */
+  protected typed(text: string, options: TextOptions = {}): TextOptions {
+    return readsRightToLeft(text)
+      ? { ...options, rtl: true, align: options.align ?? 'start' }
+      : { ...options, align: options.align ?? 'start' };
+  }
+
+  /** The practice's legal name in the page's language, or the English one where it has none. */
+  protected legalName(): string {
+    return this.lang === 'ar' && this.supplier.legalNameAr
+      ? this.supplier.legalNameAr
+      : this.supplier.legalName;
+  }
+
+  /** A date as the page's language writes it. */
+  protected date(isoDate: string): string {
+    return this.lang === 'ar' ? arabicDocumentDate(isoDate) : formatDocumentDate(isoDate);
   }
 
   protected record(
@@ -207,6 +297,21 @@ export abstract class DocumentPage {
     }
 
     const english = top - 20;
+    if (this.lang !== 'both') {
+      // One title: the English in his capitals, the Arabic as it is written.
+      const text = this.lang === 'ar' ? title.ar : title.en.toUpperCase();
+      this.sheet.line(
+        english,
+        RIGHT,
+        text,
+        TYPE.title,
+        this.fixed({ bold: true, rgb: VIOLET, align: 'end' }),
+      );
+      const single = Math.min(markBottom, english - 8);
+      this.record('masthead', LEFT, RIGHT, top, single);
+      this.sheet.down(top - single);
+      return;
+    }
     const arabic = english - 26;
     this.sheet.line(english, RIGHT, title.en.toUpperCase(), TYPE.title, {
       bold: true,
@@ -244,22 +349,36 @@ export abstract class DocumentPage {
     pairs: readonly NumberPair[],
   ): void {
     const supplier = this.supplier;
-    const labelled = (label: Phrase, value: string, bold = false): FacingRow => ({
-      en: `${label.en} ${value}`,
-      ar: `${label.ar} ${value}`,
-      size: TYPE.row,
-      step: 11,
-      bold,
-      grey: bold ? INK : MUTED,
-    });
+    const single = this.lang !== 'both';
+    const labelled = (label: Phrase, value: string, bold = false): FacingRow =>
+      single
+        ? {
+            en: `${this.say(label)} ${value}`,
+            ar: null,
+            size: TYPE.row,
+            step: 11,
+            bold,
+            grey: bold ? INK : MUTED,
+            rtl: this.lang === 'ar',
+          }
+        : {
+            en: `${label.en} ${value}`,
+            ar: `${label.ar} ${value}`,
+            size: TYPE.row,
+            step: 11,
+            bold,
+            grey: bold ? INK : MUTED,
+          };
+    const name = single ? this.legalName() : supplier.legalName;
     const rows: FacingRow[] = [
       {
-        en: supplier.legalName,
-        ar: supplier.legalNameAr,
+        en: name,
+        ar: single ? null : supplier.legalNameAr,
         size: TYPE.name,
         step: 16,
         bold: true,
         grey: INK,
+        ...(single && readsRightToLeft(name) ? { rtl: true } : {}),
       },
     ];
     if (supplier.licenceNumber) rows.push(labelled(WORDS.licenceNumber, supplier.licenceNumber));
@@ -298,9 +417,13 @@ export abstract class DocumentPage {
       this.caption(each.caption, inside, RIGHT - PAD, each.label, TYPE.caption, {
         grey: MUTED,
       });
-      this.sheet.line(each.baseline, inside, each.value.text, each.value.size, {
-        ...each.value.options,
-      });
+      this.sheet.line(
+        each.baseline,
+        inside,
+        each.value.text,
+        each.value.size,
+        single ? this.typed(each.value.text, each.value.options) : { ...each.value.options },
+      );
     }
     this.drawFacing(facing, LEFT, SUPPLIER_WIDTH, firstBaseline);
 
@@ -336,12 +459,70 @@ export abstract class DocumentPage {
     const x = LEFT + PAD;
     const captionAt = top - PAD - 5;
 
-    const name = this.sheet.wrap(party.name, inner, TYPE.household, {
-      bold: true,
-    });
+    const single = this.lang !== 'both';
+    const nameOptions: TextOptions = single
+      ? this.typed(party.name, { bold: true })
+      : { bold: true };
+    const name = this.sheet.wrap(party.name, inner, TYPE.household, nameOptions);
     const nameAt = captionAt - 18;
     const lastName = nameAt - (name.length - 1) * 16;
     const record = party.recordNumber;
+    if (single) {
+      // One line: "Client record: MW-000099", or its Arabic as the page in
+      // both set it, "رقم السجل MW-000099".
+      const text =
+        this.lang === 'ar'
+          ? `${WORDS.clientRecord.ar} ${record}`
+          : `${WORDS.clientRecord.en}: ${record}`;
+      const recordAt = lastName - 18;
+      const cardHeight = top - (recordAt - PAD + 2);
+      this.sheet.card(LEFT, top, LEFT_WIDTH, cardHeight, { radius: RADIUS });
+      this.caption(captionAt, x, LEFT + LEFT_WIDTH - PAD, party.caption, TYPE.caption, {
+        bold: true,
+        grey: MUTED,
+      });
+      name.forEach((line, index) => {
+        this.sheet.line(nameAt - index * 16, x, line, TYPE.household, nameOptions);
+      });
+      this.sheet.line(recordAt, x, text, TYPE.record, this.fixed({ grey: MUTED }));
+      this.record(party.block, LEFT, LEFT + LEFT_WIDTH, top, top - cardHeight);
+      let bottom = top - cardHeight;
+      if (method) {
+        const lines: { at: number; setting: Setting }[] = [
+          {
+            at: captionAt,
+            setting: {
+              text: this.say(WORDS.paymentMethodCaption),
+              size: TYPE.caption,
+              options: this.fixed({ bold: true, grey: MUTED, align: 'end' }),
+            },
+          },
+          {
+            at: captionAt - 17,
+            setting: {
+              text: this.say(method),
+              size: TYPE.method,
+              options: this.fixed({ bold: true, rgb: VIOLET, align: 'end' }),
+            },
+          },
+        ];
+        for (const each of lines) {
+          this.sheet.line(
+            each.at,
+            RIGHT,
+            each.setting.text,
+            each.setting.size,
+            each.setting.options,
+          );
+        }
+        const widest = Math.max(...lines.map((each) => this.width(each.setting)));
+        const methodBottom = captionAt - 17 - 5;
+        this.record('paymentMethod', RIGHT - widest, RIGHT, top, methodBottom);
+        bottom = Math.min(bottom, methodBottom);
+      }
+      this.sheet.down(top - bottom);
+      return;
+    }
     const english: Setting = {
       text: `${WORDS.clientRecord.en}: ${record}`,
       size: TYPE.record,
@@ -468,10 +649,15 @@ export abstract class DocumentPage {
     const width = LEFT_WIDTH;
     const valueAt = x + PAD + LABEL_COLUMN;
     const valueWidth = width - PAD * 2 - LABEL_COLUMN;
-    const laid = rows.map((row) => ({
-      ...row,
-      lines: this.sheet.wrap(row.value, valueWidth, TYPE.value, row.options),
-    }));
+    const single = this.lang !== 'both';
+    const laid = rows.map((row) => {
+      const options = single ? this.typed(row.value, row.options) : row.options;
+      return {
+        ...row,
+        options,
+        lines: this.sheet.wrap(row.value, valueWidth, TYPE.value, options),
+      };
+    });
     // Offsets from the card's top.
     const titleAt = PAD + 8;
     let at = titleAt + 8 + 17;
@@ -490,7 +676,13 @@ export abstract class DocumentPage {
         this.sheet.outline(x, top, width, cardHeight, RADIUS);
         this.cardTitle(top - titleAt, x, width, title);
         for (const row of placed) {
-          this.sheet.line(top - row.first, x + PAD, row.label, TYPE.label, { grey: MUTED });
+          this.sheet.line(
+            top - row.first,
+            x + PAD,
+            row.label,
+            TYPE.label,
+            single ? this.fixed({ grey: MUTED }) : { grey: MUTED },
+          );
           row.lines.forEach((line, index) => {
             this.sheet.line(top - row.first - index * 11, valueAt, line, TYPE.value, row.options);
           });
@@ -506,6 +698,21 @@ export abstract class DocumentPage {
         });
         const baseline = stripAt - 16;
         const label = strip.label;
+        if (single) {
+          this.sheet.line(
+            baseline,
+            x + PAD + 10,
+            this.say(label),
+            TYPE.label,
+            this.fixed({ grey: MUTED }),
+          );
+          this.sheet.line(baseline, x + width - PAD - 10, strip.value, TYPE.cell, {
+            bold: true,
+            rgb: VIOLET,
+            align: 'end',
+          });
+          return;
+        }
         this.sheet.line(baseline, x + PAD + 10, label.en, TYPE.label, { grey: MUTED });
         this.sheet.line(
           baseline,
@@ -568,7 +775,13 @@ export abstract class DocumentPage {
           const valueOptions: TextOptions = row.accent
             ? { bold: true, rgb: VIOLET, align: 'end' }
             : { bold: true, align: 'end' };
-          this.sheet.line(y, x + PAD, row.label, TYPE.value, { grey: MUTED });
+          this.sheet.line(
+            y,
+            x + PAD,
+            row.label,
+            TYPE.value,
+            this.lang === 'both' ? { grey: MUTED } : this.fixed({ grey: MUTED }),
+          );
           this.sheet.line(y, x + width - PAD, row.value, TYPE.value, valueOptions);
         });
         if (rows.length > 0) this.sheet.hairline(x + PAD, top - ruleAt, width - PAD * 2);
@@ -580,16 +793,26 @@ export abstract class DocumentPage {
         const bandWidth = width - inset * 2;
         this.sheet.bandFill(x + inset, bandTop, bandWidth, bandTop - bandBottom, RADIUS);
         const captionAt = bandTop - 14;
-        this.sheet.line(captionAt, x + inset + 10, block.en, TYPE.caption, {
-          bold: true,
-          rgb: WHITE,
-        });
-        this.sheet.line(captionAt, x + width - inset - 10, block.ar, TYPE.caption, {
-          bold: true,
-          rgb: WHITE,
-          align: 'end',
-          rtl: true,
-        });
+        if (this.lang === 'both') {
+          this.sheet.line(captionAt, x + inset + 10, block.en, TYPE.caption, {
+            bold: true,
+            rgb: WHITE,
+          });
+          this.sheet.line(captionAt, x + width - inset - 10, block.ar, TYPE.caption, {
+            bold: true,
+            rgb: WHITE,
+            align: 'end',
+            rtl: true,
+          });
+        } else {
+          this.sheet.line(
+            captionAt,
+            x + inset + 10,
+            this.say(block),
+            TYPE.caption,
+            this.fixed({ bold: true, rgb: WHITE }),
+          );
+        }
         const room = bandWidth - 20;
         const natural = this.sheet.width(figure, TYPE.due, { bold: true });
         // Smaller only when a figure in the millions would not fit the block.
@@ -618,7 +841,15 @@ export abstract class DocumentPage {
 
     const titleAt = PAD + 7;
     let at = titleAt + 16;
+    const single = this.lang !== 'both';
     const placed = sentences.map((sentence) => {
+      if (single) {
+        // One language: its sentence alone, set as the English one was.
+        const lines = this.sheet.wrap(this.say(sentence.phrase), width, TYPE.tax, this.fixed());
+        const englishAt = at;
+        at = englishAt + (lines.length - 1) * 12 + 16;
+        return { ...sentence, english: lines, arabic: [] as string[], englishAt, arabicAt: at };
+      }
       const english = this.sheet.wrap(sentence.phrase.en, width, TYPE.tax);
       const arabic = this.sheet.wrap(sentence.phrase.ar, width, TYPE.tax, { rtl: true });
       const englishAt = at;
@@ -640,9 +871,13 @@ export abstract class DocumentPage {
         });
         for (const sentence of placed) {
           sentence.english.forEach((line, index) => {
-            this.sheet.line(top - sentence.englishAt - index * 12, x, line, TYPE.tax, {
-              grey: sentence.grey,
-            });
+            this.sheet.line(
+              top - sentence.englishAt - index * 12,
+              x,
+              line,
+              TYPE.tax,
+              single ? this.fixed({ grey: sentence.grey }) : { grey: sentence.grey },
+            );
           });
           sentence.arabic.forEach((line, index) => {
             this.sheet.line(top - sentence.arabicAt - index * 12, RIGHT - PAD, line, TYPE.tax, {
@@ -672,6 +907,7 @@ export abstract class DocumentPage {
     const supplier = this.supplier;
     const centre = (LEFT + RIGHT) / 2;
     const spacer = '   ';
+    if (this.lang !== 'both') return this.singleFooter();
     const pieces = [
       supplier.legalName,
       ...(supplier.address ?? '')
@@ -731,6 +967,77 @@ export abstract class DocumentPage {
     };
   }
 
+  /**
+   * The footer on a document in one language: the legal name in that
+   * language and the address as typed, centred, wrapped never cut; then the
+   * telephone, email and website, each named in that language. In Arabic each
+   * contact is two pieces — its name, right to left, and the number or address
+   * itself, left to right — so a telephone number's plus sign stays in front
+   * of it.
+   */
+  private singleFooter(): { top: number; draw: () => void } {
+    const supplier = this.supplier;
+    const centre = (LEFT + RIGHT) / 2;
+    const spacer = '   ';
+    const pieces = [
+      this.legalName(),
+      ...(supplier.address ?? '')
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0),
+    ];
+    const joined = pieces.join(spacer);
+    const options = this.typed(joined, { grey: MUTED, align: 'centre' });
+    const lines = this.sheet.wrap(joined, WIDTH, TYPE.footer, options);
+
+    const contacts = [
+      supplier.contactPhone ? { label: WORDS.phone as Phrase, value: supplier.contactPhone } : null,
+      supplier.contactEmail ? { label: WORDS.email as Phrase, value: supplier.contactEmail } : null,
+      supplier.website ? { label: WORDS.website as Phrase, value: supplier.website } : null,
+    ].filter((each): each is { label: Phrase; value: string } => each !== null);
+
+    const top = BAND + (lines.length - 1) * SMALL_LINE;
+    const baselines = lines.map((_, index) => top - 12 - index * SMALL_LINE);
+    const contactAt = top - 12 - lines.length * SMALL_LINE;
+    const lowest = contacts.length > 0 ? contactAt : (baselines[baselines.length - 1] ?? top - 12);
+
+    return {
+      top,
+      draw: () => {
+        this.sheet.ruleAt(top, LEFT, WIDTH);
+        lines.forEach((each, index) => {
+          this.sheet.line(baselines[index] ?? top, centre, each, TYPE.footer, options);
+        });
+        if (contacts.length > 0) {
+          const muted: TextOptions = { grey: MUTED, align: 'start' };
+          const labelOptions = this.fixed(muted);
+          const items = contacts.map((each) => {
+            const label = `${this.say(each.label)}:`;
+            return {
+              label,
+              value: each.value,
+              labelWidth: this.sheet.width(label, TYPE.footer, labelOptions),
+              valueWidth: this.sheet.width(each.value, TYPE.footer, muted),
+            };
+          });
+          const gap = this.sheet.width(' ', TYPE.footer);
+          const between = this.sheet.width(spacer, TYPE.footer);
+          const total =
+            items.reduce((sum, each) => sum + each.labelWidth + gap + each.valueWidth, 0) +
+            between * (items.length - 1);
+          let x = centre - Math.min(total, WIDTH) / 2;
+          for (const each of items) {
+            this.sheet.line(contactAt, x, each.label, TYPE.footer, labelOptions);
+            x += each.labelWidth + gap;
+            this.sheet.line(contactAt, x, each.value, TYPE.footer, muted);
+            x += each.valueWidth + between;
+          }
+        }
+        this.record('footer', LEFT, RIGHT, top, lowest - 3);
+      },
+    };
+  }
+
   // ------------------------------------------------------------------------
   // Shared by the blocks
   // ------------------------------------------------------------------------
@@ -744,6 +1051,10 @@ export abstract class DocumentPage {
     size: number,
     options: TextOptions,
   ): void {
+    if (this.lang !== 'both') {
+      this.sheet.line(y, left, this.say(label), size, this.fixed(options));
+      return;
+    }
     this.sheet.line(y, left, label.en, size, options);
     this.sheet.line(y, right, label.ar, size, { ...options, align: 'end', rtl: true });
   }
@@ -764,7 +1075,10 @@ export abstract class DocumentPage {
    */
   private facing(rows: readonly FacingRow[], width: number): Facing {
     const laid = rows.map((row) => {
-      const options: TextOptions = { bold: row.bold === true };
+      const options: TextOptions = {
+        bold: row.bold === true,
+        ...(row.rtl ? { rtl: true, align: 'start' as const } : {}),
+      };
       const arabicOptions: TextOptions = { ...options, rtl: true };
       const english = this.sheet.wrap(row.en, width, row.size, options);
       if (!row.ar) return { row, english, arabic: [], beneath: false };
@@ -788,7 +1102,11 @@ export abstract class DocumentPage {
   private drawFacing(facing: Facing, x: number, width: number, firstBaseline: number): void {
     let y = firstBaseline;
     facing.laid.forEach((each, index) => {
-      const options: TextOptions = { bold: each.row.bold === true, grey: each.row.grey };
+      const options: TextOptions = {
+        bold: each.row.bold === true,
+        grey: each.row.grey,
+        ...(each.row.rtl ? { rtl: true, align: 'start' as const } : {}),
+      };
       each.english.forEach((line, row) => {
         this.sheet.line(y - row * each.row.step, x, line, each.row.size, options);
       });
@@ -807,8 +1125,11 @@ export abstract class DocumentPage {
 }
 
 type FacingRow = {
+  /** The row, or on a document in one language the row in that language. */
   en: string;
   ar: string | null;
+  /** On a document in one language, a row that reads right to left. */
+  rtl?: boolean;
   size: number;
   step: number;
   bold?: boolean;

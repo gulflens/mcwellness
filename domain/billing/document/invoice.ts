@@ -33,7 +33,7 @@
 
 import { chargesVat, type InvoiceDocument, type InvoiceLine } from './model';
 import type { DocumentImage, FontSet, Page } from '../../shared/document';
-import { INK, LEFT, MUTED, PILL, RIGHT, VIOLET, WHITE } from './sheet';
+import { INK, LEFT, MUTED, PILL, RIGHT, VIOLET, WHITE, type TextOptions } from './sheet';
 import {
   BAR_WIDTH,
   DocumentPage,
@@ -111,7 +111,7 @@ class InvoicePage extends DocumentPage {
   private readonly registered: boolean;
 
   constructor(document_: InvoiceDocument, fonts: FontSet) {
-    super(fonts, document_.supplier, document_.reference);
+    super(fonts, document_.supplier, document_.reference, document_.locale);
     this.document_ = document_;
     this.registered = chargesVat(document_.supplier);
   }
@@ -153,7 +153,7 @@ class InvoicePage extends DocumentPage {
    */
   private numberPairs(): NumberPair[] {
     const date = (iso: string) => ({
-      text: formatDocumentDate(iso),
+      text: this.lang === 'both' ? formatDocumentDate(iso) : this.date(iso),
       size: TYPE.date,
       options: { bold: true },
     });
@@ -266,9 +266,15 @@ class InvoicePage extends DocumentPage {
     });
 
     return columns.map((column) => {
+      const headings =
+        this.lang === 'both'
+          ? [
+              this.sheet.width(column.label.en, TYPE.heading, { bold: true }),
+              this.sheet.width(column.label.ar, TYPE.headingAr, { bold: true, rtl: true }),
+            ]
+          : [this.sheet.width(this.say(column.label), TYPE.heading, this.fixed({ bold: true }))];
       const widths = [
-        this.sheet.width(column.label.en, TYPE.heading, { bold: true }),
-        this.sheet.width(column.label.ar, TYPE.headingAr, { bold: true, rtl: true }),
+        ...headings,
         ...this.document_.lines.map((line) => {
           const cell = column.cell(line);
           if (cell.kind === 'empty') return 0;
@@ -290,6 +296,29 @@ class InvoicePage extends DocumentPage {
     // Rounded at the top as the card is, square where the rows meet it.
     this.sheet.bandFill(LEFT, top, WIDTH, HEADER_HEIGHT, RADIUS);
     this.sheet.bandFill(LEFT, top - HEADER_HEIGHT / 2, WIDTH, HEADER_HEIGHT / 2);
+    if (this.lang !== 'both') {
+      // One heading per column, on the band's middle line.
+      const at = top - 23;
+      this.sheet.line(
+        at,
+        LEFT + PAD,
+        this.say(WORDS.description),
+        TYPE.heading,
+        this.fixed({ bold: true, rgb: WHITE }),
+      );
+      let x = LEFT + descriptionWidth;
+      for (const column of columns) {
+        this.sheet.line(
+          at,
+          x + column.width / 2,
+          this.say(column.label),
+          TYPE.heading,
+          this.fixed({ bold: true, rgb: WHITE, align: 'centre' }),
+        );
+        x += column.width;
+      }
+      return;
+    }
     const english = top - 16;
     const arabic = top - 30;
     this.sheet.line(english, LEFT + PAD, WORDS.description.en, TYPE.heading, {
@@ -323,6 +352,21 @@ class InvoicePage extends DocumentPage {
   /** A line measured: its description and Arabic name wrapped to the column, its height. */
   private row(line: InvoiceLine, descriptionWidth: number): Row {
     const inner = descriptionWidth - PAD * 2;
+    if (this.lang !== 'both') {
+      // The line by its name in the page's language: the Arabic one where the
+      // catalogue holds one, the English as it was typed where it does not.
+      const text = this.lang === 'ar' && line.descriptionAr ? line.descriptionAr : line.description;
+      const options = this.typed(text, { bold: true });
+      const lines = this.sheet.wrap(text, inner, TYPE.description, options);
+      const deepest = 17 + (lines.length - 1) * 12;
+      return {
+        line,
+        english: lines,
+        arabic: [],
+        height: Math.max(ROW_HEIGHT, deepest + 14),
+        options,
+      };
+    }
     const english = this.sheet.wrap(line.description, inner, TYPE.description, { bold: true });
     const arabic = line.descriptionAr
       ? this.sheet.wrap(line.descriptionAr, inner, TYPE.descriptionAr, { rtl: true })
@@ -342,7 +386,13 @@ class InvoicePage extends DocumentPage {
     const bottom = top - row.height;
     const x = LEFT + PAD;
     row.english.forEach((text, index) => {
-      this.sheet.line(top - 17 - index * 12, x, text, TYPE.description, { bold: true });
+      this.sheet.line(
+        top - 17 - index * 12,
+        x,
+        text,
+        TYPE.description,
+        row.options ?? { bold: true },
+      );
     });
     const arabicAt = top - 17 - (row.english.length - 1) * 12 - 13;
     row.arabic.forEach((text, index) => {
@@ -393,13 +443,22 @@ class InvoicePage extends DocumentPage {
    * names the payment reference: the invoice's own number.
    */
   private paymentCard(bank: NonNullable<InvoiceDocument['bank']>): Laid {
+    // English labels on a document in both, as the design set them; the
+    // page's own language on a document in one.
+    const label = (phrase: Phrase): string => (this.lang === 'both' ? phrase.en : this.say(phrase));
     const rows: CardRow[] = [
-      { label: WORDS.accountName.en, value: bank.accountHolder, options: { bold: true } },
-      { label: WORDS.iban.en, value: groupIban(bank.iban), options: { bold: true, rgb: VIOLET } },
+      { label: label(WORDS.accountName), value: bank.accountHolder, options: { bold: true } },
+      {
+        label: label(WORDS.iban),
+        value: groupIban(bank.iban),
+        options: { bold: true, rgb: VIOLET },
+      },
     ];
-    if (bank.bic) rows.push({ label: WORDS.swiftBic.en, value: bank.bic, options: { bold: true } });
+    if (bank.bic) {
+      rows.push({ label: label(WORDS.swiftBic), value: bank.bic, options: { bold: true } });
+    }
     if (bank.bankAddress) {
-      rows.push({ label: WORDS.bankAddress.en, value: bank.bankAddress, options: {} });
+      rows.push({ label: label(WORDS.bankAddress), value: bank.bankAddress, options: {} });
     }
     return this.rowsCard(WORDS.paymentDetails, rows, {
       label: WORDS.paymentReference,
@@ -415,18 +474,19 @@ class InvoicePage extends DocumentPage {
    */
   private summary(): Laid {
     const document_ = this.document_;
+    const label = (phrase: Phrase): string => (this.lang === 'both' ? phrase.en : this.say(phrase));
     const rows: SummaryRow[] = [
-      { label: WORDS.subtotal.en, value: money(document_.netFils + document_.discountFils) },
+      { label: label(WORDS.subtotal), value: money(document_.netFils + document_.discountFils) },
     ];
     if (document_.discountFils > 0) {
       rows.push({
-        label: discountTotalLabel(document_.discountBasisPoints).en,
+        label: label(discountTotalLabel(document_.discountBasisPoints)),
         value: `- ${money(document_.discountFils)}`,
         accent: true,
       });
     }
     if (this.registered) {
-      rows.push({ label: WORDS.net.en, value: money(document_.netFils) });
+      rows.push({ label: label(WORDS.net), value: money(document_.netFils) });
       rows.push({ label: this.vatLabel(), value: money(document_.vatFils) });
     }
     return this.summaryCard(WORDS.invoiceSummary, rows, WORDS.totalDue, money(document_.grossFils));
@@ -436,8 +496,9 @@ class InvoicePage extends DocumentPage {
   private vatLabel(): string {
     const rates = new Set(this.document_.lines.map((line) => line.vatRateBasisPoints));
     const [rate] = [...rates];
-    if (rates.size !== 1 || rate === undefined) return WORDS.vatColumn.en;
-    return `${WORDS.vatColumn.en} ${formatRate(rate)}`;
+    const vat = this.lang === 'both' ? WORDS.vatColumn.en : this.say(WORDS.vatColumn);
+    if (rates.size !== 1 || rate === undefined) return vat;
+    return `${vat} ${formatRate(rate)}`;
   }
 
   /**
@@ -464,4 +525,11 @@ type Cell = { kind: 'text'; text: string } | { kind: 'pill'; text: string } | { 
 
 type Column = { label: Phrase; width: number; cell: (line: InvoiceLine) => Cell };
 
-type Row = { line: InvoiceLine; english: string[]; arabic: string[]; height: number };
+type Row = {
+  line: InvoiceLine;
+  english: string[];
+  arabic: string[];
+  height: number;
+  /** On a document in one language, how its one description is set. */
+  options?: TextOptions;
+};
