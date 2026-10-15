@@ -34,6 +34,7 @@ import { Practice, PracticeResponse, UpdatePracticeInput } from './schema';
 
 const SELECT_PRACTICE =
   'select t.legal_name, t.legal_name_ar, t.trn, t.licence_number, t.licensing_authority, ' +
+  't.address_ar, t.licensing_authority_ar, ' +
   "to_char(t.licence_expires_on, 'YYYY-MM-DD') as licence_expires_on, " +
   't.vat_registered, t.vat_trn, t.record_readings, ' +
   't.whatsapp_number, t.default_emirate, t.timezone, ' +
@@ -51,6 +52,8 @@ type PracticeRow = {
   trn: string | null;
   licence_number: string | null;
   licensing_authority: string | null;
+  address_ar: string | null;
+  licensing_authority_ar: string | null;
   licence_expires_on: string | null;
   vat_registered: boolean;
   vat_trn: string | null;
@@ -132,6 +135,8 @@ function view(row: PracticeRow, supplies: { fils: number; asOf: string }): Pract
     taxRegistrationNumber: row.trn,
     licenceNumber: row.licence_number,
     licensingAuthority: row.licensing_authority,
+    addressAr: row.address_ar,
+    licensingAuthorityAr: row.licensing_authority_ar,
     licenceExpiresOn: row.licence_expires_on,
     vatRegistered: row.vat_registered,
     vatTrn: row.vat_trn,
@@ -268,6 +273,8 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         assignments.push(`${column} = $${values.length}`);
       }
     };
+    setIfPresent('address_ar', wanted.addressAr);
+    setIfPresent('licensing_authority_ar', wanted.licensingAuthorityAr);
     setIfPresent('contact_phone', wanted.contactPhone);
     setIfPresent('contact_email', wanted.contactEmail);
     setIfPresent('website', wanted.website);
