@@ -4,10 +4,13 @@ import { groupIban } from '../../shared/iban';
 /**
  * Every word on a rendered money document, in both languages.
  *
- * Arabic is a first-class layout here, not a translation dropped underneath the
- * English: each label is set beside its English on the same line, right-aligned
- * against the right margin, which is how a bilingual invoice is read in the
- * Gulf. British English throughout (CLAUDE.md), and no word on these documents
+ * A document is set in one language, its own (`locale`, migration 413; the
+ * operator's decision of 15 October 2026), and takes the one half of each
+ * pair here — an Arabic one the English page mirrored. A document issued
+ * before then has no language of its own and was set bilingually: each label
+ * beside its English on the same line, right-aligned against the right
+ * margin. It is still drawn so, because a filed document must re-render to
+ * the bytes it was filed as. British English throughout (CLAUDE.md), and no word on these documents
  * belongs to the trade that built them — a family reads "Invoice", never
  * "document id" or "record".
  *

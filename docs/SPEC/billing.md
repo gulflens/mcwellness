@@ -521,6 +521,21 @@ Structure invoices as PINT AE (UBL/XML) objects from day one. Your wave: appoint
 
 ### 5.6 What a money document looks like (the operator's design, 24 September 2026)
 
+_**Amended 2026-10-15: one language, never both** (the operator's decision of
+that day). An invoice and a receipt are each set in one language, fixed when
+the row is written (`invoice.locale`, `payment.locale`, migration 413, from the
+client's `preferred_locale`): every caption, heading, row label, date and
+sentence below in that language alone, the practice by its legal name in that
+language (the English one where it has none), each line by its name in that
+language (the Arabic catalogue name where there is one). An Arabic document is
+this same design mirrored — the violet header, the cards and the TOTAL DUE /
+PAID block on the other side of the page (`domain/shared/document/mirror.ts`).
+Amounts stay "AED 700.00". Where this section says a row is set in "both
+languages" or "English only", that describes a document issued before
+2026-10-15, whose row has no language and which is still drawn exactly as it
+was filed, so a lost file is re-made to its hash. The message a document is
+sent with is in the same one language (docs/CHANGE-REQUESTS/docfix-03.md)._
+
 _The operator designed the invoice again on 24 September 2026 and asked that
 the platform's own documents look exactly like his page, with two
 instructions that bind every choice below: "respect my colors and simplicity".

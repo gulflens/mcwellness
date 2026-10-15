@@ -2,8 +2,9 @@
  * Every fixed word on a rendered report, in both languages
  * (docs/SPEC/reports-v1.md section 5).
  *
- * **Headings, labels, the identity block and every fixed sentence render in
- * English and Arabic together**, as the invoice already does. The
+ * **A report is set in one language, its own** (the operator's decision of
+ * 15 October 2026), and takes the one half of each pair here; a report issued
+ * before then set both halves together, and is still drawn so. The
  * practitioner's own narrative does not: a paragraph a person wrote is not
  * something a renderer may translate, so it prints in the locale chosen at
  * issue and a household wanting both gets a second report of the same
