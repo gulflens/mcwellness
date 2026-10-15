@@ -156,6 +156,11 @@ export function mountReportPreview(api: Hono<ApiEnv>, now: () => Date = () => ne
         version: record.version,
         amendmentReason: record.amendment_reason,
         content: parsed.content as ReportContent,
+        // A draft is set in one language; an issued report as it was filed,
+        // so one issued before 15 October 2026 previews in both, as
+        // `documentFrom` renders it.
+        bilingual:
+          record.status !== 'draft' && (parsed.content as ReportContent).layout !== 'single',
       },
       documentFonts(),
     );

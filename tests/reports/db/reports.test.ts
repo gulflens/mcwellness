@@ -1079,6 +1079,24 @@ describe('the language a report is set in', () => {
     expect(record ? documentFrom(record)?.bilingual : null).toBe(false);
   });
 
+  it('previews a report issued before the decision in both languages, as it was filed', async () => {
+    const id = await issued(10);
+    // Standing in for a row issued before 15 October 2026: its content has
+    // no mark. An issued row refuses every write, so the guard steps aside
+    // for this one statement.
+    await h.owner.query('alter table report disable trigger guard_report_write');
+    try {
+      await h.owner.query("update report set content = content - 'layout' where id = $1", [id]);
+    } finally {
+      await h.owner.query('alter table report enable trigger guard_report_write');
+    }
+    const res = await h.call('GET', `/api/reports/${id}/preview`, SEEDED.owner);
+    expect(res.status).toBe(200);
+    const page = extractAll(new Uint8Array(await res.arrayBuffer()));
+    expect(page).toContain('Progress report');
+    expect(page).toMatch(/\p{Script=Arabic}/u);
+  });
+
   it('renders a report issued before the decision in both languages, as it was filed', async () => {
     const id = await issued(9);
     const record = await readReport(h.owner, id);

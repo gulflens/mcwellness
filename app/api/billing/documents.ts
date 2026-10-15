@@ -69,10 +69,11 @@ const KIND_SQL =
   'coalesce(i.reference, p.receipt_reference) as reference, ' +
   // The document's own language (migration 413); for one issued before it,
   // the client's own, so the message is still in one language.
-  'coalesce(i.locale, p.locale, c.preferred_locale)::text as locale, ' +
+  "coalesce(i.locale, p.locale, c.preferred_locale, 'en')::text as locale, " +
   'coalesce(i.supplier_legal_name_ar, si.supplier_legal_name_ar) as practice_name_ar ' +
   'from billing_document bd join document d on d.id = bd.document_id ' +
-  'join client c on c.id = bd.client_id ' +
+  // Left: the link and send routes never needed the client's row to answer.
+  'left join client c on c.id = bd.client_id ' +
   'left join invoice i on i.id = bd.invoice_id ' +
   'left join payment p on p.id = bd.payment_id ' +
   'left join invoice si on si.id = p.invoice_id ' +
