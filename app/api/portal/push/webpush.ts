@@ -148,8 +148,16 @@ export function generateVapidKeys(): { publicKey: string; privateKey: string } {
   ecdh.generateKeys();
   return {
     publicKey: toBase64Url(ecdh.getPublicKey()),
-    privateKey: toBase64Url(ecdh.getPrivateKey()),
+    // Node drops a scalar's leading zero bytes, so about one pair in 256
+    // came back 31 bytes long and was refused by vapidKeysFromEnv (a CI
+    // failure on pull request 258). Padded back to the 32 bytes it is.
+    privateKey: toBase64Url(padScalar(ecdh.getPrivateKey())),
   };
+}
+
+/** A P-256 private scalar at its full 32 bytes, leading zeros restored. */
+export function padScalar(scalar: Buffer): Buffer {
+  return scalar.length >= 32 ? scalar : Buffer.concat([Buffer.alloc(32 - scalar.length), scalar]);
 }
 
 type PushEnv = {
