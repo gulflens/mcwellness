@@ -42,22 +42,26 @@ export type SendChannel = (typeof SEND_CHANNELS)[number];
 /** Enough about a document to write a sentence about it. */
 export type Sendable = {
   kind: 'invoice' | 'receipt';
+  /** The one language the message is written in: the document's own, else the client's. */
+  locale: 'en' | 'ar';
   /** "INV-000001" or "RCP-000004". */
   reference: string;
-  /** The practice's own name, as the document itself carries it. */
+  /** The practice's own name in that language, as the document itself carries it. */
   practiceName: string;
   /** A short-lived signed link to the bytes. */
   url: string;
 };
 
 export type DraftedMessage = {
-  /** English first, Arabic beneath: the practice writes to families in both. */
+  /** In one language, the document's (the operator's decision of 15 October 2026). */
   text: string;
   subject: string;
 };
 
 /**
- * The message that goes with a document, in both languages.
+ * The message that goes with a document, in its one language. Until 15
+ * October 2026 it was English with the Arabic beneath; since the operator's
+ * decision of that day nothing the practice sends carries both.
  *
  * Deliberately plain and deliberately short. It says what the document is, who
  * it is from and where to open it, and it asks for nothing: no reply, no
@@ -76,11 +80,17 @@ export function draftMessage(document_: Sendable): DraftedMessage {
     : `Your receipt ${document_.reference} from ${document_.practiceName} is ready. ` +
       `You can open it here: ${document_.url}`;
 
-  const arabic = isInvoice
-    ? `فاتورتك ${document_.reference} من ${document_.practiceName} جاهزة. يمكنك فتحها هنا: ${document_.url}`
-    : `إيصالك ${document_.reference} من ${document_.practiceName} جاهز. يمكنك فتحه هنا: ${document_.url}`;
-
-  return { subject, text: `${english}\n\n${arabic}` };
+  if (document_.locale === 'ar') {
+    return {
+      subject: isInvoice
+        ? `${document_.practiceName} — فاتورة ${document_.reference}`
+        : `${document_.practiceName} — إيصال ${document_.reference}`,
+      text: isInvoice
+        ? `فاتورتك ${document_.reference} من ${document_.practiceName} جاهزة. يمكنك فتحها هنا: ${document_.url}`
+        : `إيصالك ${document_.reference} من ${document_.practiceName} جاهز. يمكنك فتحه هنا: ${document_.url}`,
+    };
+  }
+  return { subject, text: english };
 }
 
 /**

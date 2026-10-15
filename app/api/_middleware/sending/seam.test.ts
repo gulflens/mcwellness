@@ -13,6 +13,7 @@ import { documentSender, shareSheetSender } from './index';
 
 const INVOICE = {
   kind: 'invoice' as const,
+  locale: 'en' as const,
   reference: 'INV-000001',
   practiceName: 'Synthetic Wellness Studio',
   url: 'https://example.com/d/abc',
