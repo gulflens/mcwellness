@@ -3,8 +3,10 @@ import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import type pg from 'pg';
 import { z } from 'zod';
-import { cleanText } from './text';
-import { decodeReason, REASON_ENCODING_HEADER, REASON_HEADER } from './reason';
+import { decodeReason, REASON_ENCODING_HEADER, REASON_HEADER, stampedReason } from './reason';
+
+// Where it always was, for the routes that stamp a reason from a body.
+export { scrubReason } from './reason';
 import type { Actor } from '@domain/shared';
 import type { IdentityKeys } from '@domain/shared/identity';
 import { ResolvedActorRow } from './actor-schema';
@@ -99,14 +101,6 @@ export type RequestContextDeps = { pool: PoolLike; verifier: TokenVerifier };
 
 const RequestId = z.uuid();
 
-// A pasted token or key must never reach the trail (audit.md section 8): a JWT, or any
-// run of 32 or more key-looking characters, is replaced before the reason is stamped.
-const TOKEN_LIKE =
-  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|(?=[A-Za-z0-9_+/=-]*\d)[A-Za-z0-9_+/=-]{32,}/g;
-export function scrubReason(reason: string): string {
-  return reason.replace(TOKEN_LIKE, '[redacted]');
-}
-
 const RESOLVE_ACTOR =
   'select user_id, tenant_id, status, roles, capabilities from app.resolve_actor($1)';
 const SET_CONTEXT =
@@ -179,7 +173,7 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
     if (decoded === null) {
       return c.json({ error: 'bad_request', code: 'reason_unreadable', requestId }, 400);
     }
-    const reason = scrubReason(cleanText(decoded, 500));
+    const reason = stampedReason(decoded);
 
     const client = await pool.connect();
     let inTransaction = false;

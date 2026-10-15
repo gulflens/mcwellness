@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { cleanText } from './text';
 
 /**
  * The reason a console save carries, read off the request.
@@ -14,7 +15,9 @@ import type { Context } from 'hono';
  *
  * Every reader of the reason goes through `requestReason`, so the text a
  * route judges and the text the fence stamps on `app.reason` for the audit
- * trail are the same decoded, human text.
+ * trail are the same decoded, cleaned text: a reason of nothing but
+ * invisible or control characters, which encoding now lets through, is no
+ * reason at a route either.
  */
 
 export const REASON_HEADER = 'x-reason';
@@ -43,11 +46,27 @@ export function decodeReason(
   }
 }
 
+// A pasted token or key must never reach the trail (audit.md section 8): a JWT, or any
+// run of 32 or more key-looking characters, is replaced before the reason is stamped.
+const TOKEN_LIKE =
+  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|(?=[A-Za-z0-9_+/=-]*\d)[A-Za-z0-9_+/=-]{32,}/g;
+export function scrubReason(reason: string): string {
+  return reason.replace(TOKEN_LIKE, '[redacted]');
+}
+
+/** A decoded reason as the trail keeps it: cleaned, capped at 500 characters, scrubbed. */
+export function stampedReason(decoded: string): string {
+  return scrubReason(cleanText(decoded, 500));
+}
+
 /**
- * The request's reason, decoded. An unreadable header reads as no reason
- * here; the request-context middleware has already refused one with a 400
- * before any route below it runs.
+ * The request's reason, decoded and cleaned exactly as the fence stamps it.
+ * An unreadable header reads as no reason here; the request-context
+ * middleware has already refused one with a 400 before any route below it
+ * runs.
  */
 export function requestReason(c: Context): string {
-  return decodeReason(c.req.header(REASON_HEADER), c.req.header(REASON_ENCODING_HEADER)) ?? '';
+  return stampedReason(
+    decodeReason(c.req.header(REASON_HEADER), c.req.header(REASON_ENCODING_HEADER)) ?? '',
+  );
 }

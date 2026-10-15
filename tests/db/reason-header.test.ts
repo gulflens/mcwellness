@@ -155,6 +155,16 @@ describe('a reason in any characters', () => {
     expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
   });
 
+  it.each([
+    ['zero-width spaces', '\u200b'.repeat(12)],
+    ['a NUL', '\u0000'],
+    ['bidirectional marks', '\u202e\u2066\u2069'],
+  ])('refuses a reason of nothing but %s, which cleans to nothing', async (_kind, typed) => {
+    const { res } = await save(encoded(typed));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'reason_required' });
+  });
+
   it('judges the decoded text, so an encoded run of spaces is no reason at all', async () => {
     const { res } = await save(encoded('   '));
     expect(res.status).toBe(400);

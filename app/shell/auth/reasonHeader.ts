@@ -22,6 +22,8 @@ const ENCODING = 'x-reason-encoding';
 // Anything other than printable ASCII: Latin-1 letters the browser would
 // send, line breaks it would refuse, and everything beyond.
 const NEEDS_ENCODING = /[^\x20-\x7e]/;
+// A lone half of a surrogate pair, which encodeURIComponent refuses to encode.
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
 
 function pairsOf(init: HeadersInit | undefined): [string, string][] {
   if (init === undefined) return [];
@@ -35,7 +37,7 @@ export function withSendableReason(init: HeadersInit | undefined): Headers {
   let encoded = false;
   for (const [name, value] of pairsOf(init)) {
     if (name.toLowerCase() === REASON && NEEDS_ENCODING.test(value)) {
-      headers.append(name, encodeURIComponent(value));
+      headers.append(name, encodeURIComponent(value.replace(LONE_SURROGATE, '\ufffd')));
       encoded = true;
     } else {
       headers.append(name, value);

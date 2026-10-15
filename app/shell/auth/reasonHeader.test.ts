@@ -33,6 +33,11 @@ describe('withSendableReason', () => {
     expect(withSendableReason(already).get('x-reason')).toBe('plain');
   });
 
+  it('sends a reason holding a broken emoji rather than failing to send it', () => {
+    const headers = withSendableReason({ 'x-reason': 'cut off \ud83d' });
+    expect(decodeURIComponent(headers.get('x-reason') ?? '')).toBe('cut off \ufffd');
+  });
+
   it('answers empty headers for none, and never invents a reason', () => {
     const headers = withSendableReason(undefined);
     expect([...headers.keys()]).toEqual([]);

@@ -65,6 +65,14 @@ describe('requestReason', () => {
     expect(await reasonOf({ 'x-reason': 'typed it wrong' })).toBe('typed it wrong');
   });
 
+  it('answers empty for a reason of nothing but invisible or control characters', async () => {
+    for (const typed of ['\u200b'.repeat(12), '\u0000', '\u202e\u2066', ' \ufeff ']) {
+      expect(
+        await reasonOf({ 'x-reason': encodeURIComponent(typed), 'x-reason-encoding': 'uri' }),
+      ).toBe('');
+    }
+  });
+
   it('answers empty for an absent or unreadable header', async () => {
     expect(await reasonOf({})).toBe('');
     expect(await reasonOf({ 'x-reason': '%E2', 'x-reason-encoding': 'uri' })).toBe('');
