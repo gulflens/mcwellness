@@ -11,6 +11,7 @@ import {
   type AccessReportReader,
   type ActivityEvent,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * The practice's whole trail, and who has read one record
@@ -204,7 +205,7 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
     const { before, limit, locale, actorId, entityType, action, from, to, clientId } = query.data;
     const senior = hasRole(actor, 'owner', 'lead_practitioner');
-    const reason = (c.req.header('x-reason') ?? '').trim();
+    const reason = requestReason(c).trim();
     // A feed narrowed to one record is that record's history, so it holds the
     // door the record's own timeline holds (app/api/audit/timeline.ts): under
     // row security a client of another practice does not exist, an erased
@@ -349,7 +350,7 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!row) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
-    if (row.status === 'erased' && !(c.req.header('x-reason') ?? '').trim()) {
+    if (row.status === 'erased' && !requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
 

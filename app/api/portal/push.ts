@@ -29,6 +29,7 @@ import {
   UnsubscribeInput,
   type OfficePushMessage,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * Phone notifications (the push memo's decisions 2 and 3,
@@ -344,7 +345,7 @@ export function mountPortalPush(
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     if (!sender.configured) return c.json({ error: 'push_not_configured', requestId }, 503);
-    if (reasonOf(c.req.header('x-reason')) === null) {
+    if (reasonOf(requestReason(c)) === null) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const body = SendPushInput.safeParse(await c.req.json().catch(() => null));

@@ -24,6 +24,7 @@ import {
 } from './record-schema';
 import { logRefused } from './refused';
 import { photoEvidenceToRemove, removePhotoBytes } from './withdrawal';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * Recording and withdrawing consent (docs/SPEC/client-record.md sections 2
@@ -610,7 +611,7 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     // Withdrawal is a sensitive action and always needs a reason (section 9).
-    if (!(c.req.header('x-reason') ?? '').trim()) {
+    if (!requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     if (clientStatus === 'erased') {

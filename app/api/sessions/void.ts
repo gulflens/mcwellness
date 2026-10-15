@@ -5,6 +5,7 @@ import { canActor } from '@domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { logRefusal, logSensitive } from './audit';
 import { VOID_CONFLICT_CODES, VoidSessionResponse, type VoidConflictCode } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * POST /api/sessions/:id/void — a visit logged from the practice's records
@@ -143,7 +144,7 @@ export function mountVoidSession(api: Hono<ApiEnv>, now: () => Date): void {
     if (!canActor(actor, { type: 'session.void' }, {}, now())) {
       return answer('wrong_role', null);
     }
-    if (!(c.req.header('x-reason') ?? '').trim()) {
+    if (!requestReason(c).trim()) {
       return answer('reason_required', null);
     }
 

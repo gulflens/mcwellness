@@ -133,6 +133,69 @@ describe('withRequestContext', () => {
     expect(fake.released).toEqual(['clean']);
   });
 
+  it('stamps a percent-encoded reason as the decoded text, cleaned as a plain one is', async () => {
+    const fake = fakePool(ownerRow);
+    const probe = app(fake.pool, (c: { json: (b: unknown) => Response }) => c.json({}));
+    const typed = 'العائلة طلبت ذلك — the family’s request 🙂';
+    const res = await probe.request('/probe', {
+      headers: {
+        authorization: 'Bearer good',
+        'x-reason': encodeURIComponent(`  ${typed}\n`),
+        'x-reason-encoding': 'uri',
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(fake.params[3]?.[4]).toBe(typed);
+  });
+
+  it('counts a decoded reason by character when it caps it at 500', async () => {
+    const fake = fakePool(ownerRow);
+    const probe = app(fake.pool, (c: { json: (b: unknown) => Response }) => c.json({}));
+    // 600 Arabic letters: 1,200 bytes of UTF-8, 600 characters.
+    const res = await probe.request('/probe', {
+      headers: {
+        authorization: 'Bearer good',
+        'x-reason': encodeURIComponent('ع'.repeat(600)),
+        'x-reason-encoding': 'uri',
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(fake.params[3]?.[4]).toBe('ع'.repeat(500));
+  });
+
+  it('answers 400 without touching the pool for a reason it cannot decode', async () => {
+    for (const headers of [
+      { 'x-reason': '%E2%80', 'x-reason-encoding': 'uri' },
+      { 'x-reason': 'abc', 'x-reason-encoding': 'rot13' },
+    ]) {
+      const fake = fakePool(ownerRow);
+      const probe = app(fake.pool, (c: { json: (b: unknown) => Response }) => c.json({}));
+      const res = await probe.request('/probe', {
+        headers: {
+          authorization: 'Bearer good',
+          'x-request-id': '00000000-0000-4000-8000-0000000000ee',
+          ...headers,
+        },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: 'bad_request',
+        code: 'reason_unreadable',
+        requestId: '00000000-0000-4000-8000-0000000000ee',
+      });
+      expect(fake.pool.connections).toBe(0);
+    }
+  });
+
+  it('still answers 401 before it reads the reason', async () => {
+    const fake = fakePool(ownerRow);
+    const probe = app(fake.pool, (c: { json: (b: unknown) => Response }) => c.json({}));
+    const res = await probe.request('/probe', {
+      headers: { 'x-reason': '%E2', 'x-reason-encoding': 'uri' },
+    });
+    expect(res.status).toBe(401);
+  });
+
   it('generates a request id when the incoming one is not a uuid', async () => {
     const fake = fakePool(ownerRow);
     const probe = app(fake.pool, (c: { json: (b: unknown) => Response }) => c.json({}));

@@ -4,6 +4,7 @@ import { createMiddleware } from 'hono/factory';
 import type pg from 'pg';
 import { z } from 'zod';
 import { cleanText } from './text';
+import { decodeReason, REASON_ENCODING_HEADER, REASON_HEADER } from './reason';
 import type { Actor } from '@domain/shared';
 import type { IdentityKeys } from '@domain/shared/identity';
 import { ResolvedActorRow } from './actor-schema';
@@ -97,7 +98,6 @@ export type PoolLike = { connect(): Promise<PoolClientLike> };
 export type RequestContextDeps = { pool: PoolLike; verifier: TokenVerifier };
 
 const RequestId = z.uuid();
-const Reason = z.string().transform((value) => cleanText(value, 500));
 
 // A pasted token or key must never reach the trail (audit.md section 8): a JWT, or any
 // run of 32 or more key-looking characters, is replaced before the reason is stamped.
@@ -172,8 +172,14 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
     if (!claims) {
       return unauthorized(c, requestId);
     }
-    const reasonParse = Reason.safeParse(c.req.header('x-reason') ?? '');
-    const reason = reasonParse.success ? scrubReason(reasonParse.data) : '';
+    // A reason that is not plain Latin-1 arrives percent-encoded and marked
+    // (./reason.ts). One that cannot be decoded is refused here, before any
+    // route reads it, so no route ever judges or stamps a half-read reason.
+    const decoded = decodeReason(c.req.header(REASON_HEADER), c.req.header(REASON_ENCODING_HEADER));
+    if (decoded === null) {
+      return c.json({ error: 'bad_request', code: 'reason_unreadable', requestId }, 400);
+    }
+    const reason = scrubReason(cleanText(decoded, 500));
 
     const client = await pool.connect();
     let inTransaction = false;
