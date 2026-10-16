@@ -3775,3 +3775,22 @@ form can now be uploaded once its Arabic has been read by a native speaker
 and the privacy-page paragraph is approved. Settings › Practice has new
 Arabic address and licensing-authority fields. Until the practice fills them
 in, an Arabic document prints the English ones.
+
+## What was done on 2026-10-16: the marketing wording 1.0 filed on production
+
+**About 12:10 UTC (16:10 +04). No migration and no build.** The wording was
+approved on 6 October 2026 and filed on staging that day. Production's filing
+was left owed when auto mode refused the write. Until it was filed, the
+household portal showed a note in place of the offers switch.
+- Two `document` rows, `consent_text`, purpose `marketing`, version 1.0,
+  status approved and immutable:
+  - `0000000a-0000-4000-8000-000000000071` (English, sha256 `7c062c06…`);
+  - `0000000a-0000-4000-8000-000000000072` (Arabic, sha256 `85961833…`).
+  - Both were written in one transaction, with the owner as the actor and a
+    reason, and produced two audit rows.
+- `docs/CONSENT/marketing.{en,ar}.md` from main went to the `documents` bucket
+  at the keys the rows name, with `supabase storage cp --linked
+  --experimental`. The sizes are 2,636 and 3,819 bytes, the same as
+  staging's.
+- Read back from the bucket, each file's sha256 equals its row's.
+- `verify_audit_chain()` returns null.
