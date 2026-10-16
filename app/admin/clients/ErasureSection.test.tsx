@@ -327,6 +327,26 @@ describe('a record that has been erased', () => {
     vi.unstubAllGlobals();
   });
 
+  it('says nothing about a block when the browser opened WhatsApp', async () => {
+    // With "noopener" a standard browser answers null whether or not the tab
+    // opened, so "Your browser stopped WhatsApp opening" showed every time.
+    const tab = { opener: {} } as unknown as Window;
+    vi.stubGlobal(
+      'open',
+      vi.fn((_url: string, _target?: string, features?: string) =>
+        features?.includes('noopener') ? null : tab,
+      ),
+    );
+    mount(<ErasureSection record={{ ...record, status: 'erased' }} mayAsk mayErase />, {
+      requests: [performedRequest],
+    });
+    await screen.findByText(/Erased on 3 September 2026/);
+    fireEvent.click(screen.getByRole('button', { name: 'Draft a WhatsApp message' }));
+    expect(tab.opener).toBeNull();
+    expect(screen.queryByText(/Your browser stopped WhatsApp opening/)).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
   it('drafts the message in the household’s own language', async () => {
     const open = vi.fn((url: string, target?: string, features?: string) => {
       void target;

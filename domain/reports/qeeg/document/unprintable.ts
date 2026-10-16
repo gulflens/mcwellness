@@ -8,11 +8,12 @@
  * outside the installed Latin subset would print with that letter missing and
  * nothing would say so. The preview says so instead, before she signs.
  *
- * **Asked the way the writer asks.** A Latin character is asked of the
- * regular or the bold face its op is set in; an Arabic one of the Arabic
- * face, or of the bold Arabic face when the op is bold and the set carries
- * one. A right-to-left op is shaped first, as the writer shapes it, so what is
- * asked is the glyph that would be drawn, not the letter that was typed.
+ * **Asked by the writer itself.** A Latin character is asked of the
+ * regular or the bold face its op is set in, and of that weight's extended
+ * face when the first has no glyph; an Arabic one of the Arabic face, or of
+ * the bold Arabic face when the op is bold and the set carries one. A
+ * right-to-left op is shaped first, as the writer shapes it, so what is asked
+ * is the glyph that would be drawn, not the letter that was typed.
  *
  * **Code points, not the characters.** The answer travels to the screen in a
  * response header, and a header carries ASCII. `U+0141` names the letter
@@ -21,32 +22,20 @@
  * Pure: pages and faces in, a sorted list out, nothing thrown.
  */
 
-import { forDrawing, glyphFor, isArabic } from '@domain/shared/document';
-import type { Font, FontSet, Page, Style } from '@domain/shared/document';
-
-/** The face the writer draws `code` in, for an op set in `style`. */
-function faceFor(code: number, style: Style, fonts: FontSet): Font {
-  const bold = style.font === 'bold' || style.font === 'arabicBold';
-  if (isArabic(code)) return bold && fonts.arabicBold ? fonts.arabicBold : fonts.arabic;
-  return bold ? fonts.bold : fonts.regular;
-}
+import { undrawable } from '@domain/shared/document';
+import type { FontSet, Page } from '@domain/shared/document';
 
 /** A code point as `U+` and at least four upper-case hex digits. */
 function named(code: number): string {
   return `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
 }
 
+/**
+ * The writer's own answer (`undrawable`, `domain/shared/document/pdf.ts`),
+ * named for a header. Asked of the writer rather than worked out again here,
+ * so the two can never disagree about which face a character goes to — the
+ * extended Latin faces of docs/CHANGE-REQUESTS/docfix-01.md included.
+ */
 export function unprintableIn(pages: readonly Page[], fonts: FontSet): string[] {
-  const missing = new Set<number>();
-  for (const page of pages) {
-    for (const op of page.ops) {
-      if (op.kind !== 'text') continue;
-      const codes =
-        op.rtl === true ? forDrawing(op.text) : [...op.text].map((c) => c.codePointAt(0) ?? 0);
-      for (const code of codes) {
-        if (glyphFor(faceFor(code, op.style, fonts), code) === null) missing.add(code);
-      }
-    }
-  }
-  return [...missing].sort((a, b) => a - b).map(named);
+  return undrawable(pages, fonts).map(named);
 }

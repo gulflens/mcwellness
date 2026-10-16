@@ -148,10 +148,15 @@ export function ribbonFor(
  * the difference, and nothing else.
  *
  * **Refused rather than guessed** where the two do not compare: fewer than two
- * maps, two of different instruments, or a pair whose units disagree on a
- * figure. That is the assessment stream's own `compare` rule, quoted rather
- * than imported (section 6, no import across modules), and a figure the two
- * maps do not share is left out rather than paired with nothing.
+ * maps, two of different instruments, or a pair whose units disagree on any
+ * figure — the whole comparison, not that one line, because that is what the
+ * comparison view does and the report prints "the same figures the comparison
+ * view shows" (docs/SPEC/reports-v1.md section 5). That is the assessment
+ * stream's own `compare` rule (docs/SPEC/assessment.md section 5, rule 3),
+ * quoted rather than imported (section 6, no import across modules), and
+ * `tests/reports/comparison-agrees.test.ts` holds the two to one answer. A
+ * figure the two maps do not share is left out rather than paired with
+ * nothing.
  *
  * The earliest and the latest are the pair, because a progress report is about
  * a stretch of a programme and the pair a household wants is the two ends of
@@ -177,15 +182,18 @@ export function compareBrainMaps(assessments: readonly AssessmentRow[]): BrainMa
   for (const first of earlier.figures) {
     const second = later.figures.find((figure) => figure.label === first.label);
     // A figure only one of the two maps carries has nothing to be compared
-    // with; a pair whose units disagree is not a difference at all.
-    if (!second || second.unit !== first.unit) continue;
+    // with, so it is left out.
+    if (!second) continue;
+    // A pair whose units disagree is not a difference at all, and the
+    // comparison view refuses the whole comparison for it: so does this.
+    if (second.unit !== first.unit) return null;
     lines.push({
       label: first.label,
       labelAr: first.labelAr,
       unit: first.unit,
       earlier: first.value,
       later: second.value,
-      difference: round3(second.value - first.value),
+      difference: difference(second.value, first.value),
     });
   }
   if (lines.length === 0) return null;
@@ -206,13 +214,15 @@ export function compareBrainMaps(assessments: readonly AssessmentRow[]): BrainMa
 }
 
 /**
- * Floating-point subtraction leaves tails a household should never read
- * ("0.30000000000000004"). Three places is finer than any figure these
- * instruments report and is the same answer on every machine, which the
- * snapshot needs it to be.
+ * Later minus earlier, to six decimal places: exactly the comparison view's
+ * own rounding (`difference` in domain/assessment/compare.ts), so the report
+ * quotes the number the screen shows. Floating-point subtraction leaves tails
+ * a household should never read ("0.30000000000000004"), and six places is
+ * the same answer on every machine, which the snapshot needs it to be. The
+ * page still prints a figure to at most three places (`formatFigure`).
  */
-function round3(value: number): number {
-  return Math.round(value * 1000) / 1000;
+function difference(later: number, earlier: number): number {
+  return Number((later - earlier).toFixed(6));
 }
 
 /**

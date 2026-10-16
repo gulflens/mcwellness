@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DocumentLinkResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { openInNewTab } from '../../shell/openInNewTab';
 import { Button } from '../../shell/components/Controls';
 
 /**
@@ -75,12 +76,11 @@ export function DocumentLink({
         return;
       }
       const { url } = DocumentLinkResponse.parse(await res.json());
-      // noreferrer as well as noopener: the link carries a signature, and the
-      // page it opens has no business knowing which screen sent it.
-      const opened = window.open(url, '_blank', 'noopener,noreferrer');
-      // A blocked popup is null and silent. Hand the link over rather than
-      // leave a button that appears to do nothing.
-      if (!opened) setBlockedUrl(url);
+      // The link carries a signature: the tab it opens is cut off from the
+      // console and told nothing of which screen sent it (`openInNewTab`).
+      // A blocked popup is silent. Hand the link over rather than leave a
+      // button that appears to do nothing.
+      if (!openInNewTab(url)) setBlockedUrl(url);
     } catch {
       setError('That file did not open.');
     } finally {

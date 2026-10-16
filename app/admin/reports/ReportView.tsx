@@ -15,6 +15,7 @@ import { Ribbon } from './Ribbon';
 import { twinRefusalSentence } from './qeeg/refusals';
 import { TWIN_REASON } from './qeeg/useQeegSigning';
 import { languageWord, twinLines } from './qeeg/twinWords';
+import { openInNewTab } from '../../shell/openInNewTab';
 
 /**
  * View and deliver (docs/SPEC/reports-v1.md section 4.3): the filed PDF
@@ -206,7 +207,7 @@ export function ReportView({
 
   async function open(): Promise<void> {
     if (!report?.url) return;
-    if (window.open(report.url, '_blank', 'noopener,noreferrer') === null) {
+    if (!openInNewTab(report.url)) {
       setError('The report could not be opened. Your browser blocked the window.');
     }
   }

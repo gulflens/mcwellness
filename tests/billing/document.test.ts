@@ -12,11 +12,14 @@ import {
   toVisualOrder,
   waivedNotice,
   WORDS,
+  layout,
   type InvoiceDocument,
   type InvoiceLine,
+  type Page,
   type ReceiptDocument,
   type SupplierSnapshot,
 } from '../../domain/billing/document';
+import { undrawable } from '../../domain/shared/document';
 
 /**
  * What a rendered money document says, read back off the page.
@@ -973,5 +976,51 @@ describe('the discount’s percentage', () => {
     ).toBe(null);
     expect(sharedDiscountBasisPoints([discountedLine(null, 0)])).toBe(null);
     expect(sharedDiscountBasisPoints([])).toBe(null);
+  });
+});
+
+/**
+ * A name keeps every letter (docs/CHANGE-REQUESTS/docfix-01.md).
+ *
+ * The faces were the `latin` subset of IBM Plex Sans alone, which stops at
+ * Latin-1, and the writer leaves out a character its face cannot draw. So a
+ * household's name with ş, ğ, ł or š in it printed with those letters missing,
+ * on an invoice and a receipt alike, and nothing said so. The strings below are
+ * a listed name with the letters set beside it, not anybody's name.
+ */
+describe('a name with letters beyond Latin-1', () => {
+  const LETTERS = 'ş ğ ł š é ñ ø Ş Ğ Ł Š';
+  const named = { ...HOUSEHOLD, name: `Hazel Dune ${LETTERS}` };
+
+  it('prints every letter on an invoice', () => {
+    const invoice = { ...invoiceFor(UNREGISTERED), recipient: named };
+    // Runs joined as drawn: a face change mid-name is two runs on one line.
+    expect(extractText(renderDocument(invoice, fonts)).join('')).toContain(named.name);
+  });
+
+  it('prints every letter on a receipt', () => {
+    const receipt = receiptFor(UNREGISTERED, { recipient: named });
+    expect(extractText(renderDocument(receipt, fonts)).join('')).toContain(named.name);
+  });
+
+  it('leaves nothing on either page that no face can draw', () => {
+    const invoice = { ...invoiceFor(UNREGISTERED), recipient: named };
+    const receipt = receiptFor(UNREGISTERED, { recipient: named });
+    expect(undrawable(layout(invoice, fonts), fonts)).toEqual([]);
+    expect(undrawable(layout(receipt, fonts), fonts)).toEqual([]);
+  });
+
+  it('can draw every letter of Latin-1 and Latin Extended-A, in both weights', () => {
+    // The whole of both blocks, so a name typed with any European letter is
+    // drawn, and a face that ever stops carrying one fails here, by name.
+    const letters: string[] = [];
+    for (let code = 0x00a0; code <= 0x017f; code += 1) letters.push(String.fromCodePoint(code));
+    const text = letters.join('');
+    const page = (font: 'regular' | 'bold'): Page => ({
+      ops: [{ kind: 'text', x: 40, y: 700, text, style: { font, size: 9 } }],
+    });
+    // U+00AD, the soft hyphen, is an instruction to break and has no glyph of its own.
+    expect(undrawable([page('regular')], fonts).filter((code) => code !== 0x00ad)).toEqual([]);
+    expect(undrawable([page('bold')], fonts).filter((code) => code !== 0x00ad)).toEqual([]);
   });
 });

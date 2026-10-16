@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReportsScreen } from '../../app/client/ReportsScreen';
 import type { PortalReportsResponse } from '../../app/api/portal/schema';
 import { CHILD_A, CHILD_B, HOME } from '../portal/fixtures';
@@ -97,6 +97,24 @@ describe('the household’s Reports screen', () => {
     );
     // And no link is in the markup before that.
     expect(document.querySelector('a[href*="storage.example.com"]')).toBeNull();
+  });
+
+  it('says nothing failed when the browser opened the report', async () => {
+    // With "noopener" a standard browser answers null from window.open
+    // whether or not the tab opened, so the household was told "That document
+    // could not be opened." every time it had been.
+    const tab = { opener: {} } as unknown as Window;
+    vi.stubGlobal(
+      'open',
+      vi.fn((_url: string, _target?: string, features?: string) =>
+        features?.includes('noopener') ? null : tab,
+      ),
+    );
+    mount();
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Open' }))[0] as HTMLElement);
+    await waitFor(() => expect(tab.opener).toBeNull());
+    expect(screen.queryByText('That document could not be opened.')).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it('offers no button for a report with no filed document', async () => {

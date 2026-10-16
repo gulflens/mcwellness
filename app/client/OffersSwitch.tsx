@@ -4,6 +4,7 @@ import { useAuth } from '../shell/auth/AuthContext';
 import { Note } from '../shell/components/Controls';
 import { PHRASES, useWords } from './i18n';
 import { usePortalRead } from './usePortal';
+import { openInNewTab } from '../shell/openInNewTab';
 
 /**
  * "Offers on your phone" — the marketing consent, on Agreements, given and
@@ -45,7 +46,7 @@ export function OffersSwitch() {
           return;
         }
         const { textUrl } = WordingResponse.parse(await res.json());
-        if (window.open(textUrl, '_blank', 'noopener,noreferrer') === null) setFailed('link');
+        if (!openInNewTab(textUrl)) setFailed('link');
       })
       .catch(() => setFailed('link'));
   }, [apiFetch, words.locale]);

@@ -9,6 +9,7 @@ import {
   type FontSet,
   type Page,
   type PathSegment,
+  undrawable,
 } from './pdf';
 import type { Font } from './truetype';
 
@@ -996,5 +997,68 @@ describe('an image asked to be resampled smoothly', () => {
   it('writes the dictionary it always wrote when the flag is absent or false', () => {
     expect(file(MAP)).not.toContain('/Interpolate');
     expect(file({ ...MAP, interpolate: false })).toBe(file(MAP));
+  });
+});
+
+/**
+ * A letter the Latin face does not carry (docs/CHANGE-REQUESTS/docfix-01.md).
+ *
+ * The packaged IBM Plex Sans comes in subsets, and the `latin` one stops at
+ * Latin-1: a name with ş, ğ, ł or š in it lost those letters on every invoice,
+ * receipt and report, and nothing said so. The second subset, `latin-ext`, is
+ * carried as a face of its own that the writer turns to for a character the
+ * first cannot draw, and only then — so a page that needs none of it is the
+ * page it always was, byte for byte.
+ */
+describe('a letter outside the first Latin face', () => {
+  const EXTENDED: readonly (readonly [number, number])[] = [[0x0100, 0x017f]];
+  const withExtended: FontSet = {
+    ...fonts,
+    regularExt: syntheticFont('Synthetic-Ext', EXTENDED, false),
+    boldExt: syntheticFont('Synthetic-Ext-Bold', EXTENDED, false),
+  };
+  const lineOf = (text: string, font: 'regular' | 'bold' = 'regular'): Page => ({
+    ops: [{ kind: 'text', x: 72, y: 700, text, style: { font, size: 10 } }],
+  });
+  const latin1 = (bytes: Uint8Array): string => new TextDecoder('latin1').decode(bytes);
+
+  it('is drawn from the extended face, and the whole word reads back', () => {
+    const pdf = renderPdf([lineOf('Fern ş ğ ł š')], withExtended, 'Synthetic');
+    expect(extractText(pdf).join('')).toBe('Fern ş ğ ł š');
+    expect(latin1(pdf)).toContain('/BaseFont /Synthetic-Ext ');
+  });
+
+  it('is drawn from the bold extended face when the line is bold', () => {
+    const pdf = renderPdf([lineOf('Ğ', 'bold')], withExtended, 'Synthetic');
+    expect(extractText(pdf).join('')).toBe('Ğ');
+    expect(latin1(pdf)).toContain('/BaseFont /Synthetic-Ext-Bold ');
+  });
+
+  it('is named by undrawable when no face carries it, rather than dropped in silence', () => {
+    expect(undrawable([lineOf('Fern ş')], fonts)).toEqual([0x015f]);
+    expect(undrawable([lineOf('Fern ş')], withExtended)).toEqual([]);
+  });
+
+  it('asks undrawable of an Arabic line the way the writer draws it, shaped', () => {
+    const arabicLine: Page = {
+      ops: [
+        {
+          kind: 'text',
+          x: 500,
+          y: 700,
+          text: 'فاتورة',
+          style: { font: 'regular', size: 10 },
+          rtl: true,
+        },
+      ],
+    };
+    expect(undrawable([arabicLine], fonts)).toEqual([]);
+  });
+
+  it('changes nothing on a page that never needs the extended face', () => {
+    const page = lineOf('Synthetic Wellness Studio, INV-000001');
+    expect(latin1(renderPdf([page], withExtended, 'Synthetic'))).toBe(
+      latin1(renderPdf([page], fonts, 'Synthetic')),
+    );
   });
 });

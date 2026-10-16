@@ -266,10 +266,20 @@ const MIRRORED = new Map<number, number>([
   [0x00bb, 0x00ab],
 ]);
 
-/** Digits and Latin: read left to right even inside an Arabic phrase. */
+/**
+ * Digits and Latin: read left to right even inside an Arabic phrase.
+ *
+ * The digits include the two sets an Arabic keyboard types, U+0660 to U+0669
+ * and the eastern U+06F0 to U+06F9. They sit in the Arabic block and are drawn
+ * by the Arabic face, but a figure is read left to right in any script: left
+ * out of this list, "١٥" inside an Arabic line was drawn "٥١"
+ * (docs/CHANGE-REQUESTS/reports-02.md, noted 5; docfix-01.md).
+ */
 function isLeftToRight(code: number): boolean {
   return (
     (code >= 0x0030 && code <= 0x0039) ||
+    (code >= 0x0660 && code <= 0x0669) ||
+    (code >= 0x06f0 && code <= 0x06f9) ||
     (code >= 0x0041 && code <= 0x005a) ||
     (code >= 0x0061 && code <= 0x007a) ||
     (code >= 0x00c0 && code <= 0x024f)
@@ -291,7 +301,9 @@ function isNeutral(code: number): boolean {
     code === 0x002d || // hyphen
     code === 0x002e || // full stop
     code === 0x002f || // solidus
-    code === 0x003a // colon
+    code === 0x003a || // colon
+    code === 0x066b || // Arabic decimal separator
+    code === 0x066c // Arabic thousands separator
   );
 }
 
