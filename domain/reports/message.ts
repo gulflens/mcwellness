@@ -16,9 +16,9 @@ import type { ReportKind, ReportLocale } from './types';
  * message sits in a notification on a lock screen somebody else may be looking
  * at, and a household's report is not a thing to put there.
  *
- * **Both languages, always**, English first with the Arabic beneath, exactly
- * as the invoice's hand-off is composed — a household reads whichever it
- * reads, and the practice does not have to choose for them.
+ * **In the report's own language, and that one alone** — the operator's
+ * decision of 15 October 2026 that nothing the practice sends a household
+ * carries both. Until then it was English first with the Arabic beneath.
  *
  * Pure: nothing here touches a network. A person presses send in their own
  * WhatsApp or their own mail app.
@@ -32,9 +32,11 @@ export type DraftedReportMessage = {
 /** Enough about a report to write a sentence about it. */
 export type SendableReport = {
   kind: ReportKind;
+  /** The report's own language, which the message is written in. */
+  locale: ReportLocale;
   /** "RPT-000001". */
   reference: string;
-  /** The practice's own name, as the report itself carries it. */
+  /** The practice's own name in that language, as the report itself carries it. */
   practiceName: string;
   /** A short-lived signed link to the bytes. */
   url: string;
@@ -49,15 +51,18 @@ const WHAT: Record<ReportKind, Record<ReportLocale, string>> = {
 };
 
 export function draftReportMessage(report: SendableReport): DraftedReportMessage {
-  const english = WHAT[report.kind].en;
-  const arabic = WHAT[report.kind].ar;
-
+  const what = WHAT[report.kind][report.locale];
+  const subject = `${report.practiceName} — ${what} ${report.reference}`;
+  if (report.locale === 'ar') {
+    return {
+      subject,
+      text: `${what} ${report.reference} من ${report.practiceName} جاهز. يمكنك فتحه هنا: ${report.url}`,
+    };
+  }
   return {
-    subject: `${report.practiceName} — ${english} ${report.reference}`,
+    subject,
     text:
-      `Your ${english} ${report.reference} from ${report.practiceName} is ready. ` +
-      `You can open it here: ${report.url}` +
-      '\n\n' +
-      `${arabic} ${report.reference} من ${report.practiceName} جاهز. يمكنك فتحه هنا: ${report.url}`,
+      `Your ${what} ${report.reference} from ${report.practiceName} is ready. ` +
+      `You can open it here: ${report.url}`,
   };
 }

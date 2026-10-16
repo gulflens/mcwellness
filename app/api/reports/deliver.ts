@@ -183,8 +183,13 @@ export function mountReportDeliver(
 
     const message = draftReportMessage({
       kind: record.kind,
+      locale: record.locale,
       reference: record.reference ?? '',
-      practiceName: record.practice_legal_name ?? '',
+      // The practice in the report's own language, as the report names it.
+      practiceName:
+        (record.locale === 'ar' ? record.practice_legal_name_ar : null) ??
+        record.practice_legal_name ??
+        '',
       url,
     });
 

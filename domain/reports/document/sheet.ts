@@ -97,15 +97,28 @@ export function clampForDocument(text: string): string {
   return characters.length <= MAX_DRAWN ? text : `${characters.slice(0, MAX_DRAWN - 1).join('')}…`;
 }
 
+/**
+ * What every later page repeats at its top and its foot. `single` is set for a
+ * report in one language (the operator's decision of 15 October 2026): the
+ * practice's name is drawn in its own direction, and the folio says "Page 1
+ * of 2" in the report's language. Absent, both are drawn exactly as every
+ * report issued before then was, in English.
+ */
+type Running = {
+  practice: string;
+  reference: string;
+  single?: { practiceRtl: boolean; folio: (page: number, of: number) => string; rtl: boolean };
+};
+
 export class Sheet {
   private readonly pages: Op[][] = [[]];
   private y = TOP;
   private continuation: (() => void) | null = null;
 
   private readonly fonts: FontSet;
-  private readonly running: { practice: string; reference: string };
+  private readonly running: Running;
 
-  constructor(fonts: FontSet, running: { practice: string; reference: string }) {
+  constructor(fonts: FontSet, running: Running) {
     this.fonts = fonts;
     this.running = running;
   }
@@ -151,7 +164,11 @@ export class Sheet {
     this.y = TOP;
     // A running header, so a loose second sheet still says which report it
     // belongs to and whose practice issued it.
-    this.text(LEFT, this.running.practice, SIZE.small, { grey: MUTED });
+    const practiceRtl = this.running.single?.practiceRtl === true;
+    this.text(LEFT, this.running.practice, SIZE.small, {
+      grey: MUTED,
+      ...(practiceRtl ? { rtl: true, align: 'start' as const } : {}),
+    });
     this.text(RIGHT, this.running.reference, SIZE.small, { grey: MUTED, align: 'end' });
     this.down(SMALL_LINE);
     this.rule();
@@ -286,14 +303,18 @@ export class Sheet {
    */
   finish(): Page[] {
     if (this.pages.length > 1) {
+      const single = this.running.single;
       this.pages.forEach((ops, index) => {
         ops.push({
           kind: 'text',
           x: RIGHT,
           y: FOLIO,
-          text: `Page ${index + 1} of ${this.pages.length}`,
+          text: single
+            ? single.folio(index + 1, this.pages.length)
+            : `Page ${index + 1} of ${this.pages.length}`,
           style: { font: 'regular', size: SIZE.small, grey: MUTED },
           align: 'end',
+          ...(single?.rtl ? { rtl: true } : {}),
         });
       });
     }

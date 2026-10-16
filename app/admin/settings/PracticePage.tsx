@@ -206,6 +206,12 @@ export function PracticePage() {
               <Fact label="Legal name">{practice.legalName}</Fact>
               <Fact label="Trade licence number">{text(practice.licenceNumber)}</Fact>
               <Fact label="Licensing authority">{text(practice.licensingAuthority)}</Fact>
+              {/* What an Arabic document prints in its place (migration 980). */}
+              <Fact label="Licensing authority in Arabic">
+                {practice.licensingAuthorityAr ? (
+                  <span dir="auto">{practice.licensingAuthorityAr}</span>
+                ) : null}
+              </Fact>
               <Fact label="Licence expires">
                 {practice.licenceExpiresOn ? (
                   <span className="numeric">{formatDate(practice.licenceExpiresOn)}</span>
@@ -241,8 +247,27 @@ export function PracticePage() {
 
           <section className="practice__group">
             <h2 className="practice__heading">Registered address</h2>
+            {/*
+              A document is in the client's one language (15 October 2026), and
+              an Arabic one prints these in Arabic. Until the practice types
+              them it prints the English, and the page says so plainly.
+            */}
+            {address !== null && !practice.addressAr ? (
+              <Note>
+                Arabic documents will show the English address until the Arabic is filled in.
+              </Note>
+            ) : null}
+            {practice.licensingAuthority && !practice.licensingAuthorityAr ? (
+              <Note>
+                Arabic documents will show the English licensing authority until the Arabic is
+                filled in.
+              </Note>
+            ) : null}
             <dl className="practice__facts">
               <Fact label="Address">{text(address?.displayAddress ?? null)}</Fact>
+              <Fact label="Address in Arabic">
+                {practice.addressAr ? <span dir="auto">{practice.addressAr}</span> : null}
+              </Fact>
               <Fact label="Emirate">{address ? EMIRATE_LABELS[address.emirate] : null}</Fact>
               <Fact label="Coordinates">
                 {coordinates ? <span className="numeric">{coordinates}</span> : null}

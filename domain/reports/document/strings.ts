@@ -2,8 +2,9 @@
  * Every fixed word on a rendered report, in both languages
  * (docs/SPEC/reports-v1.md section 5).
  *
- * **Headings, labels, the identity block and every fixed sentence render in
- * English and Arabic together**, as the invoice already does. The
+ * **A report is set in one language, its own** (the operator's decision of
+ * 15 October 2026), and takes the one half of each pair here; a report issued
+ * before then set both halves together, and is still drawn so. The
  * practitioner's own narrative does not: a paragraph a person wrote is not
  * something a renderer may translate, so it prints in the locale chosen at
  * issue and a household wanting both gets a second report of the same
@@ -92,6 +93,35 @@ export const WORDS = {
   certifyingBody: { en: 'Certifying body', ar: 'الجهة المانحة' },
   certificateNumber: { en: 'Certificate number', ar: 'رقم الشهادة' },
 } as const satisfies Record<string, Phrase>;
+
+/**
+ * A goal's status as a reader reads it (migration 100's `goal_status`). The
+ * English is the console's own (`app/admin/clients/GoalsTab.tsx`); the Arabic
+ * is new with the single-language report of 15 October 2026, when an Arabic
+ * page could no longer print the English enum beside its Arabic label. A
+ * status this does not know is printed as the row holds it.
+ */
+export const GOAL_STATUS_WORDS: Readonly<Record<string, Phrase>> = {
+  active: { en: 'Active', ar: 'نشط' },
+  achieved: { en: 'Achieved', ar: 'تحقّق' },
+  dropped: { en: 'Dropped', ar: 'متوقّف' },
+};
+
+/**
+ * The sex a brain map's software compared a recording against (migration
+ * 060's `sex_at_birth`). The words are the brain-map report's own approved
+ * pair (`domain/reports/qeeg/wording/v1.ts`, `value.sex.*`); "unknown" says
+ * nothing and is left off the page.
+ */
+export const SEX_WORDS: Readonly<Record<string, Phrase>> = {
+  female: { en: 'Female', ar: 'أنثى' },
+  male: { en: 'Male', ar: 'ذكر' },
+};
+
+/** "Page 1 of 2", on a report in one language, in that language. */
+export function folioWords(page: number, of: number, locale: 'en' | 'ar'): string {
+  return locale === 'ar' ? `الصفحة ${page} من ${of}` : `Page ${page} of ${of}`;
+}
 
 /**
  * The reference is the practice's own and nothing else. Said on the page,

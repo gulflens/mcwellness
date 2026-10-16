@@ -51,6 +51,7 @@ export { chargesVat, sharedDiscountBasisPoints } from './model';
 export type {
   InvoiceDocument,
   InvoiceLine,
+  DocumentLocale,
   MoneyDocument,
   PaymentMethod,
   Recipient,

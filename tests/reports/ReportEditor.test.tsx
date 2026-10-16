@@ -630,3 +630,54 @@ describe('opening the preview', () => {
     );
   });
 });
+
+describe('the language of a new report', () => {
+  function mountPreferring(preferredLocale: 'en' | 'ar') {
+    const calls: { url: string; body?: unknown }[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (url === '/api/me') return json(SIGNER);
+      if (url.startsWith('/api/reports/gather')) {
+        return json({ content: GATHERED, brainMapsRead: false, preferredLocale });
+      }
+      if (url === '/api/reports/draft') {
+        return json(
+          { report: { ...ROW, status: 'draft', reference: null }, content: GATHERED },
+          201,
+        );
+      }
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportEditor
+          clientId={CLIENT}
+          kind="progress"
+          onDone={() => undefined}
+          onCancel={() => undefined}
+        />
+      </AuthProviderBoundary>,
+    );
+    return calls;
+  }
+
+  it('starts in the client’s own preferred language, and is saved in it', async () => {
+    const calls = mountPreferring('ar');
+    const picker = (await screen.findByLabelText('Language of the report')) as HTMLSelectElement;
+    await waitFor(() => expect(picker.value).toBe('ar'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save the draft' }));
+    await waitFor(() => expect(calls.some((call) => call.url === '/api/reports/draft')).toBe(true));
+    const save = calls.find((call) => call.url === '/api/reports/draft');
+    expect((save?.body as { locale: string }).locale).toBe('ar');
+  });
+
+  it('lets the practitioner choose the other language before it is signed', async () => {
+    mountPreferring('ar');
+    const picker = (await screen.findByLabelText('Language of the report')) as HTMLSelectElement;
+    await waitFor(() => expect(picker.value).toBe('ar'));
+    fireEvent.change(picker, { target: { value: 'en' } });
+    // A later answer from the record does not put the client's language back.
+    await waitFor(() => expect(picker.value).toBe('en'));
+  });
+});

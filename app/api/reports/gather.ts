@@ -302,6 +302,22 @@ export async function gatherForClient(
   };
 }
 
+/**
+ * The language the client asked to be written to in (migration 060,
+ * `client.preferred_locale`): what a new report is set in unless the
+ * practitioner chooses otherwise (the operator's decision of 15 October 2026).
+ * English for a row this person cannot see, which the route has already
+ * refused on other grounds.
+ */
+export async function clientPreferredLocale(db: Db, clientId: string): Promise<'en' | 'ar'> {
+  const found = await db.query<{ preferred_locale: 'en' | 'ar' }>(
+    'select preferred_locale::text as preferred_locale from client ' +
+      'where tenant_id = app.current_tenant_id() and id = $1',
+    [clientId],
+  );
+  return found.rows[0]?.preferred_locale === 'ar' ? 'ar' : 'en';
+}
+
 /** The practice's own time zone, which every date rule is decided in. */
 export async function practiceTimeZone(db: Db): Promise<string> {
   const found = await db.query<{ timezone: string }>(

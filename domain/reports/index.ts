@@ -60,6 +60,7 @@ export type {
   ReportContent,
   ReportDocument,
   ReportKind,
+  ReportLayoutMark,
   ReportLocale,
   ReportRecipient,
   ReportStatus,

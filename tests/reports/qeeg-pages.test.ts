@@ -33,7 +33,7 @@ import type {
   QeegInitial,
 } from '../../domain/reports/qeeg/types';
 import { phrase } from '../../domain/reports/qeeg/wording';
-import { PAGE_WIDTH } from '../../domain/shared/document';
+import { extractText, PAGE_WIDTH } from '../../domain/shared/document';
 import type { DocumentImage } from '../../domain/shared/document';
 
 /**
@@ -414,5 +414,40 @@ describe('the file', () => {
         fonts,
       ),
     ).toThrow(/refused at plan\.approach/);
+  });
+});
+
+/** The practice's own address in Arabic at the foot of an Arabic brain-map report (migration 980). */
+describe('the practice’s address in an Arabic brain-map report', () => {
+  const textOf = (input: QeegReportInput): string =>
+    extractText(renderQeegReport(input, fonts)).join(' ');
+
+  it('is the Arabic address where the practice has typed one', () => {
+    const input = inputOf(fullReport(), 'ar');
+    const text = textOf({
+      ...input,
+      facts: {
+        ...input.facts,
+        practice: { ...input.facts.practice, addressAr: 'شارع المثال، دبي' },
+      },
+    });
+    expect(text).not.toContain('Example Street');
+    expect(text).toContain([...'المثال'].reverse().join(''));
+  });
+
+  it('is the English address while it has not', () => {
+    expect(textOf(inputOf(fullReport(), 'ar'))).toContain('Example Street');
+  });
+
+  it('is the English address on an English report whatever the Arabic says', () => {
+    const input = inputOf(fullReport(), 'en');
+    const text = textOf({
+      ...input,
+      facts: {
+        ...input.facts,
+        practice: { ...input.facts.practice, addressAr: 'شارع المثال، دبي' },
+      },
+    });
+    expect(text).toContain('Example Street');
   });
 });

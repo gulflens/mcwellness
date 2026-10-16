@@ -35,6 +35,10 @@ const PRACTICE = {
   taxRegistrationNumber: '000000000000000',
   licenceNumber: 'SYN-000000',
   licensingAuthority: 'Synthetic Department of Economy and Tourism',
+  // The Arabic halves an Arabic document prints (migration 980), recorded here
+  // so the plain page carries no warning; the warning has its own tests.
+  licensingAuthorityAr: 'دائرة الاقتصاد والسياحة التجريبية',
+  addressAr: 'الوحدة 1، البرج التجريبي، دبي',
   licenceExpiresOn: '2027-12-31',
   vatRegistered: false,
   vatTrn: null,
@@ -81,7 +85,10 @@ type Call = { url: string; init?: RequestInit };
 const NO_LOGO = () => json({ error: 'not_found', requestId: null }, 404);
 
 /** Answers the read, and whatever the test says to the save. */
-function mount(answer: (call: Call) => Response = () => json({ practice: PRACTICE })) {
+function mount(
+  answer: (call: Call) => Response = () => json({ practice: PRACTICE }),
+  read: unknown = PRACTICE,
+) {
   const calls: Call[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const call = { url: String(input), init };
@@ -96,7 +103,7 @@ function mount(answer: (call: Call) => Response = () => json({ practice: PRACTIC
       });
     }
     if (call.url === '/api/practice' && (init?.method ?? 'GET') === 'GET') {
-      return json({ practice: PRACTICE });
+      return json({ practice: read });
     }
     // The logo section asks on mount, and a practice starts without one.
     // What the section itself does is PracticeLogo.test.tsx's; this file is
@@ -731,5 +738,43 @@ describe('Practice settings — the bank account', () => {
     const describedBy = ibanBox.getAttribute('aria-describedby');
     expect(describedBy).toBeTruthy();
     expect(document.getElementById(describedBy ?? '')?.textContent).toBe(IBAN_MESSAGE);
+  });
+});
+
+describe('the practice’s Arabic for Arabic documents (migration 980)', () => {
+  it('warns that Arabic documents will show the English address until the Arabic is filled in', async () => {
+    const bare = { ...PRACTICE, addressAr: null, licensingAuthorityAr: null };
+    mount(() => json({ practice: bare }), bare);
+    expect(
+      await screen.findByText(
+        'Arabic documents will show the English address until the Arabic is filled in.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('says nothing of it once the Arabic address is recorded', async () => {
+    mount();
+    await screen.findByText('Synthetic Wellness Studio');
+    expect(
+      screen.queryByText(
+        'Arabic documents will show the English address until the Arabic is filled in.',
+      ),
+    ).toBeNull();
+  });
+
+  it('sends what is typed in the two Arabic boxes with the form', async () => {
+    const bare = { ...PRACTICE, addressAr: null, licensingAuthorityAr: null };
+    const { calls } = mount(() => json({ practice: bare }), bare);
+    await openTheDrawer();
+    type('Registered address in Arabic (optional)', 'الوحدة 1، البرج التجريبي، دبي');
+    type('Licensing authority in Arabic (optional)', 'دائرة الاقتصاد والسياحة التجريبية');
+    type('Why this changes', 'The Arabic for the Arabic documents.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await screen.findByText('The practice details are saved.');
+    const [save] = saves(calls);
+    expect(JSON.parse(String(save?.init?.body))).toMatchObject({
+      addressAr: 'الوحدة 1، البرج التجريبي، دبي',
+      licensingAuthorityAr: 'دائرة الاقتصاد والسياحة التجريبية',
+    });
   });
 });

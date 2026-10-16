@@ -37,6 +37,7 @@ import {
   VALUE,
   type TextOptions,
 } from './sheet';
+import { singleLanguageLayout } from './single';
 
 /**
  * The look of a report: the console's quiet ledger, on paper, with one figure
@@ -51,10 +52,17 @@ import {
  * until the practice's lawyer has approved the wording, a third line on every
  * copy saying so.
  *
- * **Bilingual, and honestly so.** Every label is set twice on the same line:
- * English against the left margin, Arabic against the right, the value between
- * them. The practitioner's own narrative is set once, in the locale chosen at
- * issue, because a paragraph a person wrote is not something a renderer may
+ * **Bilingual — for a report issued before 15 October 2026 only.** Every
+ * label is set twice on the same line: English against the left margin,
+ * Arabic against the right, the value between them. That is how every report
+ * issued until the operator's decision of that day was filed, and this file
+ * still draws it so for such a report (`ReportDocument.bilingual`), so a lost
+ * file is re-rendered to the bytes its row's hash holds. **Every report issued
+ * since is in one language, its own** (`single.ts`), and `layout` below sends
+ * it there.
+ *
+ * The practitioner's own narrative is set once, in the report's locale,
+ * because a paragraph a person wrote is not something a renderer may
  * translate.
  *
  * **The ribbon carries the band's hue, and it is the only thing on the page
@@ -657,8 +665,13 @@ function progressPage(
   return sheet.finish();
 }
 
-/** Lays out a report, across as many pages as its sections need. */
+/**
+ * Lays out a report, across as many pages as its sections need: in its own
+ * language alone (`single.ts`), or — for a report issued before 15 October
+ * 2026, which said both — in both, exactly as it was filed.
+ */
 export function layout(document_: ReportDocument, fonts: FontSet): Page[] {
+  if (document_.bilingual !== true) return singleLanguageLayout(document_, fonts);
   return document_.content.kind === 'session'
     ? sessionPage(document_, document_.content, fonts)
     : progressPage(document_, document_.content, fonts);

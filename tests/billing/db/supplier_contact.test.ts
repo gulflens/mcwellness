@@ -86,6 +86,12 @@ async function setContact(
 beforeAll(async () => {
   h = await startHarness(NOW);
   await setPracticePrices(h, SEED_TODAY);
+  // Every household here reads English, so the words these tests look for are
+  // on the page: since migration 413 a document is in its client's one
+  // language, and the Arabic one is tested in document_locale.test.ts.
+  await h.owner.query("update client set preferred_locale = 'en' where tenant_id = $1", [
+    h.data.tenant.id,
+  ]);
 }, 120_000);
 
 afterAll(async () => {

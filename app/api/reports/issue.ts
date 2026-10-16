@@ -148,6 +148,19 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
       );
     }
 
+    // In one language from 15 October 2026 (the operator's decision): the mark
+    // goes into the draft's own content before it is signed, so the issued
+    // row says how it was set and is re-rendered the same way for as long as
+    // it is kept. A report issued before then has no mark and stays in both
+    // (`documentFrom`, ReportDocument.bilingual). A brain-map report is set
+    // per language already and has a body of its own; it is not touched.
+    await db.query(
+      'update report set content = content || \'{"layout":"single"}\'::jsonb ' +
+        "where tenant_id = app.current_tenant_id() and id = $1 and status = 'draft' " +
+        "and kind in ('session', 'progress')",
+      [reportId],
+    );
+
     const issued = await db.query<{ id: string }>(
       'select id from app.issue_report($1::uuid, $2::uuid, $3::date)',
       [reportId, practitionerId, today],

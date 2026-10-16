@@ -8,8 +8,9 @@
  * from now on, and never on one already filed: a lost file is rebuilt from
  * its row and must match the hash it was filed with
  * (app/api/reports/get.ts), so an issued report keeps printing what it
- * printed. A report's own body carries no mark yet that tells the two apart;
- * the renderer calls this once one does.
+ * printed. A report issued in one language carries `layout: 'single'`, and
+ * only that renderer (document/single.ts) calls this; the bilingual one,
+ * which re-renders every report filed before, never does.
  *
  * The column is an open set, so a value this has no name for is printed
  * exactly as it was recorded: a title someone typed is already words, and a

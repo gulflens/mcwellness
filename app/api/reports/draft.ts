@@ -10,6 +10,7 @@ import {
   gatherForClient,
   gatherSession,
   listVisits,
+  clientPreferredLocale,
   practiceTimeZone,
   VisitsRefused,
   type SessionNarrative,
@@ -62,7 +63,8 @@ const VisitsQuery = z.object({ clientId: z.uuid() });
 const SessionGatherQuery = z.object({
   clientId: z.uuid(),
   sessionId: z.uuid(),
-  locale: z.enum(['en', 'ar']).default('en'),
+  /** Absent, the client's own preferred language. */
+  locale: z.enum(['en', 'ar']).optional(),
 });
 
 const INSERT_SQL =
@@ -162,6 +164,7 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
       GatherResponse.parse({
         content: gathered.content,
         brainMapsRead: gathered.brainMapsRead,
+        preferredLocale: await clientPreferredLocale(db, query.data.clientId),
       }),
     );
   });
@@ -191,7 +194,7 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     const query = SessionGatherQuery.safeParse({
       clientId: c.req.query('clientId'),
       sessionId: c.req.query('sessionId'),
-      locale: c.req.query('locale') ?? 'en',
+      locale: c.req.query('locale'),
     });
     if (!query.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
@@ -203,16 +206,17 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     const db = c.get('db');
     await logRead(db, 'client', query.data.clientId, query.data.clientId);
     const timeZone = await practiceTimeZone(db);
+    const preferredLocale = await clientPreferredLocale(db, query.data.clientId);
     const content = await gatherSession(db, {
       clientId: query.data.clientId,
       sessionId: query.data.sessionId,
       timeZone,
-      locale: query.data.locale,
+      locale: query.data.locale ?? preferredLocale,
     });
     if (!content) {
       return c.json({ error: 'not_found', code: 'no_such_visit', requestId }, 404);
     }
-    return c.json(GatherResponse.parse({ content, brainMapsRead: false }));
+    return c.json(GatherResponse.parse({ content, brainMapsRead: false, preferredLocale }));
   });
 
   api.post('/api/reports/draft', async (c) => {
@@ -247,6 +251,9 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     }
 
     const db = c.get('db');
+    // The one language the report is set in: what was asked for, else what
+    // the draft already has, else the client's own (15 October 2026).
+    let locale: 'en' | 'ar' | undefined = input.locale;
     if (input.id) {
       const existing = await readReport(db, input.id);
       if (!existing || existing.client_id !== input.clientId) {
@@ -262,7 +269,9 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
       if (existing.status !== 'draft') {
         return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
       }
+      locale ??= existing.locale;
     }
+    const reportLocale = locale ?? (await clientPreferredLocale(db, input.clientId));
 
     // The figures come from the record, always. What the request carried of
     // them is thrown away; what it carried of the narrative is kept. Both
@@ -307,7 +316,7 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
           clientId: input.clientId,
           sessionId: input.sessionId,
           timeZone,
-          locale: input.locale,
+          locale: reportLocale,
           narrative: sessionNarrativeOf(input.content),
         });
         if (!gathered) {
@@ -335,7 +344,7 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     const written = input.id
       ? await db.query<{ id: string }>(UPDATE_SQL, [
           input.id,
-          input.locale,
+          reportLocale,
           input.serviceTypeId,
           input.coverageFrom,
           input.coverageTo,
@@ -344,7 +353,7 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
       : await db.query<{ id: string }>(INSERT_SQL, [
           input.clientId,
           input.kind,
-          input.locale,
+          reportLocale,
           input.serviceTypeId,
           input.coverageFrom,
           input.coverageTo,

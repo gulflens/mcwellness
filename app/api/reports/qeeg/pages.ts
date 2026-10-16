@@ -134,7 +134,7 @@ export async function gatheredOnce(
 // ---------------------------------------------------------------------------
 
 const PRACTICE_SQL =
-  'select t.legal_name, t.legal_name_ar, l.display_address, t.contact_phone, ' +
+  'select t.legal_name, t.legal_name_ar, l.display_address, t.address_ar, t.contact_phone, ' +
   't.contact_email, t.website from tenant t left join location l on l.id = t.location_id ' +
   'where t.id = app.current_tenant_id()';
 
@@ -142,6 +142,7 @@ type PracticeRow = {
   legal_name: string;
   legal_name_ar: string | null;
   display_address: string | null;
+  address_ar: string | null;
   contact_phone: string | null;
   contact_email: string | null;
   website: string | null;
@@ -226,7 +227,7 @@ export async function picturesOf(
 
 function linesOf(
   practice: PracticeRow,
-  name: { name: string; nameAr: string | null; address: string | null },
+  name: { name: string; nameAr: string | null; address: string | null; addressAr: string | null },
 ): PracticeLines {
   return {
     ...name,
@@ -257,6 +258,7 @@ export async function draftFacts(
       name: practice.legal_name,
       nameAr: practice.legal_name_ar,
       address: practice.display_address,
+      addressAr: practice.address_ar,
     }),
     logo: await practiceLogo(db, storage),
     // Nothing on a draft today is calculated: the draft door refuses a
@@ -306,6 +308,7 @@ export async function signedFacts(
       name: record.practice_legal_name,
       nameAr: record.practice_legal_name_ar,
       address: record.practice_address,
+      addressAr: record.practice_address_ar,
     }),
     logo: await practiceLogo(db, storage),
     calculatedFrom: null,
