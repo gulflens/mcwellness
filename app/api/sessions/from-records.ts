@@ -26,6 +26,7 @@ import {
   voidRecordedSession,
   voidRefusalFor,
 } from './void';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * POST /api/sessions/from-records — a visit that happened before the app,
@@ -131,7 +132,7 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
       await logRefusal(db, 'session', sessionId, null, ['wrong_role']);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    if (!(c.req.header('x-reason') ?? '').trim()) {
+    if (!requestReason(c).trim()) {
       return refuseBadRequest('reason_required', null);
     }
 

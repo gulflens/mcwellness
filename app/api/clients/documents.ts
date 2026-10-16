@@ -13,6 +13,7 @@ import {
 } from './record-schema';
 import { logReads } from '../_middleware/audit';
 import { logRefused } from './refused';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * The Documents tab (docs/SPEC/client-record.md section 4.2): what is filed
@@ -142,7 +143,7 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    if (view.needsReason && !(c.req.header('x-reason') ?? '').trim()) {
+    if (view.needsReason && !requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
 
@@ -266,7 +267,7 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    if (view.needsReason && !(c.req.header('x-reason') ?? '').trim()) {
+    if (view.needsReason && !requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const storage = c.get('storage');

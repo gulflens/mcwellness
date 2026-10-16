@@ -5,6 +5,7 @@ import { narrate, type AuditEvent } from '../../../domain/shared/audit-narrative
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { TimelineResponse, type TimelineEvent } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * GET /api/clients/:id/timeline: one client's audit trail as sentences
@@ -102,7 +103,7 @@ export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // Opening an erased record is a sensitive action (client-record.md section 8):
     // it needs a typed reason, which the trail then carries with the read.
     const subjectErased = exists.rows[0]?.status === 'erased';
-    if (subjectErased && !(c.req.header('x-reason') ?? '').trim()) {
+    if (subjectErased && !requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const { limit, locale } = query.data;

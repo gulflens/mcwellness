@@ -21,6 +21,7 @@ import {
   SetPackageStatusInput,
   type PackageRow,
 } from './ledger-schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * The bundle catalogue: `GET` and `POST /api/billing/packages`, and
@@ -545,7 +546,7 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // copied this same header into `app.reason` for the row the update below
     // writes, so nothing further is needed to land it on the audit trail —
     // this check only refuses the request when there is nothing to land.
-    const reason = (c.req.header('x-reason') ?? '').trim();
+    const reason = requestReason(c).trim();
     if (!reason) {
       return c.json({ error: 'bad_request', code: 'reason_required', requestId }, 400);
     }

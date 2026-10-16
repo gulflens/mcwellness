@@ -29,6 +29,7 @@ import {
   MoveAppointmentResponse,
   type MoveActionCode,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * `POST /api/appointments/:id/move` — the same visit, a new arrival window,
@@ -117,7 +118,7 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
     // (docs/SPEC/scheduling-manual.md section 9). The middleware has already
     // scrubbed this header and stamped it on the transaction; the route's
     // only job is to insist there was one.
-    if (cleanText(c.req.header('x-reason') ?? '', REASON_MAX).length === 0) {
+    if (cleanText(requestReason(c), REASON_MAX).length === 0) {
       return badRequest(c, requestId, 'reason_required');
     }
 

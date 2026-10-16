@@ -6,6 +6,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { canWriteGoal } from './access';
 import { CreateGoalBody, IdResponse, UpdateGoalBody } from './record-schema';
 import { logRefused } from './refused';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * A client's goals (docs/SPEC/client-record.md sections 2 and 4.2): the
@@ -116,11 +117,7 @@ export function mountGoals(api: Hono<ApiEnv>): void {
       return c.json({ error: 'not_found', requestId }, 404);
     }
     // Removing a goal — dropping it — is a sensitive action (section 9).
-    if (
-      body.data.status === 'dropped' &&
-      row.status !== 'dropped' &&
-      !(c.req.header('x-reason') ?? '').trim()
-    ) {
+    if (body.data.status === 'dropped' && row.status !== 'dropped' && !requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     if (body.data.categoryId !== undefined) {

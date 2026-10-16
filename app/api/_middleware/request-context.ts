@@ -3,7 +3,10 @@ import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import type pg from 'pg';
 import { z } from 'zod';
-import { cleanText } from './text';
+import { decodeReason, REASON_ENCODING_HEADER, REASON_HEADER, stampedReason } from './reason';
+
+// Where it always was, for the routes that stamp a reason from a body.
+export { scrubReason } from './reason';
 import type { Actor } from '@domain/shared';
 import type { IdentityKeys } from '@domain/shared/identity';
 import { ResolvedActorRow } from './actor-schema';
@@ -97,15 +100,6 @@ export type PoolLike = { connect(): Promise<PoolClientLike> };
 export type RequestContextDeps = { pool: PoolLike; verifier: TokenVerifier };
 
 const RequestId = z.uuid();
-const Reason = z.string().transform((value) => cleanText(value, 500));
-
-// A pasted token or key must never reach the trail (audit.md section 8): a JWT, or any
-// run of 32 or more key-looking characters, is replaced before the reason is stamped.
-const TOKEN_LIKE =
-  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|(?=[A-Za-z0-9_+/=-]*\d)[A-Za-z0-9_+/=-]{32,}/g;
-export function scrubReason(reason: string): string {
-  return reason.replace(TOKEN_LIKE, '[redacted]');
-}
 
 const RESOLVE_ACTOR =
   'select user_id, tenant_id, status, roles, capabilities from app.resolve_actor($1)';
@@ -172,8 +166,14 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
     if (!claims) {
       return unauthorized(c, requestId);
     }
-    const reasonParse = Reason.safeParse(c.req.header('x-reason') ?? '');
-    const reason = reasonParse.success ? scrubReason(reasonParse.data) : '';
+    // A reason that is not plain Latin-1 arrives percent-encoded and marked
+    // (./reason.ts). One that cannot be decoded is refused here, before any
+    // route reads it, so no route ever judges or stamps a half-read reason.
+    const decoded = decodeReason(c.req.header(REASON_HEADER), c.req.header(REASON_ENCODING_HEADER));
+    if (decoded === null) {
+      return c.json({ error: 'bad_request', code: 'reason_unreadable', requestId }, 400);
+    }
+    const reason = stampedReason(decoded);
 
     const client = await pool.connect();
     let inTransaction = false;
