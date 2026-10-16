@@ -145,6 +145,45 @@ describe('Rail', () => {
     expect(document.querySelector('.rail__tip')).toBeNull();
   });
 
+  it('drops the tooltip when a press takes the person to another page', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open={false}
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    const billing = screen.getByRole('link', { name: 'Billing' });
+    fireEvent.pointerEnter(billing);
+    expect(document.querySelector('.rail__tip')?.textContent).toBe('Billing');
+    fireEvent.click(billing);
+    expect(document.querySelector('.rail__tip')).toBeNull();
+  });
+
+  it('drops the tooltip when the rail opens, and does not bring it back on closing', () => {
+    const props = {
+      person: { name: 'Owner', roles: 'Owner' },
+      onSignOut: vi.fn(),
+      onToggle: vi.fn(),
+    };
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail {...props} open={false} />
+      </MemoryRouter>,
+    );
+    fireEvent.focus(screen.getByRole('link', { name: 'Schedule' }));
+    expect(document.querySelector('.rail__tip')).not.toBeNull();
+    rerender(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail {...props} open />
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('.rail__tip')).toBeNull();
+  });
+
   it('shows no tooltip and no extra name once the labels are out', () => {
     render(
       <MemoryRouter initialEntries={['/admin/clients']}>

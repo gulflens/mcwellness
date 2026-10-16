@@ -323,7 +323,7 @@ export function Rail({
   // its own aria-label, and to the eye by the tooltip below. Covering, the
   // labels are out (shell.css), so neither is needed.
   const strip = !open && !covering;
-  const tip = useRailTip(strip);
+  const tip = useRailTip(strip, pathname);
   return (
     <nav className="rail" aria-label="Sections" ref={rail}>
       {covering ? <Covering rail={rail} first={toggle} onClose={close} /> : null}
@@ -464,7 +464,7 @@ export function Rail({
 /** The gap between the strip's edge and a tooltip, the same 8px as --s-2. */
 const TIP_GAP = 8;
 
-type Tip = { label: string; block: number; inline: number };
+type Tip = { label: string; block: number; inline: number; path: string };
 
 /**
  * The strip's one tooltip, shown on hover and on keyboard focus alike: a
@@ -474,22 +474,25 @@ type Tip = { label: string; block: number; inline: number };
  * It is placed from the control's own box rather than by CSS alone because
  * `.rail` clips what overflows it, and a tooltip has to stand outside the
  * strip to be read. Escape dismisses it and scrolling hides it (WCAG 1.4.13).
+ * It belongs to the page it was shown on: a press that navigates can take the
+ * control away before any pointerleave or blur arrives, so a tooltip from
+ * another address is never drawn, and nothing listens for it.
  * Measured against the document's direction, so it stands at the strip's
  * inline end in Arabic as in English.
  */
-function useRailTip(enabled: boolean) {
+function useRailTip(enabled: boolean, path: string) {
   const [shown, setShown] = useState<Tip | null>(null);
   const hide = useCallback(() => setShown(null), []);
+  // Opening the rail puts the labels out, and the tooltip goes with them.
+  const visible = enabled && shown?.path === path ? shown : null;
   useEffect(() => {
-    if (!shown) return;
+    if (!visible) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setShown(null);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [shown]);
-  // Opening the rail puts the labels out, and the tooltip goes with them.
-  const visible = enabled ? shown : null;
+  }, [visible]);
   const show = (label: string, target: Element) => {
     const box = target.getBoundingClientRect();
     const rtl = getComputedStyle(target).direction === 'rtl';
@@ -497,6 +500,7 @@ function useRailTip(enabled: boolean) {
       label,
       block: box.top + box.height / 2,
       inline: rtl ? window.innerWidth - box.left + TIP_GAP : box.right + TIP_GAP,
+      path,
     });
   };
   const on = (label: string) =>
