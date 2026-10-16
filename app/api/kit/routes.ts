@@ -10,6 +10,7 @@ import {
   UpdateKitRequest,
   type KitRow,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * The equipment register's routes (docs/SPEC/practitioner-phone.md sections
@@ -203,7 +204,7 @@ export function mountKit(api: Hono<ApiEnv>, now: () => Date = () => new Date()):
     // A reason is required, and the row's own audit trigger carries it: this
     // changes what a practitioner is allowed to check in with, and "who moved
     // it, when and why" is exactly what the trail should answer about it.
-    const reason = (c.req.header('x-reason') ?? '').trim().slice(0, REASON_MAX);
+    const reason = requestReason(c).trim().slice(0, REASON_MAX);
     if (reason.length === 0) {
       return c.json({ error: 'bad_request', code: 'reason_required', requestId }, 400);
     }

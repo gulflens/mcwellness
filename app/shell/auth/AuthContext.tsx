@@ -10,6 +10,7 @@ import {
 import { MeResponse } from '../../api/_middleware/actor-schema';
 import { forgetDevice } from '../../therapist/session/outbox/store';
 import type { AuthProvider } from './types';
+import { withSendableReason } from './reasonHeader';
 import { forgetReferences } from '../referenceCache';
 
 /**
@@ -72,7 +73,8 @@ export function AuthProviderBoundary({
   const apiFetch = useCallback<ApiFetch>(
     async (path, init) => {
       const token = await provider.getAccessToken();
-      const headers = new Headers(init?.headers);
+      // A reason the browser would refuse to send goes percent-encoded (./reasonHeader.ts).
+      const headers = withSendableReason(init?.headers);
       if (token) headers.set('authorization', `Bearer ${token}`);
       headers.set('x-request-id', crypto.randomUUID());
       const res = await fetchImpl(path, { ...init, headers });

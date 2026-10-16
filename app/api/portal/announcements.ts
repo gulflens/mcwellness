@@ -23,6 +23,7 @@ import {
   type OfficeAnnouncement,
   type PortalAnnouncement,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * The practice's announcements (docs/SPEC/client-portal.md sections 3.1 and
@@ -207,7 +208,7 @@ export function mountPortalAnnouncements(
     if (!canActor(actor, { type: 'portal.announcement.write' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    if (reasonOf(c.req.header('x-reason')) === null) {
+    if (reasonOf(requestReason(c)) === null) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const body = PublishAnnouncementInput.safeParse(await c.req.json().catch(() => null));
@@ -306,7 +307,7 @@ export function mountPortalAnnouncements(
     if (!canActor(actor, { type: 'portal.announcement.write' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    if (reasonOf(c.req.header('x-reason')) === null) {
+    if (reasonOf(requestReason(c)) === null) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const params = IdParams.safeParse(c.req.param());

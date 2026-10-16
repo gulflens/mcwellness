@@ -4,6 +4,7 @@ import { canActor, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mountPracticeLogo } from './logo';
 import { Practice, PracticeResponse, UpdatePracticeInput } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * The practice's own details: `GET /api/practice` and `PATCH /api/practice`
@@ -199,7 +200,7 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!canActor(actor, { type: 'practice.settings.write' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    if (!(c.req.header('x-reason') ?? '').trim()) {
+    if (!requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const bodyJson = await c.req.json().catch(() => null);

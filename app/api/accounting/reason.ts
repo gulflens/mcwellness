@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import { isRealText } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * Every write to the books carries `X-Reason`, the practice routes' pattern
@@ -13,6 +14,6 @@ import { isRealText } from './schema';
  * trail itself is the trigger's.
  */
 export function requiredReason(c: Context): string | null {
-  const reason = (c.req.header('x-reason') ?? '').trim();
+  const reason = requestReason(c).trim();
   return isRealText(reason) ? reason : null;
 }

@@ -25,6 +25,7 @@ import {
   IdResponse,
 } from './record-schema';
 import { logRefused } from './refused';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * Being forgotten, in two acts (docs/SPEC/client-record.md section 8).
@@ -266,7 +267,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
         await logRefused(db, 'client', clientId, clientId);
         return c.json({ error: 'forbidden', requestId }, 403);
       }
-      if (!(c.req.header('x-reason') ?? '').trim()) {
+      if (!requestReason(c).trim()) {
         return c.json({ error: 'reason_required', requestId }, 400);
       }
     }
@@ -342,7 +343,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
     // Erasing is a sensitive action and the reason is typed before it commits
     // (client-record.md section 9, audit.md section 6). Checked before a single
     // row moves, so a refusal here has erased nothing.
-    if (!(c.req.header('x-reason') ?? '').trim()) {
+    if (!requestReason(c).trim()) {
       return c.json({ error: 'reason_required', code: 'reason_required', requestId }, 400);
     }
     if (status === 'erased') {

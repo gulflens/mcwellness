@@ -28,6 +28,7 @@ import {
   type Location,
 } from './record-schema';
 import { logRefused } from './refused';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * The client record itself: read the whole aggregate, create a lead, edit
@@ -384,7 +385,7 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     // Opening an erased record is a sensitive action (client-record.md section 8), the
     // same gate as the timeline (app/api/audit/timeline.ts): checked before any read of
     // the record's own contents, not after loading it.
-    if (view.needsReason && !(c.req.header('x-reason') ?? '').trim()) {
+    if (view.needsReason && !requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const record = await loadRecord(db, clientId);
@@ -560,7 +561,7 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
       return c.json({ error: 'invalid_transition', requestId }, 400);
     }
     // Reactivation from closed is a sensitive action (client-record.md section 9).
-    if (current.status === 'closed' && !(c.req.header('x-reason') ?? '').trim()) {
+    if (current.status === 'closed' && !requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     if (body.data.to === 'active') {
