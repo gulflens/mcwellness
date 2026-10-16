@@ -17,6 +17,7 @@ import {
   type CancelActionCode,
   type CancellationReason,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * `POST /api/appointments/:id/cancel` — a visit that is not going to happen
@@ -182,7 +183,7 @@ export function mountAppointmentCancel(
     // the notice period one of its credits — so the trail carries why
     // (docs/SPEC/scheduling-manual.md section 9). The middleware has already
     // scrubbed and stamped the header; this only insists there was one.
-    if (cleanText(c.req.header('x-reason') ?? '', REASON_MAX).length === 0) {
+    if (cleanText(requestReason(c), REASON_MAX).length === 0) {
       return badRequest(c, requestId, 'reason_required');
     }
 

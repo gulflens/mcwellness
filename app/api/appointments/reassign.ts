@@ -32,6 +32,7 @@ import {
   ReassignAppointmentRequest,
   type ReassignActionCode,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * `POST /api/appointments/:id/reassign` — the same visit, in another
@@ -170,7 +171,7 @@ export function mountAppointmentReassign(
     // should be able to explain it and not merely record it. The middleware
     // has already scrubbed this header and stamped it on the transaction;
     // the route's only job is to insist there was one.
-    if (cleanText(c.req.header('x-reason') ?? '', REASON_MAX).length === 0) {
+    if (cleanText(requestReason(c), REASON_MAX).length === 0) {
       return badRequest(c, requestId, 'reason_required');
     }
 

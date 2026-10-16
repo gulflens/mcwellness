@@ -4,6 +4,7 @@ import { DEFAULT_NOTICE_HOURS, DEFAULT_UNFIT_FEE_FILS } from '@domain/scheduling
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
 import { SchedulingSettingsResponse, UpdateSchedulingSettingsRequest } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * `GET /api/appointments/settings` — the practice's cancellation policy, as
@@ -97,7 +98,7 @@ export function mountAppointmentSettings(api: Hono<ApiEnv>): void {
     if (!hasRole(actor, 'owner', 'admin')) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    if (cleanText(c.req.header('x-reason') ?? '', REASON_MAX).length === 0) {
+    if (cleanText(requestReason(c), REASON_MAX).length === 0) {
       return c.json({ error: 'bad_request', code: 'reason_required', requestId }, 400);
     }
     const body = UpdateSchedulingSettingsRequest.safeParse(await c.req.json().catch(() => null));

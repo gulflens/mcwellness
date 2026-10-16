@@ -11,6 +11,7 @@ import {
   type Emirate,
   type PractitionerRow,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * The practice's practitioners and where each one's driving day starts:
@@ -215,7 +216,7 @@ export function mountPractitioners(api: Hono<ApiEnv>, now: () => Date = () => ne
     }
     // A move, so it says why (docs/SPEC/audit.md section 6). Asked before the
     // body is read, so a request with no reason changes nothing at all.
-    if (!(c.req.header('x-reason') ?? '').trim()) {
+    if (!requestReason(c).trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const body = SetBaseInput.safeParse(await c.req.json().catch(() => null));
