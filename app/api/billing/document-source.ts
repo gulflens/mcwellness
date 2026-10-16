@@ -46,6 +46,9 @@ import type { Db } from '../_middleware/request-context';
 
 const INVOICE_SQL =
   'select i.id, i.reference, i.issued_on, i.supplied_on, i.net_fils, i.vat_fils, i.gross_fils, ' +
+  // The one language the invoice was issued in (migration 413), or null for
+  // one issued before 15 October 2026 and filed in both.
+  'i.locale::text as locale, ' +
   // The day the charge was forgiven, in the practice's own time zone, so the
   // page can say so. A waived fee keeps its number and its figures — the row
   // is append-only — and a document that did not say it had been forgiven
@@ -53,6 +56,7 @@ const INVOICE_SQL =
   "to_char(i.waived_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as waived_on, " +
   'i.client_id, i.supplier_legal_name, i.supplier_legal_name_ar, i.supplier_address, ' +
   'i.supplier_licence_number, i.supplier_licensing_authority, i.supplier_trn, ' +
+  'i.supplier_address_ar, i.supplier_licensing_authority_ar, ' +
   'i.supplier_vat_registered, i.supplier_vat_trn, ' +
   'i.supplier_contact_phone, i.supplier_contact_email, i.supplier_website, ' +
   "c.mrn as client_mrn, c.given_name || ' ' || c.family_name as client_name " +
@@ -66,6 +70,7 @@ const LINES_SQL =
 
 const PAYMENT_SQL =
   'select p.id, p.client_id, p.receipt_reference, p.method, p.amount_fils, p.reference, ' +
+  'p.locale::text as locale, ' +
   "to_char(p.received_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as received_on, " +
   'p.invoice_id, i.reference as invoice_reference, i.issued_on as invoice_issued_on, ' +
   "c.mrn as client_mrn, c.given_name || ' ' || c.family_name as client_name " +
@@ -76,6 +81,7 @@ const PAYMENT_SQL =
 const SUPPLIER_COLUMNS =
   'supplier_legal_name, supplier_legal_name_ar, supplier_address, ' +
   'supplier_licence_number, supplier_licensing_authority, supplier_trn, ' +
+  'supplier_address_ar, supplier_licensing_authority_ar, ' +
   'supplier_vat_registered, supplier_vat_trn, ' +
   'supplier_contact_phone, supplier_contact_email, supplier_website';
 
@@ -131,6 +137,9 @@ type SupplierColumns = {
   supplier_address: string | null;
   supplier_licence_number: string | null;
   supplier_licensing_authority: string | null;
+  /** The two Arabic halves migration 980 snapshots; null on an invoice from before it. */
+  supplier_address_ar: string | null;
+  supplier_licensing_authority_ar: string | null;
   supplier_trn: string | null;
   supplier_vat_registered: boolean | null;
   supplier_vat_trn: string | null;
@@ -146,6 +155,8 @@ function supplierOf(row: SupplierColumns): SupplierSnapshot {
     address: row.supplier_address,
     licenceNumber: row.supplier_licence_number,
     licensingAuthority: row.supplier_licensing_authority,
+    addressAr: row.supplier_address_ar,
+    licensingAuthorityAr: row.supplier_licensing_authority_ar,
     // Named for what it is. `supplier_trn` is the corporate-tax registration
     // and the renderer never prints it as a VAT number.
     corporateTaxNumber: row.supplier_trn,
@@ -169,6 +180,7 @@ type InvoiceRow = SupplierColumns & {
   vat_fils: number;
   gross_fils: number;
   waived_on: string | null;
+  locale: 'en' | 'ar' | null;
   client_id: string;
   client_mrn: string;
   client_name: string;
@@ -202,6 +214,7 @@ export async function invoiceDocument(
     clientId: row.client_id,
     document: {
       kind: 'invoice',
+      locale: row.locale,
       supplier: supplierOf(row),
       recipient: { name: row.client_name, recordNumber: row.client_mrn },
       reference: row.reference,
@@ -247,6 +260,7 @@ type PaymentRow = {
   amount_fils: number;
   reference: string | null;
   received_on: string;
+  locale: 'en' | 'ar' | null;
   invoice_id: string | null;
   invoice_reference: string | null;
   invoice_issued_on: string | null;
@@ -281,6 +295,7 @@ export async function receiptDocument(
     clientId: row.client_id,
     document: {
       kind: 'receipt',
+      locale: row.locale,
       supplier: supplierOf(supplier),
       recipient: { name: row.client_name, recordNumber: row.client_mrn },
       reference: row.receipt_reference,

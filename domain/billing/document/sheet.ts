@@ -124,9 +124,17 @@ export class Sheet {
    */
   private floorAt = BOTTOM;
   private readonly fonts: FontSet;
-  private readonly running: { practice: string; reference: string };
+  /**
+   * `practiceRtl`: on a document in one language (15 October 2026), a legal
+   * name that reads right to left. Absent, the running header is drawn as
+   * every document filed before then drew it.
+   */
+  private readonly running: { practice: string; reference: string; practiceRtl?: boolean };
 
-  constructor(fonts: FontSet, running: { practice: string; reference: string }) {
+  constructor(
+    fonts: FontSet,
+    running: { practice: string; reference: string; practiceRtl?: boolean },
+  ) {
     this.fonts = fonts;
     this.running = running;
   }
@@ -194,9 +202,15 @@ export class Sheet {
     // belongs to and whose practice issued it.
     // Cut to half the measure, so a long legal name never runs under the
     // reference against the right margin.
-    this.text(LEFT, this.fit(this.running.practice, (RIGHT - LEFT) / 2, SIZE.small), SIZE.small, {
-      grey: MUTED,
-    });
+    const practiceOptions: TextOptions = this.running.practiceRtl
+      ? { grey: MUTED, rtl: true, align: 'start' }
+      : { grey: MUTED };
+    this.text(
+      LEFT,
+      this.fit(this.running.practice, (RIGHT - LEFT) / 2, SIZE.small, practiceOptions),
+      SIZE.small,
+      practiceOptions,
+    );
     this.text(RIGHT, this.running.reference, SIZE.small, { grey: MUTED, align: 'end' });
     this.down(SMALL_LINE);
     this.rule();

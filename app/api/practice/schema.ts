@@ -278,6 +278,13 @@ export const Practice = z.object({
   taxRegistrationNumber: z.string().nullable(),
   licenceNumber: z.string().nullable(),
   licensingAuthority: z.string().nullable(),
+  /**
+   * The address and the licensing authority in Arabic (migration 980): what a
+   * document in Arabic prints in their place. Null until the practice types
+   * them, and an Arabic document then prints the English.
+   */
+  addressAr: z.string().nullable(),
+  licensingAuthorityAr: z.string().nullable(),
   licenceExpiresOn: z.string().nullable(),
   vatRegistered: z.boolean(),
   vatTrn: z.string().nullable(),
@@ -341,6 +348,12 @@ export const UpdatePracticeInput = z
     taxRegistrationNumber: TaxRegistration,
     licenceNumber: optional(60),
     licensingAuthority: optional(120),
+    /**
+     * Optional, like the contact fields: absent leaves the column as it
+     * stands, blank or null clears it (migration 980).
+     */
+    addressAr: optional(300).optional(),
+    licensingAuthorityAr: optional(120).optional(),
     licenceExpiresOn: IsoDate.nullable(),
     vatRegistered: z.boolean(),
     vatTrn: VatTrn,

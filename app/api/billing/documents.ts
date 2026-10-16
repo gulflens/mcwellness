@@ -66,10 +66,17 @@ import { documentSender } from '../_middleware/sending';
 
 const KIND_SQL =
   'select bd.id, bd.kind, bd.client_id, bd.document_id, d.storage_key, d.sha256, ' +
-  'coalesce(i.reference, p.receipt_reference) as reference ' +
+  'coalesce(i.reference, p.receipt_reference) as reference, ' +
+  // The document's own language (migration 413); for one issued before it,
+  // the client's own, so the message is still in one language.
+  "coalesce(i.locale, p.locale, c.preferred_locale, 'en')::text as locale, " +
+  'coalesce(i.supplier_legal_name_ar, si.supplier_legal_name_ar) as practice_name_ar ' +
   'from billing_document bd join document d on d.id = bd.document_id ' +
+  // Left: the link and send routes never needed the client's row to answer.
+  'left join client c on c.id = bd.client_id ' +
   'left join invoice i on i.id = bd.invoice_id ' +
   'left join payment p on p.id = bd.payment_id ' +
+  'left join invoice si on si.id = p.invoice_id ' +
   'where bd.tenant_id = app.current_tenant_id() and bd.document_id = $1';
 
 const EXISTING_SQL =
@@ -85,6 +92,9 @@ type FiledRow = {
   /** The fingerprint of the bytes that were filed. A re-render must match it. */
   sha256: Buffer;
   reference: string | null;
+  locale: 'en' | 'ar';
+  /** The practice's Arabic legal name as the document's invoice carried it, when it did. */
+  practice_name_ar: string | null;
 };
 
 /** The bytes for a document, from the rows it was written from. */
@@ -391,8 +401,12 @@ export function mountDocumentSending(
     );
     const message = draftMessage({
       kind: row.kind,
+      locale: row.locale,
       reference: row.reference ?? '',
-      practiceName: practice.rows[0]?.supplier_legal_name ?? '',
+      practiceName:
+        (row.locale === 'ar' ? row.practice_name_ar : null) ??
+        practice.rows[0]?.supplier_legal_name ??
+        '',
       url,
     });
 

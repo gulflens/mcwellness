@@ -134,7 +134,12 @@ export const DraftInput = z.object({
   id: z.uuid().optional(),
   clientId: z.uuid(),
   kind: DraftKindInput,
-  locale: ReportLocaleInput.default('en'),
+  /**
+   * The one language the report is set in. Absent on a new draft, it is the
+   * client's own preferred language; absent on a saved one, the draft keeps
+   * the language it has (the operator's decision of 15 October 2026).
+   */
+  locale: ReportLocaleInput.optional(),
   serviceTypeId: z.uuid().nullable().default(null),
   /**
    * The completed visit a **session** report follows. Required for that kind
@@ -296,6 +301,12 @@ export const GatherResponse = z.object({
   content: z.unknown(),
   /** True when the assessment table is on this database and was read. */
   brainMapsRead: z.boolean(),
+  /**
+   * The client's own preferred language, which a new report is set in until
+   * the practitioner chooses otherwise. Optional only so an answer from
+   * before it existed still parses.
+   */
+  preferredLocale: ReportLocaleInput.optional(),
 });
 export type GatherResponse = z.infer<typeof GatherResponse>;
 

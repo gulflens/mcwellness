@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProgressReportContent, SessionReportContent } from '@domain/reports';
 import { isoDateIn } from '@domain/shared';
 import {
@@ -147,6 +147,9 @@ export function ReportEditor({
   const [error, setError] = useState<string | null>(null);
   const [blockedPreview, setBlockedPreview] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Whether the language is somebody's choice — the practitioner's, or the
+  // saved draft's — rather than the client's preference the record offered.
+  const localeChosen = useRef(reportId !== null);
 
   // Reading and setting are separate so an effect never calls setState in its
   // own body: it hands the answer to a callback, the way the record's own tabs
@@ -230,7 +233,11 @@ export function ReportEditor({
   const gather = useCallback(
     async (
       at: Pick<Editing, 'coverageFrom' | 'coverageTo' | 'sessionId' | 'locale'>,
-    ): Promise<{ content: ProgressReportContent | SessionReportContent; maps: boolean } | null> => {
+    ): Promise<{
+      content: ProgressReportContent | SessionReportContent;
+      maps: boolean;
+      preferredLocale: 'en' | 'ar' | undefined;
+    } | null> => {
       const query =
         kind === 'progress'
           ? `/api/reports/gather?clientId=${encodeURIComponent(clientId)}` +
@@ -245,6 +252,7 @@ export function ReportEditor({
         return {
           content: body.content as ProgressReportContent | SessionReportContent,
           maps: body.brainMapsRead,
+          preferredLocale: body.preferredLocale,
         };
       } catch {
         return null;
@@ -265,6 +273,13 @@ export function ReportEditor({
       }
       setGathered(next.content);
       setBrainMapsRead(next.maps);
+      // A new report is set in the client's own language until somebody
+      // chooses otherwise (the operator's decision of 15 October 2026).
+      const preferred = next.preferredLocale;
+      if (!localeChosen.current && preferred !== undefined) {
+        localeChosen.current = true;
+        setEditing((was) => (was.locale === preferred ? was : { ...was, locale: preferred }));
+      }
     });
     return () => {
       live = false;
@@ -441,11 +456,12 @@ export function ReportEditor({
         )}
         <Select
           id="report-locale"
-          label="Language of the practitioner's own words"
-          hint="Every heading and label prints in both. What you write prints in the language you write it in."
+          label="Language of the report"
+          hint="The whole report prints in this one language. It starts as the client's preferred language."
           value={editing.locale}
           onChange={(event) => {
             const value = event.currentTarget.value as 'en' | 'ar';
+            localeChosen.current = true;
             setEditing((was) => ({ ...was, locale: value }));
           }}
         >

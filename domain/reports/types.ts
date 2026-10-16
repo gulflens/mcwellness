@@ -88,8 +88,17 @@ export type PracticeSnapshot = {
   legalName: string;
   legalNameAr: string | null;
   address: string | null;
+  /**
+   * The same in Arabic (migration 980), printed on a document in Arabic in its
+   * place. Absent or null — never typed, or a document from before — and an
+   * Arabic document prints the English one; a document in English or in both
+   * never reads it.
+   */
+  addressAr?: string | null;
   licenceNumber: string | null;
   licensingAuthority: string | null;
+  /** As `addressAr`, for the licensing authority. */
+  licensingAuthorityAr?: string | null;
 };
 
 /** Who the report is about. A household, which is a private individual. */
@@ -210,6 +219,8 @@ export type SessionReportContent = {
   note: string;
   /** What to expect before the next visit. */
   beforeNextVisit: string;
+  /** `'single'` on a report issued in one language (`ReportLayoutMark`). */
+  layout?: ReportLayoutMark;
 };
 
 /** What a progress report says (section 5). */
@@ -227,7 +238,18 @@ export type ProgressReportContent = {
   summary: string;
   /** What the practice suggests next. */
   suggestion: string;
+  /** `'single'` on a report issued in one language (`ReportLayoutMark`). */
+  layout?: ReportLayoutMark;
 };
+
+/**
+ * Written into a session or progress report's content when it is issued, from
+ * 15 October 2026: the report is set in its own language alone. A report
+ * issued before then carries no mark and was set in both, so its row says
+ * which layout re-renders it to the bytes it was filed as
+ * (`app/api/reports/source.ts`, `ReportDocument.bilingual`).
+ */
+export type ReportLayoutMark = 'single';
 
 export type ReportContent = SessionReportContent | ProgressReportContent;
 
@@ -253,4 +275,13 @@ export type ReportDocument = {
   /** Why this version exists, on version 2 and after. */
   amendmentReason: string | null;
   content: ReportContent;
+  /**
+   * Both languages on one page, as every session and progress report issued
+   * before 15 October 2026 was set. Since the operator's decision of that day
+   * a report is set in its `locale` alone; a report issued before it is still
+   * rendered in both, so a lost file is re-rendered to the bytes it was filed
+   * as. Absent is one language. `app/api/reports/source.ts` sets it from the
+   * row (`ReportLayoutMark`).
+   */
+  bilingual?: boolean;
 };

@@ -49,7 +49,7 @@ class ReceiptPage extends DocumentPage {
   private readonly document_: ReceiptDocument;
 
   constructor(document_: ReceiptDocument, fonts: FontSet) {
-    super(fonts, document_.supplier, document_.reference);
+    super(fonts, document_.supplier, document_.reference, document_.locale);
     this.document_ = document_;
   }
 
@@ -110,7 +110,10 @@ class ReceiptPage extends DocumentPage {
       {
         label: WORDS.dateReceived,
         value: {
-          text: formatDocumentDate(this.document_.receivedOn),
+          text:
+            this.lang === 'both'
+              ? formatDocumentDate(this.document_.receivedOn)
+              : this.date(this.document_.receivedOn),
           size: TYPE.date,
           options: { bold: true },
         },
@@ -124,17 +127,22 @@ class ReceiptPage extends DocumentPage {
    * date. English labels only, as the payment details card's rows.
    */
   private receivedRows(method: Phrase): CardRow[] {
-    const rows: CardRow[] = [{ label: WORDS.method.en, value: method.en, options: { bold: true } }];
+    // English on a document in both, as the design set it; the page's own
+    // language on a document in one.
+    const say = (phrase: Phrase): string => (this.lang === 'both' ? phrase.en : this.say(phrase));
+    const rows: CardRow[] = [
+      { label: say(WORDS.method), value: say(method), options: { bold: true } },
+    ];
     if (this.document_.paymentReference) {
       rows.push({
-        label: WORDS.reference.en,
+        label: say(WORDS.reference),
         value: this.document_.paymentReference,
         options: { bold: true },
       });
     }
     if (this.document_.settles) {
       rows.push({
-        label: WORDS.settlesInvoice.en,
+        label: say(WORDS.settlesInvoice),
         value: this.document_.settles.reference,
         options: { bold: true },
       });

@@ -13,6 +13,7 @@ import { draftMessage, whatsAppHandoff } from './sending';
 
 const INVOICE = {
   kind: 'invoice' as const,
+  locale: 'en' as const,
   reference: 'INV-000001',
   practiceName: 'Synthetic Wellness Studio',
   url: 'https://example.com/d/abc',
@@ -27,16 +28,37 @@ describe('the message that goes with a document', () => {
     expect(message.subject).toBe('Synthetic Wellness Studio — invoice INV-000001');
   });
 
-  it('is written in both languages', () => {
+  it('is written in the document’s one language: English alone for an English one', () => {
+    // The operator's decision of 15 October 2026: nothing the practice sends
+    // carries both languages.
     const message = draftMessage(INVOICE);
     expect(message.text).toContain('Your invoice INV-000001');
-    expect(message.text).toContain('فاتورتك');
+    expect(message.text).not.toMatch(/\p{Script=Arabic}/u);
   });
 
-  it('says receipt for a receipt, in both languages', () => {
-    const message = draftMessage({ ...INVOICE, kind: 'receipt', reference: 'RCP-000004' });
-    expect(message.text).toContain('Your receipt RCP-000004');
-    expect(message.text).toContain('إيصالك');
+  it('is in Arabic alone for an Arabic document, subject and all', () => {
+    const message = draftMessage({
+      ...INVOICE,
+      locale: 'ar',
+      practiceName: 'استوديو العافية التجريبي',
+    });
+    expect(message.text).toBe(
+      'فاتورتك INV-000001 من استوديو العافية التجريبي جاهزة. يمكنك فتحها هنا: https://example.com/d/abc',
+    );
+    expect(message.subject).toBe('استوديو العافية التجريبي — فاتورة INV-000001');
+  });
+
+  it('says receipt for a receipt, in either language', () => {
+    const english = draftMessage({ ...INVOICE, kind: 'receipt', reference: 'RCP-000004' });
+    const arabic = draftMessage({
+      ...INVOICE,
+      locale: 'ar',
+      kind: 'receipt',
+      reference: 'RCP-000004',
+    });
+    expect(english.text).toContain('Your receipt RCP-000004');
+    expect(arabic.text).toContain('إيصالك RCP-000004');
+    expect(arabic.text).not.toContain('Your');
   });
 
   it('asks for nothing back', () => {

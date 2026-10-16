@@ -16,7 +16,7 @@ import { logAction, logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
 import { requiredReason } from './reason';
-import { practiceTimeZone } from './gather';
+import { clientPreferredLocale, practiceTimeZone } from './gather';
 import { brainMapService } from './qeeg/brainMapService';
 import { brainMapConsentGate } from './qeeg/consentGate';
 import { countedSessions } from './qeeg/sessionsCounted';
@@ -539,7 +539,8 @@ async function writeDraft(
         ])
       : await db.query<{ id: string }>(INSERT_SQL, [
           input.clientId,
-          input.locale ?? 'en',
+          // Unsaid, the client's own preferred language (15 October 2026).
+          input.locale ?? (await clientPreferredLocale(db, input.clientId)),
           row.serviceTypeId,
           comparedWithId,
           body,

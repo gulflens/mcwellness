@@ -154,6 +154,12 @@ export function PracticeDrawer({
   const legalNameAr = practice.legalNameAr;
   const [licenceNumber, setLicenceNumber] = useState(practice.licenceNumber ?? '');
   const [licensingAuthority, setLicensingAuthority] = useState(practice.licensingAuthority ?? '');
+  // The two Arabic halves an Arabic document prints (migration 980). Typed by
+  // the practice; the labels stay English, as the whole console is.
+  const [licensingAuthorityAr, setLicensingAuthorityAr] = useState(
+    practice.licensingAuthorityAr ?? '',
+  );
+  const [addressAr, setAddressAr] = useState(practice.addressAr ?? '');
   const [licenceExpiresOn, setLicenceExpiresOn] = useState(practice.licenceExpiresOn ?? '');
   const [taxRegistrationNumber, setTaxRegistrationNumber] = useState(
     practice.taxRegistrationNumber ?? '',
@@ -355,6 +361,9 @@ export function PracticeDrawer({
           taxRegistrationNumber,
           licenceNumber,
           licensingAuthority,
+          licensingAuthorityAr:
+            licensingAuthorityAr.trim().length === 0 ? null : licensingAuthorityAr,
+          addressAr: addressAr.trim().length === 0 ? null : addressAr,
           licenceExpiresOn: licenceExpiresOn.trim().length === 0 ? null : licenceExpiresOn,
           vatRegistered,
           vatTrn: vatRegistered ? typedVatTrn : '',
@@ -476,6 +485,17 @@ export function PracticeDrawer({
             maxLength={120}
             value={licensingAuthority}
             onChange={(e) => setLicensingAuthority(e.target.value)}
+          />
+
+          <Field
+            id="practice-licensing-authority-ar"
+            label="Licensing authority in Arabic (optional)"
+            hint="Printed on documents in Arabic. Left empty, they print the English."
+            type="text"
+            dir="auto"
+            maxLength={120}
+            value={licensingAuthorityAr}
+            onChange={(e) => setLicensingAuthorityAr(e.target.value)}
           />
 
           <PhoneField
@@ -635,6 +655,17 @@ export function PracticeDrawer({
               clearFieldError('displayAddress');
             }}
             error={fieldErrors.displayAddress}
+          />
+
+          <Field
+            id="practice-address-ar"
+            label="Registered address in Arabic (optional)"
+            hint="Printed on documents in Arabic. Left empty, they print the English address."
+            type="text"
+            dir="auto"
+            maxLength={300}
+            value={addressAr}
+            onChange={(e) => setAddressAr(e.target.value)}
           />
 
           <Select

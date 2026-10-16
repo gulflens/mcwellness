@@ -61,6 +61,12 @@ async function deliverVisit(clientId: string): Promise<string> {
 beforeAll(async () => {
   h = await startHarness(NOW);
   await setPracticePrices(h, SEED_TODAY);
+  // Every household here reads English, so the words these tests look for are
+  // on the page: since migration 413 a document is in its client's one
+  // language, and the Arabic one is tested in document_locale.test.ts.
+  await h.owner.query("update client set preferred_locale = 'en' where tenant_id = $1", [
+    h.data.tenant.id,
+  ]);
 }, 120_000);
 
 afterAll(async () => {
@@ -114,7 +120,7 @@ describe('rendering an invoice', () => {
     expect(Buffer.from(stored.subarray(0, 8)).toString('latin1')).toBe('%PDF-1.7');
   });
 
-  it('renders what the invoice says, in both languages', async () => {
+  it('renders what the invoice says, in the client’s language', async () => {
     const invoiceId = await deliverVisit(h.clientId(1));
     const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
     const body = (await res.json()) as CreateDocumentResponse;

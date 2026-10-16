@@ -66,6 +66,9 @@ const PRACTICE = {
   taxRegistrationNumber: null,
   licenceNumber: null,
   licensingAuthority: null,
+  // The Arabic halves an Arabic document prints (migration 980).
+  addressAr: null,
+  licensingAuthorityAr: null,
   licenceExpiresOn: null,
   vatRegistered: false,
   vatTrn: null,

@@ -562,3 +562,41 @@ describe('tenant.record_readings', () => {
     expect((await read(authIdOf(0))).recordReadings).toBe(true);
   });
 });
+
+/**
+ * The practice's address and licensing authority in Arabic (migration 980),
+ * printed in their place on a document in Arabic. Empty until the practice
+ * types them; nothing is invented for it.
+ */
+describe('the practice’s own Arabic', () => {
+  it('is empty until somebody records it', async () => {
+    expect(await read(authIdOf(0))).toMatchObject({ addressAr: null, licensingAuthorityAr: null });
+  });
+
+  it('is saved, cleared when sent blank, and left alone by a save that does not mention it', async () => {
+    const saved = await call('PATCH', authIdOf(0), {
+      reason: 'The Arabic for the Arabic documents.',
+      body: await form({
+        addressAr: 'الوحدة 1، البرج التجريبي، دبي',
+        licensingAuthorityAr: 'دائرة الاقتصاد والسياحة التجريبية',
+      }),
+    });
+    expect(saved.status).toBe(200);
+    expect(await read(authIdOf(0))).toMatchObject({
+      addressAr: 'الوحدة 1، البرج التجريبي، دبي',
+      licensingAuthorityAr: 'دائرة الاقتصاد والسياحة التجريبية',
+    });
+
+    await call('PATCH', authIdOf(0), {
+      reason: 'An ordinary save that never saw the Arabic.',
+      body: await form(),
+    });
+    expect((await read(authIdOf(0))).addressAr).toBe('الوحدة 1، البرج التجريبي، دبي');
+
+    await call('PATCH', authIdOf(0), {
+      reason: 'Clearing the Arabic address.',
+      body: await form({ addressAr: '' }),
+    });
+    expect((await read(authIdOf(0))).addressAr).toBeNull();
+  });
+});

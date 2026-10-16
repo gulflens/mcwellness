@@ -4,10 +4,13 @@ import { groupIban } from '../../shared/iban';
 /**
  * Every word on a rendered money document, in both languages.
  *
- * Arabic is a first-class layout here, not a translation dropped underneath the
- * English: each label is set beside its English on the same line, right-aligned
- * against the right margin, which is how a bilingual invoice is read in the
- * Gulf. British English throughout (CLAUDE.md), and no word on these documents
+ * A document is set in one language, its own (`locale`, migration 413; the
+ * operator's decision of 15 October 2026), and takes the one half of each
+ * pair here — an Arabic one the English page mirrored. A document issued
+ * before then has no language of its own and was set bilingually: each label
+ * beside its English on the same line, right-aligned against the right
+ * margin. It is still drawn so, because a filed document must re-render to
+ * the bytes it was filed as. British English throughout (CLAUDE.md), and no word on these documents
  * belongs to the trade that built them — a family reads "Invoice", never
  * "document id" or "record".
  *
@@ -134,8 +137,13 @@ export const WORDS = {
   bankAddress: { en: 'Bank address', ar: 'عنوان البنك' },
 
   paymentDetails: { en: 'Payment details', ar: 'تفاصيل الدفع' },
-  accountName: { en: 'Account name', ar: '' },
-  swiftBic: { en: 'SWIFT / BIC', ar: '' },
+  /**
+   * Set beside their English only on a document in Arabic alone (15 October
+   * 2026); a document set in both still prints the payment card's rows in
+   * English only, as the design says.
+   */
+  accountName: { en: 'Account name', ar: 'اسم الحساب' },
+  swiftBic: { en: 'SWIFT / BIC', ar: 'رمز SWIFT / BIC' },
 
   /**
    * The receipt's own two lower cards (round 65, "The receipt"). Its title
@@ -146,8 +154,16 @@ export const WORDS = {
    * `transfer` / `link` below).
    */
   paymentReceived: { en: 'Payment received', ar: 'الدفعة المستلمة' },
-  method: { en: 'Method', ar: '' },
-  reference: { en: 'Reference', ar: '' },
+  method: { en: 'Method', ar: 'الطريقة' },
+  reference: { en: 'Reference', ar: 'المرجع' },
+
+  /**
+   * The footer's contact line, on a document in one language (15 October
+   * 2026). A document set in both keeps the letters it was filed with.
+   */
+  phone: { en: 'P', ar: 'هاتف' },
+  email: { en: 'E', ar: 'البريد' },
+  website: { en: 'W', ar: 'الموقع' },
   /** The receipt's bottom card, carrying `receiptBasis` (round 65). */
   note: { en: 'Note', ar: 'ملاحظة' },
 
