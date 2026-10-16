@@ -199,7 +199,8 @@ describe('a rendered session report', () => {
   });
 
   it('names who signed it and on what authority', () => {
-    expect(text).toContain('bcia_bcn');
+    expect(text).toContain('BCIA Board Certified in Neurofeedback');
+    expect(text).not.toContain('bcia_bcn');
     expect(text).toContain('BCIA');
     expect(text).toContain('SYN-0001');
   });

@@ -16,6 +16,7 @@ import type {
   ReportDocument,
   SessionReportContent,
 } from '../../domain/reports';
+import { certificationName } from '../../domain/reports';
 
 /**
  * A report in the client's language: English or Arabic, never both
@@ -311,5 +312,25 @@ describe('the practice in Arabic on an Arabic report', () => {
     );
     expect(texts).toContain(PRACTICE.address);
     expect(texts).not.toContain('الوحدة 1، البرج التجريبي، دبي');
+  });
+});
+
+describe('the signature on a report in one language', () => {
+  it('names the certification in English, not the code it is recorded as', () => {
+    const texts = textsOf(report('en', SESSION_EN)).map((op) => op.text);
+    expect(texts).toContain(certificationName('bcia_bcn').en);
+    expect(texts).not.toContain('bcia_bcn');
+  });
+
+  it('names the certification in Arabic on an Arabic report', () => {
+    const texts = textsOf(report('ar', SESSION)).map((op) => op.text);
+    expect(texts).toContain(certificationName('bcia_bcn').ar);
+    expect(texts).not.toContain('bcia_bcn');
+  });
+
+  it('prints a certification it has no name for exactly as it was recorded', () => {
+    const typed = { ...report('en', SESSION_EN) };
+    typed.signer = { ...typed.signer, certification: 'Neurofeedback practitioner' };
+    expect(textsOf(typed).map((op) => op.text)).toContain('Neurofeedback practitioner');
   });
 });

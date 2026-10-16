@@ -1,5 +1,6 @@
 import { BAND_RGB } from '../../shared/bands';
 import { mirrorPages, type FontSet, type Page } from '../../shared/document';
+import { certificationName } from '../certificationName';
 import type {
   PracticeSnapshot,
   ProgressReportContent,
@@ -245,7 +246,7 @@ class ReportPage {
   signature(signer: SignerSnapshot): void {
     this.section(WORDS.signedBy);
     this.labelled(WORDS.practitioner, signer.name);
-    this.labelled(WORDS.certification, signer.certification);
+    this.labelled(WORDS.certification, certificationName(signer.certification)[this.lang]);
     if (signer.certifyingBody) this.labelled(WORDS.certifyingBody, signer.certifyingBody);
     if (signer.certificateNumber) {
       this.labelled(WORDS.certificateNumber, signer.certificateNumber);
