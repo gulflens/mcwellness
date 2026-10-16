@@ -454,12 +454,15 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
 
     // None yet: the general door's own session path, with nothing written by
     // a person — the note and what to expect before the next visit are left
-    // for the editor, which opens on this draft next.
+    // for the editor, which opens on this draft next. It is set in the
+    // client's own language, as the general door's is (section 5): one
+    // language per report, and the editor may change it before signing.
+    const locale = await clientPreferredLocale(db, clientId);
     const content = await gatherSession(db, {
       clientId,
       sessionId,
       timeZone: await practiceTimeZone(db),
-      locale: 'en',
+      locale,
     });
     if (!content) {
       return c.json({ error: 'not_found', code: 'no_such_visit', requestId }, 404);
@@ -474,7 +477,7 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     const written = await db.query<{ id: string }>(INSERT_SQL, [
       clientId,
       'session',
-      'en',
+      locale,
       null,
       null,
       null,

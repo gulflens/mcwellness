@@ -173,4 +173,26 @@ describe('starting the session report from the visit', () => {
     );
     expect(Number(rows[0]?.n)).toBeGreaterThanOrEqual(1);
   });
+
+  it('is set in the client’s own language, one language per report', async () => {
+    // The operator's decision of 15 October 2026: English or Arabic, never
+    // both, the client's preferred language unless the practitioner changes
+    // it in the editor before signing.
+    await h.owner.query("update client set preferred_locale = 'ar'::locale where id = $1", [
+      h.clientId(10),
+    ]);
+    try {
+      const visit = await h.completedVisit(10);
+      const res = await h.call('POST', '/api/reports/session-draft', SEEDED.owner, {
+        sessionId: visit,
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as DraftResponse;
+      expect(body.report.locale).toBe('ar');
+    } finally {
+      await h.owner.query("update client set preferred_locale = 'en'::locale where id = $1", [
+        h.clientId(10),
+      ]);
+    }
+  });
 });
