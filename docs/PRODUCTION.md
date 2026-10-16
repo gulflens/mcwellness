@@ -3679,3 +3679,25 @@ definitions, and both stay at 131 migrations. Health and deep health answer
 **Left open for the operator.** A household can still read its own
 practice's whole `tenant` row, including bank, licence and TRN details. None
 of it is personal data.
+
+## What was done on 2026-10-11: the forty-ninth live pass — the practice's list, stage one
+
+**15:21 UTC (19:21 +04): main `e400b6b3`, PR 249.**
+- The first stage of the practice's list of 6 October 2026:
+  - a refused package sale says why, and names the first date it can carry;
+  - Books opens a journal entry or an account in a drawer;
+  - a lead can be booked;
+  - Pause, Close and Reactivate are on the Overview;
+  - Week and Today offer the visit actions;
+  - called-off visits and stood-down kit hide behind a switch;
+  - Enquiries shows how many are new.
+- No migration and no policy file. Both databases stay at 131 on production.
+  Staging alone already holds 607 and 608 of PR 253, which is not yet merged.
+- No other session was running (ListAgents). The host's build list showed no
+  build after the forty-eighth.
+- Archive 7,867,162 bytes; TUS 201, then 204 with the offset equal to the
+  size. Build `01a12b8d`. The entry moved from `index-DvRcmZiz.js` to
+  `index-DpY7rXUS.js` in 60 s, and the old entry answers 404.
+- The served `BillingPage-*.js` carries "No price was in force on", and
+  `/api/enquiries/count` answers 401 to a stranger. Health 200 in 0.75 s, deep
+  health 200 in 0.81 s. No restart.

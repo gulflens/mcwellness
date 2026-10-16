@@ -31,6 +31,7 @@ import {
   type AppointmentRow,
   type ReorderActionCode,
 } from './schema';
+import { requestReason } from '../_middleware/reason';
 
 /**
  * `POST /api/appointments/reorder` — several visits of one practitioner's day
@@ -95,7 +96,7 @@ export function mountAppointmentReorder(
 
     // A reorder rewrites several windows at once, so the trail should be able
     // to explain it rather than merely record it.
-    if (cleanText(c.req.header('x-reason') ?? '', REASON_MAX).length === 0) {
+    if (cleanText(requestReason(c), REASON_MAX).length === 0) {
       return badRequest(c, requestId, 'reason_required');
     }
 
