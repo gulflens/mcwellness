@@ -43,7 +43,7 @@ type StatusMove = 'active' | 'paused' | 'closed';
 const MOVE_LABELS: Record<StatusMove, string> = {
   active: 'Reactivate',
   paused: 'Pause',
-  closed: 'Close',
+  closed: 'Close case',
 };
 
 /**
@@ -94,6 +94,7 @@ export function OverviewTab({
   const [moveReason, setMoveReason] = useState('');
   const [moveBusy, setMoveBusy] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
+  const mayEdit = mayWrite && record.status !== 'erased';
   const moves: StatusMove[] =
     mayWrite && record.status !== 'lead'
       ? (['active', 'paused', 'closed'] as const).filter((to) => canTransition(record.status, to))
@@ -181,24 +182,34 @@ export function OverviewTab({
           <ActivationSummary missing={[]} toSign={toSign} activated />
         </div>
       ) : null}
-      {moves.length > 0 && confirming === null ? (
+      {/* One row: the status moves and Edit together (the operator's Phase 1
+          brief, 2026-10-16), where Edit had stood on a row of its own below.
+          It steps aside while a close or a reactivation is being confirmed,
+          and while the record is being edited, so one task is in front of
+          the person at a time. */}
+      {confirming === null && !editing && (moves.length > 0 || mayEdit) ? (
         <div className="drawer__actions">
           {moves.map((to) => (
             <Button key={to} variant="secondary" disabled={moveBusy} onClick={() => press(to)}>
               {MOVE_LABELS[to]}
             </Button>
           ))}
+          {mayEdit ? (
+            <Button variant="secondary" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {confirming === 'close' ? (
         <div className="tab-section">
           <Note>
-            Closing makes record {record.mrn} read-only except for documents. It can be reactivated
-            later, with a reason.
+            Closing the case makes record {record.mrn} read-only except for documents. It can be
+            reactivated later, with a reason.
           </Note>
           <div className="drawer__actions">
             <Button variant="primary" disabled={moveBusy} onClick={() => void move('closed')}>
-              {moveBusy ? 'Closing…' : 'Close record'}
+              {moveBusy ? 'Closing…' : 'Close case'}
             </Button>
             <Button variant="quiet" disabled={moveBusy} onClick={() => setConfirming(null)}>
               Cancel
@@ -231,13 +242,6 @@ export function OverviewTab({
         </div>
       ) : null}
       {moveError ? <Note tone="critical">{moveError}</Note> : null}
-      {mayWrite && record.status !== 'erased' && !editing ? (
-        <div className="drawer__actions">
-          <Button variant="secondary" onClick={() => setEditing(true)}>
-            Edit
-          </Button>
-        </div>
-      ) : null}
       {editing ? (
         <IdentityForm
           clientId={record.id}
