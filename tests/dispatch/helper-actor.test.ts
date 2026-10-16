@@ -54,6 +54,8 @@ const EVERY: { [K in Action['type']]: Extract<Action, { type: K }> } = {
   'audit.activity': { type: 'audit.activity' },
   'enquiry.list': { type: 'enquiry.list' },
   'enquiry.action': { type: 'enquiry.action' },
+  'testimonial.list': { type: 'testimonial.list' },
+  'testimonial.decide': { type: 'testimonial.decide' },
   'appointment.list': { type: 'appointment.list', scope: 'own' },
   'appointment.create': {
     type: 'appointment.create',

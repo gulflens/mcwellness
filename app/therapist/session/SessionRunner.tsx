@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { scoreSignalQuality, type TelemetrySample } from '@domain/session';
+import { canActor } from '@domain/shared';
+import { DraftResponse } from '../../api/reports/schema';
 import { CloseResponse, EventsResponse, type ServiceTypeOption } from '../../api/sessions/schema';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button } from '../../shell/components/Controls';
@@ -81,6 +83,19 @@ const CLOSE_BLOCKED =
   'This visit could not be checked out. Nothing is lost — ask the practice to close it.';
 
 /**
+ * The session report, from the end of the visit. The practice asked whether
+ * what is done on Today reaches the client's Reports, and it did not: a
+ * report was only ever started from the record. It is offered here, on the
+ * last screen, and not on the summary before it, because a session report
+ * follows a completed visit (app/api/reports/gather.ts reads completed
+ * sessions only) and a visit is completed by the check-out. The route is
+ * idempotent on the visit, so a second tap, or coming back to it, opens the
+ * same report rather than writing another.
+ */
+const REPORT_FAILED =
+  "The report could not be started. It can be written from the client's Reports tab.";
+
+/**
  * How the outbox reaches this API, and how it reads the answer. Three
  * distinctions matter: a failure worth waiting on, a refusal that never
  * changes, and a batch refused for its size, which goes again in pieces.
@@ -151,6 +166,7 @@ export function SessionRunner({
   service,
   recordReadings,
   onFinished,
+  onOpenReport,
   createStore = createOutboxStore,
 }: {
   visit: RunnerVisit;
@@ -158,6 +174,11 @@ export function SessionRunner({
   /** `tenant.record_readings` (migration 918), from the service-types door's own answer. */
   recordReadings: boolean;
   onFinished: () => void;
+  /**
+   * Opens a client's report once the visit has started it: the check-in face
+   * navigates to the client's Reports tab. Absent, nothing is offered.
+   */
+  onOpenReport?: (clientId: string, reportId: string) => void;
   /** Injected in tests, where IndexedDB does not exist. */
   createStore?: () => Promise<OutboxStore>;
 }) {
@@ -171,6 +192,9 @@ export function SessionRunner({
   const [pending, setPending] = useState(0);
   const [durable, setDurable] = useState(true);
   const [step, setStep] = useState<Step>('preflight');
+  // The session report being started from the last screen: idle, asking, or
+  // refused (REPORT_FAILED).
+  const [report, setReport] = useState<'idle' | 'starting' | 'failed'>('idle');
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   // Seeded with the value each slider actually shows, so the summary and the
   // record agree: an answer nobody moved is still the answer that is filed
@@ -537,6 +561,35 @@ export function SessionRunner({
     };
   }, [closeVisit, outbox, step]);
 
+  // Whether to offer the report at all: `report.draft`, which reads the role
+  // alone (domain/shared/actor.ts) — who reaches the client is the row
+  // policies' to say, and the route asks again against the visit's own client,
+  // which this screen never holds.
+  const mayStartReport =
+    onOpenReport !== undefined &&
+    session.status === 'signed-in' &&
+    canActor(session.actor, { type: 'report.draft', clientId: '' }, {}, new Date());
+
+  const startReport = useCallback(async () => {
+    if (!onOpenReport) return;
+    setReport('starting');
+    try {
+      const res = await apiFetch('/api/reports/session-draft', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId: visit.sessionId }),
+      });
+      const parsed = res.ok ? DraftResponse.safeParse(await res.json()) : null;
+      if (!parsed?.success) {
+        setReport('failed');
+        return;
+      }
+      onOpenReport(parsed.data.report.clientId, parsed.data.report.id);
+    } catch {
+      setReport('failed');
+    }
+  }, [apiFetch, onOpenReport, visit.sessionId]);
+
   const durationSeconds =
     startedAtMs !== null && endedAtMs !== null
       ? Math.round((endedAtMs - startedAtMs) / 1000)
@@ -662,7 +715,17 @@ export function SessionRunner({
           <div className="step">
             <h1>Checked out</h1>
             <p className="note">The visit is recorded.</p>
+            {report === 'failed' ? <p className="note small">{REPORT_FAILED}</p> : null}
             <div className="step__dock">
+              {mayStartReport ? (
+                <Button
+                  className="step__primary"
+                  disabled={report === 'starting'}
+                  onClick={() => void startReport()}
+                >
+                  Write the session report
+                </Button>
+              ) : null}
               <Button variant="primary" className="step__primary" onClick={onFinished}>
                 Back to Today
               </Button>

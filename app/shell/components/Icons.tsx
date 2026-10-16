@@ -69,6 +69,13 @@ export const EnquiriesIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** A review: a star, the website's own mark for one. */
+export const ReviewsIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M10 2.75l2.2 4.6 5 .6-3.7 3.5.95 5L10 14l-4.45 2.45.95-5-3.7-3.5 5-.6z" />
+  </Icon>
+);
+
 /** A key: the person's own password. */
 export const KeyIcon = (p: IconProps) => (
   <Icon {...p}>

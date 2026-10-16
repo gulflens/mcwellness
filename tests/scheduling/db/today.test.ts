@@ -1,7 +1,11 @@
 import { SignJWT } from 'jose';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { AppointmentListResponse, DayStopListResponse } from '@app/api/appointments/schema';
+import type {
+  AppointmentListResponse,
+  DayStopListResponse,
+  TeamDayStopListResponse,
+} from '@app/api/appointments/schema';
 import { createPool } from '@app/api/_middleware/db';
 import { createTokenVerifier } from '@app/api/_middleware/token-verifier';
 import { createApi } from '@app/api/create-api';
@@ -44,6 +48,9 @@ const PRACTITIONER_TWO_USER = '00000000-0000-4000-8000-000000007005';
 const FINANCE_USER = '00000000-0000-4000-8000-000000007006';
 const FINANCE_AUTH = '00000000-0000-4000-8000-000000007007';
 const SERVICE_TYPE = '00000000-0000-4000-8000-000000007008';
+// The second practitioner signs in and holds the lead practitioner's role
+// too: one of the people the whole practice's Today is for.
+const PRACTITIONER_TWO_AUTH = '00000000-0000-4000-8000-000000007009';
 
 const CLIENT_FIRST = '00000000-0000-4000-8000-000000007010';
 const LOCATION_FIRST = '00000000-0000-4000-8000-000000007011';
@@ -127,6 +134,12 @@ async function stopsFrom(res: Response): Promise<DayStopListResponse['appointmen
   return body.appointments;
 }
 
+/** The team scope's rows: a day stop with whose it is. */
+async function teamFrom(res: Response): Promise<TeamDayStopListResponse['appointments']> {
+  const body = (await res.json()) as TeamDayStopListResponse;
+  return body.appointments;
+}
+
 /** The same rows as plain objects, for asserting what is *not* on them: the
  *  types forbid naming a field the shape does not have, which is the point,
  *  so the absence is checked against the wire itself. */
@@ -154,9 +167,9 @@ beforeAll(async () => {
   await seedUser(owner, {
     id: PRACTITIONER_TWO_USER,
     tenantId: IDS.tenantA,
-    authId: null,
+    authId: PRACTITIONER_TWO_AUTH,
     displayName: 'Synthetic Practitioner Two',
-    roles: ['practitioner'],
+    roles: ['practitioner', 'lead_practitioner'],
   });
   await seedPractitioner(owner, IDS.tenantA, PRACTITIONER_TWO, PRACTITIONER_TWO_USER);
 
@@ -442,5 +455,89 @@ describe('GET /api/appointments — the practice scope carries none of it', () =
 
   it('is still refused for a bare practitioner: the whole practice is not their day', async () => {
     expect((await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}`)).status).toBe(403);
+  });
+});
+
+describe("GET /api/appointments?scope=team — Today's whole practice", () => {
+  it('is refused for a bare practitioner, never quietly narrowed to their own day', async () => {
+    // A 403 rather than the own day under another name: a screen that asked
+    // for the whole practice and got one person's day would say "nothing
+    // else is booked" when it was never allowed to look.
+    expect((await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=team`)).status).toBe(403);
+    expect((await list(FINANCE_AUTH, `date=${TODAY}&scope=team`)).status).toBe(403);
+  });
+
+  it("gives a lead practitioner every practitioner's stops, each naming whose it is", async () => {
+    const res = await list(PRACTITIONER_TWO_AUTH, `date=${TODAY}&scope=team`);
+    expect(res.status).toBe(200);
+    const stops = await teamFrom(res);
+    // The same statuses as a day sheet: a proposed visit and a called-off one
+    // are not stops on anybody's day.
+    expect(stops.map((a) => a.id)).toEqual([
+      APPOINTMENT_FIRST,
+      APPOINTMENT_SECOND,
+      APPOINTMENT_SOMEONE_ELSE,
+    ]);
+    expect(stops.map((a) => a.practitioner.displayName)).toEqual([
+      'Synthetic Practitioner One',
+      'Synthetic Practitioner One',
+      'Synthetic Practitioner Two',
+    ]);
+    // Which of them are the caller's own, which is what decides the buttons.
+    expect(stops.map((a) => a.mine)).toEqual([false, false, true]);
+  });
+
+  it('carries the day-sheet shape: an initial, never the family name', async () => {
+    const raw = await rawFrom(await list(PRACTITIONER_TWO_AUTH, `date=${TODAY}&scope=team`));
+    for (const row of raw) {
+      const client = row.client as Record<string, unknown>;
+      expect(client).toHaveProperty('familyInitial');
+      expect(client).not.toHaveProperty('familyName');
+      expect(client).not.toHaveProperty('familyNameAr');
+    }
+    const stops = await teamFrom(await list(PRACTITIONER_TWO_AUTH, `date=${TODAY}&scope=team`));
+    expect(stops.find((a) => a.id === APPOINTMENT_FIRST)?.declared).toEqual([
+      'headInjury',
+      'medication',
+    ]);
+  });
+
+  it('gives an owner with no practitioner record the whole day, none of it theirs', async () => {
+    const stops = await teamFrom(await list(AUTH.ownerA, `date=${TODAY}&scope=team`));
+    expect(stops.map((a) => a.id)).toEqual([
+      APPOINTMENT_FIRST,
+      APPOINTMENT_SECOND,
+      APPOINTMENT_SOMEONE_ELSE,
+    ]);
+    expect(stops.every((a) => !a.mine)).toBe(true);
+  });
+
+  it('says on the own scope whether the caller has a day of their own at all', async () => {
+    // What lets Today open on the whole practice for an owner who delivers no
+    // visits, rather than on an empty day: an empty list cannot tell "nothing
+    // booked" from "not a practitioner".
+    const ownerDay = (await (
+      await list(AUTH.ownerA, `date=${TODAY}&scope=own`)
+    ).json()) as DayStopListResponse;
+    expect(ownerDay.hasOwnDay).toBe(false);
+    const practitionerDay = (await (
+      await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`)
+    ).json()) as DayStopListResponse;
+    expect(practitionerDay.hasOwnDay).toBe(true);
+  });
+
+  it("leaves the lead practitioner's own scope their own", async () => {
+    const own = await stopsFrom(await list(PRACTITIONER_TWO_AUTH, `date=${TODAY}&scope=own`));
+    expect(own.map((a) => a.id)).toEqual([APPOINTMENT_SOMEONE_ELSE]);
+  });
+
+  it("audits another practitioner's stop to its client, as the practice scope does", async () => {
+    await list(PRACTITIONER_TWO_AUTH, `date=${TODAY}&scope=team`);
+    const { rows } = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'list' " +
+        "and entity_type = 'appointment' and entity_id = $1 and client_id = $2 and actor_id = $3",
+      [APPOINTMENT_FIRST, CLIENT_FIRST, PRACTITIONER_TWO_USER],
+    );
+    expect(Number(rows[0]?.n)).toBeGreaterThanOrEqual(1);
   });
 });

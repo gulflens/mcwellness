@@ -148,7 +148,8 @@ describe('GET /api/reports', () => {
     const body = (await res.json()) as { kinds: string[] };
     // The brain-map report is a kind like the others (docs/CHANGE-REQUESTS/reports-02.md,
     // request 4).
-    expect(body.kinds).toEqual(['session', 'progress', 'qeeg']);
+    // As is an uploaded PDF (migration 607, docs/SPEC/reports-v1.md section 12).
+    expect(body.kinds).toEqual(['session', 'progress', 'qeeg', 'external']);
   });
 });
 
@@ -202,6 +203,18 @@ describe('the past record doors of a brain-map report', () => {
       expect(res.status, door).toBe(400);
       expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
     }
+  });
+
+  it('mounts the uploaded report’s withdraw door', async () => {
+    // Its own check of the request — no reason — never the unmounted 404.
+    const res = await call(
+      'POST',
+      '/api/reports/00000000-0000-4000-8000-000000000001/withdraw',
+      authIdOf(0),
+      {},
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('reason_required');
   });
 
   it('mounts the follow-up begun from an earlier report', async () => {

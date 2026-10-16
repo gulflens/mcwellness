@@ -567,6 +567,15 @@ export function CheckInPage() {
         service={services.find((s) => s.id === running.serviceTypeId) ?? null}
         recordReadings={runningRecordReadings}
         onFinished={() => navigate('/today')}
+        // The client's Reports tab, opened on the report the visit started.
+        // The client is an opaque id in the address, as every record is; the
+        // report goes in router state, so the tab opens it once and the
+        // address stays the plain record (app/admin/clients/ClientsPage.tsx).
+        onOpenReport={(clientId, reportId) =>
+          navigate(`/admin/clients?client=${clientId}&section=reports`, {
+            state: { client: clientId, openReport: reportId },
+          })
+        }
       />
     );
   }

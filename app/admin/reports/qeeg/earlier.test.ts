@@ -26,6 +26,7 @@ const row = {
   pastRecord: false,
   withdrawn: false,
   recordedOn: '2026-06-01',
+  title: null,
 };
 
 describe('the stand-in comparison', () => {
@@ -51,6 +52,7 @@ describe('the reports a follow-up is offered to be compared with', () => {
     issuedOn: null,
     pastRecord: true,
     recordedOn: '2026-03-14',
+    title: null,
     // Brought in after the signed report was signed, recorded long before it.
     createdAt: '2026-09-20T08:00:00+04:00',
   };

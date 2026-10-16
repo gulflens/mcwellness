@@ -24,12 +24,14 @@
 export type IsoDate = string;
 
 /**
- * The kinds a report can be: the two this piece built (section 1), and the
+ * The kinds a report can be: the two this piece built (section 1), the
  * brain-map report (`qeeg`, docs/SPEC/reports-qeeg.md, migration 602), whose
- * body is declared in `./qeeg/` and not in `ReportContent` below. The order
- * is the database enum's own, so the schema route answers in it.
+ * body is declared in `./qeeg/` and not in `ReportContent` below, and an
+ * uploaded PDF made in another tool (`external`, migrations 607 and 608,
+ * `./external.ts`), which this app files and sends but never renders. The
+ * order is the database enum's own, so the schema route answers in it.
  */
-export const REPORT_KINDS = ['session', 'progress', 'qeeg'] as const;
+export const REPORT_KINDS = ['session', 'progress', 'qeeg', 'external'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 /**

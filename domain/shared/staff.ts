@@ -119,7 +119,45 @@ export function canResetPassword(
   return actorRoles.includes('owner');
 }
 
-/** `archived` is the end of a sign-in; only `suspended` comes back. */
-export function canReactivate(status: 'active' | 'suspended' | 'archived'): boolean {
+export type StaffStatus = 'active' | 'suspended' | 'archived';
+
+/**
+ * Reactivate answers a suspension and nothing else. An archived colleague comes
+ * back through Restore, a separate and deliberate act (`canRestore`, migration
+ * 977's `app.restore_staff`), so the one button never quietly undoes the other.
+ */
+export function canReactivate(status: StaffStatus): boolean {
   return status === 'suspended';
+}
+
+export type ArchiveRefusal = 'not_yourself' | 'locked' | 'already_archived';
+
+/**
+ * Whether a colleague may be archived — the practice's "remove a person", which
+ * is never a delete (migration 977); null means yes. The order is the order a
+ * person would want to be told in. Who may press it at all (an owner) is
+ * `staff.access.manage`; whether the person still has visits ahead is a fact
+ * about the diary, not about the person, and is asked by the route and again
+ * by `app.archive_staff`, which binds.
+ */
+export function canArchive(input: {
+  actorUserId: string;
+  targetUserId: string;
+  targetRoles: readonly Role[];
+  status: StaffStatus;
+}): ArchiveRefusal | null {
+  // The practice's owner archiving themselves is an outage, not a decision.
+  if (input.actorUserId === input.targetUserId) return 'not_yourself';
+  if (isLocked(input.targetRoles)) return 'locked';
+  if (input.status === 'archived') return 'already_archived';
+  return null;
+}
+
+/** Restore answers an archive and nothing else, and is never one's own. */
+export function canRestore(input: {
+  actorUserId: string;
+  targetUserId: string;
+  status: StaffStatus;
+}): boolean {
+  return input.actorUserId !== input.targetUserId && input.status === 'archived';
 }

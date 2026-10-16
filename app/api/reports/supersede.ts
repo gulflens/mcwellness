@@ -94,6 +94,20 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
       return c.json({ error: 'unprocessable', code: imported, requestId }, 422);
     }
 
+    if (standing.kind === 'external') {
+      // An uploaded PDF is not corrected here: a version written in this app
+      // would be a different document from the one the household holds, and
+      // nothing here can write the PDF again. A correction is a new upload
+      // (migration 608, `report_external_stands_alone`).
+      await logAction(
+        db,
+        'report.supersede_refused',
+        { type: 'report', id: reportId, clientId: standing.client_id },
+        { reason: 'external_report' },
+      );
+      return c.json({ error: 'unprocessable', code: 'external_report', requestId }, 422);
+    }
+
     const answer = canSupersede(
       { status: standing.status, version: standing.version },
       cleanText(reason, 500),

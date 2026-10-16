@@ -303,6 +303,13 @@ export const OverviewResponse = z.object({
   cashPositionFils: z.number().int(),
   cashAccounts: z.array(StatementRowSchema),
   receivableFils: z.number().int(),
+  /**
+   * The money that arrived from the first day of the books' year to `asOf`:
+   * receipts, VAT and all, the same payments `/api/billing/summary` counts for
+   * the month. What the overview leads with (the operator's decision of
+   * 2026-10-06); the books themselves stay on accruals.
+   */
+  receivedYearToDateFils: z.number().int(),
   corporateTaxEstimateFils: z.number().int(),
   reliefWatch: z.enum(['clear', 'approaching', 'exceeded']),
   reliefThresholdFils: z.number().int(),

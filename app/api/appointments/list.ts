@@ -8,10 +8,12 @@ import {
   APPOINTMENT_SCOPES,
   AppointmentListResponse,
   DayStopListResponse,
+  TeamDayStopListResponse,
   type AppointmentRow,
   type AppointmentScope,
   type DayStop,
   type DeliveryMode,
+  type TeamDayStop,
 } from './schema';
 import { HEALTH_QUESTIONS, type HealthQuestion } from '../clients/record-schema';
 
@@ -22,7 +24,10 @@ import { HEALTH_QUESTIONS, type HealthQuestion } from '../clients/record-schema'
  * `scope=practice` (the default) is the admin console's day schedule
  * (scheduling-manual.md section 4.1), across every practitioner.
  * `scope=own` is the practitioner's Today (section 5.1): their own stops, and
- * only theirs. The two answer in different shapes, not one shape with holes
+ * only theirs. `scope=team` is Today's "Whole practice" switch: every
+ * practitioner's stops in the own scope's shape, each saying whose it is and
+ * whether it is the caller's (schema.ts's `TeamDayStop`), for exactly the
+ * roles the practice scope admits. The first two answer in different shapes, not one shape with holes
  * in it — see `AppointmentRow` and `DayStop` in schema.ts, and the note there
  * on what the own scope deliberately does not carry.
  *
@@ -84,6 +89,8 @@ type PracticeRow = BaseRow & {
   session_settled_outside_app: boolean | null;
   session_minutes: number | null;
 };
+
+type TeamRow = OwnRow & { practitioner_id: string; practitioner_display_name: string };
 
 type OwnRow = BaseRow & {
   service_type_code: string;
@@ -261,6 +268,19 @@ const OWN_SQL =
   OWN_STATUS_FILTER +
   ORDER;
 
+// Today's whole practice: the own scope's columns and its status filter, for
+// every practitioner, with whose each stop is. The same statuses because it is
+// the same screen — a proposed or called-off visit is not a stop on anybody's
+// day — and the same family initial in place of the family name, because a
+// wider view of the day is no reason for a wider view of each household.
+const TEAM_SQL =
+  BASE_COLUMNS +
+  OWN_COLUMNS +
+  ', p.id as practitioner_id, u.display_name as practitioner_display_name' +
+  FROM_AND_WHERE.replace(' where ', DECLARED_JOIN + ' where ') +
+  OWN_STATUS_FILTER +
+  ORDER;
+
 /** The caller's own practitioner row, or null when they are not one. */
 const PRACTITIONER_SQL =
   'select id from practitioner where user_id = $1 and tenant_id = app.current_tenant_id()';
@@ -342,7 +362,7 @@ function toDayStop(r: OwnRow, today: string): DayStop {
 }
 
 /** The rows, and the client ids the audit trail needs but the wire does not. */
-type OwnDay = { stops: DayStop[]; clientIds: (string | null)[] };
+type OwnDay = { stops: DayStop[]; clientIds: (string | null)[]; hasOwnDay: boolean };
 
 async function ownDay(
   db: Db,
@@ -358,11 +378,39 @@ async function ownDay(
   // calendar). They have no stops of their own, and an empty day is the honest
   // answer rather than a refusal.
   if (practitionerId === undefined) {
-    return { stops: [], clientIds: [] };
+    return { stops: [], clientIds: [], hasOwnDay: false };
   }
   const { rows } = await db.query<OwnRow>(OWN_SQL, [dayStart, dayEnd, practitionerId]);
   return {
     stops: rows.map((r) => toDayStop(r, today)),
+    clientIds: rows.map((r) => r.client_id),
+    hasOwnDay: true,
+  };
+}
+
+/**
+ * Every practitioner's stops, read under the caller's own row rules. Only the
+ * roles that read every appointment and every client reach this (canActor's
+ * `team` scope), so the client join drops nothing for them.
+ */
+async function teamDay(
+  db: Db,
+  userId: string,
+  dayStart: Date,
+  dayEnd: Date,
+  today: string,
+): Promise<{ stops: TeamDayStop[]; clientIds: string[] }> {
+  const practitioner = await db.query<{ id: string }>(PRACTITIONER_SQL, [userId]);
+  // An owner or an administrator with no practitioner row has no stop of
+  // their own, so every stop says so.
+  const practitionerId = practitioner.rows[0]?.id ?? null;
+  const { rows } = await db.query<TeamRow>(TEAM_SQL, [dayStart, dayEnd]);
+  return {
+    stops: rows.map((r) => ({
+      ...toDayStop(r, today),
+      practitioner: { id: r.practitioner_id, displayName: r.practitioner_display_name },
+      mine: r.practitioner_id === practitionerId,
+    })),
     clientIds: rows.map((r) => r.client_id),
   };
 }
@@ -395,7 +443,22 @@ export function mountAppointmentList(api: Hono<ApiEnv>, now: () => Date = () => 
         day.stops.map((stop, index) => ({ id: stop.id, clientId: day.clientIds[index] ?? null })),
         'list',
       );
-      return c.json(DayStopListResponse.parse({ appointments: day.stops }));
+      return c.json(
+        DayStopListResponse.parse({ appointments: day.stops, hasOwnDay: day.hasOwnDay }),
+      );
+    }
+
+    if (scope === 'team') {
+      const day = await teamDay(db, actor.userId, dayStart, dayEnd, practiceDate(now()));
+      // Audited exactly as the practice scope's rows are: one list row per
+      // appointment, attributed to its client, whoever's stop it is.
+      await logReads(
+        db,
+        'appointment',
+        day.stops.map((stop, index) => ({ id: stop.id, clientId: day.clientIds[index] ?? null })),
+        'list',
+      );
+      return c.json(TeamDayStopListResponse.parse({ appointments: day.stops }));
     }
 
     const { rows } = await db.query<PracticeRow>(PRACTICE_SQL, [dayStart, dayEnd]);

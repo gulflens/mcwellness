@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { REPORT_KINDS, REPORT_STATUSES } from '../../domain/reports';
 import {
   editorKindFor,
+  isCorrectedHere,
   kindLabel,
   kindWord,
   mayBeSent,
@@ -35,6 +36,11 @@ describe('the words for a kind', () => {
     expect(kindWord('qeeg')).toBe('Brain map');
     expect(kindLabel('qeeg')).toBe('Brain map report');
   });
+
+  it('calls a PDF made in another tool an uploaded report', () => {
+    expect(kindWord('external')).toBe('Uploaded');
+    expect(kindLabel('external')).toBe('Uploaded report');
+  });
 });
 
 describe('the words for a status', () => {
@@ -63,6 +69,19 @@ describe('which rows the editor opens', () => {
 
   it('opens no brain-map report in it, because that editor is not this one', () => {
     expect(editorKindFor('qeeg')).toBeNull();
+  });
+
+  it('opens no uploaded report in it, because there is nothing of it to write', () => {
+    expect(editorKindFor('external')).toBeNull();
+  });
+});
+
+describe('which reports are corrected here', () => {
+  it('corrects the kinds written here, and not a PDF made elsewhere', () => {
+    expect(isCorrectedHere('session')).toBe(true);
+    expect(isCorrectedHere('progress')).toBe(true);
+    expect(isCorrectedHere('qeeg')).toBe(true);
+    expect(isCorrectedHere('external')).toBe(false);
   });
 });
 

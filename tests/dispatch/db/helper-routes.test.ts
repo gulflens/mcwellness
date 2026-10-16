@@ -308,8 +308,18 @@ describe('every other route, for a helper', () => {
     /^\/api\/portal\/invite\//,
     /^\/api\/storage\//,
   ];
-  /** The website's enquiry door: public, ahead of the fence, by method. */
-  const PUBLIC = new Set(['POST /api/enquiries', 'OPTIONS /api/enquiries']);
+  /**
+   * The website's two doors: public, ahead of the fence, by method — the
+   * enquiry door, and the reviews' door and published list (migration 978).
+   */
+  const PUBLIC = new Set([
+    'POST /api/enquiries',
+    'OPTIONS /api/enquiries',
+    'POST /api/testimonials',
+    'OPTIONS /api/testimonials',
+    'GET /api/testimonials/published',
+    'OPTIONS /api/testimonials/published',
+  ]);
 
   it('answers 403 or 404 to every mounted route but their own location and session', async () => {
     const seen = new Set<string>();

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { monthlyMoney, type CollectedPayment, type LedgerCredit } from '../../domain/billing';
+import {
+  cashCollectedBetween,
+  monthlyMoney,
+  type CollectedPayment,
+  type LedgerCredit,
+} from '../../domain/billing';
 import { fils } from '../../domain/shared';
 
 /**
@@ -121,5 +126,39 @@ describe('the figures reconcile to the ledger', () => {
       revenueRecognisedFils: 0,
       deferredNetFils: 0,
     });
+  });
+});
+
+/**
+ * The money received across a stretch of days — the Books overview's
+ * "Received this year (receipts)", which the operator asked to lead with
+ * (2026-10-06): the books stay on accruals, and the first thing on the screen
+ * is the cash. The same payments as the month's figure, so the year is the
+ * months added up and never a different count.
+ */
+describe('the money received between two days', () => {
+  const payments: CollectedPayment[] = [
+    { amountFils: fils(50_000), receivedOn: '2026-06-30' },
+    { amountFils: fils(70_000), receivedOn: '2026-07-01' },
+    { amountFils: fils(82_500), receivedOn: '2026-09-15' },
+    { amountFils: fils(10_000), receivedOn: '2026-10-07' },
+  ];
+
+  it('counts both end days and nothing outside them', () => {
+    expect(cashCollectedBetween(payments, '2026-07-01', '2026-10-06')).toBe(152_500);
+    expect(cashCollectedBetween(payments, '2026-06-30', '2026-06-30')).toBe(50_000);
+  });
+
+  it('agrees with the months it is made of', () => {
+    const months = ['2026-07', '2026-08', '2026-09'].map(
+      (month) => monthlyMoney(payments, [], month).cashCollectedFils,
+    );
+    expect(cashCollectedBetween(payments, '2026-07-01', '2026-09-30')).toBe(
+      months.reduce((total, figure) => total + figure, 0),
+    );
+  });
+
+  it('answers zero, not nothing, for a stretch with no money in it', () => {
+    expect(cashCollectedBetween(payments, '2026-01-01', '2026-01-31')).toBe(0);
   });
 });

@@ -101,6 +101,21 @@
   margin: var(--s-8) 0 var(--s-4);
 }
 
+/* The month's accrual figures, after the receipts (MoneyFigures.tsx): a step
+   down in size so the cash is the row the eye lands on, and a heading that
+   sits close to the receipts above it rather than opening a new part of the
+   page. */
+.figures__heading--quiet {
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  margin: 0 0 var(--s-3);
+}
+
+.figures--secondary .figures__item dd:first-of-type {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+}
+
 /* Finding one family: a search field, then the matches beneath it. */
 .picker {
   display: flex;

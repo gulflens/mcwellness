@@ -15,15 +15,17 @@ export {
   STAFF_ROLES,
   STAFF_ROLE_LABELS,
   STAFF_ROLE_OPENS,
+  canArchive,
   canEditProfile,
   canReactivate,
+  canRestore,
   canResetPassword,
   canSuspend,
   canSwitchRole,
   isLocked,
   isStaffRole,
 } from './staff';
-export type { RoleSwitchRefusal, StaffRole } from './staff';
+export type { ArchiveRefusal, RoleSwitchRefusal, StaffRole, StaffStatus } from './staff';
 export { BAND_NAMES, BAND_RGB, BANDS, UNIT_NAMES, UNITS } from './bands';
 export type { Band, Unit } from './bands';
 export {

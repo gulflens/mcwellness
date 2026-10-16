@@ -175,8 +175,12 @@ export const DayStop = z.object({
 });
 export type DayStop = z.infer<typeof DayStop>;
 
-/** Whose day is being asked for: the whole practice's, or the caller's own. */
-export const APPOINTMENT_SCOPES = ['practice', 'own'] as const;
+/**
+ * Whose day is being asked for: the whole practice's for the coordinator's
+ * ledger, the caller's own for Today, or `team` — every practitioner's stops
+ * for Today's "Whole practice" switch, in the day sheet's shape.
+ */
+export const APPOINTMENT_SCOPES = ['practice', 'own', 'team'] as const;
 export type AppointmentScope = (typeof APPOINTMENT_SCOPES)[number];
 
 /**
@@ -198,8 +202,43 @@ export type AppointmentListResponse = z.infer<typeof AppointmentListResponse>;
  * rule the day sheet lives by, not a bug in the query, but it is silent, so
  * it is written down here and in list.ts.
  */
-export const DayStopListResponse = z.object({ appointments: z.array(DayStop) });
+export const DayStopListResponse = z.object({
+  appointments: z.array(DayStop),
+  /**
+   * Whether the caller has a practitioner row at all, so a day of their own
+   * to show. False for an owner or an administrator who delivers no visits:
+   * Today then opens on the whole practice rather than on an empty day that
+   * cannot be told apart from "nothing booked". Optional because the phone's
+   * worker may hand back a day cached before the field existed, and that day
+   * was somebody's own.
+   */
+  hasOwnDay: z.boolean().optional(),
+});
 export type DayStopListResponse = z.infer<typeof DayStopListResponse>;
+
+/**
+ * A stop on Today's "Whole practice" view (`scope=team`): the day sheet's own
+ * shape, so the card renders the same and the family name still never leaves
+ * the database, plus the two things a view across several people's days needs.
+ *
+ * - **`practitioner`**, whose stop it is, by the same id and display name the
+ *   coordinator's ledger carries (`AppointmentRow.practitioner`).
+ * - **`mine`**, whether it is the caller's own. Decided on the server against
+ *   the caller's practitioner row rather than by the screen comparing ids,
+ *   because it decides whether Check in and Call off are offered at all: only
+ *   the caller's own stop has them, and anybody else's is to look at.
+ *
+ * Only the roles that read every appointment may ask (`canActor`'s
+ * `appointment.list` with scope `team`).
+ */
+export const TeamDayStop = DayStop.extend({
+  practitioner: z.object({ id: z.uuid(), displayName: z.string() }),
+  mine: z.boolean(),
+});
+export type TeamDayStop = z.infer<typeof TeamDayStop>;
+
+export const TeamDayStopListResponse = z.object({ appointments: z.array(TeamDayStop) });
+export type TeamDayStopListResponse = z.infer<typeof TeamDayStopListResponse>;
 
 export const AppointmentOptionsResponse = z.object({
   serviceTypes: z.array(

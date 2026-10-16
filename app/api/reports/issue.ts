@@ -106,6 +106,10 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
         // present and placed, its pages not running over
         // (docs/SPEC/reports-qeeg.md section 14).
         return issueQeeg(c, draft, raw, now());
+      case 'external':
+        // Filed already issued (migration 608), so the status check above has
+        // answered it; named so a kind added later is a compile error here.
+        return c.json({ error: 'unprocessable', code: 'already_issued', requestId }, 422);
       default: {
         const unknown: never = draft.kind;
         return unknown;

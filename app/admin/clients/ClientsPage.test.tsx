@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
-import { ClientsPage, searchRequest } from './ClientsPage';
+import { ClientsPage, handedOverReport, searchRequest } from './ClientsPage';
 import { ADMIN, FINANCE, LEAD_PRACTITIONER, PRACTITIONER, signedInProvider } from './testActors';
 
 // Set by the one test that needs the wizard replaced with a button standing in for
@@ -358,5 +358,21 @@ describe('ClientsPage search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'activate-stub' }));
 
     expect(screen.getByRole('status').textContent).toBe('Alpha Synthetic is now active.');
+  });
+});
+
+describe('a report handed over by the end of a visit', () => {
+  const REPORT = '00000006-0000-4000-8000-000000000001';
+
+  it('opens on the record it was started for', () => {
+    expect(handedOverReport({ client: row.id, openReport: REPORT }, row.id)).toBe(REPORT);
+  });
+
+  it('does not follow the person into another record, or arrive from nowhere', () => {
+    const other = '00000008-0000-4000-8000-0000000000a2';
+    expect(handedOverReport({ client: row.id, openReport: REPORT }, other)).toBeNull();
+    expect(handedOverReport({ client: row.id, openReport: REPORT }, null)).toBeNull();
+    expect(handedOverReport(null, row.id)).toBeNull();
+    expect(handedOverReport({ client: row.id, openReport: 7 }, row.id)).toBeNull();
   });
 });

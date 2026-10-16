@@ -264,6 +264,8 @@ Revenue recognised             AED  27,400
 Deferred revenue balance       AED 213,600   ← sessions you owe
 ```
 
+_Amended 2026-10-06 (the practice's list of 6 October):_ cash leads. The Books Overview's first row is "Received this month (receipts)", "Received this year (receipts)" and "In the bank"; the accrual figures sit in a smaller second row headed "Earned and owed (from invoices and sessions)". The Invoices tab's strip follows the same order. The postings are unchanged: the books stay accrual.
+
 That third number is your obligation. Watch it the way you'd watch a debt.
 
 ### 4.2 Allocating package value across components

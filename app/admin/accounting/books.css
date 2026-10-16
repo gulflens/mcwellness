@@ -30,6 +30,29 @@
   line-height: var(--lh-h3);
 }
 
+/* Cash first (OverviewSection.tsx): the receipts and the bank are the row the
+   eye lands on, at heading size; what the accruals say comes after, a step
+   smaller, each figure with its one plain line. */
+.figures--lead .figures__value {
+  font-size: var(--t-h2);
+  line-height: var(--lh-h2);
+}
+
+.figures--secondary .figures__value {
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+}
+
+.figures__explains {
+  margin: 0;
+}
+
+.books__figures-heading {
+  margin-block: var(--s-6) 0;
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+}
+
 .lines-editor {
   display: flex;
   flex-direction: column;

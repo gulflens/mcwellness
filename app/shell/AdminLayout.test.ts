@@ -77,3 +77,18 @@ describe('the pages a rail section lists', () => {
     expect(pagesOf(OWNER, 'audit')).toEqual([]);
   });
 });
+
+describe('the sections a rail lists', () => {
+  const keysOf = (actor: Actor): readonly string[] =>
+    visibleSections(actor, NOW).map((section) => section.key);
+
+  it('offers Reviews to the owner and an admin, beside Enquiries, and to nobody else', () => {
+    const owner = keysOf(OWNER);
+    expect(owner.indexOf('reviews')).toBe(owner.indexOf('enquiries') + 1);
+    expect(keysOf({ ...OWNER, roles: ['admin'] })).toContain('reviews');
+    for (const role of ['lead_practitioner', 'finance'] as const) {
+      expect(keysOf({ ...OWNER, roles: [role] }), role).not.toContain('reviews');
+    }
+    expect(keysOf(PRACTITIONER)).not.toContain('reviews');
+  });
+});

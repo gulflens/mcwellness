@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
 import {
   canSeeErased,
@@ -108,6 +108,20 @@ export function searchRequest(
   return { url: `/api/clients${params.size > 0 ? `?${params.toString()}` : ''}` };
 }
 
+/**
+ * The report a visit just started, handed over in router state by the end of
+ * the visit on the practitioner's phone (app/therapist/session/CheckInPage.tsx)
+ * so it never sits in the address bar — or null. Only for the client it was
+ * started for: a state left on the history entry does not follow the person
+ * into another record.
+ */
+export function handedOverReport(state: unknown, clientId: string | null): string | null {
+  const handed = state as { client?: unknown; openReport?: unknown } | null;
+  return clientId !== null && handed?.client === clientId && typeof handed.openReport === 'string'
+    ? handed.openReport
+    : null;
+}
+
 export function ClientsPage() {
   const { apiFetch, session } = useAuth();
   const actor = session.status === 'signed-in' ? session.actor : null;
@@ -130,6 +144,9 @@ export function ClientsPage() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [params, setParams] = useSearchParams();
   const clientId = params.get('client');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const openReportId = handedOverReport(location.state, clientId);
   const enrolling = params.get('enrol') === 'new' && mayEnrol;
   const inWorkspace = Boolean(clientId) || enrolling;
   const listPosition = useRef(0);
@@ -373,6 +390,15 @@ export function ClientsPage() {
           section={params.get('section') ?? 'overview'}
           onSectionChange={(section) => setParams({ client: clientId, section }, { replace: true })}
           onClose={closeDrawer}
+          openReportId={openReportId}
+          // The hand-over has done its work: off the history entry, so a
+          // remount or a return to this entry does not open it again.
+          onReportOpened={() =>
+            void navigate(
+              { pathname: location.pathname, search: location.search },
+              { replace: true, state: null },
+            )
+          }
         />
       ) : null}
       {enrolling ? (

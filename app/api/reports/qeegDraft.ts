@@ -138,6 +138,7 @@ async function comparedFrom(
       break;
     case 'session':
     case 'progress':
+    case 'external':
       return { ok: false, reason: 'not_a_brain_map' };
     default: {
       const unknown: never = earlier.kind;

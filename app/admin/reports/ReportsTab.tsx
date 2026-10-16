@@ -1,9 +1,10 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
 import type { ReportRow } from '../../api/reports/schema';
 import type { QeegContent } from '../../../domain/reports/qeeg/types';
+import { ExternalUpload } from './ExternalUpload';
 import { editorKindFor, kindWord, statusTone, statusWord } from './kinds';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
@@ -50,12 +51,28 @@ import './reports.css';
  * the same two. One brought in and not yet kept opens the import again, to be
  * finished with the same file.
  *
+ * **A report made in another tool** is uploaded from here as its PDF
+ * ("Upload a PDF report", `ExternalUpload.tsx`, docs/SPEC/reports-v1.md
+ * section 12) by whoever may write one. It is filed issued, listed as
+ * "Uploaded" with its title beneath its reference, and opens in the viewer
+ * with Open and Send like any signed report.
+ *
  * **A draft opens in the editor, not the viewer.** Every row used to open in
  * `ReportView`, which offers a draft no edit, no preview and no signature — so
  * a saved draft, and every correction started by "Correct this report", could
  * be finished only through the API. A draft row lands in the editor loaded
  * with what was saved, and a supersede hands its corrected draft straight
  * there, which is what section 4.3 describes.
+ *
+ * **It can open on one report.** `openReportId` is the report a visit just
+ * started from the practitioner's phone (`POST /api/reports/session-draft`,
+ * reached through the client page's router state): the tab opens it the way a
+ * click on its row would — a draft in the editor, anything signed in the
+ * viewer — once, and then behaves as it always has. An id that is not among
+ * this client's reports opens nothing. Once it has actually opened one it says
+ * so (`onHandedOpened`), and the page lets the hand-over go from the history
+ * entry: left there, every remount of this tab — a section switch, a reload,
+ * Back from another record — would open the same report again.
  */
 
 function coverageOf(report: ReportRow): string {
@@ -86,6 +103,9 @@ function Row({
         </button>
         {beneath && report.amendmentReason ? (
           <span className="reports__reason small">Replaced: {report.amendmentReason}</span>
+        ) : null}
+        {report.title !== null ? (
+          <span className="reports__reason small">{report.title}</span>
         ) : null}
         {twinLines(report, reports).map((line) => (
           <span key={line} className="reports__reason small">
@@ -120,8 +140,14 @@ function Row({
 export function ReportsTab({
   clientId,
   erased = false,
+  openReportId = null,
+  onHandedOpened,
 }: {
   clientId: string;
+  /** A report to open as soon as the list has loaded; see above. */
+  openReportId?: string | null;
+  /** Called once, after `openReportId` was found and opened; never when it was not. */
+  onHandedOpened?: () => void;
   /**
    * Whether this record has been erased. Passed rather than read back from the
    * server, because the drawer knows it one act before the record does
@@ -142,6 +168,8 @@ export function ReportsTab({
   const [startingQeeg, setStartingQeeg] = useState(false);
   /** Bringing in a past record from the old tool; `resuming` when one was left as a draft. */
   const [importing, setImporting] = useState<{ resuming: boolean } | null>(null);
+  /** Uploading a PDF made in another tool. */
+  const [uploading, setUploading] = useState(false);
   /** The past record open read-only. */
   const [pastId, setPastId] = useState<string | null>(null);
   /** The brain-map report being written: a draft to open, or a blank to start. */
@@ -152,6 +180,15 @@ export function ReportsTab({
     prefilled: Prefilled | null;
   } | null>(null);
   const loadPrefill = usePrefill(clientId);
+  /** Which `openReportId` has been opened, so it is opened once and not again. */
+  const [openedFrom, setOpenedFrom] = useState<string | null>(null);
+  // Told after the render that opened it, never during one: the page answers
+  // by navigating, which is not something a render may do.
+  useEffect(() => {
+    if (openedFrom !== null) onHandedOpened?.();
+    // Once per report opened; a new callback identity is not a new opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedFrom]);
 
   const mayWrite = canDraftReports(actor, now, clientId) && !erased;
   const maySupersede = canSupersedeReports(actor, now, clientId) && !erased;
@@ -188,6 +225,21 @@ export function ReportsTab({
           }}
         />
       </>
+    );
+  }
+
+  if (uploading) {
+    return (
+      <ExternalUpload
+        clientId={clientId}
+        onDone={(id) => {
+          // Straight onto the report it filed, where Open and Send are.
+          setUploading(false);
+          setOpenId(id);
+          void refetch();
+        }}
+        onCancel={() => setUploading(false)}
+      />
     );
   }
 
@@ -272,6 +324,11 @@ export function ReportsTab({
               setDraftId(id);
               setWriting(superseded);
               return;
+            case 'external':
+              // Never corrected here (the view offers no correction, and the
+              // server refuses one); named so a kind added later is a compile
+              // error rather than a draft opened in the wrong form.
+              return;
             default: {
               const unknown: never = superseded;
               return unknown;
@@ -309,6 +366,20 @@ export function ReportsTab({
     setOpenId(report.id);
   }
 
+  // The report handed in, opened once the list it belongs to is here. Set
+  // during render rather than in an effect, React's own pattern for state that
+  // follows a prop: the first paint is already the opened report, never the
+  // table for a moment first.
+  // Marked only when it was there to open: an id the list does not hold is
+  // not consumed, so nothing tells the page it was.
+  if (openReportId !== null && openedFrom !== openReportId) {
+    const handed = state.reports.find((report) => report.id === openReportId);
+    if (handed) {
+      setOpenedFrom(openReportId);
+      open(handed);
+    }
+  }
+
   const chains = inChains(state.reports);
 
   return (
@@ -320,6 +391,7 @@ export function ReportsTab({
           </Button>
           <Button onClick={() => setWriting('session')}>Write a session report</Button>
           <Button onClick={() => setStartingQeeg(true)}>New brain-map report</Button>
+          <Button onClick={() => setUploading(true)}>Upload a PDF report</Button>
           {mayImport ? (
             <Button onClick={() => setImporting({ resuming: false })}>
               Bring in a past record

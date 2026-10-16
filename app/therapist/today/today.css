@@ -30,6 +30,23 @@
   min-block-size: var(--tap);
 }
 
+/* Mine or the whole practice: two quiet presses, the chosen one ruled in ink,
+   the same as the enquiries' source filter (app/admin/enquiries). Each keeps
+   the practitioner's tap height. */
+.today__view {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.today__view .button {
+  min-block-size: var(--tap);
+}
+
+.today__view .button[aria-pressed='true'] {
+  border-color: var(--ink);
+}
+
 .today__error {
   display: flex;
   flex-direction: column;

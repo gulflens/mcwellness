@@ -176,6 +176,16 @@ export function canOpenEnquiries(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `testimonial.list` (app/api/testimonials/routes.ts) — who may open
+ * Reviews. The owner and an admin, who also decide what the website shows
+ * (`testimonial.decide`); `db/policies/testimonial/readers.sql` refuses the
+ * rows beneath both this screen and the routes (docs/SPEC/testimonials.md).
+ */
+export function canOpenReviews(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'testimonial.list' }, {}, now);
+}
+
+/**
  * Matches the `/today/check-in` gate in App.tsx: who may cross to the
  * practitioner's side. An owner who also treats holds `lead_practitioner`
  * alongside owner, so the console offers them "Today"; an admin-only or

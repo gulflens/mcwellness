@@ -137,6 +137,7 @@ const OVERVIEW = {
     },
   ],
   receivableFils: 45_000,
+  receivedYearToDateFils: 2_150_000,
   corporateTaxEstimateFils: 0,
   reliefWatch: 'clear',
   reliefThresholdFils: 300_000_000,
@@ -430,6 +431,67 @@ describe('the Books overview', () => {
     mount(OWNER, { overview: { error: 'forbidden' }, overviewStatus: 403 });
     expect(await screen.findByText("You don't have permission to see the books.")).toBeTruthy();
     expect(screen.queryByText('Result, year to date')).toBeNull();
+  });
+});
+
+/**
+ * Cash first (the practice suggested money be counted only when a receipt is
+ * issued; the operator kept the books on accruals and decided on 2026-10-06
+ * that the overview leads with cash). The first row is what was received and
+ * what is in the bank; what was earned and what is owed comes second, quieter,
+ * each figure with one plain line saying what it is.
+ */
+describe('the overview leads with cash', () => {
+  function labelsIn(section: HTMLElement): string[] {
+    return [...section.querySelectorAll('.figures__label')].map((el) => el.textContent ?? '');
+  }
+
+  it('puts the receipts and the bank first, in that order', async () => {
+    mount(OWNER);
+    await screen.findByText('Result, year to date');
+    const sections = [...document.querySelectorAll<HTMLElement>('section.figures')];
+    const received = await screen.findByRole('region', { name: 'Money received' });
+    expect(sections[0]).toBe(received);
+    await waitFor(() =>
+      expect(labelsIn(received)).toEqual([
+        'Received this month (receipts)',
+        'Received this year (receipts)',
+        'In the bank',
+      ]),
+    );
+    // Read off each figure's own tile: the month from billing, the year from the books.
+    const values = [...received.querySelectorAll('.figures__value')].map((el) => el.textContent);
+    expect(values).toEqual(['10,825.00', '21,500.00', '10,850.00']);
+  });
+
+  it('puts what was earned and what is owed second, each with a plain line', async () => {
+    mount(OWNER);
+    await screen.findByText('Result, year to date');
+    const earned = await screen.findByRole('region', {
+      name: 'Earned and owed (from invoices and sessions)',
+    });
+    expect(
+      screen.getByRole('heading', { name: 'Earned and owed (from invoices and sessions)' }),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(labelsIn(earned)).toEqual([
+        'Revenue recognised this month',
+        'Sessions owed',
+        'Owed by households',
+        'Result, year to date',
+      ]),
+    );
+    expect(
+      screen.getByText('Earned when a session is delivered, whether or not it has been paid.'),
+    ).toBeTruthy();
+    expect(screen.getByText('Paid for in advance, not yet delivered.')).toBeTruthy();
+    expect(screen.getByText('Invoiced and not yet paid.')).toBeTruthy();
+    expect(
+      screen.getByText('What was earned this year, less what it cost to earn it.'),
+    ).toBeTruthy();
+    // No longer the first thing on the screen.
+    const sections = [...document.querySelectorAll<HTMLElement>('section.figures')];
+    expect(sections.indexOf(earned)).toBeGreaterThan(0);
   });
 });
 

@@ -113,3 +113,25 @@ export function monthlyMoney(
     deferredNetFils: deferred,
   };
 }
+
+/**
+ * The money that arrived between two days, both included: the Books
+ * overview's "Received this year (receipts)" (the operator's decision of
+ * 2026-10-06 that the overview leads with cash while the books stay on
+ * accruals). The same payments and the same rule as `monthlyMoney`'s cash
+ * figure, so a year is exactly its months added up. ISO dates compare as
+ * strings, so no clock and no time zone is involved.
+ */
+export function cashCollectedBetween(
+  payments: readonly CollectedPayment[],
+  from: IsoDate,
+  to: IsoDate,
+): Fils {
+  let cash = fils(0);
+  for (const payment of payments) {
+    if (payment.receivedOn >= from && payment.receivedOn <= to) {
+      cash = addFils(cash, payment.amountFils);
+    }
+  }
+  return cash;
+}

@@ -15,6 +15,18 @@ describe('the practice-local day and hour', () => {
 });
 
 describe('what falls due between two ticks', () => {
+  it('removes stale website reviews once a day, with the posting', () => {
+    // docs/SPEC/testimonials.md section 6: a declined review is kept thirty
+    // days and an undecided one a hundred and eighty; once a day keeps both
+    // promises to within the day.
+    expect(dueJobs(dubai('2026-10-06', 2, 59), dubai('2026-10-06', 3, 0))).toContain(
+      'testimonial-retention',
+    );
+    expect(dueJobs(dubai('2026-10-06', 3, 59), dubai('2026-10-06', 4, 0))).not.toContain(
+      'testimonial-retention',
+    );
+  });
+
   it('deletes positions older than two days on every change of the hour, as the sweep does', () => {
     // Piece twenty-five (docs/SPEC/dispatch.md section 15): a practitioner's
     // positions are kept two days, and an hourly delete keeps that promise to
@@ -40,6 +52,7 @@ describe('what falls due between two ticks', () => {
       'erasure-files',
       'location-positions',
       'post-books',
+      'testimonial-retention',
     ]);
     // The next tick inside the same hour does neither again.
     expect(dueJobs(dubai('2026-09-10', 3, 0), dubai('2026-09-10', 3, 1))).toEqual([]);
@@ -60,12 +73,14 @@ describe('what falls due between two ticks', () => {
       'erasure-files',
       'location-positions',
       'post-books',
+      'testimonial-retention',
     ]);
     // Asleep from before three until after: the posting is still owed.
     expect(dueJobs(dubai('2026-09-11', 1, 0), dubai('2026-09-11', 9, 0))).toEqual([
       'erasure-files',
       'location-positions',
       'post-books',
+      'testimonial-retention',
     ]);
   });
 });

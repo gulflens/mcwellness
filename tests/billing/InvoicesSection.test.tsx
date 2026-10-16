@@ -161,21 +161,34 @@ describe('what the invoice book says about VAT', () => {
 });
 
 describe('the three figures above the book', () => {
-  it('shows what came in, what was earned, and what is still owed', async () => {
+  it('leads with what came in, then what was earned and what is still owed', async () => {
+    // Cash first, as on the Books overview (the operator's decision of
+    // 2026-10-06): the receipts, then a quieter pair under their own heading.
     mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }));
-    const cash = await screen.findByText('Cash collected this month (AED)');
-    expect(screen.getByText('Revenue recognised (AED)')).toBeTruthy();
-    expect(screen.getByText('Owed in sessions (AED)')).toBeTruthy();
+    const cash = await screen.findByText('Received this month (receipts, AED)');
+    expect(cash.nextElementSibling?.textContent).toBe('10,325.00');
+    expect(
+      screen.getByRole('heading', { name: 'Earned and owed (from invoices and sessions)' }),
+    ).toBeTruthy();
+    const labels = [...document.querySelectorAll('.figures dt')].map((el) => el.textContent);
+    expect(labels).toEqual([
+      'Received this month (receipts, AED)',
+      'Revenue recognised this month (AED)',
+      'Sessions owed (AED)',
+    ]);
     // Read off the figure beside its own label, not off the page: the same
     // amount appears in a row of the book below.
-    expect(cash.nextElementSibling?.textContent).toBe('10,325.00');
     expect(screen.getByText('688.33')).toBeTruthy();
     expect(screen.getByText('9,636.67')).toBeTruthy();
     // Two of the three are net and one is gross: set side by side without
     // saying which, the arithmetic a reader would do between them is wrong.
-    expect(screen.getByText('What arrived, including any VAT')).toBeTruthy();
-    expect(screen.getByText('Earned by delivering, net of VAT')).toBeTruthy();
-    expect(screen.getByText('Paid for, not yet delivered, net of VAT')).toBeTruthy();
+    expect(screen.getByText('What arrived, including any VAT.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Earned when a session is delivered, whether or not it has been paid. Net of VAT.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Paid for in advance, not yet delivered. Net of VAT.')).toBeTruthy();
   });
 
   it('still shows the book when the figures cannot be had', async () => {
@@ -188,7 +201,7 @@ describe('the three figures above the book', () => {
       return null;
     });
     expect(await screen.findByText('INV-000002')).toBeTruthy();
-    expect(screen.queryByText('Cash collected this month (AED)')).toBeNull();
+    expect(screen.queryByText('Received this month (receipts, AED)')).toBeNull();
   });
 });
 

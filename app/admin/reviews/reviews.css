@@ -1,0 +1,19 @@
+/* The Reviews screen: three tables, one at a time, and per row a few quiet actions. */
+.reviews__who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+/* The words as written, wrapped at a reading width measured in characters
+   (never a viewport width: tests/lint/one-set-of-breakpoints). */
+.reviews__body {
+  margin: 0;
+  max-inline-size: 60ch;
+  white-space: pre-line;
+}
+.reviews__actions {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  flex-wrap: wrap;
+}

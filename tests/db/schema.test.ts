@@ -182,7 +182,12 @@ describe('core schema', () => {
     // practitioner's positions are kept two days and never copied into the
     // audit log, which would keep them five years. Admitted the same way, by
     // the decision written on the table.
-    const UNAUDITED_BY_DECISION = ['enquiry', 'practitioner_position'];
+    //
+    // And `testimonial` (migration 978, docs/SPEC/testimonials.md): the
+    // website's reviews, a public write with no actor exactly as an enquiry
+    // is, whose words must go entirely when a person asks for theirs to be
+    // withdrawn — which a copy in the append-only log would prevent.
+    const UNAUDITED_BY_DECISION = ['enquiry', 'practitioner_position', 'testimonial'];
     const { rows: tables } = await client.query<{ table_name: string }>(
       "select table_name from information_schema.tables where table_schema = 'public' " +
         "and table_type = 'BASE TABLE' and table_name not like 'audit_log_%' " +

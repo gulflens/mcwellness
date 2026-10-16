@@ -99,7 +99,9 @@ Read five things off that row before going on.
    below refuses it outright; this line is where you see it first.
 4. **`status` is `active`.** An owner cannot afterwards be suspended or
    archived by anybody, so a suspended row must be reactivated *before* this
-   step and not after it.
+   step and not after it — and an archived one restored (Settings › Team, Show
+   archived, Restore; migration 977), never set back by hand, so their
+   practitioner row comes back with them.
 5. **Whether they have a sign-in.** They do not need one yet — an owner's
    `auth_id` may be linked for the first time at any point, because that is how
    an owner arrives — but once it is linked it can never be moved. Section 7 is

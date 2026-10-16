@@ -280,6 +280,9 @@ export const WORDS = {
   sessionReport: t('Session report', 'تقرير الجلسة'),
   progressReport: t('Progress report', 'تقرير التقدّم'),
   brainMapReport: t('Brain map report', 'تقرير خريطة الدماغ'),
+  // A PDF the practice made in another tool and uploaded (migration 608); its
+  // title, shown beside this, says what it is. The Arabic wants a reader's check.
+  uploadedReport: t('Uploaded report', 'تقرير مرفوع'),
   reportCovers: t('Covers', 'يغطي'),
   reportIssued: t('Issued', 'صدر في'),
   reportReplaced: t('Replaced by a newer version', 'استُبدل بإصدار أحدث'),

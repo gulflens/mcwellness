@@ -419,6 +419,28 @@
 }
 
 /*
+  Archive and Restore, last on the Access tab (migration 977). The same column
+  shape as the sign-in above. The heading of "Remove from the practice" carries
+  the critical tone, a status colour the brief admits; the buttons beneath it
+  stay ink, as every button on this console does.
+*/
+.team-access__archive,
+.team-access__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.team-access__heading--critical {
+  color: var(--critical);
+}
+
+.team-access__list {
+  margin: 0;
+  padding-inline-start: var(--s-5);
+}
+
+/*
   A role's switch. `.access-switch` and not `.switch`, which the practitioner
   app's check-in screen already owns (app/therapist/session/CheckInPage.css):
   screens are code-split, so both stylesheets are in the document as soon as
@@ -535,6 +557,12 @@
 
 /* Helpers (round 76, dispatch section 15.12): a section of its own under the
    staff, its heading and its one action on a line. */
+/* "Show archived", above the table it filters, left to the page's own rhythm. */
+.team__archived-switch {
+  display: flex;
+  justify-content: flex-start;
+}
+
 .team__helpers {
   display: flex;
   flex-direction: column;

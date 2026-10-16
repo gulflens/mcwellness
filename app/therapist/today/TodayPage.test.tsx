@@ -10,6 +10,7 @@ import { TodayPage, describeLeg, wantsInstallNote } from './TodayPage';
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 /**
@@ -356,5 +357,128 @@ describe('the way to your own home base', () => {
     mount(FALLBACK);
     await screen.findByRole('button', { name: 'Your home base' });
     expect(screen.queryByRole('button', { name: 'Admin console' })).toBeNull();
+  });
+});
+
+/**
+ * Today's "Whole practice" (the practice's request that all four see the day
+ * alike; the operator's decision of 2026-10-06). Offered only to the roles the
+ * database already lets read every appointment, and a view across the day,
+ * never a way to act on somebody else's visit.
+ */
+describe('the whole practice', () => {
+  const LEAD = { ...ME, roles: ['practitioner', 'lead_practitioner'] };
+  const OWNER_ONLY = { ...ME, roles: ['owner'] };
+  const OTHER = '00000006-0000-4000-8000-000000000002';
+  const MINE = '00000006-0000-4000-8000-000000000001';
+
+  const TEAM = [
+    {
+      ...STOPS[0],
+      practitioner: { id: MINE, displayName: 'Rowan Meadow' },
+      mine: true,
+    },
+    {
+      ...STOPS[1],
+      practitioner: { id: OTHER, displayName: 'Sable Practitioner' },
+      mine: false,
+    },
+  ];
+
+  /** The day sheet answering each scope with its own body. */
+  function mountScopes(me: unknown, own: unknown, team: unknown = { appointments: TEAM }) {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url === '/api/me') return json(me);
+      if (url.startsWith('/api/appointments')) {
+        if (url.includes('scope=team')) return json(team);
+        if (url.includes('scope=own')) return json(own);
+        return json({ error: 'bad_request' }, 400);
+      }
+      if (url.startsWith('/api/routing/day')) return json(FALLBACK);
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <MemoryRouter initialEntries={['/today']}>
+          <TodayPage />
+        </MemoryRouter>
+      </AuthProviderBoundary>,
+    );
+    return fetchImpl;
+  }
+
+  const asked = (fetchImpl: ReturnType<typeof mountScopes>, scope: string) =>
+    fetchImpl.mock.calls.some(([input]) => String(input).includes(`scope=${scope}`));
+
+  it('is not offered to a practitioner, who sees their own day and asks for nothing more', async () => {
+    const fetchImpl = mountScopes(ME, { appointments: STOPS, hasOwnDay: true });
+    expect(await screen.findByText('Rowan M.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Whole practice' })).toBeNull();
+    expect(asked(fetchImpl, 'team')).toBe(false);
+  });
+
+  it("opens a lead practitioner on their own day, and switches to everyone's", async () => {
+    const fetchImpl = mountScopes(LEAD, { appointments: [STOPS[0]], hasOwnDay: true });
+    expect(await screen.findByText('Rowan M.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mine' }).getAttribute('aria-pressed')).toBe('true');
+    expect(asked(fetchImpl, 'team')).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Whole practice' }));
+    expect(await screen.findByText('Dahlia M.')).toBeTruthy();
+    expect(asked(fetchImpl, 'team')).toBe(true);
+    expect(
+      screen.getByRole('button', { name: 'Whole practice' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    // Each stop says whose it is.
+    expect(screen.getByText('Sable Practitioner')).toBeTruthy();
+    expect(screen.getByText('Yours')).toBeTruthy();
+  });
+
+  it("keeps Check in and Call off to the caller's own stops", async () => {
+    sessionStorage.setItem('mcwellness-today-view', 'team');
+    mountScopes(LEAD, { appointments: [STOPS[0]], hasOwnDay: true });
+    expect(await screen.findByText('Dahlia M.')).toBeTruthy();
+    // Their own stop keeps its buttons; somebody else's is there to look at.
+    expect(screen.getAllByRole('button', { name: /Check in/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Check in Rowan M.' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Call off Dahlia/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Navigate to Dahlia/ })).toBeNull();
+  });
+
+  it('remembers the choice for the session, and only the session', async () => {
+    mountScopes(LEAD, { appointments: [STOPS[0]], hasOwnDay: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Whole practice' }));
+    await screen.findByText('Dahlia M.');
+    expect(sessionStorage.getItem('mcwellness-today-view')).toBe('team');
+    expect(localStorage.getItem('mcwellness-today-view')).toBeNull();
+
+    cleanup();
+    mountScopes(LEAD, { appointments: [STOPS[0]], hasOwnDay: true });
+    expect(await screen.findByText('Dahlia M.')).toBeTruthy();
+  });
+
+  it('ignores a remembered choice the caller may not make', async () => {
+    // A shared device, a practitioner signing in after a lead: the stored word
+    // is a preference, never a permission.
+    sessionStorage.setItem('mcwellness-today-view', 'team');
+    const fetchImpl = mountScopes(ME, { appointments: STOPS, hasOwnDay: true });
+    expect(await screen.findByText('Rowan M.')).toBeTruthy();
+    expect(asked(fetchImpl, 'team')).toBe(false);
+  });
+
+  it('opens an owner who is nobody’s practitioner on the whole practice, not an empty day', async () => {
+    mountScopes(
+      OWNER_ONLY,
+      { appointments: [], hasOwnDay: false },
+      { appointments: TEAM.map((stop) => ({ ...stop, mine: false })) },
+    );
+    expect(await screen.findByText('Dahlia M.')).toBeTruthy();
+    expect(screen.queryByText('Nothing is booked for you today.')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Whole practice' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    // None of it is theirs, so none of it carries a check-in.
+    expect(screen.queryByRole('button', { name: /Check in/ })).toBeNull();
   });
 });

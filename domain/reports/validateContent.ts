@@ -42,7 +42,9 @@ function wrongKind(kind: ReportKind, claimed: unknown): ContentRefusal {
  * The shape per kind, or none. The brain-map report (`qeeg`) has its own rule,
  * `domain/reports/qeeg/shape.ts`, and its own routes: answering it here would
  * be a second answer to what a brain-map report is, and would let a route
- * built for the two kinds save, preview or re-render one. Exhaustive, so a
+ * built for the two kinds save, preview or re-render one. An uploaded report
+ * (`external`) has no body to write at all — its title and size are filed by
+ * its own door (`./external.ts`) — so it has none here either. Exhaustive, so a
  * kind added later is a compile error here rather than a body read as a
  * session report's.
  */
@@ -53,6 +55,7 @@ function shapeFor(kind: ReportKind): typeof SessionReportShape | typeof Progress
     case 'progress':
       return ProgressReportShape;
     case 'qeeg':
+    case 'external':
       return null;
     default: {
       const unknown: never = kind;
@@ -75,7 +78,10 @@ export function validateContent(kind: ReportKind, content: unknown): ContentAnsw
     return {
       ok: false,
       field: 'kind',
-      message: 'A brain-map report is checked by its own rule, not this one.',
+      message:
+        kind === 'external'
+          ? 'An uploaded report has no body to write; it is filed as its PDF.'
+          : 'A brain-map report is checked by its own rule, not this one.',
     };
   }
   if (parsed.success) {
