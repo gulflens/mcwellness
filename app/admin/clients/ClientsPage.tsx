@@ -12,6 +12,7 @@ import {
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
+import { displayPhone } from '../../shell/components/phoneDisplay';
 import { ClientStatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
 import './clients.css';
@@ -23,6 +24,21 @@ import { EnrolmentWizard } from './EnrolmentWizard';
  * with the columns the data can fill today. Seeded by the trunk in PR 5; the
  * client-record worktree owns it from there.
  */
+
+/**
+ * An empty cell, drawn as a dash so a blank reads as "nothing recorded"
+ * rather than as a row still loading (the operator's Phase 1 brief,
+ * 2026-10-16), and said in words: a screen reader would otherwise read the
+ * dash as punctuation, or skip it.
+ */
+function NotRecorded() {
+  return (
+    <>
+      <span aria-hidden="true">—</span>
+      <span className="visually-hidden">Not recorded</span>
+    </>
+  );
+}
 
 const EMIRATES: Record<string, string> = {
   DXB: 'Dubai',
@@ -246,7 +262,7 @@ export function ClientsPage() {
         header: 'Age',
         numeric: true,
         fit: true,
-        render: (row) => (row.age === null ? '' : String(row.age)),
+        render: (row) => (row.age === null ? <NotRecorded /> : String(row.age)),
       },
       {
         key: 'status',
@@ -262,7 +278,7 @@ export function ClientsPage() {
             <span className="contact">
               <span>{RELATIONSHIPS[row.contact.relationship] ?? row.contact.relationship}</span>
               {row.contact.phone ? (
-                <span className="numeric muted">{row.contact.phone}</span>
+                <span className="numeric muted">{displayPhone(row.contact.phone)}</span>
               ) : null}
             </span>
           ) : (
@@ -272,7 +288,7 @@ export function ClientsPage() {
       {
         key: 'emirate',
         header: 'Emirate',
-        render: (row) => (row.emirate ? (EMIRATES[row.emirate] ?? row.emirate) : ''),
+        render: (row) => (row.emirate ? (EMIRATES[row.emirate] ?? row.emirate) : <NotRecorded />),
       },
     ],
     [selectClient],

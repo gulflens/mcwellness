@@ -376,3 +376,27 @@ describe('a report handed over by the end of a visit', () => {
     expect(handedOverReport({ client: row.id, openReport: 7 }, row.id)).toBeNull();
   });
 });
+
+describe('the clients table', () => {
+  it('shows a dash for an unknown age or emirate, said aloud as not recorded', async () => {
+    const blank = { ...row, age: null, emirate: null } as unknown as typeof row;
+    mount([blank]);
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Juniper' } });
+    const name = await screen.findByRole('button', { name: 'Juniper Quarry' });
+    const cells = [...name.closest('tr')!.querySelectorAll('td')];
+    const age = cells[2]!;
+    const emirate = cells[5]!;
+    for (const cell of [age, emirate]) {
+      expect(cell.querySelector('[aria-hidden="true"]')?.textContent).toBe('—');
+      expect(cell.querySelector('.visually-hidden')?.textContent).toBe('Not recorded');
+    }
+  });
+
+  it('shows the contact number spaced, as stored underneath', async () => {
+    mount([row]);
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Juniper' } });
+    await screen.findByRole('button', { name: 'Juniper Quarry' });
+    expect(screen.getByText('+971 50 000 0031')).toBeTruthy();
+    expect(screen.queryByText('+971500000031')).toBeNull();
+  });
+});
