@@ -3775,3 +3775,42 @@ form can now be uploaded once its Arabic has been read by a native speaker
 and the privacy-page paragraph is approved. Settings › Practice has new
 Arabic address and licensing-authority fields. Until the practice fills them
 in, an Arabic document prints the English ones.
+
+## What was done on 2026-10-16: the fifty-first live pass — Phase 1 console fixes
+
+**14:35 UTC (18:35 +04): main `e8fdd5fa`, PR 263, on the operator's word.**
+Its checks were fresh against main (`7fd760eb`) when it was merged, and main's
+own run on `e8fdd5fa` passed both checks before the archive was made. Front
+end only, so the pass was a build alone.
+- The sidebar stays as it was left on every page from 768px up; only a phone
+  still covers the page and closes itself. Collapsed, each icon has an
+  `aria-label` and a tooltip on hover and keyboard focus
+  (`docs/SPEC/coloured-shell.md` section 7, revised).
+- The client record says "Close case", with Pause, Close case and Edit in one
+  row.
+- The erasure actions are drawn as destructive (`button--danger`, the
+  critical colour), and the request step says what recording does before
+  anything is sent.
+- The clients table shows a dash for an unknown age or emirate, and spaced
+  phone numbers (display only).
+
+**Databases: untouched.** No migration and no policy file. Both stay at 138.
+
+**Build.** Before the upload the host's build list ended at the 50th pass
+(`01a14475`, `mcwellness-14998ec3.tar.gz`), so there were no unrecorded
+builds. The one peer session on the machine answered clear before the upload.
+- Archive `mcwellness-e8fdd5fa.tar.gz`, 8,043,255 bytes. TUS create 201, then
+  PATCH 204 with the offset equal to the size.
+- Build `01a14523`, stored settings, 56 s.
+- Entry `index-C2d5eeEu.js` → `index-CSAgLIPi.js`, stylesheet
+  `index-zA9Expg-.css` → `index-gViIp_PA.css`, flipped about 60 s after the
+  start call. No restart.
+
+**Verified.**
+- Health 200 in 0.49 s and deep health 200 in 0.51 s.
+- The old entry and a nonsense asset path both answer 404.
+- `rail__tip` is in the entry and the stylesheet, and `button--danger` is in
+  the stylesheet.
+- "Close case", "Not recorded" and "erases nothing yet" are in
+  `ClientsPage-DPRiviyh.js`.
+- The runtime log shows the usual two clean start blocks and no error.
