@@ -3701,3 +3701,77 @@ of it is personal data.
 - The served `BillingPage-*.js` carries "No price was in force on", and
   `/api/enquiries/count` answers 401 to a stranger. Health 200 in 0.75 s, deep
   health 200 in 0.81 s. No restart.
+
+## What was done on 2026-10-16: the fiftieth live pass — the practice's list, stage two, and documents in one language
+
+**11:25 UTC (15:25 +04): main `14998ec3`, PRs 256, 260, 257, 259 and 253, merged
+in that order.** Each was brought up to date with main and passed both checks
+again before it was merged. Main's own run on `14998ec3` passed both checks
+before the archive was made.
+- PR 260: a reason with an apostrophe or Arabic in it no longer breaks a
+  save. It is sent percent-encoded with `X-Reason-Encoding: uri`.
+- PR 257: six document defects. A name keeps every letter beyond Latin-1,
+  Arabic in a report's values is joined, and Arabic-keyboard figures are no
+  longer drawn backwards. Nine screens no longer claim a tab that opened was
+  blocked.
+- PR 259: every new document is in one language, the client's own: an
+  invoice, a receipt, a session report and a progress report. A
+  single-language report now names the certification instead of printing its
+  code. Documents filed before keep their bilingual layout, so they still
+  re-render to the bytes they were filed as.
+- PR 253: stage two of the practice's list.
+  - Today has a whole-practice switch.
+  - Uploaded PDF reports.
+  - A colleague can be archived and restored.
+  - The website's reviews and the office's Reviews screen.
+  - A visit's report is drafted in the client's language.
+
+**Databases, from the files, through the linked CLI** (`supabase db query
+--linked --file`). Each step was one transaction that refused to start unless
+the ledger held the expected count. Each migration carried its own sha256
+ledger row.
+- **Staging, 133 → 138:** 413, 977, 978, 979, 980, then the policy files
+  `reports/reports.sql` and `testimonial/{readers,tenant_isolation,writers}.sql`.
+- **Production, 131 → 132:** 607 alone, because a new enum value cannot be
+  used in the transaction that adds it.
+- **Production, 132 → 138:** 413, 608, 977, 978, 979, 980 and the same
+  policy files, plus `core/helper_reach.sql`.
+- **The trap:** `core/helper_reach.sql` loops over every table, so a new table
+  (`testimonial`) needs it applied again. The first staging fingerprint was
+  short two policies (`testimonial.helper_reach_read`/`_write`) until it was.
+  Any pass that adds a table must re-apply it.
+
+**Fingerprint.** Production, staging and a freshly migrated local database
+were compared item by item: every column, constraint, index, policy, trigger
+and enum label in `public` and `app`. They are identical, apart from the
+monthly audit-log partitions, which each database makes by its own calendar.
+The ledger hash is `b8f2a354…` on both hosted databases.
+
+Nine older function bodies differ in their text. They come from migrations
+307, 402, 404, 408, 500, 600, 601 and 955; none was touched here. With
+comments and whitespace removed, they are identical on all three databases.
+The comments were lost in earlier hand-typed passes. `verify_audit_chain()`
+returns null.
+
+**Build.**
+- No other session was running. The host's build list showed nothing after
+  the forty-ninth pass.
+- Archive `mcwellness-14998ec3.tar.gz`, 8,037,804 bytes. TUS 201, then 204
+  with the offset equal to the size. Build `01a14475` completed 11:26:23 UTC.
+- Production's database step finished 73 seconds before the new build served.
+  No invoice, payment or report was written in that gap.
+- The entry moved from `index-DpY7rXUS.js` to `index-C2d5eeEu.js`. The old
+  entry and a nonsense name both answer 404.
+
+**Proof by content.**
+- `TeamPage-*.js` carries "Show archived".
+- `ClientsPage-*.js` carries "Language of the report".
+- `/api/testimonials/published` answers 200.
+- Health is 200 in 0.22 s and deep health 200 in 0.25 s. No restart.
+
+**Still held:** PR 254 (the invoice and receipt in the soft design) and PR 258
+(phone notifications) wait for the practice's approval. The website's review
+form can now be uploaded once its Arabic has been read by a native speaker
+and the privacy-page paragraph is approved. Settings › Practice has new
+Arabic address and licensing-authority fields. Until the practice fills them
+in, an Arabic document prints the English ones.
