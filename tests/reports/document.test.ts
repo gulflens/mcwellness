@@ -6,6 +6,7 @@ import { NOT_A_DIAGNOSIS as SCREEN_SENTENCE } from '../../app/admin/assessments/
 import { extractAll, extractText, toVisualOrder } from '../../domain/shared/document';
 import {
   COMPARISON_NOT_A_DIAGNOSIS,
+  formatDifference,
   layout,
   NOT_A_CLINIC,
   NOT_A_DIAGNOSIS,
@@ -508,5 +509,126 @@ describe('the people in this file', () => {
       expect(isListedGivenName(given ?? ''), full).toBe(true);
       expect(isListedFamilyName(family ?? ''), full).toBe(true);
     }
+  });
+});
+
+/**
+ * Figures typed on an Arabic keyboard, drawn the way round they are read
+ * (docs/CHANGE-REQUESTS/reports-02.md, noted 5; docs/CHANGE-REQUESTS/docfix-01.md).
+ * Read off a rendered page, in the order the glyphs are drawn: a figure is
+ * drawn left to right inside a right-to-left line, so "١٥" comes off the page
+ * as "١٥" and never as "٥١".
+ */
+describe('an Arabic report with figures typed in Arabic', () => {
+  const bytes = renderReport(
+    report({
+      kind: 'session',
+      locale: 'ar',
+      content: { ...SESSION_CONTENT, note: 'زيارة رقم ١٥ من ۲۴.' },
+    }),
+    fonts,
+  );
+  const drawn = extractText(bytes).join('');
+
+  it('draws ١٥ as fifteen, not fifty-one', () => {
+    expect(drawn).toContain('١٥');
+    expect(drawn).not.toContain('٥١');
+  });
+
+  it('draws ۲۴ as twenty-four, not forty-two', () => {
+    expect(drawn).toContain('۲۴');
+    expect(drawn).not.toContain('۴۲');
+  });
+});
+
+/**
+ * Every Arabic value on an Arabic report is set right to left, and so shaped
+ * (docs/CHANGE-REQUESTS/reports-02.md, noted 6; docs/CHANGE-REQUESTS/docfix-01.md).
+ *
+ * The labelled values, the rating labels, the observation words, a goal's
+ * description and status and a comparison's measurement were drawn as
+ * left-to-right text whatever language they were in, so an Arabic one came
+ * out as separate, unjoined letters in typed order — backwards on the page.
+ * Read off the rendered page: a right-to-left run comes off it in drawn order
+ * (`asCopied`), and each op that draws Arabic carries the flag.
+ */
+describe('Arabic values on an Arabic report', () => {
+  const SERVICE = 'جلسة تدريب';
+  const RATING = 'ما مدى شعورك بالهدوء؟';
+  const GOAL_AREA = 'النوم';
+  const CHIP = 'هدأ بسرعة';
+  const GOAL = 'النوم طوال الليل دون استيقاظ';
+  const STATUS = 'نشط';
+  const MEASUREMENT = 'النسبة الأمامية';
+
+  const session = report({
+    kind: 'session',
+    locale: 'ar',
+    content: {
+      ...SESSION_CONTENT,
+      serviceNameAr: SERVICE,
+      goalArea: GOAL_AREA,
+      observationChips: [CHIP],
+    },
+  });
+  const progress = report({
+    locale: 'ar',
+    content: {
+      ...PROGRESS_CONTENT,
+      goals: [
+        {
+          id: '00000009-0000-4000-8000-000000000001',
+          description: GOAL,
+          status: STATUS,
+          movement: '',
+        },
+      ],
+    },
+  });
+
+  const opsOf = (document_: ReportDocument) =>
+    layout(document_, fonts).flatMap((page) =>
+      page.ops.filter((op): op is Extract<typeof op, { kind: 'text' }> => op.kind === 'text'),
+    );
+  // Runs joined as drawn: Arabic and Latin in one line are two runs, two faces.
+  const sessionText = extractText(renderReport(session, fonts)).join('');
+  const progressText = extractText(renderReport(progress, fonts)).join('');
+
+  it.each([
+    ['the service', SERVICE],
+    ['a rating’s question', RATING],
+    ['the goal worked on', GOAL_AREA],
+    ['what was noticed', CHIP],
+    ['the duration', `60 ${WORDS.minutes.ar}`],
+  ])('sets %s right to left on a session report', (_name, value) => {
+    const op = opsOf(session).find((each) => each.text === value);
+    expect(op?.rtl).toBe(true);
+    expect(sessionText).toContain(asCopied(value));
+  });
+
+  it.each([
+    ['a goal’s description', GOAL],
+    ['a goal’s status', STATUS],
+    ['a measurement’s name', `${MEASUREMENT} (ratio)`],
+  ])('sets %s right to left on a progress report', (_name, value) => {
+    const op = opsOf(progress).find((each) => each.text === value);
+    expect(op?.rtl).toBe(true);
+    expect(progressText).toContain(asCopied(value));
+  });
+
+  it('leaves an English value on an Arabic report left to right', () => {
+    const op = opsOf(session).find((each) => each.text === SIGNER_NAME);
+    expect(op?.rtl).toBeUndefined();
+  });
+});
+
+describe('a difference finer than the page prints', () => {
+  it('prints without a sign when it rounds to nought, whichever way it went', () => {
+    // A difference is kept to six places (as the comparison view keeps it)
+    // and printed to three; 0.0004 printed "+0" beside a "0" for -0.0004.
+    expect(formatDifference(0.0004)).toBe('0');
+    expect(formatDifference(-0.0004)).toBe('0');
+    expect(formatDifference(0.0006)).toBe('+0.001');
+    expect(formatDifference(-0.7)).toBe('-0.7');
   });
 });

@@ -265,5 +265,7 @@ export function formatFigure(value: number): string {
 /** The same, signed, for a difference: "+1.4", "-0.7", "0". */
 export function formatDifference(value: number): string {
   const text = formatFigure(value);
-  return value > 0 ? `+${text}` : text;
+  // The sign of what is printed, not of what is kept: a difference is kept to
+  // six places and printed to three, and 0.0004 is "0", never "+0".
+  return Number(text) > 0 ? `+${text}` : text;
 }

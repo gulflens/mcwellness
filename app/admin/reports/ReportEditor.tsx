@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ProgressReportContent, SessionReportContent } from '@domain/reports';
+import { isoDateIn } from '@domain/shared';
 import {
   DraftResponse,
   GatherResponse,
@@ -9,8 +10,10 @@ import {
   type VisitChoice,
 } from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { openInNewTab } from '../../shell/openInNewTab';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
+import { isoFromParts, partsFromIso, shiftDays } from '../../shell/components/calendar';
 import { Ribbon } from './Ribbon';
 import { mayOfferSigning } from './reportsAccess';
 
@@ -67,11 +70,22 @@ type Editing = {
   movementByGoal: Record<string, string>;
 };
 
+/**
+ * Today, as the practice's own calendar has it. Not `toISOString`, which reads
+ * the day in Greenwich: from midnight to four in the morning in Dubai that is
+ * still yesterday, so a report started then covered a day short and the
+ * certificate check was asked about the wrong day.
+ */
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+function practiceToday(now: Date): string {
+  return isoDateIn(now, PRACTICE_TIME_ZONE);
+}
+
 /** Ninety days back to today, which is the stretch a programme is read over. */
 function defaultCoverage(now: Date): { from: string; to: string } {
-  const to = now.toISOString().slice(0, 10);
-  const back = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-  return { from: back.toISOString().slice(0, 10), to };
+  const to = practiceToday(now);
+  const today = partsFromIso(to);
+  return { from: today ? isoFromParts(shiftDays(today, -90)) : to, to };
 }
 
 const REFUSALS: Record<string, string> = {
@@ -120,7 +134,7 @@ export function ReportEditor({
   const { apiFetch, session } = useAuth();
   const actor = session.status === 'signed-in' ? session.actor : null;
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = practiceToday(now);
 
   const [editing, setEditing] = useState<Editing>(() => empty(now, kind));
   const [gathered, setGathered] = useState<ProgressReportContent | SessionReportContent | null>(
@@ -131,6 +145,7 @@ export function ReportEditor({
   const [loading, setLoading] = useState(reportId !== null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blockedPreview, setBlockedPreview] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   // Reading and setting are separate so an effect never calls setState in its
@@ -320,6 +335,7 @@ export function ReportEditor({
     if (!id) return;
     setBusy(true);
     setError(null);
+    setBlockedPreview(null);
     try {
       const res = await apiFetch(`/api/reports/${id}/preview`);
       if (!res.ok) {
@@ -329,10 +345,13 @@ export function ReportEditor({
       // Held as an object URL and revoked on the next tick: a preview carries
       // a household's own figures and has no business outliving the click.
       const url = URL.createObjectURL(await res.blob());
-      if (window.open(url, '_blank', 'noopener,noreferrer') === null) {
-        setError('The preview could not be opened. Your browser blocked the window.');
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      // `openInNewTab` answers whether the tab really opened: asking for
+      // "noopener" made every preview say it was blocked.
+      if (!openInNewTab(url)) setBlockedPreview(url);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        setBlockedPreview((shown) => (shown === url ? null : shown));
+      }, 60_000);
     } catch {
       setError('The preview could not be rendered.');
     } finally {
@@ -502,7 +521,7 @@ export function ReportEditor({
             ) : (
               <Note>
                 {brainMapsRead
-                  ? 'This client has fewer than two brain maps of one kind, so the report says nothing about them.'
+                  ? 'This client has no two brain maps of one kind whose figures compare, so the report says nothing about them.'
                   : 'Brain maps are not recorded on this system yet, so the report says nothing about them.'}
               </Note>
             )}
@@ -638,6 +657,14 @@ export function ReportEditor({
       {gathered === null ? <Note>Reading the record.</Note> : null}
 
       {error ? <Note tone="critical">{error}</Note> : null}
+      {blockedPreview ? (
+        <Note tone="critical">
+          Your browser blocked the preview window.{' '}
+          <a href={blockedPreview} target="_blank" rel="noopener noreferrer">
+            Open the page
+          </a>
+        </Note>
+      ) : null}
 
       {confirming ? (
         <div className="report-editor__sign">

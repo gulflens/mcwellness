@@ -61,10 +61,28 @@ describe('DocumentLink', () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Open, opens in a new tab' }));
     await waitFor(() => {
-      expect(open).toHaveBeenCalledWith(SIGNED, '_blank', 'noopener,noreferrer');
+      // Without "noopener", so a null answer means a real block (openInNewTab).
+      expect(open).toHaveBeenCalledWith(SIGNED, '_blank');
     });
     // Nothing is left on screen: the tab is open and the link is not kept.
     expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('says nothing about a block when the browser opened the tab', async () => {
+    // A browser following the HTML standard answers null from a window.open
+    // that asked for "noopener" whether or not the tab opened, so asking for
+    // it showed "Your browser stopped the file opening" every time.
+    const tab = { opener: {} } as unknown as Window;
+    vi.stubGlobal(
+      'open',
+      vi.fn((_url: string, _target?: string, features?: string) =>
+        features?.includes('noopener') ? null : tab,
+      ),
+    );
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open, opens in a new tab' }));
+    await waitFor(() => expect(tab.opener).toBeNull());
+    expect(screen.queryByText(/Your browser stopped the file opening/)).toBeNull();
   });
 
   it('hands the link over when the browser blocks the tab', async () => {

@@ -5,7 +5,8 @@ import { inflateSync } from 'node:zlib';
 import { readFont, type Font, type FontSet } from '../../../domain/shared/document';
 
 /**
- * The three faces a rendered document is set in, read off disk once.
+ * The faces a rendered document is set in, read off disk once: three, and the
+ * two extended Latin faces a name beyond Latin-1 needs.
  *
  * The app's own type is IBM Plex Sans, with IBM Plex Sans Arabic for Arabic
  * (docs/DESIGN-BRIEF.md, `app/shell/tokens.css`), and both are already
@@ -174,6 +175,17 @@ export function documentFonts(): FontSet {
       join(arabic, 'ibm-plex-sans-arabic-arabic-400-normal.woff'),
       'IBMPlexSansArabic',
       true,
+    ),
+    // The same family's `latin-ext` subset, at both weights: the letters the
+    // `latin` one stops short of — ş, ğ, ł, š and the rest of Latin Extended —
+    // so a household's name prints with every letter it is spelt with
+    // (docs/CHANGE-REQUESTS/docfix-01.md). The writer draws from these only a
+    // character the first face cannot, so a document that never needs one is
+    // byte for byte the document it was, and its filed hash still holds.
+    regularExt: load(join(latin, 'ibm-plex-sans-latin-ext-400-normal.woff'), 'IBMPlexSans-Ext'),
+    boldExt: load(
+      join(latin, 'ibm-plex-sans-latin-ext-600-normal.woff'),
+      'IBMPlexSans-SemiBold-Ext',
     ),
   };
   return cached;

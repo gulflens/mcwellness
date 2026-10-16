@@ -72,6 +72,27 @@ describe('putting a line into the order it is drawn', () => {
     expect(drawn.startsWith('1,234.56')).toBe(true);
   });
 
+  it('keeps figures typed on an Arabic keyboard in order, as a figure is read', () => {
+    // U+0660 to U+0669 are the figures an Arabic keyboard types. A figure is
+    // read left to right whatever script its digits are in, so "رقم ١٥" is
+    // drawn with ١ before ٥ — it was drawn "٥١", fifty-one
+    // (docs/CHANGE-REQUESTS/reports-02.md, noted 5; docfix-01.md).
+    const drawn = String.fromCodePoint(...forDrawing('رقم ١٥'));
+    expect(drawn.startsWith('١٥')).toBe(true);
+  });
+
+  it('keeps the eastern figures of U+06F0 to U+06F9 in order too', () => {
+    const drawn = String.fromCodePoint(...forDrawing('رقم ۱۵'));
+    expect(drawn.startsWith('۱۵')).toBe(true);
+  });
+
+  it('keeps an Arabic decimal and thousands separator inside the figure', () => {
+    // U+066C and U+066B: "١٬٢٣٤٫٥" is one figure, and comes apart at a
+    // separator exactly as "1,234.5" would without the comma's own rule.
+    const drawn = String.fromCodePoint(...forDrawing('المبلغ ١٬٢٣٤٫٥'));
+    expect(drawn.startsWith('١٬٢٣٤٫٥')).toBe(true);
+  });
+
   it('puts a full stop that ends an Arabic sentence on the left, where it is read', () => {
     const drawn = forDrawing('نعم.');
     expect(drawn[0]).toBe(0x002e);

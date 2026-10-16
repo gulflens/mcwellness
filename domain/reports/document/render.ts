@@ -35,6 +35,7 @@ import {
   SIZE,
   SMALL_LINE,
   VALUE,
+  type TextOptions,
 } from './sheet';
 
 /**
@@ -79,22 +80,54 @@ import {
  * to the same bytes, which is what the byte-identical re-render test proves.
  */
 
+/**
+ * Whether a value reads right to left: whether its first letter is Arabic,
+ * which is Unicode's own rule for a paragraph's direction (UAX 9, P2 and P3).
+ * Digits and punctuation decide nothing, so "60 دقيقة" is Arabic and
+ * "Hazel Harbour" is not.
+ *
+ * A value is whatever language somebody wrote it in — a service's Arabic
+ * name, a rating's Arabic question, a goal typed in Arabic — and it was drawn
+ * left to right whatever it was, so an Arabic one came out as loose letters
+ * in typed order, backwards and unjoined (docs/CHANGE-REQUESTS/reports-02.md,
+ * noted 6). The writer does not infer direction (`pdf.ts`), so the page does.
+ */
+function readsRightToLeft(text: string): boolean {
+  for (const character of text) {
+    if (/\p{L}/u.test(character)) return /\p{Script=Arabic}/u.test(character);
+  }
+  return false;
+}
+
+/** A value in a column: right to left when it is Arabic, still from the column's start. */
+function inColumn(text: string, options: TextOptions = {}): TextOptions {
+  return readsRightToLeft(text) ? { ...options, rtl: true, align: 'start' } : options;
+}
+
+/** A line of its own: an Arabic one right to left against the right margin, as a narrative is. */
+function onItsOwn(text: string, options: TextOptions = {}): { x: number; options: TextOptions } {
+  return readsRightToLeft(text)
+    ? { x: RIGHT, options: { ...options, rtl: true, align: 'end' } }
+    : { x: LEFT, options };
+}
+
 /** A label in both languages on one line, with its value between them. */
 function labelled(sheet: Sheet, label: Phrase, value: string): void {
   if (value.length === 0) return;
   const arabicWidth = sheet.width(label.ar, SIZE.body, { rtl: true });
   const labelWidth = VALUE - LEFT - GUTTER;
   const valueWidth = RIGHT - VALUE - (arabicWidth > 0 ? arabicWidth + GUTTER : 0);
+  const valueOptions = inColumn(value);
 
   const rows = Math.max(
     sheet.wrap(label.en, labelWidth, SIZE.body, {}).length,
-    sheet.wrap(value, valueWidth, SIZE.body, {}).length,
+    sheet.wrap(value, valueWidth, SIZE.body, valueOptions).length,
   );
   sheet.room(rows * LINE);
 
   const y = sheet.baseline;
   sheet.paragraph(y, LEFT, label.en, labelWidth, SIZE.body, { grey: MUTED });
-  sheet.paragraph(y, VALUE, value, valueWidth, SIZE.body, {});
+  sheet.paragraph(y, VALUE, value, valueWidth, SIZE.body, valueOptions);
   sheet.line(y, RIGHT, label.ar, SIZE.body, { grey: MUTED, align: 'end', rtl: true });
   sheet.down(rows * LINE);
 }
@@ -416,10 +449,11 @@ function sessionPage(
     const questionWidth = RATING.before - RATING.question - GUTTER * 3;
     for (const rating of content.ratings) {
       const label = rtl && rating.labelAr ? rating.labelAr : rating.label;
-      const rows = sheet.wrap(label, questionWidth, SIZE.body, {}).length;
+      const labelOptions = inColumn(label);
+      const rows = sheet.wrap(label, questionWidth, SIZE.body, labelOptions).length;
       sheet.room(rows * LINE);
       const y = sheet.baseline;
-      sheet.paragraph(y, RATING.question, label, questionWidth, SIZE.body, {});
+      sheet.paragraph(y, RATING.question, label, questionWidth, SIZE.body, labelOptions);
       sheet.line(y, RATING.before, rating.before === null ? '' : String(rating.before), SIZE.body, {
         align: 'end',
       });
@@ -439,9 +473,10 @@ function sessionPage(
     section(sheet, WORDS.whatWasNoticed);
     if (content.observationChips.length > 0) {
       const words = content.observationChips.join(rtl ? '، ' : ', ');
-      const lines = sheet.wrap(words, RIGHT - LEFT, SIZE.body, {}).length;
+      const placed = onItsOwn(words);
+      const lines = sheet.wrap(words, RIGHT - LEFT, SIZE.body, placed.options).length;
       sheet.room(lines * LINE);
-      sheet.paragraph(sheet.baseline, LEFT, words, RIGHT - LEFT, SIZE.body, {});
+      sheet.paragraph(sheet.baseline, placed.x, words, RIGHT - LEFT, SIZE.body, placed.options);
       sheet.down(lines * LINE);
     }
     if (content.tolerance !== null) {
@@ -510,11 +545,17 @@ function progressPage(
   if (content.goals.length > 0) {
     section(sheet, WORDS.goals);
     for (const goal of content.goals) {
-      const rows = sheet.wrap(goal.description, RIGHT - LEFT, SIZE.body, { bold: true }).length;
+      const placed = onItsOwn(goal.description, { bold: true });
+      const rows = sheet.wrap(goal.description, RIGHT - LEFT, SIZE.body, placed.options).length;
       sheet.room(rows * LINE + LINE);
-      sheet.paragraph(sheet.baseline, LEFT, goal.description, RIGHT - LEFT, SIZE.body, {
-        bold: true,
-      });
+      sheet.paragraph(
+        sheet.baseline,
+        placed.x,
+        goal.description,
+        RIGHT - LEFT,
+        SIZE.body,
+        placed.options,
+      );
       sheet.down(rows * LINE);
       labelled(sheet, WORDS.goalStatus, goal.status);
       if (goal.movement.trim().length > 0) {
@@ -581,10 +622,11 @@ function progressPage(
     for (const line of comparison.lines) {
       const label = rtl && line.labelAr ? line.labelAr : line.label;
       const withUnit = `${label} (${line.unit})`;
-      const rows = sheet.wrap(withUnit, labelWidth, SIZE.body, {}).length;
+      const labelOptions = inColumn(withUnit);
+      const rows = sheet.wrap(withUnit, labelWidth, SIZE.body, labelOptions).length;
       sheet.room(rows * LINE);
       const y = sheet.baseline;
-      sheet.paragraph(y, COMPARE.measurement, withUnit, labelWidth, SIZE.body, {});
+      sheet.paragraph(y, COMPARE.measurement, withUnit, labelWidth, SIZE.body, labelOptions);
       sheet.line(y, COMPARE.earlier, formatFigure(line.earlier), SIZE.body, { align: 'end' });
       sheet.line(y, COMPARE.later, formatFigure(line.later), SIZE.body, { align: 'end' });
       sheet.line(y, COMPARE.difference, formatDifference(line.difference), SIZE.body, {

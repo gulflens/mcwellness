@@ -12,6 +12,7 @@ import { Sections } from './Layout';
 import { OffersSwitch } from './OffersSwitch';
 import { useWords } from './i18n';
 import { usePortalRead } from './usePortal';
+import { openInNewTab } from '../shell/openInNewTab';
 
 /**
  * `/portal/agreements` — what each person on the record agreed to, and to what
@@ -130,7 +131,7 @@ function WordingButton({ consentId }: { consentId: string }) {
           return;
         }
         const { textUrl } = WordingResponse.parse(await res.json());
-        if (window.open(textUrl, '_blank', 'noopener,noreferrer') === null) setFailed(true);
+        if (!openInNewTab(textUrl)) setFailed(true);
       })
       .catch(() => setFailed(true));
   }, [apiFetch, consentId]);

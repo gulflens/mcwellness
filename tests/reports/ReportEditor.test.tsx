@@ -186,7 +186,7 @@ describe('the draft editor', () => {
     mountEditor(SIGNER, true);
     expect(
       await screen.findByText(
-        'This client has fewer than two brain maps of one kind, so the report says nothing about them.',
+        'This client has no two brain maps of one kind whose figures compare, so the report says nothing about them.',
       ),
     ).toBeTruthy();
   });
@@ -506,6 +506,20 @@ describe('view and deliver', () => {
     expect(screen.getByRole('button', { name: 'Open the report' })).toBeTruthy();
   });
 
+  it('says nothing about a block when the browser opened the report', async () => {
+    // With "noopener" a standard browser answers null from window.open
+    // whether or not the tab opened, so every report "was blocked".
+    const tab = { opener: {} } as unknown as Window;
+    vi.spyOn(window, 'open').mockImplementation((_url, _target, features) =>
+      typeof features === 'string' && features.includes('noopener') ? null : tab,
+    );
+    mountView();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open the report' }));
+    await waitFor(() => expect(tab.opener).toBeNull());
+    expect(screen.queryByText(/blocked/)).toBeNull();
+    vi.restoreAllMocks();
+  });
+
   it('says a superseded version is kept because a household may hold it', async () => {
     mountView({ status: 'superseded' });
     expect(
@@ -554,5 +568,65 @@ describe('view and deliver', () => {
         'A new version has been started as a draft. Read it over, then sign it.',
       ),
     ).toBeTruthy();
+  });
+});
+
+describe('the practice’s day', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('covers ninety days back to today in Dubai, not in Greenwich', async () => {
+    // 21:30 on 2 September in Greenwich is 01:30 on 3 September in Dubai: a
+    // progress report started then covers up to the 3rd. `toISOString` read
+    // the day in UTC and gave the 2nd, a day short, for four hours each night.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-02T21:30:00Z'));
+    const { calls } = mountEditor();
+    await waitFor(() =>
+      expect(calls.some((call) => call.url.startsWith('/api/reports/gather'))).toBe(true),
+    );
+    const gather = new URL(
+      calls.find((call) => call.url.startsWith('/api/reports/gather'))?.url ?? '',
+      'http://localhost',
+    );
+    expect(gather.searchParams.get('to')).toBe('2026-09-03');
+    expect(gather.searchParams.get('from')).toBe('2026-06-05');
+  });
+});
+
+describe('opening the preview', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('says nothing is wrong when the browser opened the page', async () => {
+    // With "noopener" a browser returns null from window.open whether or not
+    // it opened the tab (the HTML standard says so), so asking for it made
+    // every preview report itself blocked.
+    const opened = { opener: {} as unknown } as Window;
+    const open = vi
+      .spyOn(window, 'open')
+      .mockImplementation((_url, _target, features) =>
+        typeof features === 'string' && features.includes('noopener') ? null : opened,
+      );
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+    mountEditor();
+    fireEvent.click(await screen.findByRole('button', { name: 'See the page' }));
+    await waitFor(() => expect(open).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText(/blocked/)).toBeNull());
+    // And the page opened cannot reach back into the console.
+    expect(opened.opener).toBeNull();
+  });
+
+  it('says the browser blocked the page, and offers it, when the browser did', async () => {
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+    mountEditor();
+    fireEvent.click(await screen.findByRole('button', { name: 'See the page' }));
+    expect(await screen.findByText(/blocked/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open the page' }).getAttribute('href')).toBe(
+      'blob:preview',
+    );
   });
 });
