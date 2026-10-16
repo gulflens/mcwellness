@@ -998,3 +998,127 @@ describe('an image asked to be resampled smoothly', () => {
     expect(file({ ...MAP, interpolate: false })).toBe(file(MAP));
   });
 });
+
+/**
+ * A soft wash: one colour fading into another along a line, painted inside a
+ * box — the ground the money documents' design of 7 October 2026 is drawn on
+ * (docs/superpowers/specs/2026-10-07-soft-documents-design.md).
+ *
+ * It is PDF's own axial shading (Shading Type 2) driven by an exponential
+ * interpolation function (Function Type 2, N 1) between two red-green-blue
+ * colours, painted with `sh` inside a clip to the box so it never runs past
+ * it. The shading dictionary is written straight into the page's resources,
+ * so no object is added and every document that draws no wash numbers its
+ * objects, and writes its bytes, exactly as before.
+ */
+describe('a wash', () => {
+  const LAVENDER = [0.89, 0.85, 0.95] as const;
+  const BLUSH = [0.98, 0.95, 0.96] as const;
+  const WASH: Page['ops'][number] = {
+    kind: 'shade',
+    x: 0,
+    y: 0,
+    width: 595.28,
+    height: 841.89,
+    from: { x: 595.28, y: 841.89, rgb: LAVENDER },
+    to: { x: 0, y: 0, rgb: BLUSH },
+  };
+  const file = (pages: Page[]): string =>
+    new TextDecoder('latin1').decode(renderPdf(pages, fonts, 'S'));
+
+  it('paints its shading inside a clip to its box, in its own q and Q', () => {
+    expect(streamOf(renderPdf([{ ops: [WASH] }], fonts, 'S'))).toBe(
+      'q 0 0 595.28 841.89 re W n /Sh1 sh Q',
+    );
+  });
+
+  it('declares an axial shading between the two colours in the page’s resources', () => {
+    expect(file([{ ops: [WASH] }])).toContain(
+      '/Shading << /Sh1 << /ShadingType 2 /ColorSpace /DeviceRGB ' +
+        '/Coords [595.28 841.89 0 0] ' +
+        '/Function << /FunctionType 2 /Domain [0 1] /C0 [0.89 0.85 0.95] /C1 [0.98 0.95 0.96] /N 1 >> ' +
+        '/Extend [true true] >> >>',
+    );
+  });
+
+  it('names the same wash once, however many pages draw it', () => {
+    const text = file([{ ops: [WASH] }, { ops: [WASH] }]);
+    expect(text.match(/\/Sh1 <</g)).toHaveLength(2); // once in each page's resources
+    expect(text).not.toContain('/Sh2');
+  });
+
+  it('names a second, different wash Sh2', () => {
+    const other = { ...WASH, to: { ...WASH.to, rgb: [1, 1, 1] as const } } as Page['ops'][number];
+    const text = file([{ ops: [WASH, other] }]);
+    expect(text).toContain('/Sh2 << /ShadingType 2');
+    expect(streamOf(renderPdf([{ ops: [WASH, other] }], fonts, 'S'))).toContain('/Sh2 sh');
+  });
+
+  it('clamps a colour outside 0 to 1, as every other colour in the file is', () => {
+    const loud = {
+      ...WASH,
+      from: { ...WASH.from, rgb: [1.4, -0.2, 0.5] as const },
+    } as Page['ops'][number];
+    expect(file([{ ops: [loud] }])).toContain('/C0 [1 0 0.50]');
+  });
+
+  it('draws nothing for an axis of no length, an empty box, or a number that is not finite', () => {
+    const bad = (patch: object): string =>
+      streamOf(renderPdf([{ ops: [{ ...WASH, ...patch } as Page['ops'][number]] }], fonts, 'S'));
+    expect(bad({ to: { ...WASH.from } })).toBe('');
+    expect(bad({ width: 0 })).toBe('');
+    expect(bad({ height: -4 })).toBe('');
+    expect(bad({ x: Number.NaN })).toBe('');
+    expect(bad({ from: { ...WASH.from, y: Number.POSITIVE_INFINITY } })).toBe('');
+    expect(file([{ ops: [{ ...WASH, width: 0 } as Page['ops'][number]] }])).not.toContain(
+      '/Shading',
+    );
+  });
+
+  it('leaves the text after it in the fill the text asked for', () => {
+    const stream = streamOf(
+      renderPdf(
+        [
+          {
+            ops: [
+              WASH,
+              { kind: 'text', x: 56, y: 700, text: 'A', style: { font: 'regular', size: 10 } },
+            ],
+          },
+        ],
+        fonts,
+        'S',
+      ),
+    );
+    expect(stream.split('\n')).toEqual([
+      'q 0 0 595.28 841.89 re W n /Sh1 sh Q',
+      '0 g',
+      'BT',
+      '/F1 10 Tf',
+      '1 0 0 1 56 700 Tm',
+      '<0022> Tj',
+      'ET',
+    ]);
+  });
+
+  it('adds no /Shading key to a page that draws none', () => {
+    expect(file([GREY_PAGE])).not.toContain('/Shading');
+    expect(streamOf(renderPdf([GREY_PAGE], fonts, 'Synthetic'))).toBe(GREY_STREAM_BEFORE_COLOUR);
+  });
+
+  it('is not read back as text', () => {
+    const bytes = renderPdf(
+      [
+        {
+          ops: [
+            WASH,
+            { kind: 'text', x: 56, y: 700, text: 'Only', style: { font: 'regular', size: 10 } },
+          ],
+        },
+      ],
+      fonts,
+      'S',
+    );
+    expect(extractText(bytes).join('')).toBe('Only');
+  });
+});

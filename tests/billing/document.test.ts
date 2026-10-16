@@ -261,14 +261,16 @@ describe('the invoice in the operator’s design, block by block', () => {
     expect(page).not.toContain('Before discount');
   });
 
-  it('sets the payment details card with English labels only and the IBAN grouped in fours', () => {
-    expect(page).toContain('Payment details');
-    expect(page).toContain(asCopied(WORDS.paymentDetails.ar));
-    expect(lines).toContain('Account name');
+  it('sets the bank details card with English labels only and the IBAN grouped in fours', () => {
+    // English only, title and all, as the practice's mockup of October 2026 sets it.
+    expect(lines).toContain('Bank details');
+    expect(page).not.toContain('Payment details');
+    expect(page).not.toContain(asCopied('تفاصيل الدفع'));
+    expect(lines).toContain('Account holder');
     expect(lines).toContain('Example Practice L.L.C-FZ');
     expect(lines).toContain('IBAN');
     expect(lines).toContain('AE36 0000 0000 0000 0000 001');
-    expect(lines).toContain('SWIFT / BIC');
+    expect(lines).toContain('BIC');
     expect(lines).toContain('TESTAEXX');
     expect(lines).toContain('Bank address');
     expect(lines).toContain('1 Example Street, Abu Dhabi');
@@ -278,7 +280,8 @@ describe('the invoice in the operator’s design, block by block', () => {
     for (const arabic of [WORDS.iban.ar, WORDS.bankAddress.ar, 'اسم صاحب الحساب', 'رمز السويفت']) {
       expect(page, arabic).not.toContain(asCopied(arabic));
     }
-    expect(page).not.toContain('Account holder');
+    expect(page).not.toContain('Account name');
+    expect(page).not.toContain('SWIFT');
     expect(page).not.toContain('Pay by bank transfer');
   });
 
@@ -424,9 +427,10 @@ describe('an invoice from a practice that has recorded no bank account', () => {
   const page = extractAll(bytes);
   const lines = extractText(bytes);
 
-  it('has no payment details card and no payment method, caption and all', () => {
+  it('has no bank details card and no payment method, caption and all', () => {
+    expect(page).not.toContain('Bank details');
     expect(page).not.toContain('Payment details');
-    expect(page).not.toContain(asCopied(WORDS.paymentDetails.ar));
+    expect(page).not.toContain(asCopied('تفاصيل الدفع'));
     expect(page).not.toContain('PAYMENT METHOD');
     expect(page).not.toContain(asCopied(WORDS.paymentMethodCaption.ar));
     expect(page).not.toContain('Bank transfer');
@@ -555,7 +559,7 @@ describe('a page number', () => {
 });
 
 describe('the bank account’s optional rows', () => {
-  it('leaves out SWIFT / BIC and the bank address when the practice recorded neither', () => {
+  it('leaves out BIC and the bank address when the practice recorded neither', () => {
     const page = extractAll(
       renderDocument(
         programmeInvoice(UNREGISTERED, { bank: { ...BANK, bic: null, bankAddress: null } }),
@@ -563,7 +567,14 @@ describe('the bank account’s optional rows', () => {
       ),
     );
     expect(page).toContain('AE36 0000 0000 0000 0000 001');
-    expect(page).not.toContain('SWIFT / BIC');
+    expect(
+      extractText(
+        renderDocument(
+          programmeInvoice(UNREGISTERED, { bank: { ...BANK, bic: null, bankAddress: null } }),
+          fonts,
+        ),
+      ),
+    ).not.toContain('BIC');
     expect(page).not.toContain('Bank address');
   });
 });
@@ -672,28 +683,32 @@ describe('the receipt in the operator’s design, block by block', () => {
     expect(page).toContain(asCopied(WORDS.transfer.ar));
   });
 
-  it('sets the Payment received card: the method, the reference and the invoice it settles, English labels only', () => {
-    expect(page).toContain('Payment received');
-    expect(page).toContain(asCopied(WORDS.paymentReceived.ar));
+  it('sets the table: the payment on account, the invoice it was taken against, and its amount, in both languages', () => {
+    expect(lines).toContain('Description');
+    expect(lines).toContain('Amount');
+    expect(page).toContain(asCopied(WORDS.amount.ar));
+    expect(lines).toContain('Payment received on account');
+    expect(page).toContain(asCopied(WORDS.paymentOnAccount.ar));
+    expect(lines).toContain('Against invoice INV-000001');
+    expect(page).toContain(asCopied('مقابل الفاتورة'));
+    // The round 65 card's rows are gone with the card.
+    expect(page).not.toContain('Settles invoice');
+    expect(page).not.toContain(asCopied('سداد الفاتورة'));
+  });
+
+  it('sums up: the method and the payment reference, English labels only, over TOTAL PAID in the lavender block', () => {
+    expect(page).toContain('Receipt summary');
+    expect(page).toContain(asCopied(WORDS.receiptSummary.ar));
     expect(lines).toContain('Method');
     expect(lines).toContain('Reference');
     expect(lines).toContain('SYN 0001');
-    expect(lines).toContain('Settles invoice');
-    expect(lines).toContain('INV-000001');
-    // The rows' labels carry no Arabic, as the payment details card's do not.
-    expect(page).not.toContain(asCopied(WORDS.settlesInvoice.ar));
-    // The method twice: once as the payment method, once on its row.
-    expect(lines.filter((line) => line === 'Bank transfer')).toHaveLength(2);
-  });
-
-  it('sums up with TOTAL PAID over the figure in the violet block, and nothing else', () => {
-    expect(page).toContain('Receipt summary');
-    expect(page).toContain(asCopied(WORDS.receiptSummary.ar));
     expect(lines).toContain('TOTAL PAID');
     expect(page).toContain(asCopied(WORDS.totalPaid.ar));
-    // A receipt has one figure, and prints it once: no Total row above the block.
+    // The method twice: once as the payment method, once on its row.
+    expect(lines.filter((line) => line === 'Bank transfer')).toHaveLength(2);
+    // The one figure twice: the table's amount and the block. No Total row.
     expect(lines).not.toContain('Total');
-    expect(count(page, 'AED 700.00')).toBe(1);
+    expect(count(page, 'AED 700.00')).toBe(2);
   });
 
   it('carries the Note card with the receipt’s own sentence, in both languages', () => {
@@ -725,7 +740,7 @@ describe('a receipt, by the method the money came by', () => {
   ] as const;
 
   it.each(METHODS)(
-    '%s: names it as the payment method and on the Payment received card, and no other',
+    '%s: names it as the payment method and on the summary’s Method row, and no other',
     (method, phrase) => {
       const bytes = renderDocument(receiptFor(UNREGISTERED, { method }), fonts);
       const lines = extractText(bytes);
@@ -752,9 +767,10 @@ describe('a receipt’s optional rows', () => {
     expect(without).toContain('Method');
   });
 
-  it('leaves Settles invoice out when it settles no invoice, and says it was taken on account', () => {
+  it('leaves the invoice line out when it settles no invoice, and says it was taken on account', () => {
     const page = extractAll(renderDocument(receiptFor(UNREGISTERED, { settles: null }), fonts));
-    expect(page).not.toContain('Settles invoice');
+    expect(page).toContain('Payment received on account');
+    expect(page).not.toContain('Against invoice');
     expect(page).not.toContain('INV-000001');
     expect(page).toContain('Received by bank transfer on 2 September 2026, on account.');
   });
@@ -864,6 +880,22 @@ describe('a receipt asks for no money and claims nothing about tax, whoever issu
  * demo file the operator compared his page with, which lives outside the
  * repository.
  *
+ * **All four moved on 7 October 2026**, when the practice's softer dress
+ * replaced round 65's colours (docs/superpowers/specs/2026-10-07-soft-
+ * documents-design.md): every page painted first with a lavender-to-blush
+ * wash (the writer's new `shade` op, a `/Shading` resource on each page),
+ * white cards with a lavender edge, lavender bands and blocks with violet
+ * type where round 65 set white on violet, violet bars down the bank card's
+ * and the tax card's left edge, the muted grey darkened to 0.35 so it reads at
+ * AA on the lavender, and the bank card retitled "Bank details" with
+ * "Account holder" and "BIC". The receipt moved further: a table of one line
+ * ("Payment received on account", the invoice it was taken against) and its
+ * amount replaced the "Payment received" card, the summary gained the Method
+ * and Reference rows, and the Note card moved up beside the summary. They
+ * were re-pinned after the rendered pages had been read against the
+ * practice's mockups as described in that spec. Filed documents keep the
+ * pages they were filed with; only documents rendered from now on wear this.
+ *
  * They are rendered with no logo, deliberately: the mark is the practice's own
  * row and not a file in this repository, so a golden that embedded one would
  * be a golden about a picture rather than about the writer.
@@ -876,24 +908,24 @@ describe('the bytes of a rendered document', () => {
     [
       'an invoice from an unregistered practice',
       () => renderDocument(invoiceFor(UNREGISTERED), fonts),
-      'c76a466978cea23f35d7719a91879816ec997df218dda24c6c16ccb2872df647',
+      '32b857efc64d60adf12efab83d12bceb4c2cc82793a502f011d33ca099418999',
     ],
     [
       'an invoice from a registered practice',
       () => renderDocument(invoiceFor(REGISTERED), fonts),
-      '94e934d4b4c53e0e8fff0577b4b3213b90c9a55416109f0807276c445436349d',
+      'a47e8ed666f8f1c3c268b7b8982d74624e0598b23eb618a941d03dbf9af7bb0e',
     ],
     [
       // The case the operator's demo covers: the payment method, the payment
       // details card and its reference strip, and a discount's pill and row.
       'an unregistered invoice with a bank account and a 25% discount',
       () => renderDocument(programmeInvoice(UNREGISTERED), fonts),
-      'b1327bc962370153551e6f30a8ad1452d024407c9c81f800a43acaf9c81f4ddf',
+      'fa1fa9975f91972c2dd7e063b2e0e773da31127f40b43bcc58b541724766b65f',
     ],
     [
       'a receipt',
       () => renderDocument(receiptFor(UNREGISTERED), fonts),
-      'bde17737f2bc560a8351f8377d39f068a55ec53bc9eb3494b3ed0adb800c6207',
+      'df0f216198933b4585ff85942e85303c9a59f2170cf66e6843c7d24a2d01b103',
     ],
   ];
 

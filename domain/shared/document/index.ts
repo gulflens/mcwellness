@@ -34,6 +34,8 @@ export type {
   Paint,
   PathOp,
   PathSegment,
+  ShadeOp,
+  ShadeStop,
   Stroke,
   Style,
 } from './pdf';

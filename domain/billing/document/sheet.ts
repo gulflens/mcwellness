@@ -1,7 +1,8 @@
 /**
  * The sheet a money document is drawn on: the page's measurements, the
- * practice's violet and its three tints, and `Sheet` — the cursor that lays a
- * document out top-down across as many pages as it needs.
+ * practice's violet and the soft colours it is dressed in (since 7 October
+ * 2026), and `Sheet` — the cursor that lays a document out top-down across as
+ * many pages as it needs.
  *
  * Split out of `render.ts` in round 65 so the pages drawn on it — the invoice
  * and the receipt in the operator's design of 24 September 2026 (`invoice.ts`,
@@ -17,6 +18,7 @@ import {
   type FontSet,
   type Op,
   type Page,
+  type ShadeOp,
 } from '../../shared/document';
 
 export const MARGIN = 48;
@@ -34,42 +36,73 @@ export const BOTTOM = BAND + 18;
 export const GUTTER = 10;
 
 export const INK = 0;
-export const MUTED = 0.42;
+/**
+ * The secondary grey, `#595959`. Darker than the 0.42 it was before the soft
+ * dress of 7 October 2026: the page's ground is no longer white but a wash
+ * and lavender bands, and this is the lightest grey that still reads at WCAG
+ * AA (4.5:1) on the darkest of them, `LAVENDER` (`tests/billing/palette.
+ * test.ts` holds every type colour to that against every ground).
+ */
+export const MUTED = 0.35;
 export const RULE = 0.78;
+
+/** A colour written as a designer writes it, `0xRRGGBB`, as the writer's 0-to-1 triple. */
+function rgb(hex: number): readonly [number, number, number] {
+  return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
+}
 
 /**
  * The practice's own violet, `#380473`, sampled from the darkest large area of
- * its mark. The one hue on either document: both pages in the operator's
- * design of 24 September 2026 fill their bands and accents with it and ground
- * their cards in the three tints below.
+ * its mark: the ink of every title, reference, heading and accent, and the
+ * bars down the left edge of the number card, the bank card, the tax card and
+ * the note card.
  */
-export const VIOLET = [0x38 / 255, 0x04 / 255, 0x73 / 255] as const;
+export const VIOLET = rgb(0x380473);
 
 /**
- * Type set on violet — the table's headings and the violet block's caption
- * and figure — and nowhere else: white is his colour only on his violet
- * (which `tests/billing/palette.test.ts` pins on every page).
+ * The cards' ground. The practice's mockups of October 2026 lay white at high
+ * opacity over the wash; the writer has no transparency, so it is solid white
+ * (docs/superpowers/specs/2026-10-07-soft-documents-design.md).
  */
-export const WHITE = [1, 1, 1] as const;
+export const WHITE = rgb(0xffffff);
 
 /**
- * `VIOLET` mixed toward white by `k`: `1 - (1 - v) * k` per channel, so
- * `k = 0` is white and `k = 1` is `VIOLET` itself. One formula, so `CARD`,
- * `EDGE` and `PILL` below have the one source the design asks for
- * (docs/superpowers/specs/2026-09-24-invoice-redesign-design.md, "The page,
- * top to bottom": "all derived in code from the one brand violet").
+ * The bands and blocks, `#dccfef`: the table's header, the summary card's
+ * title band and its TOTAL DUE / TOTAL PAID block, the discount pill and the
+ * payment-reference strip. Type on it is violet.
  */
-export function tint(k: number): readonly [number, number, number] {
-  const [r, g, b] = VIOLET;
-  return [1 - (1 - r) * k, 1 - (1 - g) * k, 1 - (1 - b) * k];
+export const LAVENDER = rgb(0xdccfef);
+
+/** The cards' borders and the hairlines inside them, `#e2d8ee`. */
+export const LAVENDER_EDGE = rgb(0xe2d8ee);
+
+/**
+ * The two ends of the page's wash: lavender, `#e4daf2`, in the top-right
+ * corner, fading through a very pale lilac to a warm near-white blush,
+ * `#fbf3f6`, toward the bottom-left. Used by `wash` and by nothing else.
+ */
+export const WASH_FROM = rgb(0xe4daf2);
+export const WASH_TO = rgb(0xfbf3f6);
+
+/**
+ * The ground every page of a money document is painted with first: the wash
+ * across the whole sheet, from `WASH_FROM` at the top-right corner to
+ * `WASH_TO` most of the way down the diagonal, and the blush carried on past
+ * it into the bottom-left corner — so the lavender is a corner's glow and
+ * most of the page is near-white, as the mockups draw it.
+ */
+export function wash(): ShadeOp {
+  const reach = 0.8;
+  return {
+    kind: 'shade',
+    x: 0,
+    y: 0,
+    width: PAGE_WIDTH,
+    height: PAGE_HEIGHT,
+    from: { x: PAGE_WIDTH, y: PAGE_HEIGHT, rgb: WASH_FROM },
+    to: { x: PAGE_WIDTH * (1 - reach), y: PAGE_HEIGHT * (1 - reach), rgb: WASH_TO },
+  };
 }
-
-/** A card's ground: the violet mixed six per cent over white, `#f3f0f7`. */
-export const CARD = tint(0.06);
-/** A card's border: the violet mixed fifteen per cent over white, `#e1d9ea`. */
-export const EDGE = tint(0.15);
-/** The discount pill's ground: the violet mixed twelve per cent over white, `#e7e1ee`. */
-export const PILL = tint(0.12);
 
 export const SIZE = { wordmark: 15, title: 20, reference: 13, heading: 12, body: 9, small: 7.5 };
 export const LINE = 13;
@@ -252,9 +285,10 @@ export class Sheet {
   }
 
   /**
-   * A card: `CARD` filled, `EDGE` stroked, 6 pt corners unless told
+   * A card: `WHITE` filled, `LAVENDER_EDGE` stroked, 6 pt corners unless told
    * otherwise — the practice's own design (docs/superpowers/specs/2026-09-24-
-   * invoice-redesign-design.md, "Corners: 6 pt on cards").
+   * invoice-redesign-design.md, "Corners: 6 pt on cards"; the colours of
+   * 2026-10-07-soft-documents-design.md).
    *
    * Takes the box from its **top** edge, `yTop`, which is how this file lays
    * a page out — downward from `TOP` — rather than the bottom-left corner
@@ -269,38 +303,47 @@ export class Sheet {
     options: { radius?: number } = {},
   ): void {
     this.rect(x, yTop - height, width, height, {
-      fill: { rgb: CARD },
-      stroke: { rgb: EDGE },
+      fill: { rgb: WHITE },
+      stroke: { rgb: LAVENDER_EDGE },
       radius: options.radius ?? 6,
     });
   }
 
   /**
-   * A band filled solid `VIOLET` and never stroked: the lines table's
-   * header, the totals' "TOTAL DUE" / "TOTAL PAID" block, the discount pill,
-   * the tax card's left-edge bar. Top-edge coordinates and the same
-   * conversion as `card` — see there.
+   * A band filled solid `VIOLET` and never stroked: the bar down a card's
+   * left edge. Top-edge coordinates and the same conversion as `card` — see
+   * there.
    */
   bandFill(x: number, yTop: number, width: number, height: number, radius = 0): void {
     this.rect(x, yTop - height, width, height, { fill: { rgb: VIOLET }, radius });
   }
 
   /**
-   * A card's border with nothing inside it: `EDGE` stroked, the page's white
-   * showing through — the lines table and the two cards beneath it, as the
-   * operator's page draws them. Top-edge coordinates, as `card`.
+   * A band filled `LAVENDER` and never stroked: the lines table's header,
+   * the summary's title band and its TOTAL DUE / TOTAL PAID block, the
+   * discount pill, the payment-reference strip. Top-edge coordinates, as
+   * `card`.
    */
-  outline(x: number, yTop: number, width: number, height: number, radius = 6): void {
-    this.rect(x, yTop - height, width, height, { stroke: { rgb: EDGE }, radius });
+  lavenderFill(x: number, yTop: number, width: number, height: number, radius = 0): void {
+    this.rect(x, yTop - height, width, height, { fill: { rgb: LAVENDER }, radius });
   }
 
   /**
-   * A hairline inside a card, in the card's own `EDGE` rather than the grey
+   * A card's border with nothing inside it: `LAVENDER_EDGE` stroked, drawn
+   * over a card whose border a band has covered. Top-edge coordinates, as
+   * `card`.
+   */
+  outline(x: number, yTop: number, width: number, height: number, radius = 6): void {
+    this.rect(x, yTop - height, width, height, { stroke: { rgb: LAVENDER_EDGE }, radius });
+  }
+
+  /**
+   * A hairline inside a card, in the card's own `LAVENDER_EDGE` rather than the grey
    * rule the page draws between blocks: across when `height` is left at its
    * half point, down a column when it is given. `x`, `y` is its bottom-left.
    */
   hairline(x: number, y: number, width: number, height = 0.5): void {
-    this.rect(x, y, width, height, { fill: { rgb: EDGE } });
+    this.rect(x, y, width, height, { fill: { rgb: LAVENDER_EDGE } });
   }
 
   /**

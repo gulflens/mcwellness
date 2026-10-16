@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
   layout,
-  measure,
   type InvoiceDocument,
   type InvoiceLine,
   type Op,
@@ -10,53 +9,60 @@ import {
   type ReceiptDocument,
   type SupplierSnapshot,
 } from '../../domain/billing/document';
+import { PAGE_HEIGHT, PAGE_WIDTH } from '../../domain/shared/document';
 import {
-  CARD,
-  EDGE,
   INK,
+  LAVENDER,
+  LAVENDER_EDGE,
   MUTED,
-  PILL,
   RULE,
   VIOLET,
+  WASH_FROM,
+  WASH_TO,
   WHITE,
 } from '../../domain/billing/document/sheet';
 
 /**
  * The colours the two money documents may use, and nothing else.
  *
- * The operator's first instruction for the design of 24 September 2026 was
- * "respect my colors" (docs/superpowers/specs/2026-09-24-invoice-redesign-
- * design.md): the practice's violet, white on violet, and the three tints of
- * that violet for cards, with type otherwise in the ink and the greys the
- * documents already use. This walks every op of every page of both documents,
- * over the variants that change what a page draws, and holds each to that:
+ * The softer dress of 7 October 2026 (docs/superpowers/specs/2026-10-07-soft-
+ * documents-design.md) keeps the round-65 rule — "respect my colors" — and
+ * names its colours: the practice's violet as the ink and the accent, white
+ * card grounds, `LAVENDER` for bands and blocks, `LAVENDER_EDGE` for card
+ * borders, and the page's wash from `WASH_FROM` to `WASH_TO`, with type
+ * otherwise in the ink and the greys the documents already use. This walks
+ * every op of every page of both documents, over the variants that change
+ * what a page draws, and holds each to that:
  *
- * - every `rgb`, on type or on a shape, is `VIOLET`, `CARD`, `EDGE`, `PILL`
- *   or `WHITE`;
+ * - every `rgb`, on type or on a shape, is one of those six;
  * - every `grey` is `INK`, `MUTED` or `RULE`;
- * - every piece of type set in `WHITE` lies inside a rectangle filled
- *   `VIOLET` on the same page — white is his colour only on his violet.
+ * - type is set only in the ink, a grey or the violet — never white, never
+ *   a lavender — and every type colour reads at WCAG AA (4.5:1) against
+ *   every ground the page has, the darkest lavender included;
+ * - every page is first painted with the wash, and the wash's two colours
+ *   appear nowhere else.
  *
- * A second hue, a new grey, or white type that has slipped off its band fails
- * here before anyone has to see it on paper.
+ * A second hue, a new grey, or type too faint for its ground fails here
+ * before anyone has to see it on paper.
  */
 
 const fonts = documentFonts();
 
 /** Two colours are the same colour to within floating-point arithmetic. */
 const SAME = 1e-9;
-/** A piece of type touching its band's edge to within a third of a point is inside it. */
-const TOLERANCE = 0.34;
 
 type Rgb = readonly [number, number, number];
 
 const PALETTE: ReadonlyArray<readonly [string, Rgb]> = [
   ['VIOLET', VIOLET],
-  ['CARD', CARD],
-  ['EDGE', EDGE],
-  ['PILL', PILL],
   ['WHITE', WHITE],
+  ['LAVENDER', LAVENDER],
+  ['LAVENDER_EDGE', LAVENDER_EDGE],
+  ['WASH_FROM', WASH_FROM],
+  ['WASH_TO', WASH_TO],
 ];
+/** Every colour type may sit on: the cards, the bands and blocks, both ends of the wash. */
+const GROUNDS: readonly Rgb[] = [WHITE, LAVENDER, WASH_FROM, WASH_TO];
 const GREYS = [INK, MUTED, RULE];
 
 const sameRgb = (a: Rgb, b: Rgb): boolean =>
@@ -93,6 +99,8 @@ function coloursOf(op: Op): { rgb: Rgb[]; grey: number[] } {
     }
     case 'image':
       return { rgb: [], grey: [] };
+    case 'shade':
+      return { rgb: [op.from.rgb, op.to.rgb], grey: [] };
     case 'path': {
       // The money documents draw no path; if one ever does, its paint is
       // held to the same palette. A paint that names neither is ink.
@@ -223,7 +231,7 @@ for (const method of ['cash', 'transfer', 'link'] as const) {
 }
 
 describe('the palette both money documents may use', () => {
-  it('sets every colour in the violet, its three tints or white, and every grey in the ink or the two greys', () => {
+  it('sets every colour in the six named colours, and every grey in the ink or the two greys', () => {
     for (const { name, pages } of CASES) {
       pages.forEach((page, index) => {
         for (const op of page.ops) {
@@ -237,40 +245,76 @@ describe('the palette both money documents may use', () => {
     }
   });
 
-  it('sets white type only inside a band filled violet', () => {
-    let white = 0;
+  it('sets type only in the ink, a grey or the violet', () => {
     for (const { name, pages } of CASES) {
       pages.forEach((page, index) => {
-        const bands = page.ops.filter(
-          (op): op is Extract<Op, { kind: 'rect' }> =>
-            op.kind === 'rect' &&
-            op.fill !== undefined &&
-            'rgb' in op.fill &&
-            sameRgb(op.fill.rgb, VIOLET),
-        );
         for (const op of page.ops) {
-          if (op.kind !== 'text' || !op.style.rgb || !sameRgb(op.style.rgb, WHITE)) continue;
-          white += 1;
-          const width = measure(op.text, op.style, fonts, op.rtl === true);
-          const align = op.align ?? (op.rtl === true ? 'end' : 'start');
-          const left =
-            align === 'end' ? op.x - width : align === 'centre' ? op.x - width / 2 : op.x;
-          const right = left + width;
-          const inside = bands.some(
-            (band) =>
-              left >= band.x - TOLERANCE &&
-              right <= band.x + band.width + TOLERANCE &&
-              op.y >= band.y - TOLERANCE &&
-              // The capital's rise, and not only the baseline, inside the band.
-              op.y + op.style.size * 0.75 <= band.y + band.height + TOLERANCE,
-          );
-          expect(inside, `${name}, page ${index + 1}: "${op.text}" is white off the violet`).toBe(
+          if (op.kind !== 'text' || !op.style.rgb) continue;
+          expect(sameRgb(op.style.rgb, VIOLET), `${name}, page ${index + 1}: "${op.text}"`).toBe(
             true,
           );
         }
       });
     }
-    // The table's headings and both violet blocks: the check read something.
-    expect(white).toBeGreaterThan(0);
+  });
+
+  it('sets every colour of type at 4.5:1 or better against every ground it could sit on', () => {
+    const colours = new Map<string, Rgb>();
+    for (const { pages } of CASES) {
+      for (const page of pages) {
+        for (const op of page.ops) {
+          if (op.kind !== 'text') continue;
+          const grey = op.style.grey ?? 0;
+          const rgb: Rgb = op.style.rgb ?? [grey, grey, grey];
+          colours.set(rgb.join(','), rgb);
+        }
+      }
+    }
+    // Ink, the muted grey and the violet at least.
+    expect(colours.size).toBeGreaterThanOrEqual(3);
+    for (const [key, colour] of colours) {
+      for (const ground of GROUNDS) {
+        expect(contrast(colour, ground), `${key} on ${ground.join(',')}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
+    }
+  });
+
+  it('paints every page first with the wash, corner to corner, and the wash’s colours nowhere else', () => {
+    for (const { name, pages } of CASES) {
+      pages.forEach((page, index) => {
+        const at = `${name}, page ${index + 1}`;
+        const [first, ...rest] = page.ops;
+        expect(first?.kind, at).toBe('shade');
+        if (first?.kind !== 'shade') return;
+        expect(first.x, at).toBe(0);
+        expect(first.y, at).toBe(0);
+        expect(first.width, at).toBeCloseTo(PAGE_WIDTH, 5);
+        expect(first.height, at).toBeCloseTo(PAGE_HEIGHT, 5);
+        expect(sameRgb(first.from.rgb, WASH_FROM), at).toBe(true);
+        expect(sameRgb(first.to.rgb, WASH_TO), at).toBe(true);
+        for (const op of rest) {
+          expect(op.kind, at).not.toBe('shade');
+          for (const colour of coloursOf(op).rgb) {
+            expect(sameRgb(colour, WASH_FROM) || sameRgb(colour, WASH_TO), at).toBe(false);
+          }
+        }
+      });
+    }
   });
 });
+
+/** WCAG relative luminance of an sRGB colour. */
+function luminance(rgb: Rgb): number {
+  const linear = rgb.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return (
+    0.2126 * (linear[0] as number) + 0.7152 * (linear[1] as number) + 0.0722 * (linear[2] as number)
+  );
+}
+
+/** WCAG contrast ratio between two colours. */
+function contrast(a: Rgb, b: Rgb): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+  return (hi + 0.05) / (lo + 0.05);
+}

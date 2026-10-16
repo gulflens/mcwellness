@@ -95,6 +95,12 @@ function copyOf(op: LayoutOp): LayoutOp {
       return op.rgb ? { ...op, rgb: [...op.rgb] } : { ...op };
     case 'image':
       return { ...op };
+    case 'shade':
+      return {
+        ...op,
+        from: { ...op.from, rgb: [...op.from.rgb] },
+        to: { ...op.to, rgb: [...op.to.rgb] },
+      };
     case 'path': {
       const segments = mapPoints(
         op.segments,
@@ -172,6 +178,16 @@ export function scaleOps(
       }
       case 'image':
         return { ...op, x: sx(op.x), y: sy(op.y), width: op.width * k, height: op.height * k };
+      case 'shade':
+        return {
+          ...op,
+          x: sx(op.x),
+          y: sy(op.y),
+          width: op.width * k,
+          height: op.height * k,
+          from: { ...op.from, x: sx(op.from.x), y: sy(op.from.y) },
+          to: { ...op.to, x: sx(op.to.x), y: sy(op.to.y) },
+        };
       case 'path': {
         const segments = mapPoints(op.segments, sx, sy);
         if (!op.stroke) return { ...op, segments };
@@ -221,6 +237,14 @@ export function translateOps(ops: readonly LayoutOp[], dx: number, dy: number): 
       case 'image':
       case 'rect':
         return { ...op, x: op.x + dx, y: op.y + dy };
+      case 'shade':
+        return {
+          ...op,
+          x: op.x + dx,
+          y: op.y + dy,
+          from: { ...op.from, x: op.from.x + dx, y: op.from.y + dy },
+          to: { ...op.to, x: op.to.x + dx, y: op.to.y + dy },
+        };
       case 'path':
         return {
           ...op,

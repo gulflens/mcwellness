@@ -282,6 +282,10 @@ function extentOfOp(op: LayoutOp, measure: Measure): Extent {
         bottom: op.y - half,
       };
     }
+    // A wash paints its box and nothing past it (the money documents' ground;
+    // the report draws none).
+    case 'shade':
+      return { left: op.x, right: op.x + op.width, top: op.y + op.height, bottom: op.y };
     case 'path': {
       const bounds = boundsOf(op.segments);
       const half = op.stroke ? (op.stroke.width ?? PDF_LINE_WIDTH) / 2 : 0;
