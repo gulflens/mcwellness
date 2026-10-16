@@ -504,7 +504,7 @@ export function ErasureSection({
 
           {mayErase && confirming !== open.id ? (
             <div className="drawer__actions">
-              <Button variant="primary" onClick={() => setConfirming(open.id)}>
+              <Button variant="danger" onClick={() => setConfirming(open.id)}>
                 Erase this client
               </Button>
             </div>
@@ -534,7 +534,7 @@ export function ErasureSection({
               />
               <div className="drawer__actions">
                 <Button
-                  variant="primary"
+                  variant="danger"
                   disabled={busy || !eraseReason.trim()}
                   onClick={() => void erase(open.id)}
                 >
@@ -555,6 +555,17 @@ export function ErasureSection({
           {asking ? (
             <div className="drawer__form">
               <StepHeading>Record that this household has asked to be forgotten</StepHeading>
+              {/* What this step does, before anything is sent (the operator's
+                  Phase 1 brief, 2026-10-16): the button that opens it is
+                  drawn as destructive, so the step says plainly that it is
+                  the first of two and that the second cannot be undone. */}
+              <Note>
+                Recording the request erases nothing yet. It notes that the household has asked,
+                why, and who asked, and keeps their phone number, if there is one, for the
+                confirmation letter. The owner or an admin then carries out the erasure as a
+                separate step, which removes this client&apos;s personal details and documents,
+                except the invoices and receipts tax law keeps for five years, and cannot be undone.
+              </Note>
               <Textarea
                 id="erasure-ask-reason"
                 label="Why the household has asked"
@@ -587,7 +598,7 @@ export function ErasureSection({
               </div>
               <div className="drawer__actions">
                 <Button
-                  variant="primary"
+                  variant="danger"
                   disabled={busy || !askReason.trim() || askContactId === ''}
                   onClick={() => void ask()}
                 >
@@ -600,7 +611,7 @@ export function ErasureSection({
             </div>
           ) : mayAsk ? (
             <div className="drawer__actions">
-              <Button variant="quiet" onClick={() => setAsking(true)}>
+              <Button variant="danger" onClick={() => setAsking(true)}>
                 Record erasure request
               </Button>
             </div>

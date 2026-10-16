@@ -711,6 +711,25 @@ a.rail__child.rail__child--current {
   background: none;
 }
 
+/* Destructive: the critical status colour, which already marks an erased
+   record and an error line, so its meaning does not move. White on it
+   measures 7.33, past the 4.5 a label needs. */
+.button--danger {
+  background: var(--critical);
+  border-color: var(--critical);
+  color: var(--surface);
+  box-shadow: var(--lift-1);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--critical) 88%, var(--ink));
+  border-color: color-mix(in srgb, var(--critical) 88%, var(--ink));
+}
+
+.button--danger:active {
+  box-shadow: none;
+}
+
 .button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -944,6 +963,28 @@ a.rail__child.rail__child--current {
 
 .admin[data-rail='closed'] .rail__person {
   padding-inline: 0;
+}
+
+/* The strip's tooltip (Rail.tsx, useRailTip): the label an icon stands for,
+   beside it, on hover and on keyboard focus. Fixed, because .rail clips what
+   overflows it; the two custom properties are the control's own centre and
+   the strip's edge, measured as it is shown. Ink on the page's ground, the
+   same pairing as body text, so it reads at body text's contrast. */
+.rail__tip {
+  position: fixed;
+  inset-block-start: var(--tip-block);
+  inset-inline-start: var(--tip-inline);
+  transform: translateY(-50%);
+  z-index: 3;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-2);
+  background: var(--ink);
+  color: var(--surface);
+  box-shadow: var(--lift-2);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* Covering: the rail floats over the page rather than squeezing it, and the

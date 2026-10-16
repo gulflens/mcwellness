@@ -6,13 +6,19 @@ import {
 } from 'react';
 import { ChevronIcon, EyeIcon, EyeOffIcon } from './Icons';
 
-/** Buttons and fields in the ledger's vocabulary: ink on paper, no hue, 44px tall. */
+/**
+ * Buttons and fields in the ledger's vocabulary: ink on paper, no hue, 44px tall.
+ * The one hue a button may carry besides the brand's is `danger`: the critical
+ * status colour, kept for an action that leads to erasing a record.
+ */
 
 export function Button({
   variant = 'secondary',
   className,
   ...rest
-}: ComponentPropsWithRef<'button'> & { variant?: 'primary' | 'secondary' | 'quiet' }) {
+}: ComponentPropsWithRef<'button'> & {
+  variant?: 'primary' | 'secondary' | 'quiet' | 'danger';
+}) {
   return (
     <button
       type="button"

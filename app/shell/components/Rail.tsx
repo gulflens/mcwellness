@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties, FocusEvent, PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink, useLocation } from 'react-router';
 import * as freshBuild from '../freshBuild';
 import type { ReactNode } from 'react';
@@ -317,6 +319,11 @@ export function Rail({
   // Stable, because useDrawer holds it in an effect's dependency list and a
   // fresh function every render would tear the focus trap down and rebuild it.
   const close = useCallback(() => onToggle(), [onToggle]);
+  // Closed to the strip, an icon is all there is: each one is named aloud by
+  // its own aria-label, and to the eye by the tooltip below. Covering, the
+  // labels are out (shell.css), so neither is needed.
+  const strip = !open && !covering;
+  const tip = useRailTip(strip, pathname);
   return (
     <nav className="rail" aria-label="Sections" ref={rail}>
       {covering ? <Covering rail={rail} first={toggle} onClose={close} /> : null}
@@ -335,26 +342,21 @@ export function Rail({
           className="rail__toggle"
           onClick={onToggle}
           aria-expanded={open}
-          title="Sections"
+          aria-label={strip ? 'Sections' : undefined}
           ref={toggle}
+          {...tip.on('Sections')}
         >
           <RailIcon />
           <span className="visually-hidden">Sections</span>
         </button>
         {onTogglePin && open ? (
-          <button
-            type="button"
-            className="rail__pin"
-            onClick={onTogglePin}
-            aria-pressed={pinned}
-            title="Keep sections open"
-          >
+          <button type="button" className="rail__pin" onClick={onTogglePin} aria-pressed={pinned}>
             <PinIcon />
             <span className="visually-hidden">Keep sections open</span>
           </button>
         ) : null}
       </div>
-      <div className="rail__list">
+      <div className="rail__list" onScroll={tip.hide}>
         {[
           { label: 'Daily work', keys: ['today', 'clients', 'enquiries', 'schedule'] },
           { label: 'Finance', keys: ['billing', 'books'] },
@@ -376,8 +378,8 @@ export function Rail({
                     <li key={section.key}>
                       <NavLink
                         to={section.to}
-                        title={named ?? section.label}
-                        aria-label={named}
+                        aria-label={strip ? (named ?? section.label) : named}
+                        {...tip.on(named ?? section.label)}
                         onClick={onChoose}
                         reloadDocument={fresh}
                         className={({ isActive }) =>
@@ -416,17 +418,99 @@ export function Rail({
         <NavLink
           to="/account/password"
           className="rail__signout"
-          title="Password"
+          aria-label={strip ? 'Password' : undefined}
           reloadDocument={fresh}
+          {...tip.on('Password')}
         >
           <KeyIcon />
           <span className="rail__label">Password</span>
         </NavLink>
-        <button type="button" className="rail__signout" onClick={onSignOut} title="Sign out">
+        <button
+          type="button"
+          className="rail__signout"
+          onClick={onSignOut}
+          aria-label={strip ? 'Sign out' : undefined}
+          {...tip.on('Sign out')}
+        >
           <SignOutIcon />
           <span className="rail__label">Sign out</span>
         </button>
       </div>
+      {tip.shown
+        ? // Drawn, not announced: the control it labels already carries the
+          // same words as its aria-label, so a reader would hear them twice.
+          // Into the body, because the sticky rail is a stacking context of
+          // its own and the page beside it would paint over anything inside.
+          createPortal(
+            <div
+              className="rail__tip"
+              aria-hidden="true"
+              style={
+                {
+                  '--tip-block': `${tip.shown.block}px`,
+                  '--tip-inline': `${tip.shown.inline}px`,
+                } as CSSProperties
+              }
+            >
+              {tip.shown.label}
+            </div>,
+            document.body,
+          )
+        : null}
     </nav>
   );
+}
+
+/** The gap between the strip's edge and a tooltip, the same 8px as --s-2. */
+const TIP_GAP = 8;
+
+type Tip = { label: string; block: number; inline: number; path: string };
+
+/**
+ * The strip's one tooltip, shown on hover and on keyboard focus alike: a
+ * title attribute appears only to a mouse, and only after a delay, so a person
+ * tabbing down the strip was told nothing about where each icon goes.
+ *
+ * It is placed from the control's own box rather than by CSS alone because
+ * `.rail` clips what overflows it, and a tooltip has to stand outside the
+ * strip to be read. Escape dismisses it and scrolling hides it (WCAG 1.4.13).
+ * It belongs to the page it was shown on: a press that navigates can take the
+ * control away before any pointerleave or blur arrives, so a tooltip from
+ * another address is never drawn, and nothing listens for it.
+ * Measured against the document's direction, so it stands at the strip's
+ * inline end in Arabic as in English.
+ */
+function useRailTip(enabled: boolean, path: string) {
+  const [shown, setShown] = useState<Tip | null>(null);
+  const hide = useCallback(() => setShown(null), []);
+  // Opening the rail puts the labels out, and the tooltip goes with them.
+  const visible = enabled && shown?.path === path ? shown : null;
+  useEffect(() => {
+    if (!visible) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShown(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [visible]);
+  const show = (label: string, target: Element) => {
+    const box = target.getBoundingClientRect();
+    const rtl = getComputedStyle(target).direction === 'rtl';
+    setShown({
+      label,
+      block: box.top + box.height / 2,
+      inline: rtl ? window.innerWidth - box.left + TIP_GAP : box.right + TIP_GAP,
+      path,
+    });
+  };
+  const on = (label: string) =>
+    enabled
+      ? {
+          onPointerEnter: (event: PointerEvent<HTMLElement>) => show(label, event.currentTarget),
+          onPointerLeave: hide,
+          onFocus: (event: FocusEvent<HTMLElement>) => show(label, event.currentTarget),
+          onBlur: hide,
+        }
+      : {};
+  return { shown: visible, on, hide };
 }

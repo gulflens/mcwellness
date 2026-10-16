@@ -76,17 +76,17 @@ function sent(call: Call | undefined): { to: string; reason: string | null } {
 const button = (name: string) => screen.queryByRole('button', { name });
 
 describe('OverviewTab status moves', () => {
-  it('offers Pause and Close to an active client, and nothing to reactivate', () => {
+  it('offers Pause and Close case to an active client, and nothing to reactivate', () => {
     mount('active');
     expect(button('Pause')).toBeTruthy();
-    expect(button('Close')).toBeTruthy();
+    expect(button('Close case')).toBeTruthy();
     expect(button('Reactivate')).toBeNull();
   });
 
-  it('offers Reactivate and Close to a paused client', () => {
+  it('offers Reactivate and Close case to a paused client', () => {
     mount('paused');
     expect(button('Reactivate')).toBeTruthy();
-    expect(button('Close')).toBeTruthy();
+    expect(button('Close case')).toBeTruthy();
     expect(button('Pause')).toBeNull();
   });
 
@@ -94,18 +94,37 @@ describe('OverviewTab status moves', () => {
     mount('closed');
     expect(button('Reactivate')).toBeTruthy();
     expect(button('Pause')).toBeNull();
-    expect(button('Close')).toBeNull();
+    expect(button('Close case')).toBeNull();
   });
 
   it('offers no status move to someone the status route would refuse', () => {
     mount('active', { mayWrite: false });
     expect(button('Pause')).toBeNull();
-    expect(button('Close')).toBeNull();
+    expect(button('Close case')).toBeNull();
   });
 
   it('offers no status move on an erased record', () => {
     mount('erased');
-    for (const name of ['Pause', 'Close', 'Reactivate']) expect(button(name)).toBeNull();
+    for (const name of ['Pause', 'Close case', 'Reactivate']) expect(button(name)).toBeNull();
+  });
+
+  it('stands Pause, Close case and Edit in one row, in that order', () => {
+    mount('active');
+    const row = button('Pause')!.closest('.drawer__actions')!;
+    expect([...row.querySelectorAll('button')].map((one) => one.textContent)).toEqual([
+      'Pause',
+      'Close case',
+      'Edit',
+    ]);
+    expect(document.querySelectorAll('.drawer__actions')).toHaveLength(1);
+  });
+
+  it('puts the row away while the close is being confirmed, and says what closing does', () => {
+    mount('active');
+    fireEvent.click(button('Close case')!);
+    expect(button('Pause')).toBeNull();
+    expect(button('Edit')).toBeNull();
+    expect(screen.getByText(/makes record .* read-only except for documents/)).toBeTruthy();
   });
 
   it('pauses an active client in one press', async () => {
@@ -124,18 +143,19 @@ describe('OverviewTab status moves', () => {
 
   it('asks before closing, and closes a paused client once confirmed', async () => {
     const { statusCalls, onChanged } = mount('paused');
-    fireEvent.click(button('Close')!);
+    fireEvent.click(button('Close case')!);
     expect(statusCalls()).toHaveLength(0);
-    fireEvent.click(button('Close record')!);
+    fireEvent.click(button('Close case')!);
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(sent(statusCalls()[0])).toEqual({ to: 'closed', reason: null });
   });
 
   it('lets a close be cancelled without sending anything', () => {
     const { statusCalls } = mount('active');
-    fireEvent.click(button('Close')!);
+    fireEvent.click(button('Close case')!);
     fireEvent.click(button('Cancel')!);
-    expect(button('Close record')).toBeNull();
+    expect(screen.queryByText(/makes record .* read-only/)).toBeNull();
+    expect(button('Pause')).toBeTruthy();
     expect(statusCalls()).toHaveLength(0);
   });
 

@@ -166,7 +166,7 @@ export function AdminLayout({ actorName }: { actorName: string }) {
     }
   }, [width]);
   const tier = tierOf(width);
-  const mode = railMode(tier, railOpen, pinned);
+  const mode = railMode(tier, railOpen);
   const toggleRail = () => {
     setRailOpen((wasOpen) => {
       const open = !wasOpen;
@@ -219,7 +219,7 @@ export function AdminLayout({ actorName }: { actorName: string }) {
         onToggle={toggleRail}
         covering={mode === 'overlay'}
         pinned={pinned}
-        onTogglePin={tier === 'desk' ? undefined : togglePin}
+        onTogglePin={tier === 'compact' ? togglePin : undefined}
         onChoose={chooseSection}
         badges={Object.keys(badges).length === 0 ? undefined : badges}
       />
