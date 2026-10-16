@@ -114,40 +114,37 @@ describe('tierOf', () => {
 });
 
 describe('railMode', () => {
-  it('is a column on a desk, and pinning there means nothing', () => {
-    expect(railMode('desk', true, false)).toBe('column-open');
-    expect(railMode('desk', false, false)).toBe('column-strip');
-    expect(railMode('desk', true, true)).toBe('column-open');
-    expect(railMode('desk', false, true)).toBe('column-strip');
+  it('is a column on a desk', () => {
+    expect(railMode('desk', true)).toBe('column-open');
+    expect(railMode('desk', false)).toBe('column-strip');
   });
 
   it('rests as a strip below the desk until it is opened', () => {
-    expect(railMode('tablet', false, false)).toBe('column-strip');
-    expect(railMode('compact', false, false)).toBe('column-strip');
-    expect(railMode('tablet', false, true)).toBe('column-strip');
-    expect(railMode('compact', false, true)).toBe('column-strip');
+    expect(railMode('tablet', false)).toBe('column-strip');
+    expect(railMode('compact', false)).toBe('column-strip');
   });
 
-  it('covers the content when opened, and pushes it once pinned on a tablet', () => {
-    expect(railMode('tablet', true, false)).toBe('overlay');
-    expect(railMode('tablet', true, true)).toBe('column-open');
+  it('is a column on a tablet or a laptop too, so every page shows the same rail', () => {
+    // The operator's Phase 1 brief of 2026-10-16: the rail had covered the
+    // page below the desk and closed itself on every choice, so it read
+    // expanded on the page it was opened on and collapsed on the next.
+    expect(railMode('tablet', true)).toBe('column-open');
   });
 
-  it('still covers on a phone even when pinned, where 220px would leave 170', () => {
-    expect(railMode('compact', true, false)).toBe('overlay');
-    expect(railMode('compact', true, true)).toBe('overlay');
+  it('covers on a phone, where 220px would leave 170', () => {
+    expect(railMode('compact', true)).toBe('overlay');
   });
 });
 
 describe('closesOnChoice', () => {
-  it('puts itself away behind you below the desk, unless you pinned it', () => {
+  it('puts itself away behind you on a phone, unless you pinned it', () => {
     expect(closesOnChoice('compact', false)).toBe(true);
-    expect(closesOnChoice('tablet', false)).toBe(true);
     expect(closesOnChoice('compact', true)).toBe(false);
-    expect(closesOnChoice('tablet', true)).toBe(false);
   });
 
-  it('never closes on a desk, where choosing a section does not move the rail', () => {
+  it('never closes on a tablet or a desk, where it stands beside the page', () => {
+    expect(closesOnChoice('tablet', false)).toBe(false);
+    expect(closesOnChoice('tablet', true)).toBe(false);
     expect(closesOnChoice('desk', false)).toBe(false);
     expect(closesOnChoice('desk', true)).toBe(false);
   });

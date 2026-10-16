@@ -73,6 +73,8 @@ Taken on 8 September 2026, each with the recommendation accepted.
    strip is always on the inline start. Expanding floats the labels over the
    page; tapping a section goes there and closes. Pinning keeps it open across
    navigation and reloads, and where there is room it becomes a column again.
+   *Narrowed to phones on 2026-10-16 (section 7): from 768px up an expanded
+   sidebar is a column and stays as it was left.*
 3. **The mark is full colour, and the violet is a real accent** — not a tinted
    logo in an otherwise grey interface, and not confined to the mark.
 4. **The console fills any display.** No cap. Prose keeps its own measure.
@@ -235,30 +237,43 @@ practitioner's landing before this piece is called done.
 
 Three states where there were two, and a tier decides which are reachable.
 
+*Revised 2026-10-16 on the operator's Phase 1 brief, which asked for one
+sidebar on every page and for the collapsed or expanded choice to be
+remembered. On a tablet, and on
+a laptop window narrower than 1200px, an expanded sidebar had covered the page
+and closed itself on every choice, so it read expanded on the page it was
+opened on and collapsed on the next. From 768px up it is now a column at both
+sizes and only the toggle moves it. Covering, and the pin, remain on phones.*
+
 | | Compact, below 768 | Tablet, 768–1199 | Desk, 1200 and up |
 |---|---|---|---|
-| Resting | 64px strip | 64px strip | Open, labelled column |
-| Expanded | Covers, scrim behind | Covers, scrim behind | Already open |
-| Tapping a section | Goes, and closes | Goes, and closes | Goes, and stays |
-| Pinned | Stays open, still covers | Becomes a column, pushes | Not offered |
+| Resting | 64px strip | 64px strip, or as last left | Open column, or as last left |
+| Expanded | Covers, scrim behind | Column, pushes | Column, pushes |
+| Tapping a section | Goes, and closes | Goes, and stays | Goes, and stays |
+| Pinned | Stays open, still covers | Not offered | Not offered |
+
+**On the strip every icon is named twice over.** Its `aria-label` names it
+aloud (with the badge, "Enquiries, 2 new"), and a tooltip beside it names it
+to the eye, on hover and on keyboard focus alike, dismissed by Escape. The
+tooltip is drawn, not announced, so a reader does not hear the name twice.
 
 **Why pinning does not push on a phone.** A 220px rail on a 390px screen
 leaves 170px of page. Pinning there means only that the sidebar stops closing
 itself, which is what a person pinning it on a phone actually wants.
 
-**The state is two remembered facts, not one.** `mcwellness.rail` already holds
+**The state is two remembered facts, not one** (the second now read on a phone only). `mcwellness.rail` already holds
 `open` or `closed` and keeps its meaning. A second key,
 `mcwellness.rail.pinned`, holds `yes` or `no`. No migration is needed and a
 browser that refuses storage falls back to the tier's default, as it does now.
 
 **The mode is derived, never stored.** A pure function in `app/shell/railState.ts`
-maps a tier and the two facts to one of `column-open`, `column-strip` or
-`overlay`, so every combination can be tested without a browser:
+maps a tier and whether the rail is open to one of `column-open`,
+`column-strip` or `overlay`, so every combination can be tested without a
+browser:
 
-- desk → `column-open` when open, `column-strip` when not; pinned is ignored;
-- tablet and pinned and open → `column-open`;
-- open → `overlay`;
-- otherwise → `column-strip`.
+- closed → `column-strip`, at every tier;
+- open on a phone → `overlay`;
+- open on a tablet or a desk → `column-open`.
 
 **What an overlay owes a person.** It closes on Escape and on a press outside
 itself, unless pinned. While it covers, focus is held within it and returns to
@@ -269,7 +284,7 @@ mirrors without a second rule — `@starting-style` for the drawer in
 `shell.css` is the pattern to follow.
 
 **The pin control** sits beside the existing toggle in `.rail__head`, and only
-where it means something: below the desk tier, and only while the rail is
+where it means something: on a phone, and only while the rail is
 expanded. It is a `button` with `aria-pressed` and the accessible name "Keep
 sections open". The strip shows the toggle alone; there is no room for two
 controls in 64px and nothing for the second to do.

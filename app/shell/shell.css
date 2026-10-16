@@ -946,6 +946,28 @@ a.rail__child.rail__child--current {
   padding-inline: 0;
 }
 
+/* The strip's tooltip (Rail.tsx, useRailTip): the label an icon stands for,
+   beside it, on hover and on keyboard focus. Fixed, because .rail clips what
+   overflows it; the two custom properties are the control's own centre and
+   the strip's edge, measured as it is shown. Ink on the page's ground, the
+   same pairing as body text, so it reads at body text's contrast. */
+.rail__tip {
+  position: fixed;
+  inset-block-start: var(--tip-block);
+  inset-inline-start: var(--tip-inline);
+  transform: translateY(-50%);
+  z-index: 3;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-2);
+  background: var(--ink);
+  color: var(--surface);
+  box-shadow: var(--lift-2);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* Covering: the rail floats over the page rather than squeezing it, and the
    grid still reserves the strip beneath it so the content does not jump when
    the rail opens (docs/SPEC/coloured-shell.md section 7). */

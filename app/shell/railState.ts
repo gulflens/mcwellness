@@ -71,36 +71,36 @@ export function tierOf(viewportWidth: number): Tier {
 export type RailMode = 'column-open' | 'column-strip' | 'overlay';
 
 /**
- * The rail's mode, derived from the tier and the two remembered facts and
- * never stored (docs/SPEC/coloured-shell.md section 7).
+ * The rail's mode, derived from the tier and whether it is open, and never
+ * stored (docs/SPEC/coloured-shell.md section 7).
  *
- * On a desk the rail is a column and pinning means nothing: it is already held
- * open. Below the desk the strip is what rests on the screen, opening floats
- * the labels over the page, and pinning keeps them there.
+ * On a desk and on a tablet the rail is a column: open, it stands beside the
+ * page and pushes it; closed, it is the strip. It stays as the person left it
+ * on every page, because nothing but the toggle moves it. Until the
+ * operator's Phase 1 brief of 2026-10-16 a tablet's open rail covered the page
+ * and put itself away on every choice, so the same console read expanded on
+ * the page it was opened on and collapsed on the next.
  *
- * Pinning pushes the content aside only on a tablet. A 220px rail on a 390px
- * phone would leave 170px of page, so on a phone pinning means only that the
- * rail stops closing itself behind you — which is what a person pinning it
- * there actually wants.
+ * Only a phone covers. A 220px rail on a 390px phone would leave 170px of
+ * page, so there opening floats the labels over it, and pinning means only
+ * that the rail stops closing itself behind you — which is what a person
+ * pinning it there actually wants.
  */
-export function railMode(tier: Tier, open: boolean, pinned: boolean): RailMode {
-  if (tier === 'desk') {
-    return open ? 'column-open' : 'column-strip';
-  }
+export function railMode(tier: Tier, open: boolean): RailMode {
   if (!open) {
     return 'column-strip';
   }
-  return tier === 'tablet' && pinned ? 'column-open' : 'overlay';
+  return tier === 'compact' ? 'overlay' : 'column-open';
 }
 
 /**
- * Whether choosing a section should put the rail away behind you. True
- * wherever the rail is covering the page and the person has not pinned it: one
- * press goes and clears the view, rather than leaving the page hidden behind a
- * rail they must then close.
+ * Whether choosing a section should put the rail away behind you. True only
+ * where the rail is covering the page — a phone — and the person has not
+ * pinned it: one press goes and clears the view, rather than leaving the page
+ * hidden behind a rail they must then close.
  */
 export function closesOnChoice(tier: Tier, pinned: boolean): boolean {
-  return tier !== 'desk' && !pinned;
+  return tier === 'compact' && !pinned;
 }
 
 /**

@@ -93,6 +93,75 @@ describe('Rail', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
   });
 
+  it('names every icon on the strip with an aria-label of its own', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open={false}
+          onToggle={vi.fn()}
+          badges={{ enquiries: 2 }}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Clients' }).getAttribute('aria-label')).toBe(
+      'Clients',
+    );
+    expect(screen.getByRole('link', { name: 'Enquiries, 2 new' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sections' }).getAttribute('aria-label')).toBe(
+      'Sections',
+    );
+    expect(screen.getByRole('link', { name: 'Password' }).getAttribute('aria-label')).toBe(
+      'Password',
+    );
+    expect(screen.getByRole('button', { name: 'Sign out' }).getAttribute('aria-label')).toBe(
+      'Sign out',
+    );
+  });
+
+  it('shows a tooltip on the strip on hover and on keyboard focus, and Escape dismisses it', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open={false}
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    const schedule = screen.getByRole('link', { name: 'Schedule' });
+    fireEvent.focus(schedule);
+    const tip = document.querySelector('.rail__tip');
+    expect(tip?.textContent).toBe('Schedule');
+    // Drawn, not announced: the link's own name already says it.
+    expect(tip?.getAttribute('aria-hidden')).toBe('true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('.rail__tip')).toBeNull();
+    fireEvent.pointerEnter(screen.getByRole('button', { name: 'Sign out' }));
+    expect(document.querySelector('.rail__tip')?.textContent).toBe('Sign out');
+    fireEvent.pointerLeave(screen.getByRole('button', { name: 'Sign out' }));
+    expect(document.querySelector('.rail__tip')).toBeNull();
+  });
+
+  it('shows no tooltip and no extra name once the labels are out', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    const clients = screen.getByRole('link', { name: 'Clients' });
+    expect(clients.getAttribute('aria-label')).toBeNull();
+    fireEvent.focus(clients);
+    expect(document.querySelector('.rail__tip')).toBeNull();
+  });
+
   it("shows the practice's mark without announcing it a second time", () => {
     render(
       <MemoryRouter initialEntries={['/admin/clients']}>
