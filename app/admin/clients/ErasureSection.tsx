@@ -561,9 +561,10 @@ export function ErasureSection({
                   the first of two and that the second cannot be undone. */}
               <Note>
                 Recording the request erases nothing yet. It notes that the household has asked,
-                why, and who asked, and keeps that person&apos;s number for the confirmation letter.
-                The owner or an admin then carries out the erasure as a separate step, which removes
-                this client&apos;s personal details and documents and cannot be undone.
+                why, and who asked, and keeps their phone number, if there is one, for the
+                confirmation letter. The owner or an admin then carries out the erasure as a
+                separate step, which removes this client&apos;s personal details and documents,
+                except the invoices and receipts tax law keeps for five years, and cannot be undone.
               </Note>
               <Textarea
                 id="erasure-ask-reason"
