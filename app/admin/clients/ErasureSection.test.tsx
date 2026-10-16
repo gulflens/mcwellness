@@ -146,6 +146,30 @@ function mount(
   return calls;
 }
 
+describe('recording that a household has asked', () => {
+  it('is a destructive button, and says what recording does before anything is sent', async () => {
+    const calls = mount(<ErasureSection record={record} mayAsk mayErase />, { requests: [] });
+    const open = await screen.findByRole('button', { name: 'Record erasure request' });
+    expect(open.className).toContain('button--danger');
+    fireEvent.click(open);
+    expect(await screen.findByText(/Recording the request erases nothing yet\./)).toBeTruthy();
+    expect(screen.getByText(/cannot be undone/)).toBeTruthy();
+    const confirm = screen.getByRole('button', { name: 'Record the request' });
+    expect(confirm.className).toContain('button--danger');
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    expect(calls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+  });
+
+  it('records nothing when the step is cancelled', async () => {
+    const calls = mount(<ErasureSection record={record} mayAsk mayErase />, { requests: [] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Record erasure request' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText(/Recording the request erases nothing yet/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Record erasure request' })).toBeTruthy();
+    expect(calls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+  });
+});
+
 describe('a recorded request, not yet carried out', () => {
   it('says what was asked and by whom, and does not erase until it has been confirmed', async () => {
     const calls = mount(<ErasureSection record={record} mayAsk mayErase />, {
