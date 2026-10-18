@@ -6,7 +6,7 @@ import {
   type Consent,
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Confirmation } from '../../shell/components/Confirmation';
+import { Confirmation, type Outcome } from '../../shell/components/Confirmation';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { useFocusOnOpen } from '../../shell/components/useFocusOnOpen';
 import { practiceToday } from './activation';
@@ -135,7 +135,7 @@ export function ConsentTab({
   const [outcome, setOutcome] = useState<string | null>(null);
   // A signature is a high-stakes moment and ends on a confirmation (DESIGN.md,
   // States); a withdrawal or a failure stays a note line.
-  const [signed, setSigned] = useState<{ title: string; text: string } | null>(null);
+  const [signed, setSigned] = useState<{ outcome: Outcome; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const { apiFetch } = useAuth();
   const isErased = erased || record.status === 'erased';
@@ -238,12 +238,11 @@ export function ConsentTab({
           recorded or withdrawn.
         </Note>
       ) : null}
-      {/* tone="attention" carries role="status", so a confirmation reaches
-          somebody who cannot see it land (app/shell/components/Controls.tsx). */}
-      {/* Gone as soon as the next task starts: a new signature or a withdrawal. */}
+      {/* Cleared as soon as the next task starts, so cancelling that task cannot
+          bring it back and take the focus again. */}
       {signed && !signingAll && recording === null && withdrawing === null ? (
         <Confirmation
-          outcome={{ title: signed.title }}
+          outcome={signed.outcome}
           actions={
             <Button variant="quiet" onClick={() => setSigned(null)}>
               Done
@@ -253,6 +252,8 @@ export function ConsentTab({
           <p>{signed.text}</p>
         </Confirmation>
       ) : null}
+      {/* tone="attention" carries role="status", so a confirmation reaches
+          somebody who cannot see it land (app/shell/components/Controls.tsx). */}
       {outcome ? <Note tone="attention">{outcome}</Note> : null}
       {consenting.length === 0 ? (
         <Note>
@@ -269,6 +270,7 @@ export function ConsentTab({
             variant="primary"
             onClick={() => {
               setOutcome(null);
+              setSigned(null);
               setError(null);
               setSigningAll(true);
             }}
@@ -288,10 +290,12 @@ export function ConsentTab({
             setSigningAll(false);
             setOutcome(null);
             setSigned({
-              title:
-                signedPurposes.length === 1
-                  ? 'Consent signed'
-                  : `${signedPurposes.length} consents signed`,
+              outcome: {
+                title:
+                  signedPurposes.length === 1
+                    ? 'Consent recorded'
+                    : `${signedPurposes.length} consents recorded`,
+              },
               text: `Consents recorded: ${signedPurposes
                 .map((purpose) => (PURPOSE_LABELS[purpose] ?? purpose).toLowerCase())
                 .join(', ')}.`,
@@ -382,6 +386,7 @@ export function ConsentTab({
                           setRecording(purpose);
                           setWithdrawing(null);
                           setOutcome(null);
+                          setSigned(null);
                         }}
                       >
                         {active ? 'Record again' : 'Record'}
@@ -395,6 +400,7 @@ export function ConsentTab({
                           setRecording(null);
                           setReason('');
                           setOutcome(null);
+                          setSigned(null);
                         }}
                       >
                         Withdraw
@@ -458,7 +464,7 @@ export function ConsentTab({
                       setRecording(null);
                       setOutcome(null);
                       setSigned({
-                        title: 'Consent signed',
+                        outcome: { title: 'Consent recorded' },
                         text: `Consent recorded: ${PURPOSE_LABELS[purpose] ?? purpose}.`,
                       });
                       onChanged();

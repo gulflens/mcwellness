@@ -1773,6 +1773,8 @@ a.rail__item.rail__item--active:active {
 }
 
 .confirmation__title:focus-visible {
+  /* Transparent, so it shows only in forced colours, where shadows are dropped. */
+  outline: 2px solid transparent;
   box-shadow: var(--focus);
   border-radius: var(--r-1);
 }

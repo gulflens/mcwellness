@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { CheckIcon } from './Icons';
 
 /**
@@ -10,8 +10,9 @@ import { CheckIcon } from './Icons';
  *
  * It takes the focus when it appears, on its heading, so a keyboard or
  * screen-reader user who has just pressed the button in a drawer that closed
- * lands on the outcome rather than at the top of the page. It is also a
- * polite status region, so the outcome is announced where focus cannot move.
+ * lands on the outcome rather than at the top of the page. Moving the focus
+ * is what announces it; it is not also a live region, which would read the
+ * outcome twice and the buttons inside it with it.
  *
  * No identifier of an erased client ever goes into one (DESIGN.md, States).
  */
@@ -36,16 +37,19 @@ export function Confirmation({
   actions?: ReactNode;
 }) {
   const heading = useRef<HTMLHeadingElement | null>(null);
+  const headingId = useId();
+  // Each new outcome takes the focus, even one with the same words as the
+  // last (two payments without receipts in a row).
   useEffect(() => {
     heading.current?.focus();
-  }, [outcome.title]);
+  }, [outcome]);
   return (
-    <section className="confirmation" role="status" aria-live="polite">
+    <section className="confirmation" aria-labelledby={headingId}>
       <div className="confirmation__mark" aria-hidden="true">
         <CheckIcon />
       </div>
       <div className="confirmation__body">
-        <h2 ref={heading} tabIndex={-1} className="confirmation__title">
+        <h2 id={headingId} ref={heading} tabIndex={-1} className="confirmation__title">
           {outcome.title}
         </h2>
         {outcome.figure ? (

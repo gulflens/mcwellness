@@ -716,10 +716,10 @@ export function SessionRunner({
           <div className="step step--done">
             {/* The end of the visit is the one moment on this screen with any
                 ceremony (DESIGN.md, States; the operator kept the rest of the
-                session screen as it is): a calm mark, which session this was,
-                and the assurance that it has reached the practice, because
-                this step is only reached once the outbox has drained and the
-                close has been accepted. */}
+                session screen as it is): a calm mark and which session this
+                was. It claims no more than the close proves: the outbox can
+                set aside an event the server refused, so "everything arrived"
+                is not a sentence this step may say. */}
             <span className="step__done-mark" aria-hidden="true">
               <CheckIcon />
             </span>
@@ -732,9 +732,7 @@ export function SessionRunner({
                   : `Session ${visit.number} of ${visit.of}`}
               </p>
             </div>
-            <p className="note">
-              The visit is recorded, and everything on it has reached the practice.
-            </p>
+            <p className="note">The visit is recorded.</p>
             {report === 'failed' ? <p className="note small">{REPORT_FAILED}</p> : null}
             <div className="step__dock">
               {mayStartReport ? (
