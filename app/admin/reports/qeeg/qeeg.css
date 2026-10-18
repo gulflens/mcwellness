@@ -67,7 +67,7 @@
 
 .qeeg-section__left {
   margin-inline-start: auto;
-  color: var(--slate);
+  color: var(--ink-2);
   font-weight: var(--w-regular);
   font-variant-numeric: tabular-nums;
 }

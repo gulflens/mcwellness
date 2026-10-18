@@ -51,7 +51,7 @@
 }
 
 .record-facts__row dt {
-  color: var(--slate);
+  color: var(--ink-2);
   font-size: var(--t-small);
 }
 
@@ -190,7 +190,7 @@
 }
 
 .wizard__step-name {
-  color: var(--slate);
+  color: var(--ink-2);
 }
 
 .wizard__step-name--current {
