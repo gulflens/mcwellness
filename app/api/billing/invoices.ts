@@ -27,9 +27,7 @@ import { InvoicesResponse } from './ledger-schema';
  * that do not add up to it (migration 408).
  */
 
-// The whole book, so the table's own column filters see every row (the operator,
-// 2026-10-18). A ceiling: past it `truncated` says so.
-const PAGE_SIZE = 1000;
+const PAGE_SIZE = 50;
 
 const SQL =
   'select i.id, i.reference, i.number, i.kind, i.issued_on, i.client_id, i.net_fils, ' +

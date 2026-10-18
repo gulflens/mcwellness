@@ -173,8 +173,7 @@ export function ReceiptsSection() {
           {error ? <Note tone="critical">{error}</Note> : null}
           {state.response.truncated ? (
             <Note>
-              Only the most recent payments are shown: more were recorded than the list holds at
-              once.
+              The fifty most recent payments are shown, and the column filters apply to those.
             </Note>
           ) : null}
           <Table

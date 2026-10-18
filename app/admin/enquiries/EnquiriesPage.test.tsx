@@ -427,7 +427,11 @@ describe('EnquiriesPage', () => {
     await screen.findByText('Hazel Harbour');
     fireEvent.click(screen.getByRole('button', { name: `Dismissed (${ENQUIRY_PAGE + 30})` }));
     expect(await screen.findByText('Stand test 1')).toBeTruthy();
-    expect(screen.getByText(`Showing ${ENQUIRY_PAGE} of ${ENQUIRY_PAGE + 30}.`)).toBeTruthy();
+    expect(
+      screen.getByText(
+        `Showing ${ENQUIRY_PAGE} of ${ENQUIRY_PAGE + 30}. The column filters apply to the ones shown.`,
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText(`Stand test ${ENQUIRY_PAGE + 1}`)).toBeNull();
 
     const showOlder = screen.getByRole('button', { name: 'Show older' });

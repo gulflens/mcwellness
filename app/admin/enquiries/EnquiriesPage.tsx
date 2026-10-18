@@ -762,7 +762,7 @@ export function EnquiriesPage() {
               <div role="status" tabIndex={-1} ref={pagedLine}>
                 <Note>
                   {older !== null
-                    ? `Showing ${shown.length} of ${countOf(source)}.`
+                    ? `Showing ${shown.length} of ${countOf(source)}. The column filters apply to the ones shown.`
                     : `Showing all ${shown.length}.`}
                 </Note>
               </div>

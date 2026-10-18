@@ -17,9 +17,7 @@ import { ReceiptsResponse } from './document-schema';
  * book does.
  */
 
-// The whole book, so the table's own column filters see every row (the operator,
-// 2026-10-18). A ceiling: past it `truncated` says so.
-const PAGE_SIZE = 1000;
+const PAGE_SIZE = 50;
 
 const SQL =
   'select p.id, p.receipt_reference, p.method, p.amount_fils, p.reference, ' +

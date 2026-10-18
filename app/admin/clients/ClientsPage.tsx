@@ -429,8 +429,8 @@ export function ClientsPage() {
         ) : null}
         {state.kind === 'ready' && state.response.truncated ? (
           <Note>
-            More clients matched than the list holds at once. Narrow the search or the filters above
-            to find the rest.
+            This list shows the first 50 clients that match, and the column filters apply to those.
+            Narrow the search, status or emirate above to find the rest.
           </Note>
         ) : null}
       </div>

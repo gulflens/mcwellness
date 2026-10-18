@@ -239,7 +239,7 @@ export function InvoicesSection() {
           {error ? <Note tone="critical">{error}</Note> : null}
           {state.response.truncated ? (
             <Note>
-              Only the most recent invoices are shown: more were issued than the list holds at once.
+              The fifty most recent invoices are shown, and the column filters apply to those.
             </Note>
           ) : null}
           <Table

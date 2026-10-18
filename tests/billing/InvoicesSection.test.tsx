@@ -117,7 +117,7 @@ describe('InvoicesSection', () => {
     mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES, truncated: true }));
     expect(
       await screen.findByText(
-        'Only the most recent invoices are shown: more were issued than the list holds at once.',
+        'The fifty most recent invoices are shown, and the column filters apply to those.',
       ),
     ).toBeTruthy();
   });
