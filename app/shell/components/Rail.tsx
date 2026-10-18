@@ -13,6 +13,7 @@ import {
   ClientsIcon,
   EnquiriesIcon,
   KeyIcon,
+  SearchIcon,
   KitIcon,
   PinIcon,
   PortalIcon,
@@ -279,6 +280,7 @@ export function Rail({
   onTogglePin,
   onChoose,
   badges,
+  onFind,
 }: {
   sections?: readonly RailSection[];
   person: { name: string; roles: string };
@@ -305,6 +307,8 @@ export function Rail({
    * for a section the layout did not list.
    */
   badges?: Readonly<Record<string, number>>;
+  /** Opens quick-find (Ctrl K or Cmd K); absent where there is nothing to find. */
+  onFind?: () => void;
 }) {
   const rail = useRef<HTMLElement | null>(null);
   const toggle = useRef<HTMLButtonElement | null>(null);
@@ -357,6 +361,29 @@ export function Rail({
         ) : null}
       </div>
       <div className="rail__list" onScroll={tip.hide}>
+        {onFind ? (
+          // Quick-find, written on the rail so it can be found without knowing
+          // the shortcut (DESIGN.md; the critique of 2026-10-18).
+          <div className="rail__group rail__find">
+            <button
+              type="button"
+              className="rail__item rail__find-button"
+              onClick={() => {
+                tip.hide();
+                onFind();
+              }}
+              aria-label={strip ? 'Find' : undefined}
+              aria-keyshortcuts="Control+K Meta+K"
+              {...tip.on('Find')}
+            >
+              <SearchIcon />
+              <span className="rail__label">Find</span>
+              <kbd className="rail__kbd rail__label micro" aria-hidden="true">
+                {shortcutHint()}
+              </kbd>
+            </button>
+          </div>
+        ) : null}
         {[
           { label: 'Daily work', keys: ['today', 'clients', 'enquiries', 'schedule'] },
           { label: 'Finance', keys: ['billing', 'books'] },
@@ -459,6 +486,12 @@ export function Rail({
         : null}
     </nav>
   );
+}
+
+/** "⌘K" on a Mac, "Ctrl K" elsewhere: the keys the person will actually press. */
+function shortcutHint(): string {
+  const platform = typeof navigator === 'undefined' ? '' : navigator.platform;
+  return /Mac|iPhone|iPad/.test(platform) ? '⌘K' : 'Ctrl K';
 }
 
 /** The gap between the strip's edge and a tooltip, the same 8px as --s-2. */

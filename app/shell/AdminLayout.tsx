@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
 import { PageSkeleton } from './components/PageSkeleton';
+import { QuickFind } from './components/QuickFind';
 import { Outlet } from 'react-router';
 import { LocationSharing } from '../therapist/location/LocationSharing';
 import {
@@ -204,6 +205,21 @@ export function AdminLayout({ actorName }: { actorName: string }) {
   const pendingReviews = usePendingReviewCount(
     session.status === 'signed-in' && canOpenReviews(session.actor, new Date()),
   );
+  // Quick-find: Ctrl K or Cmd K anywhere in the console, or Find on the rail.
+  const [finding, setFinding] = useState(false);
+  useEffect(() => {
+    function onKey(event: globalThis.KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setFinding((was) => !was);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  // Clients are searched only for a person the rail shows Clients to: the same
+  // rule, so quick-find never sends a request the list route would refuse.
+  const mayFindClients = sections.some((section) => section.key === 'clients');
   const badges: Record<string, number> = {};
   if (newEnquiries !== null) badges.enquiries = newEnquiries;
   if (pendingReviews !== null) badges.reviews = pendingReviews;
@@ -223,6 +239,13 @@ export function AdminLayout({ actorName }: { actorName: string }) {
         onTogglePin={tier === 'compact' ? togglePin : undefined}
         onChoose={chooseSection}
         badges={Object.keys(badges).length === 0 ? undefined : badges}
+        onFind={() => setFinding(true)}
+      />
+      <QuickFind
+        open={finding}
+        onClose={() => setFinding(false)}
+        sections={sections}
+        mayFindClients={mayFindClients}
       />
       {mode === 'overlay' ? (
         // A press anywhere on the page closes the rail. It is not announced and

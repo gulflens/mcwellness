@@ -77,6 +77,13 @@ export const ReviewsIcon = (p: IconProps) => (
 );
 
 /** A key: the person's own password. */
+export const SearchIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="8.75" cy="8.75" r="5.25" />
+    <path d="M12.75 12.75 17 17" />
+  </Icon>
+);
+
 export const KeyIcon = (p: IconProps) => (
   <Icon {...p}>
     <circle cx="7" cy="10" r="3.25" />

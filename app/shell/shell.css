@@ -1806,3 +1806,136 @@ a.rail__item.rail__item--active:active {
 .page-skeleton__row:nth-child(odd) {
   inline-size: 72%;
 }
+
+/* Quick-find on the rail: a rail item that is a button, with the shortcut it
+   answers to at its end in micro. */
+.rail__find {
+  margin-block-end: var(--s-4);
+}
+
+.rail__find-button {
+  inline-size: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rail__find-button:hover {
+  background: var(--brand-lift);
+  color: var(--surface);
+}
+
+.rail__kbd {
+  margin-inline-start: auto;
+  font-family: inherit;
+  color: var(--brand-pale);
+  opacity: 0.8;
+}
+
+/* Quick-find (DESIGN.md, level 2): a floating panel near the top of the page,
+   over a light scrim, so the page stays legible behind it. */
+.quick-find {
+  inline-size: min(640px, calc(100vw - 2 * var(--s-4)));
+  max-inline-size: none;
+  margin-block: 12vh auto;
+  margin-inline: auto;
+  padding: 0;
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--lift-2);
+}
+
+.quick-find::backdrop {
+  background: color-mix(in srgb, var(--ink) 24%, transparent);
+}
+
+.quick-find__panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-find__field {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding-inline: var(--s-4);
+  border-block-end: var(--hairline) solid var(--rule);
+  color: var(--ink-2);
+}
+
+.quick-find__field input {
+  flex: 1;
+  min-block-size: var(--s-16);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--t-h3);
+  color: var(--ink);
+  appearance: none;
+}
+
+/* The field is the dialog's only control and always focused; the open panel
+   is its focus indicator, so the shared ring would draw a second box inside. */
+.quick-find__field input:focus,
+.quick-find__field input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.quick-find__field input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.quick-find__results {
+  max-block-size: min(420px, 50vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--s-2);
+  list-style: none;
+}
+
+.quick-find__results:empty {
+  display: none;
+}
+
+.quick-find__option {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  transition: background-color var(--motion-control) var(--ease);
+}
+
+.quick-find__option--active {
+  background: var(--brand-wash);
+  color: var(--brand);
+}
+
+.quick-find__name {
+  font-weight: var(--w-medium);
+}
+
+.quick-find__meta {
+  color: var(--ink-2);
+}
+
+.quick-find__meta:last-child {
+  margin-inline-start: auto;
+}
+
+.quick-find__status {
+  margin: 0;
+  padding: 0 var(--s-4);
+  color: var(--ink-2);
+}
+
+.quick-find__status:not(:empty) {
+  padding-block: var(--s-3);
+  border-block-start: var(--hairline) solid var(--rule);
+}
