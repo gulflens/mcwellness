@@ -86,7 +86,7 @@ function cellClass<Row>(column: Column<Row>): string | undefined {
  * The table while its rows are on their way (DESIGN.md, States: loading holds
  * the shape). The real headers and still placeholder rows, so the page does
  * not jump when the data lands; no shimmer. The sentence a screen used to show
- * is kept for assistive technology, and the region says it is busy.
+ * is kept for assistive technology as a status line.
  */
 export function TableSkeleton<Row>({
   columns,
@@ -99,8 +99,12 @@ export function TableSkeleton<Row>({
   rows?: number;
 }) {
   return (
-    <div className="ledger__scroll" aria-busy="true">
-      <p className="visually-hidden">{label}</p>
+    <div className="ledger__scroll">
+      {/* A status line, so the sentence is announced; the table beside it is
+          decoration and hidden from assistive technology. */}
+      <p className="visually-hidden" role="status">
+        {label}
+      </p>
       <table className="ledger ledger--pinned ledger--skeleton" aria-hidden="true">
         <thead>
           <tr>

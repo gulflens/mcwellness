@@ -6,8 +6,10 @@
  */
 export function PageSkeleton() {
   return (
-    <div className="page page-skeleton" aria-busy="true">
-      <p className="visually-hidden">Loading the page.</p>
+    <div className="page page-skeleton">
+      <p className="visually-hidden" role="status">
+        Loading the page.
+      </p>
       <div aria-hidden="true">
         <span className="page-skeleton__heading" />
         <div className="page-skeleton__panel">

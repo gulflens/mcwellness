@@ -696,8 +696,8 @@ a.rail__child.rail__child--current {
   transition:
     background-color var(--motion-control) var(--ease),
     border-color var(--motion-control) var(--ease),
-    color var(--motion-control) var(--ease),
-    box-shadow var(--motion-control) var(--ease);
+    color var(--motion-control) var(--ease);
+  /* Not box-shadow: the focus ring is a shadow and must appear at once. */
 }
 
 /* The one primary action on a page is the practice's colour, not the page's ink
@@ -775,7 +775,8 @@ a.rail__child.rail__child--current {
 /* Already on a surface (the record's content panel, a drawer): no panel
    inside a panel, only the opening hairline it always had. */
 :where(.client-workspace__content, .drawer) .ledger__scroll {
-  border-width: var(--hairline) 0 0;
+  border-width: 0;
+  border-block-start-width: var(--hairline);
   border-radius: 0;
 }
 
@@ -1295,7 +1296,7 @@ a.rail__item.rail__item--active:active {
   transition: background-color var(--motion-control) var(--ease);
 }
 
-.ledger tbody tr:not(.ledger__empty):hover > td {
+.ledger:not(.ledger--skeleton) tbody tr:not(.ledger__empty):hover > td {
   background: color-mix(in srgb, var(--ink) 4%, var(--surface));
 }
 
@@ -1779,10 +1780,6 @@ a.rail__item.rail__item--active:active {
 .ledger__placeholder {
   block-size: var(--s-3);
   inline-size: min(100%, 8rem);
-}
-
-.ledger--skeleton tbody tr:hover > td {
-  background: none;
 }
 
 .page-skeleton__heading {
