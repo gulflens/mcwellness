@@ -203,3 +203,18 @@ describe('GET /api/clients — by emirate', () => {
     expect(body.clients.map((c) => c.emirate)).toEqual(['AUH', 'AUH']);
   });
 });
+
+describe('GET /api/clients — fewer than a page', () => {
+  it('returns no more rows than the limit asked for, and says more matched', async () => {
+    const res = await list('?limit=2');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { clients: unknown[]; truncated?: boolean };
+    expect(body.clients).toHaveLength(2);
+    expect(body.truncated).toBe(true);
+  });
+
+  it('refuses a limit outside one to a page', async () => {
+    expect((await list('?limit=0')).status).toBe(400);
+    expect((await list('?limit=51')).status).toBe(400);
+  });
+});
