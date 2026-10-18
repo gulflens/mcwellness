@@ -1728,3 +1728,85 @@ a.rail__item.rail__item--active:active {
 .admin[data-rail-mode='overlay'] .rail__badge {
   position: static;
 }
+
+/* The end of a high-stakes action (DESIGN.md, States; ADR 0004): a white
+   panel with the ok colour's mark, the outcome as a heading, the figure at
+   display size, the sentence, and what comes next. Calm, not celebratory. */
+.confirmation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-4);
+  padding: var(--s-6);
+  margin-block-end: var(--s-6);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-inline-start: 3px solid var(--ok);
+  border-radius: var(--r-3);
+}
+
+.confirmation__mark {
+  display: grid;
+  place-items: center;
+  inline-size: var(--s-8);
+  block-size: var(--s-8);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ok) 14%, var(--surface));
+  color: var(--ok);
+}
+
+.confirmation__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-inline-size: 0;
+}
+
+.confirmation__title {
+  margin: 0;
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--w-medium);
+}
+
+.confirmation__title:focus {
+  outline: none;
+}
+
+.confirmation__title:focus-visible {
+  box-shadow: var(--focus);
+  border-radius: var(--r-1);
+}
+
+.confirmation__figure-label {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.confirmation__figure {
+  margin: 0;
+  font-size: var(--t-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  font-weight: var(--w-medium);
+}
+
+.confirmation__text {
+  max-inline-size: var(--measure);
+  color: var(--ink-2);
+}
+
+.confirmation__text p {
+  margin: 0;
+}
+
+.confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding-block-start: var(--s-2);
+}
+
+/* A link that does what a button does ("See the invoice") looks like one. */
+a.button {
+  text-decoration: none;
+}

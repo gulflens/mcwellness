@@ -77,6 +77,8 @@ type PostHandler = (call: Call, callIndex: number) => Response;
 
 function mount(
   options: {
+    /** Who is signed in; the practitioner above unless a test says otherwise. */
+    me?: typeof ME;
     services?: unknown[];
     onPost?: PostHandler;
     /**
@@ -100,7 +102,7 @@ function mount(
   let serviceTypesCalls = 0;
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === '/api/me') return json(ME);
+    if (url === '/api/me') return json(options.me ?? ME);
     if (url === '/api/sessions/open') {
       openVisitCalls.push(true);
       return json({ session: options.openSession ?? null });
@@ -301,6 +303,21 @@ describe('CheckInPage', () => {
       expect(await screen.findByText(sentence)).toBeTruthy();
     },
   );
+
+  it('tells someone who may add consent where to add it, rather than to ask the practice', async () => {
+    mount({
+      me: { ...ME, roles: ['owner', 'lead_practitioner', 'practitioner'] },
+      onPost: () => json({ status: 'blocked', reasons: ['consent_missing_participation'] }, 422),
+    });
+    await ready();
+    enterRecordNumber('MW-000123');
+    clickCheckIn();
+    expect(
+      await screen.findByText(
+        "Consent to be seen is missing. Add it on the client's record, under Consent, then check in again.",
+      ),
+    ).toBeTruthy();
+  });
 
   it('does not offer "Try again" for a consent or certification refusal, since retrying alone cannot clear it', async () => {
     mount({ onPost: () => json({ status: 'blocked', reasons: ['not_authorised'] }, 422) });

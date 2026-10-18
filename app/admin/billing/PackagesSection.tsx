@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { termWords } from '@domain/billing';
 import { PackagesResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { Confirmation, type Outcome } from '../../shell/components/Confirmation';
 import { Button, Note } from '../../shell/components/Controls';
 import { ChevronIcon } from '../../shell/components/Icons';
 import { Table, type Column } from '../../shell/components/Table';
@@ -64,7 +65,11 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   const [sellingSession, setSellingSession] = useState(false);
   const [withdrawing, setWithdrawing] = useState<PackageRow | null>(null);
   const [reinstatingId, setReinstatingId] = useState<string | null>(null);
-  const [note, setNote] = useState<{ text: string; tone?: 'critical' } | null>(null);
+  const [note, setNote] = useState<{
+    text: string;
+    tone?: 'critical';
+    outcome?: Outcome;
+  } | null>(null);
 
   const load = useCallback(() => {
     void apiFetch('/api/billing/packages')
@@ -302,7 +307,23 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         ) : null}
       </div>
 
-      {note ? (
+      {note?.outcome ? (
+        <Confirmation
+          outcome={note.outcome}
+          actions={
+            <>
+              <a className="button button--primary" href="#invoices">
+                See the invoice
+              </a>
+              <Button variant="quiet" onClick={() => setNote(null)}>
+                Done
+              </Button>
+            </>
+          }
+        >
+          <p>{note.text}</p>
+        </Confirmation>
+      ) : note ? (
         <div role="status">
           <Note tone={note.tone}>{note.text}</Note>
         </div>
@@ -376,9 +397,9 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         <SellPackageDrawer
           bundle={selling}
           onClose={() => setSelling(null)}
-          onSold={(summary) => {
+          onSold={(summary, outcome) => {
             setSelling(null);
-            setNote({ text: summary });
+            setNote({ text: summary, outcome });
             load();
           }}
         />
@@ -387,9 +408,9 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
       {sellingSession ? (
         <SellSessionDrawer
           onClose={() => setSellingSession(false)}
-          onSold={(summary) => {
+          onSold={(summary, outcome) => {
             setSellingSession(false);
-            setNote({ text: summary });
+            setNote({ text: summary, outcome });
           }}
         />
       ) : null}

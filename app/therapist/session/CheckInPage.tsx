@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import type { CheckInRequest, CheckInResponseReason } from '../../api/sessions/schema';
 import { CheckInResponse, OpenSessionResponse } from '../../api/sessions/schema';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
+import { canWriteClientRecord } from '../../api/clients/access';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import './CheckInPage.css';
 import { SessionRunner, type RunnerVisit } from './SessionRunner';
@@ -119,6 +120,23 @@ const REASON_COPY: Record<CheckInResponseReason, string> = {
   // the practitioner is standing at a door and needs to know what to say
   // (docs/SPEC/practitioner-phone.md section 6.3).
   kit_calibration_overdue: "The amplifier's calibration is overdue. Call the practice.",
+};
+
+/**
+ * For someone who may add consent themselves (the founder is the practice):
+ * "ask the practice" would send them to ask themselves. The same facts, and
+ * where to put them right (the critique of 2026-10-18).
+ */
+const CONSENT_COPY_FOR_WRITERS: Partial<Record<CheckInResponseReason, string>> = {
+  consent_missing_participation:
+    "Consent to be seen is missing. Add it on the client's record, under Consent, then check in again.",
+  consent_missing_minor_participation:
+    "A guardian's consent is missing. The guardian signs it on the client's record, under Consent; then check in again.",
+  consent_missing_home_visit:
+    "Home-visit consent is missing. Add it on the client's record, under Consent, then check in again.",
+  consent_missing_health_data:
+    'Consent for brain-map and neurofeedback information is missing or has been withdrawn. ' +
+    "Do not start a session. If it should be on file, add it on the client's record, under Consent.",
 };
 
 const FORBIDDEN_MESSAGE =
@@ -261,7 +279,11 @@ async function fetchOpenVisit(apiFetch: ApiFetch): Promise<RunnerVisit | null> {
 }
 
 export function CheckInPage() {
-  const { apiFetch } = useAuth();
+  const { apiFetch, session } = useAuth();
+  // The same rule the consent routes use (app/api/clients/access.ts), so the
+  // other sentence is only offered to someone the route would let add it.
+  const mayAddConsent =
+    session.status === 'signed-in' && canWriteClientRecord(session.actor, '', new Date());
   const navigate = useNavigate();
   // This face reads the device's own open-visit note, which carries a given
   // name and a family initial, so it arms the sign-out wipe too
@@ -790,7 +812,8 @@ export function CheckInPage() {
               <div className="checkin__reasons">
                 {outcome.reasons.map((reason) => (
                   <Note key={reason} tone="critical">
-                    {REASON_COPY[reason]}
+                    {(mayAddConsent ? CONSENT_COPY_FOR_WRITERS[reason] : undefined) ??
+                      REASON_COPY[reason]}
                   </Note>
                 ))}
               </div>

@@ -14,6 +14,7 @@ import {
 } from '../../api/billing/schema';
 import type { ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import type { Outcome } from '../../shell/components/Confirmation';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
@@ -88,7 +89,8 @@ export function SellSessionDrawer({
   onSold,
 }: {
   onClose: () => void;
-  onSold: (summary: string) => void;
+  /** The sentence, and the outcome a confirmation shows above it. */
+  onSold: (summary: string, outcome: Outcome) => void;
 }) {
   const { apiFetch } = useAuth();
   const drawerRef = useRef<HTMLElement>(null);
@@ -253,6 +255,11 @@ export function SellSessionDrawer({
         onSold(
           `${body.serviceTypeName} sold to ${client.givenName} ${client.familyName} for AED ` +
             `${formatFils(body.grossFils)}, invoice ${body.invoiceReference}.`,
+          {
+            title: `Invoice ${body.invoiceReference} issued`,
+            figure: `AED ${formatFils(body.grossFils)}`,
+            figureLabel: 'Total',
+          },
         );
         return;
       }

@@ -6,6 +6,7 @@ import {
   type Consent,
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { Confirmation } from '../../shell/components/Confirmation';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { useFocusOnOpen } from '../../shell/components/useFocusOnOpen';
 import { practiceToday } from './activation';
@@ -132,6 +133,9 @@ export function ConsentTab({
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
+  // A signature is a high-stakes moment and ends on a confirmation (DESIGN.md,
+  // States); a withdrawal or a failure stays a note line.
+  const [signed, setSigned] = useState<{ title: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const { apiFetch } = useAuth();
   const isErased = erased || record.status === 'erased';
@@ -150,6 +154,7 @@ export function ConsentTab({
   async function withdraw(consentId: string): Promise<void> {
     setBusy(true);
     setError(null);
+    setSigned(null);
     try {
       const res = await apiFetch(`/api/clients/${clientId}/consents/${consentId}/withdraw`, {
         method: 'POST',
@@ -235,6 +240,19 @@ export function ConsentTab({
       ) : null}
       {/* tone="attention" carries role="status", so a confirmation reaches
           somebody who cannot see it land (app/shell/components/Controls.tsx). */}
+      {/* Gone as soon as the next task starts: a new signature or a withdrawal. */}
+      {signed && !signingAll && recording === null && withdrawing === null ? (
+        <Confirmation
+          outcome={{ title: signed.title }}
+          actions={
+            <Button variant="quiet" onClick={() => setSigned(null)}>
+              Done
+            </Button>
+          }
+        >
+          <p>{signed.text}</p>
+        </Confirmation>
+      ) : null}
       {outcome ? <Note tone="attention">{outcome}</Note> : null}
       {consenting.length === 0 ? (
         <Note>
@@ -268,11 +286,16 @@ export function ConsentTab({
           record={record}
           onSaved={(signedPurposes) => {
             setSigningAll(false);
-            setOutcome(
-              `Consents recorded: ${signedPurposes
+            setOutcome(null);
+            setSigned({
+              title:
+                signedPurposes.length === 1
+                  ? 'Consent signed'
+                  : `${signedPurposes.length} consents signed`,
+              text: `Consents recorded: ${signedPurposes
                 .map((purpose) => (PURPOSE_LABELS[purpose] ?? purpose).toLowerCase())
                 .join(', ')}.`,
-            );
+            });
             onChanged();
           }}
           onCancel={() => setSigningAll(false)}
@@ -433,7 +456,11 @@ export function ConsentTab({
                     purpose={purpose}
                     onSaved={() => {
                       setRecording(null);
-                      setOutcome(`Consent recorded: ${PURPOSE_LABELS[purpose] ?? purpose}.`);
+                      setOutcome(null);
+                      setSigned({
+                        title: 'Consent signed',
+                        text: `Consent recorded: ${PURPOSE_LABELS[purpose] ?? purpose}.`,
+                      });
                       onChanged();
                     }}
                     onCancel={() => setRecording(null)}

@@ -84,7 +84,12 @@ export const WORDS = {
   loadFailed: t('That could not be loaded. Try again.', 'تعذّر التحميل. حاول مرة أخرى.'),
   saveFailed: t('That could not be saved. Try again.', 'تعذّر الحفظ. حاول مرة أخرى.'),
   saved: t('Saved.', 'تم الحفظ.'),
-  notYours: t('This part of the record is not yours to open.', 'هذا الجزء من السجل ليس لك لفتحه.'),
+  // Plainer than "not yours to open", which read as an accusation to a parent
+  // (the critique of 2026-10-18). Arabic awaits the practice's translation review.
+  notYours: t(
+    'This part of the record is not available on your account.',
+    'هذا الجزء من السجل غير متاح في حسابك.',
+  ),
 
   // Home.
   nextVisit: t('Your next visit', 'زيارتك القادمة'),
@@ -127,6 +132,9 @@ export const WORDS = {
   settled: t('Settled', 'مسدَّد'),
   balance: t('Balance', 'الرصيد'),
   amountsInAed: t('Amounts in AED', 'المبالغ بالدرهم'),
+  // A settled balance says so, rather than naming the currency of nothing.
+  // Arabic awaits the practice's translation review.
+  nothingToPay: t('Nothing to pay', 'لا يوجد مبلغ مستحق'),
   packages: t('Programmes', 'البرامج'),
   invoices: t('Invoices', 'الفواتير'),
   payments: t('Payments and receipts', 'المدفوعات والإيصالات'),

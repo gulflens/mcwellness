@@ -5,6 +5,7 @@ import { DraftResponse } from '../../api/reports/schema';
 import { CloseResponse, EventsResponse, type ServiceTypeOption } from '../../api/sessions/schema';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button } from '../../shell/components/Controls';
+import { CheckIcon } from '../../shell/components/Icons';
 import { PostStep } from './PostStep';
 import { PreflightStep } from './PreflightStep';
 import { RunStep } from './RunStep';
@@ -712,9 +713,28 @@ export function SessionRunner({
         ) : null}
 
         {step === 'done' ? (
-          <div className="step">
+          <div className="step step--done">
+            {/* The end of the visit is the one moment on this screen with any
+                ceremony (DESIGN.md, States; the operator kept the rest of the
+                session screen as it is): a calm mark, which session this was,
+                and the assurance that it has reached the practice, because
+                this step is only reached once the outbox has drained and the
+                close has been accepted. */}
+            <span className="step__done-mark" aria-hidden="true">
+              <CheckIcon />
+            </span>
             <h1>Checked out</h1>
-            <p className="note">The visit is recorded.</p>
+            <div className="step__done-figure">
+              <p className="small">{visit.of === null ? 'This visit' : 'Programme'}</p>
+              <p className="step__done-number numeric">
+                {visit.of === null
+                  ? `Session ${visit.number}`
+                  : `Session ${visit.number} of ${visit.of}`}
+              </p>
+            </div>
+            <p className="note">
+              The visit is recorded, and everything on it has reached the practice.
+            </p>
             {report === 'failed' ? <p className="note small">{REPORT_FAILED}</p> : null}
             <div className="step__dock">
               {mayStartReport ? (

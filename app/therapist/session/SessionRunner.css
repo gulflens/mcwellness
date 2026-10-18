@@ -379,3 +379,36 @@
   margin-block: var(--s-3);
   border-radius: var(--r-2);
 }
+
+/* The end of the visit (DESIGN.md, States): a mark in the ok colour, the
+   session at display size, and the assurance line. Still, no animation. */
+.step--done .step__done-mark {
+  display: grid;
+  place-items: center;
+  inline-size: var(--tap);
+  block-size: var(--tap);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ok) 18%, var(--surface));
+  color: var(--ok);
+}
+
+.step__done-figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.step__done-figure p {
+  margin: 0;
+}
+
+.step__done-figure .small {
+  color: var(--ink-2);
+}
+
+.step__done-number {
+  font-size: var(--t-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  font-weight: var(--w-medium);
+}
