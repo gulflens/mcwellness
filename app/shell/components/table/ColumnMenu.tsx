@@ -136,7 +136,11 @@ function FilterEditor<Row>({
     }
     if (kind === 'text') return cleanFilter({ kind: 'text', contains }, column);
     if (kind === 'number') {
-      const n = (s: string) => (s.trim() === '' || Number.isNaN(Number(s)) ? undefined : Number(s));
+      // "1,250" is a number as people write it; the separators are not.
+      const n = (s: string) => {
+        const plain = s.replace(/[\s,]/g, '');
+        return plain === '' || Number.isNaN(Number(plain)) ? undefined : Number(plain);
+      };
       return cleanFilter({ kind: 'range', min: n(min), max: n(max) }, column);
     }
     return cleanFilter({ kind: 'dates', from: from || undefined, to: to || undefined }, column);

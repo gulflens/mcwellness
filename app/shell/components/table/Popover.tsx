@@ -49,10 +49,22 @@ export function Popover({
   useEffect(() => {
     if (!place) return;
     const first = panel.current?.querySelector<HTMLElement>(
-      'input, button, select, [tabindex]:not([tabindex="-1"])',
+      'input:not(:disabled), button:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
     );
     first?.focus();
   }, [place]);
+
+  // However it closes (Apply, Escape, a press outside), focus goes back to
+  // the control that opened it, if that control is still on the page.
+  useEffect(
+    () => () => {
+      const lost = !document.activeElement || document.activeElement === document.body;
+      if (anchor.isConnected && lost) {
+        anchor.focus();
+      }
+    },
+    [anchor],
+  );
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

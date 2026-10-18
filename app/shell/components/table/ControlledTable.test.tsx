@@ -179,4 +179,33 @@ describe('a table with column controls', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(names()).toHaveLength(3);
   });
+
+  it('puts the keyboard inside the Columns list even when its first column cannot be hidden', () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /Columns/ }));
+    const panel = screen.getByRole('dialog', { name: 'Columns' });
+    expect(panel.contains(document.activeElement)).toBe(true);
+    expect((document.activeElement as HTMLInputElement).disabled).toBeFalsy();
+  });
+
+  it('gives another table in the same place its own layout and none of the last one’s filters', () => {
+    const { rerender } = mount();
+    fireEvent.click(within(openMenu('Age')).getByRole('button', { name: 'Hide column' }));
+    const menu = openMenu('Name');
+    fireEvent.change(within(menu).getByLabelText('Contains'), { target: { value: 'cedar' } });
+    fireEvent.click(within(menu).getByRole('button', { name: 'Apply' }));
+    rerender(
+      <Table
+        caption="Clients"
+        columns={COLUMNS}
+        rows={ROWS}
+        rowKey={(r) => r.id}
+        controls={{ id: 'other', noun: ['client', 'clients'] }}
+      />,
+    );
+    expect(headers()).toEqual(['Name', 'Status', 'Age']);
+    expect(names()).toHaveLength(3);
+    // And the first table's layout was not written under the second's key.
+    expect(window.localStorage.getItem('mcwellness.table.other')).toBeNull();
+  });
 });

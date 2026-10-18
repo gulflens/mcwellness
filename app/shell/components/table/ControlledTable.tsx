@@ -28,8 +28,9 @@ import {
  * The ledger table with spreadsheet controls (the operator, 2026-10-18: "the
  * columns control to look and feel like an excel sheet"):
  *
- * - **Resize** by dragging the edge of a column's header, or with the arrow
- *   keys on that edge; double-click the edge to fit the column to what it
+ * - **Resize** by dragging the edge of a column's header, or from the
+ *   column's menu (Narrower, Wider, Fit to contents) with the keyboard;
+ *   double-click the edge to fit the column to what it
  *   holds. The first drag fixes every column at the width it had, so nothing
  *   else jumps; from then on the table is exactly as wide as its columns.
  * - **Reorder** by dragging a header onto another, from a column's menu
@@ -67,20 +68,38 @@ export function ControlledTable<Row>({
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dropKey, setDropKey] = useState<string | null>(null);
   const table = useRef<HTMLTableElement | null>(null);
+  const columnsButton = useRef<HTMLButtonElement | null>(null);
   const changed = useRef(false);
 
   // A screen whose columns change (a VAT column appearing) keeps the layout
   // honest without losing what the person arranged.
   const columnKeys = columns.map((c) => c.key).join('|');
   const [knownKeys, setKnownKeys] = useState(columnKeys);
-  if (knownKeys !== columnKeys) {
+  const [knownId, setKnownId] = useState(controls.id);
+  if (knownId !== controls.id) {
+    // Another table in the same place (the enquiries tabs): its own layout,
+    // read from its own key, and none of the last table's filters.
+    setKnownId(controls.id);
+    setKnownKeys(columnKeys);
+    setLayout(reconcile(readStoredLayout(controls.id), columns));
+    setFilters({});
+    setMenu(null);
+    setPanel(null);
+  } else if (knownKeys !== columnKeys) {
     setKnownKeys(columnKeys);
     setLayout((current) => reconcile(current, columns));
   }
 
+  // Written only after a change the person made, and only under the key of
+  // the table the layout belongs to (it is set before any change can land).
+  const savedFor = useRef(controls.id);
   useEffect(() => {
-    if (changed.current) writeStoredLayout(controls.id, layout);
+    if (changed.current && savedFor.current === controls.id) writeStoredLayout(controls.id, layout);
+    savedFor.current = controls.id;
   }, [controls.id, layout]);
+
+  // A drag cut short by leaving the page must not leave the body's cursor set.
+  useEffect(() => () => document.body.classList.remove('is-resizing-column'), []);
 
   const update = useCallback((next: (current: ColumnLayout) => ColumnLayout) => {
     changed.current = true;
@@ -127,14 +146,27 @@ export function ControlledTable<Row>({
     const base = sized ? layout.widths : measured();
     handle.setPointerCapture?.(event.pointerId);
     changed.current = true;
-    const move = (e: PointerEvent) => {
-      const delta = (e.clientX - startX) * (rtl ? -1 : 1);
+    // One layout per frame however fast the pointer moves: a long table
+    // re-renders every row for a width, and the screen draws once a frame.
+    let frame = 0;
+    let lastX = startX;
+    const apply = () => {
+      frame = 0;
+      const delta = (lastX - startX) * (rtl ? -1 : 1);
       setLayout((current) => ({
         ...current,
         widths: { ...base, ...current.widths, [key]: clampWidth(startWidth + delta) },
       }));
     };
+    const move = (e: PointerEvent) => {
+      lastX = e.clientX;
+      if (frame === 0) frame = requestAnimationFrame(apply);
+    };
     const end = () => {
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+        apply();
+      }
       handle.removeEventListener('pointermove', move);
       handle.removeEventListener('pointerup', end);
       handle.removeEventListener('pointercancel', end);
@@ -211,6 +243,7 @@ export function ControlledTable<Row>({
     <div className="ledger-controlled">
       <div className="table-controls">
         <button
+          ref={columnsButton}
           type="button"
           className="table-controls__columns"
           aria-haspopup="dialog"
@@ -283,7 +316,6 @@ export function ControlledTable<Row>({
                     ]
                       .filter(Boolean)
                       .join(' ')}
-                    aria-sort={undefined}
                     onDragOver={(event) => {
                       if (!dragKey) return;
                       event.preventDefault();
@@ -426,7 +458,11 @@ export function ControlledTable<Row>({
             menuColumn.hideable !== false &&
             visible.filter((c) => c.key !== menuColumn.key).length > 0
           }
-          onHide={() => setHidden(menuColumn.key, true)}
+          onHide={() => {
+            setHidden(menuColumn.key, true);
+            // Its header has gone, so the focus goes to the Columns button.
+            requestAnimationFrame(() => columnsButton.current?.focus());
+          }}
           canMoveBack={visible[0]?.key !== menuColumn.key}
           canMoveForward={visible[visible.length - 1]?.key !== menuColumn.key}
           onMove={(by) => step(menuColumn.key, by)}

@@ -735,6 +735,8 @@ export function EnquiriesPage() {
       {enquiries !== null ? (
         <>
           <Table
+            // One table per tab, each with its own layout and filters.
+            key={status}
             caption={CAPTIONS[status]}
             columns={
               status === 'new'

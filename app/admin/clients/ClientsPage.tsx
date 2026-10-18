@@ -259,7 +259,11 @@ export function ClientsPage() {
         header: 'Name',
         // The door to the record, so it always shows.
         hideable: false,
-        value: (row) => `${row.givenName} ${row.familyName}`,
+        // Both scripts, as the server's search matches both.
+        value: (row) =>
+          [row.givenName, row.familyName, row.givenNameAr, row.familyNameAr]
+            .filter(Boolean)
+            .join(' '),
         filter: 'text',
         render: (row) => (
           <span className="name">
