@@ -208,11 +208,16 @@ export function AdminLayout({ actorName }: { actorName: string }) {
   // Quick-find: Ctrl K or Cmd K anywhere in the console, or Find on the rail.
   const [finding, setFinding] = useState(false);
   useEffect(() => {
+    // Cmd on a Mac and Ctrl elsewhere, so a Mac keeps Ctrl K's "delete to the
+    // end of the line" in a text field. Held keys, composition and a key a
+    // screen has already handled are left alone.
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform);
     function onKey(event: globalThis.KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setFinding((was) => !was);
-      }
+      const chord = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      if (!chord || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'k') return;
+      if (event.repeat || event.isComposing || event.defaultPrevented) return;
+      event.preventDefault();
+      setFinding((was) => !was);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -241,12 +246,13 @@ export function AdminLayout({ actorName }: { actorName: string }) {
         badges={Object.keys(badges).length === 0 ? undefined : badges}
         onFind={() => setFinding(true)}
       />
-      <QuickFind
-        open={finding}
-        onClose={() => setFinding(false)}
-        sections={sections}
-        mayFindClients={mayFindClients}
-      />
+      {finding ? (
+        <QuickFind
+          onClose={() => setFinding(false)}
+          sections={sections}
+          mayFindClients={mayFindClients}
+        />
+      ) : null}
       {mode === 'overlay' ? (
         // A press anywhere on the page closes the rail. It is not announced and
         // not reachable by keyboard: Escape and the toggle are the announced

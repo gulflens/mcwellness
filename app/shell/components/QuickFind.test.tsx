@@ -67,7 +67,6 @@ function mount({ mayFindClients = true } = {}) {
             element={
               <>
                 <QuickFind
-                  open
                   onClose={onClose}
                   sections={ADMIN_SECTIONS}
                   mayFindClients={mayFindClients}
@@ -103,6 +102,28 @@ describe('matchSections', () => {
 });
 
 describe('QuickFind', () => {
+  it.each(['78', '784-1900', '784-1900-1234567-1'])(
+    'never sends anything shaped like an Emirates ID (%s), and says where to look instead',
+    async (typed) => {
+      const { calls } = mount();
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: typed } });
+      expect(
+        await screen.findByText(
+          'To find someone by Emirates ID, use the search on the Clients page.',
+        ),
+      ).toBeTruthy();
+      await new Promise((resolve) => setTimeout(resolve, 360));
+      expect(calls()).toHaveLength(0);
+    },
+  );
+
+  it('asks for only as many clients as it shows, and says how many it found', async () => {
+    const { calls } = mount();
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'wil' } });
+    expect(await screen.findByText('1 client found.')).toBeTruthy();
+    expect(calls()).toEqual(['/api/clients?q=wil&limit=8']);
+  });
+
   it('finds a client by name and opens their record on Enter', async () => {
     const { onClose } = mount();
     const field = screen.getByRole('combobox', { name: 'Find a client or a section' });

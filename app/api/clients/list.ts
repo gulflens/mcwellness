@@ -52,6 +52,10 @@ const Query = z.object({
     .string()
     .transform((value) => cleanText(value, 80))
     .optional(),
+  // Fewer than a page, for a caller that shows fewer (quick-find shows eight):
+  // every row returned is audited as read, so the audit trail and the screen
+  // agree, and nothing is sent to the browser only to be thrown away.
+  limit: z.coerce.number().int().min(1).max(PAGE_SIZE).optional(),
 });
 
 /** Digits and hyphens as typed; the shape itself is judged by normaliseEmiratesId. */
@@ -214,6 +218,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     // lone wildcard character (`%` or `_`) escapes to two characters and is
     // never a sweep risk in the first place — escaped, it matches only that
     // literal punctuation, not "everything" — so it still searches.
+    const size = query.data.limit ?? PAGE_SIZE;
     const escaped = query.data.q ? escapeLike(query.data.q) : null;
     const search = escaped && escaped.length >= MIN_SEARCH_LENGTH ? escaped : null;
     const { rows } = await c
@@ -222,11 +227,11 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
         query.data.status ?? null,
         search ? likePattern(search) : null,
         canListErasedClients(actor),
-        PAGE_SIZE + 1,
+        size + 1,
         query.data.emirate ?? null,
       ]);
-    const truncated = rows.length > PAGE_SIZE;
-    const page = truncated ? rows.slice(0, PAGE_SIZE) : rows;
+    const truncated = rows.length > size;
+    const page = truncated ? rows.slice(0, size) : rows;
     const clients = toClientRows(page, isoDateIn(now(), PRACTICE_TIME_ZONE));
     await logListed(c.get('db'), clients);
     return c.json(

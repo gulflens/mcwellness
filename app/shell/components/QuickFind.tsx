@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { isEmiratesIdShaped } from '../../api/clients/emirates-id-shape';
 import { ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../auth/AuthContext';
 import { SearchIcon } from './Icons';
@@ -16,11 +17,17 @@ import { ClientStatusChip } from './StatusChip';
  * and audits each row it returns, exactly as typing into that page's search
  * does. A person who may not list clients is never sent a request: the
  * layout passes `mayFindClients` from the same rule the rail shows Clients by.
- * Emirates ID lookups stay on the Clients page, where the number is checked
- * whole before anything is sent.
+ * Anything shaped like an Emirates ID is never sent from here, whole or in
+ * part: the list route refuses one in a query string, but by then a proxy
+ * has logged the URL. Those lookups stay on the Clients page, which checks
+ * the number whole and posts it. Only as many clients are asked for as are
+ * shown, because every row returned is audited as read.
+ *
+ * Mounted only while open, so closing forgets what was typed; focus goes back
+ * to whatever had it before.
  *
  * A floating surface (DESIGN.md, level 2): the native modal `<dialog>`, which
- * traps focus, closes on Escape and hands focus back to whatever opened it.
+ * traps focus and closes on Escape.
  * The results are a listbox driven from the field (`aria-activedescendant`),
  * so arrow keys move through them without the focus leaving the field.
  */
@@ -31,7 +38,7 @@ type Result =
 
 /** Two characters before a client search is sent: one matches half the practice. */
 const MIN_QUERY = 2;
-const DEBOUNCE_MS = 200;
+const DEBOUNCE_MS = 300;
 const MAX_CLIENTS = 8;
 
 /** The sections whose names contain the words typed, in the rail's order. */
@@ -53,12 +60,10 @@ export function matchSections(sections: readonly RailSection[], query: string): 
 }
 
 export function QuickFind({
-  open,
   onClose,
   sections,
   mayFindClients,
 }: {
-  open: boolean;
   onClose: () => void;
   sections: readonly RailSection[];
   mayFindClients: boolean;
@@ -69,74 +74,83 @@ export function QuickFind({
   const { apiFetch } = useAuth();
   const listId = useId();
   const [query, setQuery] = useState('');
-  const [clients, setClients] = useState<
-    | { kind: 'idle' }
-    | { kind: 'loading' }
-    | { kind: 'error' }
-    | { kind: 'ready'; rows: ClientRow[] }
-  >({ kind: 'idle' });
+  // An answer belongs to the term it was asked for. Until the answer for what
+  // is in the field now arrives, no client is offered, so Enter can never open
+  // a client who matched an earlier term.
+  const [answer, setAnswer] = useState<
+    { term: string; kind: 'error' } | { term: string; kind: 'ready'; rows: ClientRow[] } | null
+  >(null);
   const [active, setActive] = useState(0);
 
   useEffect(() => {
     const element = dialog.current;
-    if (!element) return;
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // `showModal` is missing in some test environments; the attribute is what
     // it would have set.
-    if (open && !element.open) {
+    if (element && !element.open) {
       if (typeof element.showModal === 'function') element.showModal();
       else element.setAttribute('open', '');
-      field.current?.focus();
-    } else if (!open && element.open) {
-      if (typeof element.close === 'function') element.close();
-      else element.removeAttribute('open');
     }
-  }, [open]);
+    field.current?.focus();
+    return () => {
+      before?.focus();
+    };
+  }, []);
 
-  // The client search, debounced, and dropped if a newer one has started.
+  // The client search, debounced; an answer that arrives after the field has
+  // moved on is kept under its own term and never shown.
   const term = query.trim();
-  const searching = mayFindClients && term.length >= MIN_QUERY;
+  const idShaped = isEmiratesIdShaped(term);
+  const searching = mayFindClients && term.length >= MIN_QUERY && !idShaped;
   useEffect(() => {
-    if (!open || !searching) return;
+    if (!searching) return;
     let live = true;
     const timer = window.setTimeout(() => {
-      setClients({ kind: 'loading' });
-      void apiFetch(`/api/clients?q=${encodeURIComponent(term)}`)
+      const params = new URLSearchParams({ q: term, limit: String(MAX_CLIENTS) });
+      void apiFetch(`/api/clients?${params.toString()}`)
         .then(async (res) => {
           if (!res.ok) throw new Error(String(res.status));
-          return ClientListResponse.parse(await res.json()).clients.slice(0, MAX_CLIENTS);
+          return ClientListResponse.parse(await res.json()).clients;
         })
         .then((rows) => {
-          if (live) setClients({ kind: 'ready', rows });
+          if (live) setAnswer({ term, kind: 'ready', rows });
         })
         .catch(() => {
-          if (live) setClients({ kind: 'error' });
+          if (live) setAnswer({ term, kind: 'error' });
         });
     }, DEBOUNCE_MS);
     return () => {
       live = false;
       window.clearTimeout(timer);
     };
-  }, [apiFetch, open, searching, term]);
+  }, [apiFetch, searching, term]);
+
+  const currentAnswer = searching && answer?.term === term ? answer : null;
+  const found = currentAnswer?.kind === 'ready' ? currentAnswer.rows : null;
 
   const results = useMemo<Result[]>(() => {
-    const found = matchSections(sections, query);
-    if (!searching || clients.kind !== 'ready') return found;
+    const sectionResults = matchSections(sections, query);
+    if (!found) return sectionResults;
     return [
-      ...clients.rows.map((row) => ({ kind: 'client' as const, key: row.id, row })),
-      ...found,
+      ...found.map((row) => ({ kind: 'client' as const, key: row.id, row })),
+      ...sectionResults,
     ];
-  }, [clients, query, searching, sections]);
+  }, [found, query, sections]);
 
   const current = Math.min(active, Math.max(results.length - 1, 0));
+  const optionId = (result: Result) => `${listId}-${result.kind}-${result.key}`;
+  const activeResult = results[current];
 
-  function reset() {
-    setQuery('');
-    setClients({ kind: 'idle' });
-    setActive(0);
-  }
+  // The highlighted result stays in view as the arrow keys move through a list
+  // longer than the panel.
+  useEffect(() => {
+    if (!activeResult) return;
+    document.getElementById(optionId(activeResult))?.scrollIntoView?.({ block: 'nearest' });
+    // optionId is derived from listId, which is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeResult]);
 
   function close() {
-    reset();
     onClose();
   }
 
@@ -162,18 +176,23 @@ export function QuickFind({
     }
   }
 
-  const optionId = (index: number) => `${listId}-option-${index}`;
-  const status = !searching
-    ? mayFindClients && term.length > 0
-      ? 'Type one more letter to search clients.'
-      : null
-    : clients.kind === 'loading'
-      ? 'Searching clients.'
-      : clients.kind === 'error'
-        ? 'Clients could not be searched. Try again.'
-        : clients.kind === 'ready' && clients.rows.length === 0
-          ? 'No clients match.'
-          : null;
+  const status = !mayFindClients
+    ? null
+    : idShaped
+      ? 'To find someone by Emirates ID, use the search on the Clients page.'
+      : term.length === 0
+        ? null
+        : term.length < MIN_QUERY
+          ? 'Type one more letter to search clients.'
+          : currentAnswer === null
+            ? 'Searching clients.'
+            : currentAnswer.kind === 'error'
+              ? 'Clients could not be searched. Try again.'
+              : currentAnswer.rows.length === 0
+                ? 'No clients match.'
+                : currentAnswer.rows.length === 1
+                  ? '1 client found.'
+                  : `${currentAnswer.rows.length} clients found.`;
 
   return (
     <dialog
@@ -182,7 +201,7 @@ export function QuickFind({
       aria-label="Find"
       onClose={() => {
         // Escape closes the dialog natively; keep the layout's state in step.
-        if (open) close();
+        close();
       }}
       onClick={(event) => {
         // A press on the backdrop, outside the panel, closes it.
@@ -198,7 +217,7 @@ export function QuickFind({
             role="combobox"
             aria-expanded={results.length > 0}
             aria-controls={listId}
-            aria-activedescendant={results.length > 0 ? optionId(current) : undefined}
+            aria-activedescendant={activeResult ? optionId(activeResult) : undefined}
             aria-autocomplete="list"
             aria-label={mayFindClients ? 'Find a client or a section' : 'Find a section'}
             placeholder={
@@ -220,7 +239,7 @@ export function QuickFind({
           {results.map((result, index) => (
             <li
               key={`${result.kind}-${result.key}`}
-              id={optionId(index)}
+              id={optionId(result)}
               role="option"
               aria-selected={index === current}
               className={
