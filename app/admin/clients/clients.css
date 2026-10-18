@@ -51,8 +51,14 @@
 }
 
 .record-facts__row dt {
-  color: var(--slate);
+  color: var(--ink-2);
   font-size: var(--t-small);
+}
+
+/* A definition sits under its term, not 40px in from it: the browser's
+   default indent read as a misalignment beside every label. */
+.record-facts__row dd {
+  margin: 0;
 }
 
 .record-facts__list {
@@ -698,6 +704,12 @@
 
 .client-workspace__header h1 {
   margin: 0;
+  /* The client's name is the record's focal point (DESIGN.md, The Focal
+     Figure Rule): display size, on the staff console only. */
+  font-size: var(--t-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  text-wrap: balance;
 }
 
 .client-workspace__layout {
@@ -843,4 +855,78 @@
   .enrolment--page .wizard__nav {
     flex-wrap: wrap;
   }
+}
+
+/* The overview's answer (DESIGN.md, "The record workspace"; ADR 0004):
+   progress, balance and the latest report as display-size figures, each with
+   its label above it in small second ink. A hairline closes the block so the
+   status actions and the details beneath read as what follows from it. */
+.record-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding-block-end: var(--s-6);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.record-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: var(--s-6) var(--s-8);
+}
+
+.record-summary__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-inline-size: 0;
+}
+
+.record-summary__label,
+.record-summary__detail {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.record-summary__label {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+}
+
+.record-summary__figure {
+  margin: 0;
+  font-size: var(--t-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  font-weight: var(--w-medium);
+  color: var(--ink);
+}
+
+/* A state in words ("Nothing owed") is not a figure: heading size, so the
+   display step stays reserved for numbers and names. */
+.record-summary__figure--quiet {
+  font-size: var(--t-h3);
+  line-height: var(--lh-display);
+  letter-spacing: 0;
+}
+
+/* Loading holds the shape (DESIGN.md, States): a still block where the figure
+   will be, no shimmer. */
+.record-summary__placeholder {
+  display: block;
+  block-size: var(--lh-display);
+  inline-size: min(100%, 160px);
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+}
+
+.record-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.record-details__heading {
+  margin: 0;
 }
