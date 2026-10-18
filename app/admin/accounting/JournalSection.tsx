@@ -93,16 +93,49 @@ export function JournalSection({
 
   const columns = useMemo<Column<EntryRow>[]>(
     () => [
-      { key: 'reference', header: 'Entry', render: (row) => row.reference },
-      { key: 'day', header: 'Day', render: (row) => formatDate(row.enteredOn) },
-      { key: 'kind', header: 'Kind', render: (row) => JOURNAL_KIND_WORDS[row.kind] },
-      { key: 'memo', header: 'What it is', render: (row) => row.memo },
-      { key: 'event', header: 'From', render: (row) => eventWords(row.sourceEvent) },
+      {
+        key: 'reference',
+        header: 'Entry',
+        render: (row) => row.reference,
+        value: (row) => row.reference,
+        filter: 'text',
+        hideable: false,
+      },
+      {
+        key: 'day',
+        header: 'Day',
+        render: (row) => formatDate(row.enteredOn),
+        value: (row) => row.enteredOn,
+        filter: 'date',
+      },
+      {
+        key: 'kind',
+        header: 'Kind',
+        render: (row) => JOURNAL_KIND_WORDS[row.kind],
+        value: (row) => JOURNAL_KIND_WORDS[row.kind],
+        filter: 'values',
+      },
+      {
+        key: 'memo',
+        header: 'What it is',
+        render: (row) => row.memo,
+        value: (row) => row.memo,
+        filter: 'text',
+      },
+      {
+        key: 'event',
+        header: 'From',
+        render: (row) => eventWords(row.sourceEvent),
+        value: (row) => eventWords(row.sourceEvent),
+        filter: 'values',
+      },
       {
         key: 'debit',
         header: 'Total (AED)',
         numeric: true,
         align: 'end',
+        value: (row) => row.debitTotalFils / 100,
+        filter: 'number',
         render: (row) => formatFils(row.debitTotalFils),
       },
       {
@@ -145,6 +178,7 @@ export function JournalSection({
           ) : null}
           <Table
             caption="The journal"
+            controls={{ id: 'books-journal', noun: ['entry', 'entries'] }}
             columns={columns}
             rows={state.response.entries}
             rowKey={(row) => row.id}

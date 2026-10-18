@@ -115,7 +115,11 @@ describe('InvoicesSection', () => {
 
   it('says so when a page has been cut short', async () => {
     mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES, truncated: true }));
-    expect(await screen.findByText('The fifty most recent invoices are shown.')).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'The fifty most recent invoices are shown, and the column filters apply to those.',
+      ),
+    ).toBeTruthy();
   });
 
   it('says so when nothing has been invoiced yet', async () => {

@@ -70,19 +70,42 @@ export function AccountsSection({ reloadKey }: { reloadKey: number }) {
 
   const columns = useMemo<Column<AccountRow>[]>(
     () => [
-      { key: 'code', header: 'Code', render: (row) => row.code },
-      { key: 'name', header: 'Name', render: (row) => row.name },
-      { key: 'type', header: 'Kind', render: (row) => ACCOUNT_TYPE_WORDS[row.type] },
+      {
+        key: 'code',
+        header: 'Code',
+        render: (row) => row.code,
+        value: (row) => row.code,
+        filter: 'text',
+        hideable: false,
+      },
+      {
+        key: 'name',
+        header: 'Name',
+        render: (row) => row.name,
+        value: (row) => row.name,
+        filter: 'text',
+      },
+      {
+        key: 'type',
+        header: 'Kind',
+        render: (row) => ACCOUNT_TYPE_WORDS[row.type],
+        value: (row) => ACCOUNT_TYPE_WORDS[row.type],
+        filter: 'values',
+      },
       {
         key: 'role',
         header: 'Used for',
         render: (row) => (row.role ? ACCOUNT_ROLE_WORDS[row.role] : ''),
+        value: (row) => (row.role ? ACCOUNT_ROLE_WORDS[row.role] : null),
+        filter: 'values',
       },
       {
         key: 'balance',
         header: 'Balance (AED)',
         numeric: true,
         align: 'end',
+        value: (row) => row.balanceFils / 100,
+        filter: 'number',
         render: (row) => formatFils(row.balanceFils),
       },
       {
@@ -107,6 +130,7 @@ export function AccountsSection({ reloadKey }: { reloadKey: number }) {
       {state.kind === 'ready' ? (
         <Table
           caption="The chart of accounts"
+          controls={{ id: 'books-accounts', noun: ['account', 'accounts'] }}
           columns={columns}
           rows={state.accounts.filter((account) => account.archivedAt === null)}
           rowKey={(row) => row.id}
@@ -145,16 +169,38 @@ function Ledger({ ledger }: { ledger: LedgerResponse }) {
       </p>
       <Table
         caption={`${ledger.account.code} ${ledger.account.name}`}
+        controls={{ id: 'books-account-ledger', noun: ['line', 'lines'] }}
         columns={[
-          { key: 'entry', header: 'Entry', render: (row) => row.entryReference },
-          { key: 'day', header: 'Day', render: (row) => formatDate(row.enteredOn) },
-          { key: 'memo', header: 'What it is', render: (row) => row.memo },
+          {
+            key: 'entry',
+            header: 'Entry',
+            render: (row) => row.entryReference,
+            value: (row) => row.entryReference,
+            filter: 'text',
+            hideable: false,
+          },
+          {
+            key: 'day',
+            header: 'Day',
+            render: (row) => formatDate(row.enteredOn),
+            value: (row) => row.enteredOn,
+            filter: 'date',
+          },
+          {
+            key: 'memo',
+            header: 'What it is',
+            render: (row) => row.memo,
+            value: (row) => row.memo,
+            filter: 'text',
+          },
           {
             key: 'debit',
             header: 'Debit (AED)',
             numeric: true,
             align: 'end',
             render: (row) => formatFils(row.debitFils),
+            value: (row) => row.debitFils / 100,
+            filter: 'number',
           },
           {
             key: 'credit',
@@ -162,6 +208,8 @@ function Ledger({ ledger }: { ledger: LedgerResponse }) {
             numeric: true,
             align: 'end',
             render: (row) => formatFils(row.creditFils),
+            value: (row) => row.creditFils / 100,
+            filter: 'number',
           },
           {
             key: 'running',

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Enquiry } from '../../api/enquiries/schema';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
+import { ENQUIRY_PAGE } from '@domain/enquiry';
 import { EnquiriesPage } from './EnquiriesPage';
 
 /**
@@ -259,7 +260,7 @@ function served(all: readonly Enquiry[], url: string) {
   const matching = newestFirst
     .filter((row) => row.status === status && (source === null || row.source === source))
     .filter((row) => before === null || cursorOf(row) < before);
-  const page = matching.slice(0, 100);
+  const page = matching.slice(0, ENQUIRY_PAGE);
   const last = page.at(-1);
   const none = () => ({ all: 0, website: 0, discovery_call: 0, expo: 0 });
   const counts = { new: none(), converted: none(), dismissed: none() };
@@ -273,7 +274,7 @@ function served(all: readonly Enquiry[], url: string) {
   return {
     enquiries: page,
     counts,
-    older: matching.length > 100 && last ? cursorOf(last) : null,
+    older: matching.length > ENQUIRY_PAGE && last ? cursorOf(last) : null,
     marketable,
   };
 }
@@ -422,19 +423,23 @@ describe('EnquiriesPage', () => {
   });
 
   it('shows a page of a long list, says how many there are, and fetches older ones on a press', async () => {
-    const { lists } = mount({ list: [NEW, ...crowd(130)] });
+    const { lists } = mount({ list: [NEW, ...crowd(ENQUIRY_PAGE + 30)] });
     await screen.findByText('Hazel Harbour');
-    fireEvent.click(screen.getByRole('button', { name: 'Dismissed (130)' }));
+    fireEvent.click(screen.getByRole('button', { name: `Dismissed (${ENQUIRY_PAGE + 30})` }));
     expect(await screen.findByText('Stand test 1')).toBeTruthy();
-    expect(screen.getByText('Showing 100 of 130.')).toBeTruthy();
-    expect(screen.queryByText('Stand test 101')).toBeNull();
+    expect(
+      screen.getByText(
+        `Showing ${ENQUIRY_PAGE} of ${ENQUIRY_PAGE + 30}. The column filters apply to the ones shown.`,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(`Stand test ${ENQUIRY_PAGE + 1}`)).toBeNull();
 
     const showOlder = screen.getByRole('button', { name: 'Show older' });
     showOlder.focus();
     fireEvent.click(showOlder);
     // Never `disabled` while it fetches: a disabled button drops the focus it holds.
     expect(showOlder.hasAttribute('disabled')).toBe(false);
-    expect(await screen.findByText('Stand test 130')).toBeTruthy();
+    expect(await screen.findByText(`Stand test ${ENQUIRY_PAGE + 30}`)).toBeTruthy();
     // Added beneath what was there, not in place of it.
     expect(screen.getByText('Stand test 1')).toBeTruthy();
     expect(lists.at(-1)).toMatch(/^\/api\/enquiries\?status=dismissed&before=/);
@@ -442,16 +447,16 @@ describe('EnquiriesPage', () => {
     // The line stays to say the list is whole, in a region a screen reader is
     // told of, and the focus the button held goes to it and not to the top of
     // the page.
-    const whole = screen.getByText('Showing all 130.');
+    const whole = screen.getByText(`Showing all ${ENQUIRY_PAGE + 30}.`);
     const region = whole.closest('[role="status"]');
     expect(region).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(region));
   });
 
   it('lets go of an error about one table when another is opened', async () => {
-    mount({ list: [NEW, ...crowd(130)], failOlder: true });
+    mount({ list: [NEW, ...crowd(ENQUIRY_PAGE + 30)], failOlder: true });
     await screen.findByText('Hazel Harbour');
-    fireEvent.click(screen.getByRole('button', { name: 'Dismissed (130)' }));
+    fireEvent.click(screen.getByRole('button', { name: `Dismissed (${ENQUIRY_PAGE + 30})` }));
     await screen.findByText('Stand test 1');
     fireEvent.click(screen.getByRole('button', { name: 'Show older' }));
     expect(
@@ -600,9 +605,9 @@ describe('EnquiriesPage', () => {
     const holdOlder = new Promise<void>((resolve) => {
       letGo = resolve;
     });
-    mount({ list: [NEW, ...crowd(130)], holdOlder });
+    mount({ list: [NEW, ...crowd(ENQUIRY_PAGE + 30)], holdOlder });
     await screen.findByText('Hazel Harbour');
-    fireEvent.click(screen.getByRole('button', { name: 'Dismissed (130)' }));
+    fireEvent.click(screen.getByRole('button', { name: `Dismissed (${ENQUIRY_PAGE + 30})` }));
     await screen.findByText('Stand test 1');
     fireEvent.click(screen.getByRole('button', { name: 'Show older' }));
     // Back to what is waiting, while the dismissed table's next page is still on its way.

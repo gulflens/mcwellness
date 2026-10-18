@@ -85,10 +85,15 @@ export function ReceiptsSection() {
         // A payment recorded before the receipt book existed has no number, and
         // nothing invents one for it.
         render: (row) => row.receiptReference ?? <span className="muted">—</span>,
+        value: (row) => row.receiptReference,
+        filter: 'text',
+        hideable: false,
       },
       {
         key: 'client',
         header: 'Client',
+        value: (row) => `${row.clientName} ${row.clientMrn}`,
+        filter: 'text',
         render: (row) => (
           <span className="name">
             <span>{row.clientName}</span>
@@ -96,16 +101,26 @@ export function ReceiptsSection() {
           </span>
         ),
       },
-      { key: 'method', header: 'How', render: (row) => METHOD_LABELS[row.method] },
+      {
+        key: 'method',
+        header: 'How',
+        render: (row) => METHOD_LABELS[row.method],
+        value: (row) => METHOD_LABELS[row.method],
+        filter: 'values',
+      },
       {
         key: 'settles',
         header: 'Against',
+        value: (row) => row.invoiceReference ?? 'On account',
+        filter: 'text',
         render: (row) => row.invoiceReference ?? <span className="muted">On account</span>,
       },
       {
         key: 'received',
         header: 'Received',
         numeric: true,
+        value: (row) => row.receivedOn,
+        filter: 'date',
         render: (row) => formatDate(row.receivedOn),
       },
       {
@@ -113,6 +128,8 @@ export function ReceiptsSection() {
         header: 'Amount (AED)',
         numeric: true,
         align: 'end',
+        value: (row) => row.amountFils / 100,
+        filter: 'number',
         render: (row) => formatFils(row.amountFils),
       },
       {
@@ -154,9 +171,14 @@ export function ReceiptsSection() {
       {state.kind === 'ready' ? (
         <>
           {error ? <Note tone="critical">{error}</Note> : null}
-          {state.response.truncated ? <Note>The fifty most recent payments are shown.</Note> : null}
+          {state.response.truncated ? (
+            <Note>
+              The fifty most recent payments are shown, and the column filters apply to those.
+            </Note>
+          ) : null}
           <Table
             caption="Receipts"
+            controls={{ id: 'billing-receipts', noun: ['payment', 'payments'] }}
             columns={columns}
             rows={state.response.receipts}
             rowKey={(row) => row.id}

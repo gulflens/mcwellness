@@ -1806,3 +1806,373 @@ a.rail__item.rail__item--active:active {
 .page-skeleton__row:nth-child(odd) {
   inline-size: 72%;
 }
+
+/* ------------------------------------------------------------------------
+   Spreadsheet controls for a ledger table (table/ControlledTable.tsx; the
+   operator, 2026-10-18). Here and not beside the component, because every
+   screen that uses them is code-split and this is the stylesheet main.tsx
+   always loads (tests/lint/tabs-are-always-styled.test.ts, same lesson).
+   ------------------------------------------------------------------------ */
+
+.table-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin-block-end: var(--s-3);
+}
+
+.table-controls__columns {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-block-size: var(--row);
+  padding-inline: var(--s-3) var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: var(--w-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-control) var(--ease),
+    border-color var(--motion-control) var(--ease);
+}
+
+.table-controls__columns:hover {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+}
+
+.table-controls__columns[aria-expanded='true'] {
+  border-color: var(--brand);
+}
+
+.table-controls__count {
+  padding-inline: var(--s-2);
+  border-radius: var(--r-1);
+  background: var(--brand-wash);
+  color: var(--brand);
+  font-weight: var(--w-medium);
+}
+
+.table-controls__status {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+/* The header cell holds a button that fills it, and a grip on its end edge. */
+.ledger th.ledger__th {
+  padding: 0;
+}
+
+.ledger__col {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  inline-size: 100%;
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--w-medium);
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-control) var(--ease),
+    color var(--motion-control) var(--ease);
+}
+
+/* Quantities align end; identifiers, even numeric ones, align start. */
+.ledger th.align-end .ledger__col {
+  justify-content: flex-end;
+}
+
+.ledger__col:hover,
+.ledger__col[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+  color: var(--ink);
+}
+
+.ledger__col:active {
+  cursor: grabbing;
+}
+
+.ledger__col-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The chevron says "this header opens"; quiet until the header is pointed at. */
+.ledger__col-chevron {
+  flex: none;
+  opacity: 0.45;
+  transition: opacity var(--motion-control) var(--ease);
+}
+
+.ledger__col:hover .ledger__col-chevron,
+.ledger__col:focus-visible .ledger__col-chevron,
+.ledger__col[aria-expanded='true'] .ledger__col-chevron {
+  opacity: 1;
+}
+
+.ledger__col--filtered {
+  color: var(--brand);
+}
+
+.ledger__col-filter {
+  flex: none;
+}
+
+/* The grip on a column's end edge: wide enough to catch with a pointer,
+   drawn as a 2px brand line when pointed at, focused or dragged. */
+.ledger__resize {
+  position: absolute;
+  inset-block: 0;
+  /* Inside its own header: each header is sticky, so each is a stacking
+     context, and a grip reaching past the edge would sit under the next. */
+  inset-inline-end: 0;
+  z-index: 2;
+  inline-size: var(--s-2);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ledger__resize::after {
+  content: '';
+  position: absolute;
+  inset-block: var(--s-2);
+  inset-inline-end: 0;
+  inline-size: 2px;
+  border-radius: var(--r-1);
+  background: transparent;
+  transition: background-color var(--motion-control) var(--ease);
+}
+
+.ledger__resize:hover::after,
+.ledger__resize:focus-visible::after,
+.is-resizing-column .ledger__resize:active::after {
+  background: var(--brand);
+}
+
+.is-resizing-column,
+.is-resizing-column * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+/* Once a column has been dragged, every column keeps the width it was given
+   and the table is as wide as its columns, as a sheet is. */
+.ledger--sized {
+  table-layout: fixed;
+}
+
+.ledger--sized td,
+.ledger--sized th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Where a dragged header will land. */
+.ledger__th--drop {
+  background: var(--brand-wash) !important;
+}
+
+.ledger__th--drop::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 2px;
+  background: var(--brand);
+}
+
+/* A floating panel (table/Popover.tsx): level 2. */
+.popover {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  inline-size: min(320px, calc(100vw - 2 * var(--s-2)));
+  max-block-size: min(560px, calc(100vh - 2 * var(--s-4)));
+  overflow: auto;
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--lift-2);
+}
+
+.column-menu__title {
+  margin: 0;
+  font-weight: var(--w-medium);
+}
+
+.column-menu__filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.column-menu__values {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.column-menu__list {
+  max-block-size: 240px;
+  overflow-y: auto;
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  padding-block: var(--s-1);
+}
+
+.column-menu__value {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-block-size: 36px;
+  padding-inline: var(--s-3);
+  cursor: pointer;
+}
+
+.column-menu__value:hover {
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+}
+
+.column-menu__value input,
+.columns-panel__label input {
+  inline-size: 18px;
+  block-size: 18px;
+  accent-color: var(--brand);
+}
+
+.column-menu__value--all {
+  margin-block-end: var(--s-1);
+  font-weight: var(--w-medium);
+}
+
+.column-menu__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-3);
+}
+
+.column-menu__apply {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* The menu's commands, a list as a spreadsheet's column menu is. */
+.column-menu__actions {
+  display: flex;
+  flex-direction: column;
+  margin-inline: calc(-1 * var(--s-2));
+  padding-block-start: var(--s-2);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.column-menu__actions .button {
+  justify-content: flex-start;
+  min-block-size: 36px;
+  padding-inline: var(--s-3);
+  font-weight: var(--w-regular);
+}
+
+.columns-panel__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+}
+
+.columns-panel__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-block-size: var(--row);
+  padding-inline: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+  background: var(--surface);
+}
+
+.columns-panel__row:last-child {
+  border-block-end: 0;
+}
+
+.columns-panel__row--dragging {
+  opacity: 0.5;
+}
+
+.columns-panel__row--over {
+  box-shadow: inset 0 2px 0 var(--brand);
+}
+
+.columns-panel__grip {
+  display: inline-flex;
+  color: var(--slate);
+  cursor: grab;
+}
+
+.columns-panel__label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--s-2);
+  min-inline-size: 0;
+  cursor: pointer;
+}
+
+.columns-panel__arrows {
+  display: inline-flex;
+}
+
+.columns-panel__arrow {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.columns-panel__arrow:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  color: var(--ink);
+}
+
+.columns-panel__arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Where "Fit to contents" measures a column (ControlledTable widestCell):
+   off the page, unconstrained, on one line. */
+.ledger__probe {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.ledger__probe > div {
+  display: inline-block;
+  inline-size: max-content;
+}
+
+.ledger__probe .ledger__resize {
+  display: none;
+}

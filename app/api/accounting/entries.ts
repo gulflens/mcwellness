@@ -31,8 +31,10 @@ import { CreateEntryInput, EntriesResponse, EntryResponse, IsoDate } from './sch
  * `truncated` says there are more without a second count-only query.
  */
 
-const DEFAULT_LIMIT = 200;
-const MAX_LIMIT = 500;
+// The whole period, so the journal's own column filters see every entry (the
+// operator, 2026-10-18). A ceiling: past it `truncated` says so.
+const DEFAULT_LIMIT = 1000;
+const MAX_LIMIT = 1000;
 
 const Query = z.object({
   from: IsoDate.optional(),
