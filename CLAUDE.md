@@ -34,5 +34,7 @@ Read docs/DESIGN-BRIEF.md before writing any UI.
 - Hue inside a figure is reserved for EEG band data and three status states. Alongside them the inherited McWellness violet IS the interface's accent: the owner took that open decision on 2026-09-08, reversing the "no accent colour" of 2026-09-02 (docs/SPEC/coloured-shell.md). It is `--brand`, and it never enters a chart's plotting area, as no band hue is ever used for chrome.
 - One typeface family. Tabular figures for all numerals. Never monospace for data.
 - No ALL-CAPS labels, no arrows appended to button text, no middle-dot-joined metadata, no single-word colour accents in headings.
-- Tables for homogeneous data. Cards only for heterogeneous content.
-- Motion only in response to a user action, 160ms. One exception: the ribbon slice.
+- Tables for homogeneous data, on a white panel. Panels for heterogeneous content such as a record overview; never a panel inside a panel.
+- One focal point per screen: when it is a number or a name, set it at display size (DESIGN.md, "The calm instrument", ADR 0004).
+- Motion only in response to a user action: 120ms for control colour, 160ms for a drawer, and the ribbon slice at 400ms. Never entrances, shimmer or motion during a running session.
+- Loading holds the layout's shape (placeholder rows, `aria-busy`); high-stakes actions end on a confirmation state.

@@ -1,16 +1,18 @@
 ---
 name: McWellness
-description: An achromatic, hairline-ruled ledger in IBM Plex Sans; hue is reserved for band data and status, and there is no accent.
+description: A calm instrument for a home-visit wellness practice. Violet chrome, white working surfaces on violet-cast paper, IBM Plex Sans, and one bold figure, the session ribbon, that makes a client's programme visible.
 colors:
-  ink: "#16242a"
-  ink-2: "#3e5058"
-  slate: "#6b7c82"
-  rule: "#cbd5d6"
-  paper: "#eef2f1"
+  ink: "#1f152b"
+  ink-2: "#4a4056"
+  slate: "#756c81"
+  rule: "#d0cbd6"
+  paper: "#e9e7ec"
   surface: "#ffffff"
-  surface-hover: "#f1f2f2"
-  surface-pressed: "#e8e9ea"
-  selection: "#cbd1d1"
+  brand: "#380473"
+  brand-deep: "#2b0359"
+  brand-lift: "#480594"
+  brand-pale: "#eadff6"
+  brand-wash: "#f6f1fb"
   ok: "#2f6b4f"
   attention: "#8a6a1e"
   critical: "#94382e"
@@ -19,16 +21,23 @@ colors:
   alpha: "#3d8557"
   beta: "#b8863a"
   gamma: "#a8553f"
-  ink-dark: "#eef2f1"
-  ink-2-dark: "#c6d1d4"
-  slate-dark: "#8fa0a6"
-  rule-dark: "#2b3b41"
-  paper-dark: "#10191d"
-  surface-dark: "#16242a"
+  ink-dark: "#f0edf3"
+  ink-2-dark: "#ccc6d4"
+  slate-dark: "#9990a5"
+  rule-dark: "#342a42"
+  paper-dark: "#150f1e"
+  surface-dark: "#1f162a"
+  brand-dark: "#a96cef"
   ok-dark: "#5f9f83"
   attention-dark: "#c0a04e"
   critical-dark: "#c9705f"
 typography:
+  display:
+    fontFamily: "IBM Plex Sans, IBM Plex Sans Arabic, system-ui, sans-serif"
+    fontSize: "40px"
+    fontWeight: 500
+    lineHeight: "44px"
+    letterSpacing: "-0.02em"
   h1:
     fontFamily: "IBM Plex Sans, IBM Plex Sans Arabic, system-ui, sans-serif"
     fontSize: "31px"
@@ -64,7 +73,9 @@ typography:
     fontFamily: "IBM Plex Sans, IBM Plex Sans Arabic, system-ui, sans-serif"
     fontFeature: "'tnum' 1, 'lnum' 1"
 rounded:
-  r-2: "4px"
+  r-1: "2px"
+  r-2: "6px"
+  r-3: "10px"
 spacing:
   s-1: "4px"
   s-2: "8px"
@@ -73,405 +84,304 @@ spacing:
   s-5: "20px"
   s-6: "24px"
   s-8: "32px"
+  s-10: "40px"
   s-12: "48px"
   s-16: "64px"
+motion:
+  control: "120ms"
+  motion: "160ms"
+  ribbon: "400ms"
+  ease: "cubic-bezier(0.2, 0, 0, 1)"
 components:
   button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.paper}"
+    backgroundColor: "{colors.brand}"
+    textColor: "{colors.surface}"
     rounded: "{rounded.r-2}"
     padding: "0 20px"
     height: "44px"
   button-primary-hover:
-    backgroundColor: "{colors.ink-2}"
-    textColor: "{colors.paper}"
+    backgroundColor: "{colors.brand-lift}"
+    textColor: "{colors.surface}"
+  button-primary-active:
+    backgroundColor: "{colors.brand-deep}"
+    textColor: "{colors.surface}"
   button-secondary:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.r-2}"
     padding: "0 20px"
     height: "44px"
-  button-secondary-hover:
-    backgroundColor: "{colors.surface-hover}"
-    textColor: "{colors.ink}"
-  button-secondary-active:
-    backgroundColor: "{colors.surface-pressed}"
-    textColor: "{colors.ink}"
   button-quiet:
     backgroundColor: "transparent"
     textColor: "{colors.ink}"
     rounded: "{rounded.r-2}"
     padding: "0 20px"
     height: "44px"
-  link:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    padding: "0"
+  button-danger:
+    backgroundColor: "{colors.critical}"
+    textColor: "{colors.surface}"
+    rounded: "{rounded.r-2}"
+    padding: "0 20px"
+    height: "44px"
   field-input:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.r-2}"
     padding: "0 12px"
     height: "44px"
-  field-label:
-    textColor: "{colors.ink-2}"
-    typography: "{typography.small}"
   rail:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    padding: "24px 16px"
+    backgroundColor: "{colors.brand-deep}"
+    textColor: "{colors.brand-pale}"
     width: "220px"
-  rail-item:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.r-2}"
-    padding: "0 12px"
-    height: "44px"
-  rail-item-hover:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
   rail-item-active:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-  rail-item-later:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink-2}"
+    textColor: "{colors.brand}"
+  panel:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.r-3}"
   table-header:
-    backgroundColor: "{colors.paper}"
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink-2}"
     typography: "{typography.small}"
-    padding: "0 12px"
     height: "44px"
   table-cell:
-    backgroundColor: "transparent"
     textColor: "{colors.ink}"
     padding: "0 12px"
     height: "44px"
-  status-chip:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-  note:
-    textColor: "{colors.ink-2}"
-    width: "68ch"
-  note-critical:
-    textColor: "{colors.critical}"
   drawer:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
     width: "480px"
-  drawer-header:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    typography: "{typography.h2}"
-    padding: "24px"
-  drawer-body:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    padding: "24px"
-  drawer-close:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink-2}"
-    rounded: "{rounded.r-2}"
-    size: "48px"
-  drawer-close-hover:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-  drawer-section:
-    textColor: "{colors.ink}"
-    typography: "{typography.h3}"
-  timeline-day:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink-2}"
-    typography: "{typography.small}"
-    padding: "8px 0"
-  timeline-event:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    padding: "12px 0"
-  timeline-event-read:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink-2}"
-    typography: "{typography.body}"
-  timeline-meta:
-    textColor: "{colors.ink-2}"
-    typography: "{typography.micro}"
-  timeline-reason:
-    textColor: "{colors.ink-2}"
-    typography: "{typography.small}"
 ---
 
 # Design System: McWellness
 
 ## Overview
 
-**Creative North Star: "The Silent Ledger"**
+**Creative North Star: "The Calm Instrument"**
 
-McWellness is a wellness practice whose product must read as measurement, closer to a good laboratory instrument than to a spa, and its console is a ledger, not a dashboard. Rows, hairline rules and figures carry the practice. The category default of cards, hero metrics and an accent button is refused: a client is a row, a count is a number beside the heading, and the primary action on the first viewport is a search field. The coordinator sees the practice's people at a glance and finds one in seconds.
+McWellness is a wellness practice whose product reads as measurement: closer to a well-made laboratory instrument than to a spa, and closer to that than to a spreadsheet. The person using it should feel that the practice is careful, precise and quietly expensive. Three things carry that feeling, in this order:
 
-The chrome carries the practice and the figures carry the data. Hue-bearing mineral ink on cool mineral paper, structure drawn in hairline rules, one typeface family (IBM Plex Sans with its matched Arabic) at two weights, tabular figures wherever a numeral appears. The practice's own violet, `#380473`, sampled from its mark, is the interface's accent: the rail's ground, the primary action, links, the active section and the focus ring. Inside a figure, colour is still signal and nothing else — the five EEG bands and the three status states, appearing only where they carry meaning from the data. The two never meet, which is what keeps a band hue meaningful: the brand never enters a plotting area and no band hue is ever used for chrome (`tests/lint/colour-keeps-its-meaning.test.ts`).
+1. **One focal point per screen.** Every screen answers one question first and visibly: the client's next visit and progress on a record, the day's route on Today, what is owed on Billing. Everything else steps back.
+2. **One bold figure.** The session ribbon (`docs/DESIGN-BRIEF.md` section 5) is where the product spends its boldness: a client's whole programme as one strip, on the client's home screen, beside every client in the console, and on the report cover. Restraint everywhere else exists to frame it.
+3. **Finish.** White working surfaces with real depth, figures large enough to read across a room, controls that ease rather than flip, loading that holds the page's shape, and an ending with weight after every high-stakes action.
 
-**This reverses the achromatic chrome of 2026-09-02.** That decision held for six days and was taken back by the owner on 2026-09-08, who asked for "a more attractive simple coloured design" and for the practice's logo to appear in the interface. The reasoning for the original rule is not withdrawn — it is narrowed to the place it was actually earning its keep, which is the figure. `docs/SPEC/coloured-shell.md` carries the decision, the sampled palette and the measurements.
+The chrome carries the practice; the figures carry the data. The practice's violet, `#380473`, sampled from its mark and printed on every invoice, is the single accent: the rail's ground, the one primary action, links, the selected section and the focus ring. Inside a figure, colour is signal only, the five EEG bands and three status states. The two never meet (the Separation Rule).
 
-The system has three grounds that share one token set. The ledger (light, dense, the admin console) is the reference surface and the only one fully built. The instrument (dark, `[data-ground='dark']`, the practitioner's phone) inverts ink and paper, lifts the band and status hues, and steps every type size up one so it reads at arm's length in a dim room. The record (light, calm, the client portal) uses the same tokens at a 68-character measure and low density. Sampled at the finish review on 2026-09-02: paper #EEF2F1, ink #16242A, hairline #CBD5D6 rules, 44px rows, tabular figures, status in words with a 6px dot, and an ink-on-paper primary button; no hue, no cards, no accent. PR 6 introduced a 480px record drawer. On 24 September 2026, the operator approved replacing the main client record and enrolment drawers with full-page workspaces. Focused task drawers retain their existing treatment; record history remains a list of sentences on 12px-stepped hairline rules.
+**Three grounds, one token set.** The console (light, the admin desk) is the reference surface. The instrument (dark, `[data-ground='dark']`, the practitioner's phone) inverts ink and paper, lifts bands, status and brand, and steps every type size up one so it reads at arm's length in a dim room. The record (light, calm, the household's portal) uses the same tokens at a 68-character measure and low density.
 
-**Key Characteristics:**
-- Achromatic chrome: mineral ink on cool paper, structure in hairline rules, no accent colour anywhere.
-- Hue is signal: five band colours reserved for band data, three desaturated status colours carried by a 6px dot beside a word.
-- One family, two weights: IBM Plex Sans and IBM Plex Sans Arabic at 400 and 500, self-hosted; tabular lining figures on every numeral.
-- Tables, not cards: homogeneous data sits in 44px rows on hairline rules, with sticky headers and no zebra striping.
-- Full-page client work: the main client record and enrolment use the content column, with section or step navigation beside the form. Focused task drawers remain available elsewhere.
-- Three grounds, one token set: the ledger (light), the instrument (dark, type up one step) and the record (light, 68ch measure).
-- Logical properties only, so every layout mirrors for Arabic.
-- Almost no motion: feedback is instant, and the drawer's 160ms entrance is the one transition in the shell.
+The history of how this system got here (the achromatic "Silent Ledger" of 2 September, the violet of 8 September, and this reframing on 18 October) is in `docs/ADR/0004-calm-instrument.md`. This document describes what is true now.
+
+**Key characteristics:**
+- Violet chrome, violet-cast neutrals, one accent.
+- White working panels on paper: lists, records and forms sit on a surface, not on the ground.
+- Display-size figures where a number or a name is the point of the screen.
+- The session ribbon as the product's signature, in colour, because it is data.
+- Short, quiet motion that answers an action; never choreography.
+- Loading holds the layout's shape; high-stakes actions end on a confirmation, not a line of text.
+- One family (IBM Plex Sans and Plex Sans Arabic), tabular figures, logical properties throughout.
 
 ## Colors
 
-The palette is a hue-bearing near-black on a violet-cast paper, with hue permitted where it means something and one accent that says whose practice this is.
+Every value lives in `app/shell/tokens.css`; the lint rule `mcwellness/no-hex-colour` refuses a literal anywhere else.
 
-**The neutrals were re-cast on 8 September 2026.** They had been a cool mineral green at hue 165 — correct for the interface of 2 September, which had no accent colour at all. When the rail took the practice's violet at hue 268 the greys were suddenly a hundred degrees away from it, and the eye read green-against-violet rather than paper-against-brand. Every neutral now sits within 30 degrees of the mark's own hue, which `tests/lint/neutrals-share-the-hue.test.ts` holds. Lightnesses were kept, except the ground's: see Elevation.
+### Neutral (within 30 degrees of the mark's hue; `tests/lint/neutrals-share-the-hue.test.ts`)
+- **Ink** `#1f152b`: primary text and the secondary button's border. Tinted, never `#111`.
+- **Second ink** `#4a4056`: labels, table headers, counts, notes, placeholders, metadata. The lowest tone allowed for running text.
+- **Slate** `#756c81`: marks only (the default status dot, a dimmed chevron). Never text.
+- **Rule** `#d0cbd6`: every hairline: table rules, field borders, panel edges, the drawer's edge.
+- **Paper** `#e9e7ec`: the app's ground, behind the panels.
+- **Surface** `#ffffff`: panels, inputs, secondary buttons, the drawer, table headers on a panel.
+- Hover and pressed tints are `color-mix` of ink at 4%, 6% and 10% over surface, so they follow the ground.
 
-### Neutral
-- **Mineral Ink** (#1f152b): primary text, the primary button's fill, the focus ring's outer band, the link and its underline, and the surface colour on the dark ground. Tinted, never #111; a neutral black is a tell.
-- **Second Ink** (#4a4056): secondary text (field labels, table headers, the count beside a heading, notes), placeholder text, the chevron on a select, sections that have not yet arrived in the rail, the drawer's close control at rest, and in the timeline the day headings, a read or system sentence, the roles-and-time line and the reason line. Also the primary button's hover fill. The lowest tone allowed for running text.
-- **Slate** (#756c81): marks and rules only: the default status dot, the icon on a not-yet-arrived rail section. Never body or label text; it sits below the contrast floor for small type.
-- **Rule** (#d0cbd6): every hairline: table rules, the rail's edge, field borders, the line under the sign-in mark, the scrollbar thumb, the drawer's inline-start edge and the rule under its header, and the rule beneath each timeline event.
-- **Violet-cast Paper** (#e9e7ec): the app ground, the rail, sticky table headers, the primary button's text, and the close control's hover fill.
-- **Surface** (#ffffff): inputs, secondary buttons, the active rail item, the hover state of rail items, and the drawer (including the sticky day headings inside it, so events pass under them).
-- **Surface, hovered** (#f1f2f2) and **Surface, pressed** (#e8e9ea): instant feedback on secondary buttons and rail items. In code these are `color-mix` of ink at 6% and 10% over surface, so they follow the ground.
-- **Selection** (#cbd1d1): text selection; ink at 16% over paper in code.
+### Brand
+- **Brand** `#380473`: the primary action, links, the selected section, the focus ring.
+- **Brand deep** `#2b0359`: the rail's ground; the primary button pressed.
+- **Brand lift** `#480594`: the primary button and rail items under the pointer.
+- **Brand pale** `#eadff6`: text on the rail.
+- **Brand wash** `#f6f1fb`: a selected tab or section, a consent reading surface, an activation area.
+- **Brand magenta** `#d81c7c`: the mark's second colour, written down and unused; a guard test keeps it unused. The calm instrument does not need it.
+- On the dark ground the brand lifts to `#a96cef` (5.16 against that ground). `tests/lint/brand-contrast.test.ts` computes every pairing.
 
 ### Status
-The only non-band hue, deliberately desaturated so it never competes with band data. It is carried by a 6px dot beside a word, never by the word.
-- **Ok** (#2f6b4f): the dot on an active client.
-- **Attention** (#8a6a1e): the dot on a paused client.
-- **Critical** (#94382e): the dot on an erased client, and the colour of a critical note (an error line).
+Desaturated so it never competes with band data, and always carried beside a word.
+- **Ok** `#2f6b4f`, **Attention** `#8a6a1e`, **Critical** `#94382e`. Critical is also the danger button and an error line.
 
-### Band spectrum (reserved)
-The five EEG bands, slow to fast, cool to warm: **Delta** (#3b4a87, deep indigo), **Theta** (#2c7387, teal), **Alpha** (#3d8557, green), **Beta** (#b8863a, amber), **Gamma** (#a8553f, rust). Each has a `-tint` (12% over paper, for chart fills) and a `-deep` (80% toward black, for text on light) derived in `app/shell/tokens.css`; on the dark ground the base lifts to 84% base plus 16% white. The tokens exist for charts, protocol chips, the session ribbon and report figures. No shipped screen uses them yet. They are recorded here as reserved, not as used.
+### Band spectrum
+Slow to fast, cool to warm: **Delta** `#3b4a87`, **Theta** `#2c7387`, **Alpha** `#3d8557`, **Beta** `#b8863a`, **Gamma** `#a8553f`, each with a `-tint` (12% over paper) and a `-deep` (80% toward black). Used by the session ribbon, assessment and report figures, and protocol chips.
 
-### The dark ground
-`[data-ground='dark']` redefines the same custom properties rather than adding a theme: ink becomes #eef2f1, second ink #c6d1d4, slate #8fa0a6, rule #2b3b41, paper #10191d, surface #16242a; ok #5f9f83, attention #c0a04e, critical #c9705f. Components never reference a `-dark` token by name; they reference `--ink` and `--paper` and let the ground decide.
+### Named rules
+**The One Accent Rule.** The violet is the only accent. Any colour on a screen is the brand, a band, a status or a neutral; anything else is wrong.
 
-### Named Rules
-**The One Accent Rule** (replacing the Silent Chrome Rule, 2026-09-08). The interface has exactly one accent, the practice's own violet, and no other. There is no brand blue and no second hue; emphasis is still weight, size and space, with the violet reserved for the rail, the one primary action, links, the active section and the focus ring. The fastest test of a new screen is whether any colour on it is the brand, a band or a status — anything else is wrong.
+**The Separation Rule.** The brand never enters a chart's plotting area and no band hue is ever chrome (`tests/lint/colour-keeps-its-meaning.test.ts`).
 
-**The Separation Rule.** The brand never appears inside a chart's plotting area, and no band hue ever appears in chrome. `--delta-base` is an indigo and measures 1.76 against the brand; the two are told apart by where they are allowed to be, not by how they look.
+**The Status-in-Words Rule.** Status is a word in ink with an 8px dot beside it carrying the hue. The word is never coloured and never sits on a pill.
 
-**The Status-in-Words Rule.** Status is written as a word in ink; a 6px dot beside it carries the hue (ok, attention, critical). The default dot is slate, a lead is a hollow ring in second ink, and the word is never coloured.
-
-**The Band Reservation Rule.** The five band hexes appear in charts, protocol chips, session ribbons and report figures. Nowhere else: never a background wash, never a button, never decoration.
-
-**The Ground Swap Rule.** Dark is a ground, not a preference toggle. It is set by `data-ground='dark'` on the surface that needs it (the practitioner's instrument), and it swaps every token at once: ink and paper invert, bands and status lift, type steps up one.
+**The Ground Swap Rule.** Dark is a ground, set by `data-ground='dark'` on the surface that needs it. It swaps every token at once; no component is restyled for dark.
 
 ## Typography
 
-**Display Font:** none. One family across every size.
-**Body Font:** IBM Plex Sans (with IBM Plex Sans Arabic, then system-ui, sans-serif)
-**Label/Mono Font:** none. Labels are the same family; numerals are the family's tabular lining figures, never monospace.
+**One family:** IBM Plex Sans with IBM Plex Sans Arabic, self-hosted from `@fontsource`, then `system-ui`. No display face, no monospace, no Inter.
 
-**Character:** A family designed with Arabic from the start, so the two scripts match in weight, x-height and rhythm. Two weights only, regular (400) and medium (500), loaded from `@fontsource` and served from the app itself. The largest type on any screen is a client's name or a number; there are no marketing headlines in the product, and the scale is tuned for reading, not for display.
+**Weights:** regular (400) and medium (500) for all text. Semibold (600) is permitted for **headline figures only** (a balance, a session count, a price at display size), and only once the 600 files are bundled.
 
-### Hierarchy
-The scale is modular at a 1.25 ratio from a 16px base. On the dark ground every step moves up one (h1 40/44, h2 31/38, h3 25/32, body 17/27, small 16/24, micro 14/20) so the practitioner reads at arm's length.
-- **H1** (500, 31px/38px, -0.015em): the page heading (Clients, Sign in, Today, Your record); balanced wrapping.
-- **H2** (500, 25px/32px): section headings within a page, and the drawer's title (the client's name); balanced wrapping.
-- **H3** (500, 20px/28px): the wordmark in the rail, sub-section headings, and the drawer's section heading ("Timeline").
-- **Body** (400, 16px/26px): running text, table cells, field values, buttons (at 500), the link, and timeline sentences (a change or a creation at 500). Notes are capped at a 68ch measure.
-- **Small** (400, 14px/22px): field labels, table headers (at 500), the count beside a heading, the Arabic name beneath a Latin one, the drawer's record number and status line, the timeline's day headings (at 500), the reason line under an event, secondary lines.
-- **Micro** (500, 13px/18px, second ink): metadata such as a person's roles, the "Arriving" mark on a rail section, or the roles and tabular time beneath a timeline sentence. Sentence case, never all-caps.
-- **Numeric** (tabular lining figures): applied as a class to every cell or span that holds a record number, an age, a count, a phone number or a time.
-A 40px/44px display step (-0.02em) exists in the tokens for report covers only; nothing in the shipped app renders it.
+### Scale (1.25 ratio, 16px base)
+- **Display** 40/44, -0.02em, 500: the focal figure or name of a screen. The client's name in the record header; headline figures (session 12 of 25, balance owed, today's visit count). At most one display element per screen region.
+- **H1** 31/38, -0.015em: the page heading.
+- **H2** 25/32: a section heading, a drawer's title.
+- **H3** 20/28: a panel or block heading.
+- **Body** 16/26: running text, cells, values, buttons (at 500).
+- **Small** 14/22: labels, table headers (at 500), counts, secondary lines, the Arabic name beneath a Latin one.
+- **Micro** 13/18, 500, second ink: metadata, group labels in the rail. Sentence case.
+- **Numeric:** `font-variant-numeric: tabular-nums lining-nums` on every numeral that could sit in a column, at every size, including display.
 
-### Named Rules
-**The One Family Rule.** IBM Plex Sans and IBM Plex Sans Arabic, at 400 and 500, are the only faces. No display face, no monospace, no Inter.
+On the dark ground every step moves up one (h1 40/44, h2 31/38, h3 25/32, body 17/27, small 16/24, micro 14/20).
 
-**The Tabular Figures Rule.** Every numeral that could sit in a column takes `font-variant-numeric: tabular-nums lining-nums`. Record numbers, ages, counts, phone numbers and times align because of the figures, not because of a monospace fallback.
+### Named rules
+**The Focal Figure Rule.** If a screen's answer is a number or a name, it is set at display size, in tabular figures, with its label in small second ink above it. A screen with no display element must justify why nothing on it matters most.
 
-**The Weight-Not-Hue Rule.** The only tools of emphasis are the medium weight, the next size up, and space around the thing. A heading never has a single coloured, italic or bold word.
+**The Weight-Not-Hue Rule.** Emphasis is size, weight and space. A heading never has a coloured, italic or bold single word.
 
-**The Kind-by-Weight Rule.** In a list of events, what kind of event a row is shows in its weight and tone alone: a change or a creation is medium in ink, a read or a system row is regular in second ink. No icon, no badge, no dot and no coloured word marks the kind.
+**The Kind-by-Weight Rule.** In the record timeline an event's kind shows in weight and tone alone: a change or creation is medium in ink, a read or system row regular in second ink.
 
 ## Layout
 
-The ledger is a two-column grid: the rail on the inline start and a content column beside it (`grid-template-columns: var(--rail) minmax(0, 1fr)`), the whole at least the viewport height. The rail is sticky and full height, with a hairline on its inline-end edge. It is 220px with its labels and 64px as a strip of icons, and which of the two is decided by the tier and then by the person (see Tiers, below). The content column is capped at 1600px, so a wide display is used by a table while prose keeps the 68ch measure. Everything is written in logical properties (inline-start, block-end, padding-inline) so the layout mirrors for Arabic without a second stylesheet; `index.html` carries `lang` and `dir`.
+The console is a two-column grid: the rail on the inline start and a content column beside it, at least the viewport tall, capped at 1600px. Everything is written in logical properties so Arabic is a mirror, not a fork; `index.html` carries `lang` and `dir`.
 
-Page furniture is fixed: the heading and its count sit on one baseline with a 16px gap and 24px beneath; the toolbar is a wrapping row with 16px gaps aligned to the bottom edge, 24px beneath; then the table. The search field is the primary action and takes the width (`flex: 1 1 24rem`, capped at the 68ch measure) while the status select sits beside it at a minimum of 12rem. Both fields sit on a 4px gap under their label.
+### Page anatomy
+1. **Header:** the h1 with its count in small second ink on the same baseline (16px apart), and the page's one primary action at the inline end. 24px beneath.
+2. **Toolbar:** a wrapping row of fields, 16px gaps, aligned to the bottom edge. The search field takes the width.
+3. **Panel:** the working content (a table, a form, an overview) on a white surface panel, `--r-3` radius, hairline edge in Rule, `--s-6` padding for forms and overviews, flush for tables.
 
-Focused task drawers retain the ledger's second width token beside the rail: `clamp(320px, 55vw, 480px)` (`--drawer`), so on a tablet it takes a share of the screen rather than most of it and the ledger stays readable beside it. It is fixed to the block edges and the inline end, above the content (`z-index: 2`) with no scrim and no shift of the list beneath, never wider than the viewport. Its header and body each pad 24px; the header closes with a hairline, and the body scrolls on its own so the title stays put. Inside it the timeline keeps the ledger's rhythm at a finer step: a day heading with 16px above and 8px of block padding, events padded 12px block on hairline rules, 4px between a sentence and its meta line and again before a reason, and 24px of block padding around the paging button.
+### The record workspace
+The client record and enrolment are full pages inside the shell: "Back to clients", then the **record header** (the client's name at display size, the Arabic name beneath, the record number in numeric small, the status chip, the programme stage, and the record's primary action at the inline end), then a 192px sticky section column beside a white content panel. Sections are vertical tabs with a brand-wash selected state and arrow, Home and End keys. At a container width of 767px or less the sections become a labelled select.
 
-The spacing scale is a 4px step: 4, 8, 12, 16, 20, 24, 32, 48, 64. Twelve is the horizontal unit inside rows, rail items and inputs, and the block unit of a timeline event; sixteen is the gap between siblings; twenty-four is the gap between blocks and the drawer's padding; thirty-two is the page's outer padding.
-
-Density is set by one number: every row, input, button and rail item is 44px tall. The tap target rises to 48px for the sign-out control, the drawer's close control and, by the brief, on the instrument. Sign-in and the plain landing pages are a single centred column, 24rem wide (28rem on the instrument, the 68ch measure on the record), padded 64px above and 24px at the sides.
-
-Enrolment now uses the full-page workspace described below. Its inline-size container switches to a four-column step grid and single-column fields at 767px or less; remembered drawer widths do not affect this page. See [Enrolment and consent UI](docs/SPEC/enrolment-consent-ui.md) for the bounded refinement and its limits.
+**The overview leads with the answer.** A record's first section shows, in this order: next visit (date, arrival window, readiness), programme (session x of N with the ribbon), household balance, latest report. Demographic facts sit in a Details block beneath. A destructive action never appears on the overview.
 
 ### Tiers
+Compact first, two boundaries: 768px (tablet) and 1200px (desk), from `app/shell/shell.css` and `docs/SPEC/responsive-console.md`. Page padding is 16, 24 and 32px. The rail is open on the desk tier and a 64px strip of icons below it; the person's own choice wins and is remembered under `mcwellness.rail`. Wide tables scroll inside their panel with the first column pinned. The page body never scrolls sideways. The practitioner app, the portal and sign-in are designed for a phone's own width; nothing writes `user-scalable` or `maximum-scale`.
 
-There are three sizes, written compact first, with two boundaries: the tablet tier at 768px and the desk tier at 1200px (`app/shell/shell.css`; `docs/SPEC/responsive-console.md`). The compact tier pads the page 16px at the sides, the tablet tier 24px and the desk tier 32px, and the rail's own padding steps with them. The rail is open with its labels on the desk tier and closed to a strip of icons below it; whichever the person last chose beats the tier and is remembered on that device under `mcwellness.rail`. The rail's sections scroll inside the rail, so the person's name and the way out are never pushed off a short screen. Below the tablet tier a toolbar field takes the whole line and the drawer takes the full width, dropping its edge hairline.
+### Spacing
+A 4px step: 4, 8, 12, 16, 20, 24, 32, 40, 48, 64. Twelve is the horizontal unit inside rows and inputs; sixteen the gap between siblings; twenty-four between blocks and inside panels; thirty-two the desk page padding.
 
-A table wider than its column scrolls inside its own container with its first column pinned on the inline start, drawing an inset hairline on its end edge. That rule is unconditional: a sticky column in a container it already fits has nothing to stick to. It pins one column and not two, because a second has to be offset by the first one's width and CSS cannot read it. The page body never scrolls sideways.
+### Named rules
+**The 44 Rule.** Rows, inputs, buttons and rail items are 44px tall. Drawer close, sign-out and every control on the instrument take 48px; the instrument's primary action takes 56px in the thumb zone.
 
-On a phone the console is not folded at all. It declares a 1024px layout width (`app/shell/viewport.ts`) and the browser shows the whole page scaled to fit, for the person to pinch and pan, so a phone shows the same console a laptop does. The practitioner app, the household's portal and the sign-in page keep the device's own width: each is designed for a phone and must read without zooming. Nothing anywhere writes `user-scalable` or `maximum-scale`, and a test refuses either.
+**The Panel Rule.** Working content sits on a white panel; the paper ground is only the space between panels and the chrome around them. A panel is a container for one job, not a decoration: never a panel inside a panel, never a row of identical panels standing in for a table.
 
-### Named Rules
-**The 44 Rule.** Rows, inputs, buttons and rail items are 44px tall. One height sets the ledger's rhythm; the sign-out control, the drawer's close control and the instrument's controls take 48px.
+**The Logical Properties Rule.** No `left`, `right`, `margin-left` or `text-align: left`.
 
-**The Logical Properties Rule.** No `left`, `right`, `margin-left` or `text-align: left` anywhere. Inline-start and inline-end, so Arabic is a mirror and not a fork.
+## Elevation and depth
 
-**The Hairline Rule.** Structure is drawn with 1px rules in Rule (#cbd5d6): table rows, the rail's edge, field borders, the drawer's edge, the rule under each event. No zebra striping, no card borders, no boxes around groups.
+Three levels, each meaning one thing.
+- **Level 0, on the page.** Panels, rows, headings, fields. Panels separate from paper by tone and a hairline edge, not by shadow.
+- **Level 1, raised** (`--lift-1`). The page's one primary action, and the danger button where one is shown. Pressed, it settles: the shadow goes.
+- **Level 2, floating** (`--lift-2`). Something over the page: the drawer, the covering rail, a menu, the quick-find dialog. Always with a hairline edge.
 
-**The Beside Rule.** A record's detail opens in the drawer at the inline end, over the ledger with no scrim, so the list stays readable beside it. It takes a share of the screen, `clamp(320px, 55vw, 480px)`, and the full width below the tablet tier. Detail is never a modal dialog.
+The focus ring is `0 0 0 2px paper, 0 0 0 4px brand` on any `:focus-visible` element, on both grounds.
 
-The main client workspace uses a sticky section column (192px), a gap (32px) and a white content surface filling the available column with 24px padding. Enrolment uses the same proportions for its step guide and form. At a workspace container width of 767px or less, record sections become a labelled select, content padding reduces to 12px, enrolment steps use the compact grid and enrolment actions wrap. These are in-flow pages within the existing admin shell; saved drawer widths do not size them.
-
-## Elevation & Depth
-
-**Three levels, each meaning one thing** (revised 8 September 2026, replacing a flat system).
-
-- **Level 0 — on the ledger.** Flat, no token. Rows, tables, headings, fields: everything the page is made of. Depth here is still tone and hairline rule, as it always was.
-- **Level 1 — raised** (`--lift-1`). Exactly one thing on a page takes it: the single primary action. Because only one object on the ledger is ever raised, the level carries information rather than decoration. Pressing it removes the shadow, so the affordance is what settles.
-- **Level 2 — floating** (`--lift-2`). A surface that sits over the page and takes its attention: the drawer, the covering rail on a phone or tablet, menus when they arrive. Always paired with a hairline edge, so the edge is drawn as well as cast.
-
-**Why this became possible on 8 September and not before.** The old ground was 94.1% lightness, which put white only 1.15:1 away from it — a shadow had nothing to fall on and genuinely could not be seen, so depth *had* to be drawn in hairlines. Re-casting the neutrals dropped the ground to 91.5%, and at that distance the same three shadows read as three distinct heights. The rule below was a consequence of a number, not a principle, and the number changed.
-
-Every level carries an offset and a soft blur, and each is two shadows: a tight contact shadow saying the surface rests on something, and a wider ambient one saying how far above. A single blur reads as a sticker; a zero-offset halo is decoration rather than depth.
-
-The focus ring is the one treatment that lifts a control: a 2px band of paper inside a 2px band of ink (`0 0 0 2px paper, 0 0 0 4px ink`), on a 4px radius, applied to any `:focus-visible` element. It reads on both grounds because both bands swap with the ground.
-
-### Shadow Vocabulary
-- **Level 1, raised** (`--lift-1`: `0 1px 2px` ink at 8%, `0 4px 10px` ink at 6%; black at 30% and 24% on the dark ground): the page's one primary action, and nothing else on the ledger.
-- **Level 2, floating** (`--lift-2`: `0 2px 6px` ink at 10%, `0 8px 24px` ink at 14%; black at 34% and 40% on the dark ground): the drawer, the covering rail, menus when built. Always paired with a hairline edge.
-- **Focus ring** (`box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink)`): every `:focus-visible` element.
-
-### Named Rules
-**The Three Levels Rule** (replacing the Flat Ledger Rule, 8 September 2026). Depth is a scale of exactly three and every level means one thing: flat on the ledger, raised for the page's one primary action, floating for a surface that sits over the page. Nothing gains a shadow on hover, nothing invents a fourth level, and a shadow that is not one of these two tokens is decoration. The ledger itself — rows, tables, headings — stays flat, which is the half of the old rule that was always right.
-
-**The Hue Family Rule.** Every neutral sits within 30 degrees of the mark's hue. A grey that argues with the brand is not neutral, whatever its saturation.
+**The Three Levels Rule.** No fourth level, no shadow on hover, no shadow that is not one of the two tokens.
 
 ## Shapes
 
-Rectilinear with a single softening. Every rounded corner in the app is 4px: inputs, buttons, rail items, the seeded-person buttons on sign-in, the drawer's close control, and the focus ring. The 2px and 8px steps exist in the token file and are unused. The only circle is the 6px status dot (filled in a status hue or slate; hollow, as a hairline ring in second ink, for a lead). Icons are drawn on a 20px grid with a 1.5px stroke, round caps and joins, in `currentColor`, and are always marked `aria-hidden`; the close icon is two such strokes crossing. Borders are hairlines (1px) in Rule, except the secondary button, whose hairline is in ink. The link is bare text with a hairline underline offset 0.18em that thickens to 2px on hover; no box, no arrow. The drawer is a rectangle with square corners, bounded by a hairline on its inline-start edge. Nothing is clipped, tilted or masked.
+- `--r-2` (6px) is the default corner: buttons, inputs, rail items, tabs, chips that need a shape.
+- `--r-3` (10px) is for panels and anything floating (drawer edge excepted, which is square against the viewport).
+- `--r-1` (2px) is for small marks inside figures.
+- The status dot is the only circle. A lead is a hollow ring.
+- Icons: a 20px grid, 1.5px stroke, round caps and joins, `currentColor`, always `aria-hidden` (`app/shell/components/Icons.tsx`).
+- The link is text with a hairline underline offset 0.18em that thickens to 2px on hover; no arrow, no box.
+
+## Motion
+
+Motion answers what the person just did, and stops. Three durations, one curve (`--ease`, `cubic-bezier(0.2, 0, 0, 1)`), all of them zero under `prefers-reduced-motion`:
+- **Control, 120ms** (`--motion-control`): colour, background and border on hover and press for buttons, rail items, tabs, rows and links. Never size or position.
+- **Surface, 160ms** (`--motion`): the drawer and the covering rail sliding in from their own edge, with `:dir(rtl)` mirrored. No exit animation.
+- **Ribbon, 400ms** (`--motion-ribbon`): the newest slice growing into place once, the moment a session is completed or the client next opens their home screen.
+
+Never: page-load choreography, staggered entrances, shimmer, bounce, parallax, animated numbers, or motion on the practitioner's screen while a session is running.
+
+## States
+
+**Loading holds the shape.** While data loads, the panel shows the layout it is about to fill: static placeholder rows at 44px with a hairline beneath and a block of paper tone where text will be. No shimmer, no spinner. The region carries `aria-busy="true"` and a visually hidden sentence ("Loading clients.") so assistive technology hears what sighted people see. A lazily loaded page renders its header and an empty panel immediately rather than nothing.
+
+**Empty says what to do.** One sentence in second ink explaining why there is nothing, and the action that would change it when there is one.
+
+**Errors sit with their cause.** A field's error takes its hint slot in critical ink with `aria-invalid` and `aria-describedby`; there is no red border. An outcome failing (a save, a load) is a critical Note with `role="alert"`, beside the thing that failed.
+
+**High-stakes actions end on a confirmation.** Issuing an invoice, recording consent, recording erasure and completing a session finish on a confirmation state: what happened, in one sentence; the key figure at display size where there is one; the document to download or send; and what happens next. Not a Note line.
+
+**Offline is a calm band,** never a red alert. Working offline is normal on the instrument.
 
 ## Components
 
-Round 7a (2026-09-02) adds two contract slots to the shared library: `PageHeader` takes an optional `action` rendered at the header row's inline end, vertically centred and pushed clear of the count by `margin-inline-start: auto`; and `Field`/`Select` take an optional `error` string that occupies the hint's own slot in critical ink, wired to the control by `aria-invalid` and `aria-describedby`.
-
 ### Buttons
-Ink on paper, hairline-bordered, instant to respond. Three variants share one shell.
-- **Shape:** softly squared (4px radius), 44px tall, 20px horizontal padding, medium weight, inline-flex centred.
-- **Primary:** ink fill (#16242a), paper text (#eef2f1). One per screen; it is the sign-in submit. Hover shifts the fill to second ink (#3e5058).
-- **Secondary (default):** surface fill (#ffffff), ink text, a 1px ink border. Hover tints the fill with 6% ink (#f1f2f2); press tints it with 10% (#e8e9ea). The timeline's "Show earlier" paging control is this variant.
-- **Quiet:** transparent fill and border, ink text; the rail's sign-out control is this variant with a 20px icon and an 8px gap, 48px tall.
+One shell: 44px tall, 20px inline padding, `--r-2`, medium weight, inline-flex centred, 120ms colour ease.
+- **Primary:** brand fill, white label, `--lift-1`. Hover brand lift; pressed brand deep with no shadow. One per screen region.
+- **Secondary (default):** surface fill, ink label, 1px ink border. Hover 6% ink tint; pressed 10%.
+- **Quiet:** no fill, no border; for tertiary actions and the rail's sign-out.
+- **Danger:** critical fill, white label, `--lift-1`. Only where the destructive action is the point of the screen, never on an overview.
 - **Disabled:** 50% opacity, default cursor.
-- **Focus:** the shared ring. No transition on any state.
 
-### Link
-An in-page control that reads as a link: in the ledger, the client's name opens the full-page client workspace.
-- **Style:** a `button.link` reset to its text: no padding, border or fill; inherits the cell's font; ink; aligned start; a hairline underline offset 0.18em.
-- **Hover:** the underline thickens to 2px. Nothing else changes and nothing transitions.
-- **Focus:** the shared ring. No arrow, no colour, no icon.
+### Fields
+Label above in small second ink, 4px gap; a 44px surface box, 1px Rule border, `--r-2`, 12px padding. Selects draw a 20px chevron 12px from the inline end. Disabled fields drop to the paper ground and keep their hint. Search autofocuses at the tablet tier and above.
 
-### Inputs / Fields
-A label above, a box below, both in the ledger's vocabulary.
-- **Style:** the label is small (14px) in second ink with a 4px gap; the input is 44px tall, surface fill, a 1px Rule border, 4px radius, 12px horizontal padding, ink text, placeholder in second ink. Browser chrome is removed (`appearance: none`, search decorations hidden).
-- **Select:** the same box, with a 20px chevron in second ink absolutely placed 12px from the inline end and 40px of end padding so the value never runs under it.
-- **Search:** the primary action on the clients page; it takes the toolbar's width and autofocuses at the tablet tier and above, where a keyboard does not rise over the list.
-- **Focus:** the shared ring. **Error:** there is no red border; the message takes over the hint's own slot in critical ink, wired to the control by `aria-invalid`/`aria-describedby`. A field's error sits with its field; a Note is for an outcome (loading, empty, a submission failing), never for a field's own validation.
-- **Disabled:** the value stays in ink but the field loses its white fill and sits on the paper ground, which is what carries the state; the same hairline border in Rule, a default cursor and no hover change, its select chevron dimmed to slate; the hint still renders beneath so a locked step can say what it is waiting for.
+### Rail
+The console's fixed inline-start column on the brand-deep ground: the mark and the wordmark at the top, sections in groups (Daily work, Finance, Practice) under micro labels, the person and the way out at the bottom above a hairline. Items are 44px with a 20px icon and a label; hover is brand lift; the active item is a white pill with brand text and medium weight. Closed, it is a 64px strip of icons with visually hidden labels. Every section the person may open appears in exactly one group (`app/shell/components/Rail.tsx`). A section's sub-pages are navigated on the page, by tabs, not repeated in the rail.
 
-### Navigation
-The rail: the console's fixed inline-start column, icon and label, no collapse toggle.
-- **Style:** 220px wide, paper ground, hairline inline-end edge, sticky and full height. The wordmark "McWellness" sits at the top in h3 medium with 32px beneath; the person block (name in medium, roles in micro, sign-out) is pushed to the bottom above a hairline.
-- **Items:** 44px tall, 12px horizontal padding, 12px gap between a 20px icon and the label, 4px radius, ink text; 4px between items.
-- **Hover:** surface fill, instant. **Active:** surface fill and medium weight.
-- **Arriving:** a section that has not shipped is listed as text in second ink with its icon in slate and the word "Arriving" in micro on the end, `aria-disabled`; never a dead link.
-- **Closed:** below the desk tier, and whenever the person asks, the rail is a 64px strip of icons. The labels stay in the markup and are hidden the visually-hidden way, so every section keeps its accessible name and gains a title for the pointer. The sections scroll inside the rail.
+### Tabs
+A page's sub-pages are an underline tab bar beneath the header: labels in body at 500, second ink at rest, ink when selected with a 2px brand underline, 120ms colour ease. Tabs are links (`aria-current="page"`) when they change the route.
 
-The rail now groups its existing permitted destinations under **Daily work**, **Finance** and **Practice**, with micro labels, 16px between groups and the existing item treatments. Groups preserve the supplied section order and disappear when they have no permitted destinations. The compact rail uses the existing hidden-label treatment; each list retains its accessible group name. This grouping does not change route permissions or child-page navigation.
+### Ledger table (signature)
+Homogeneous data in 44px rows on hairline rules, on a white panel.
+- **Header:** sticky, surface ground, small medium in second ink, hairline beneath.
+- **Rows:** hairline beneath; column rules where the owner has asked for them (2026-09-20); a 4% ink tint on hover, eased at 120ms; no zebra.
+- **Alignment:** identifiers align start; quantities align end; all numerals tabular.
+- **Name cell:** the Latin name as a link to the record, the Arabic name beneath in small second ink with `lang="ar" dir="rtl"`.
+- **Programme cell:** where a list shows clients in a programme, a compact ribbon (the full strip at 24px tall) with "12 of 25" in small numeric beside it.
+- **Loading:** placeholder rows (see States). **Empty:** a single spanning cell with a sentence.
 
-### Status Chip
-- **Style:** a word in ink, preceded by a 6px dot with an 8px gap; no background, no border, no pill.
-- **State:** active takes the ok dot, paused the attention dot, erased the critical dot, closed the default slate dot; lead is a hollow ring (transparent fill, 1px inset ring in second ink).
-- **General purpose:** any screen can render `StatusChip` directly with a `label` and one of four tones — ok, attention and critical colour the dot, neutral sits in the documented default slate with no colour-only meaning — while the client record keeps its own five-status vocabulary above through the thin `ClientStatusChip` wrapper.
+### Session ribbon (signature)
+`app/admin/reports/Ribbon.tsx`, fed by `domain/reports`. One strip for a whole programme: each delivered session a vertical slice (height its recording quality with a visible floor, colour its dominant band), sessions remaining as empty slices, a hairline at each brain map. It always carries a plain-language sentence beside or beneath it ("Session 12 of 25. Ten weeks in.") so the figure is never the only way to know. It appears on the client's home screen (at the top, full width), in the client record's overview, in the clients ledger (compact), at the end of a session (with the one ribbon animation) and on the report cover.
+
+### Status chip
+A word in ink after an 8px dot with an 8px gap: ok, attention, critical, neutral slate; a lead is a hollow ring. `ClientStatusChip` maps the client vocabulary onto it.
 
 ### Note
-A quiet line of text that answers a state. Loading, empty and error states are a sentence, never a banner or a skeleton.
-- **Style:** body text in second ink, capped at 68ch. The critical tone is the critical colour and carries `role="alert"`.
+A sentence in second ink capped at 68ch, for empty states, outcomes and explanations. The critical tone carries `role="alert"`. Not a loading state.
 
-### Page Header
-- **Style:** the h1 and, on the same baseline 16px to its end, the count in small second ink with tabular figures ("20 clients"), 24px beneath.
+### Drawer
+Focused tasks open beside their context at the inline end: `clamp(320px, 55vw, 480px)`, resizable and remembered, surface ground, hairline inline-start edge, `--lift-2`, no scrim. Header and body pad 24px; the body scrolls. A 48px close control takes focus on open; Escape closes; focus returns. Enters over 160ms from its own edge; leaves instantly. Full width below 768px. The client record and enrolment are full pages, not drawers.
 
-### The Ledger Table (signature)
-The console's defining surface: homogeneous rows on hairline rules.
-- **Container:** scrolls horizontally inside itself, opened by a hairline on its top edge.
-- **Header:** sticky at the top, paper ground so rows pass under it, small (14px) medium in second ink, 44px tall, 12px horizontal padding, hairline beneath.
-- **Rows:** 44px tall, 12px horizontal padding, a hairline beneath each, no zebra, no hover tint, cells vertically centred and unwrapped.
-- **Alignment:** identifiers (the record number, phone numbers) align start even though they are numerals; quantities marked `align: end` align end. Numeric cells take tabular lining figures.
-- **Name cell:** the Latin name as a Link that opens the client workspace, and beneath it the Arabic name in small second ink with `lang="ar"` and `dir="rtl"`.
-- **Contact cell:** relationship in ink, then the phone number in numeric second ink, on one baseline with a 12px gap.
-- **Empty:** a single spanning cell, 24px vertical padding, wrapped text in second ink.
-- **Mobile:** the first two columns pin to the inline start on paper ground; the second draws an inset hairline on its end edge.
+### Record timeline (signature)
+History as sentences on hairline rules, newest first, grouped by day under sticky day headings. A change or creation is medium in ink; a read or system row regular in second ink; roles and a tabular time beneath in micro; a reason beneath that when given. "Show earlier" is a secondary button.
 
-### Client workspace
-The main client record opens as a full-page section within the admin shell. A heading shows the client name, record number and status, with a hairline beneath. A 44px-minimum “Back to clients” control precedes it. Desktop section navigation uses vertical tabs with a brand-wash selected state and keyboard arrow/Home/End navigation; narrow containers use a labelled “Client section” select. The section title and existing record forms occupy the white content surface. Navigation remains role-filtered. Escape does not leave this page.
-
-### The Drawer (signature)
-Focused tasks elsewhere retain the drawer beside their context. This pattern no longer applies to the main client record or enrolment.
-- **Placement:** fixed to the block edges and the inline end, 480px wide (`--drawer`), never wider than the viewport, above the content with no scrim; the ledger neither moves nor dims.
-- **Surface:** white on a hairline at its inline-start edge, lifted by the one soft shadow (see Elevation).
-- **Header:** 24px padding, a hairline beneath. The title block stacks the client's name (h2), the Arabic name beneath in small second ink (`lang="ar"`, `dir="rtl"`, pinned to the inline start as in the ledger's name cell), then the record number in numeric and the status chip, each on its own line at 4px gaps; nothing joins them with a dot or a bar.
-- **Close:** a 48px square control at the header's end: transparent, the 20px close icon in second ink, 4px radius, pulled 8px into the padding on every side so the glyph sits on the title's grid. Hover: ink on paper, instant. It takes focus when the drawer opens; Escape closes; focus returns to the name that opened it.
-- **Body:** 24px padding, scrolls inside itself; the section heading (h3 in ink), then the content.
-- **Entrance:** the one motion in the shell. 160ms on the ease-out (`cubic-bezier(0.2, 0, 0, 1)`), sliding 24px in from its own edge and fading from 0 through `@starting-style`; `:dir(rtl)` mirrors the translate so the Arabic drawer enters from its own side; both properties drop to 0ms under `prefers-reduced-motion`. It leaves instantly; there is no exit animation.
-- **Compact tier:** below 768px it is the full width and drops its edge hairline.
-- **Semantics:** an `aside` with `role="dialog"` labelled by its title. No backdrop, no focus trap.
-
-### Enrolment and consent signing
-
-Enrolment occupies a full page with “Back to clients”, an h1 and a sticky step guide beside the form. Its action row sticks to the bottom of the form while scrolling. It keeps the ledger's typography, violet, hairlines and spacing tokens. A persistent progress area gives the current step a surface fill, brand ink and `--lift-1`; this is a local selected-step treatment. The content starts with the step title, count and a plain-language instruction. Identity fields are grouped separately from the contact fields. Activation requirements sit in an expandable, brand-wash area during the later steps and remain visible on Review. Existing forms retain their save and permission rules.
-
-The Consent section uses the full workspace content width and introduces “Select consents and sign once” on a lavender brand-wash surface, alongside the count of required consents on file. Permitted writers can also open it when the required consents are complete, supporting renewals. The combined form begins with a prominent select-all checkbox and individual eligible-agreement checklist: four purposes for a child, three for an adult, initially all selected. Violet native checkboxes have visible focus, at least 44px-high label targets and a mixed select-all state; the checklist adapts to one column in narrow space. A live selected count keeps the scope of the single signature explicit.
-
-Three numbered sections separated by hairlines follow: confirm the signer, read the selected agreements, sign once. At workspace container widths of 1200px or more, reading and signing sit side by side in columns proportioned 1.2:1 with a 32px gap; the other form children span both columns. Below that width, the sections stack. The reading section lists only selected purposes before their versioned wording, uses a brand-wash reading surface and reports whether the end has been reached. Signature and scan inputs retain the reading gate; an empty selection cannot be recorded. Changing the signer or selection clears signature evidence and reading state, resets the reading region and evidence controls, and invalidates pending scan preparation. One signature covers the selected wording versions through the existing bundle flow, while each agreement keeps its own consent record. IBM Plex, violet, spacing tokens, wording and authorisation remain governed by the existing implementation.
-
-### The Record Timeline (signature)
-A client's history as sentences on rules: the ledger's vocabulary turned to time.
-- **Structure:** newest first, grouped by day in the practice's time zone. Each day heading (an `h4` set at small, medium, second ink) is sticky at the top of the record content on the surface, so it holds while its events scroll under it, with 16px above and 8px of block padding.
-- **Events:** an ordered list; each event pads 12px block and closes with a hairline. The sentence is body text: a change or a creation is medium in ink, a read or a system row is regular in second ink (The Kind-by-Weight Rule). No icon, no dot, no card, no colour.
-- **Meta:** 4px beneath the sentence, a micro line in second ink: the actor's roles ("Owner, Admin, Lead practitioner, Finance") and the time in tabular figures, on a 12px gap. Roles show once per run of the same actor and roles, not on every line; the time shows on every line.
-- **Reason:** 4px beneath the meta, when one was given: small second ink with a colon label ("Reason: synthetic seed").
-- **Paging:** a secondary button, "Show earlier", inside 24px of block padding. Loading, empty and error states are Note lines.
+### Enrolment and consent
+Enrolment is a full page with a sticky step guide, the current step on a surface fill with brand ink and `--lift-1`, and a sticky action row. Consent signing ("Select consents and sign once") keeps its behaviour, wording, gating and order exactly as built and reviewed (`docs/SPEC/enrolment-consent-ui.md`); visual refinement only.
 
 ## Do's and Don'ts
 
-### Do:
-- **Do** take every colour, size, spacing step, radius and timing from `app/shell/tokens.css`; the lint rule `mcwellness/no-hex-colour` refuses a literal in app code.
-- **Do** draw structure with 1px rules in Rule (#cbd5d6) at a 44px row height, with sticky headers and no zebra striping.
-- **Do** set status as a word in ink with a 6px dot beside it; ok, attention and critical live in the dot.
-- **Do** apply tabular lining figures to every numeral that could sit in a column.
-- **Do** use only the regular (400) and medium (500) weights of IBM Plex Sans and IBM Plex Sans Arabic, self-hosted.
-- **Do** write layout in logical properties so the Arabic layout is a mirror.
-- **Do** give a screen at most one primary button, ink on paper, and prefer a search field as the first action on a list.
-- **Do** answer loading, empty and error states with a Note line in second ink or critical, capped at 68ch.
-- **Do** put the dark ground on a surface with `data-ground='dark'` and let the tokens swap; never restyle a component for dark.
+### Do
+- **Do** give every screen one focal point and set it at display size when it is a number or a name.
+- **Do** put working content on a white panel, and keep the paper ground for space and chrome.
+- **Do** show a client's programme with the ribbon and a sentence, wherever the programme is the question.
+- **Do** take every value from `app/shell/tokens.css`.
+- **Do** ease control colour changes over 120ms, and zero all motion under reduced motion.
+- **Do** hold the layout's shape while loading, with `aria-busy` and a hidden sentence.
+- **Do** end issuing, signing, erasing and completing on a confirmation state.
+- **Do** set status as a word with an 8px dot.
+- **Do** use tabular lining figures on every numeral that could sit in a column.
+- **Do** write layout in logical properties.
 - **Do** keep the Latin wordmark "McWellness" in every locale.
-- **Do** use the full-page workspace for the main client record and enrolment, with section navigation or a step guide and an explicit return to the client list. Keep focused task drawers for their existing uses.
-- **Do** make an in-page control that reads as a link a `button.link` in ink with a hairline underline that thickens to 2px on hover.
-- **Do** write history as sentences on hairline rules at a 12px block step: a change or creation in medium ink, a read or system row in regular second ink, roles and a tabular time in micro beneath.
 
-### Don't:
-- **Don't** add a *second* accent colour. The practice's violet is the one accent (2026-09-08); there is no brand blue and no third hue.
-- **Don't** put the brand violet inside a chart, or a band hue anywhere in the chrome. A guard test refuses both.
-- **Don't** use a band hue outside band data (charts, protocol chips, the session ribbon, report figures); never as a wash, a button or decoration.
-- **Don't** put homogeneous data in cards, hero metrics or tiles; it is a table.
-- **Don't** set labels, headers or micro text in all-caps, or add an eyebrow or kicker above a heading.
-- **Don't** use a monospace face for numbers, a second display face, or Inter.
-- **Don't** add hover transitions, skeleton shimmer or page-load orchestration; feedback is instant, and the drawer's 160ms entrance is the only transition in the shell.
-- **Don't** append an arrow to button or link text, or join metadata with middle dots.
-- **Don't** colour, italicise or embolden a single word inside a heading.
-- **Don't** use a physical `left`/`right` property or a neutral black (#111).
-- **Don't** colour a status word, add a pill behind it, or use slate for running text.
-- **Don't** dim the ledger behind the drawer with a scrim, or open a record's detail in a modal dialog.
-- **Don't** mark a timeline event's kind with an icon, a badge, a dot or a coloured word; weight and ink tone carry it.
+### Don't
+- **Don't** add a second accent, or use the brand inside a chart, or a band hue in chrome.
+- **Don't** put homogeneous rows in cards or tiles; it is a table on a panel.
+- **Don't** nest panels or line up identical panels as a substitute for a table.
+- **Don't** put a destructive action on an overview, or make it the loudest object on any page where it is not the task.
+- **Don't** animate entrances, stagger, shimmer, bounce, count up numbers, or move anything during a running session.
+- **Don't** leave a region blank while it loads, or answer loading with only a sentence.
+- **Don't** repeat a section's sub-pages in the rail; use the page's tabs.
+- **Don't** set labels in all-caps, add an eyebrow above a heading, append an arrow to button text, or join metadata with middle dots.
+- **Don't** colour, italicise or embolden a single word in a heading.
+- **Don't** use a physical `left`/`right` property, a neutral black, or slate for text.
+- **Don't** dim the page behind a drawer, or open a record's detail in a modal.
+- **Don't** mark a timeline event's kind with an icon, badge, dot or coloured word.
