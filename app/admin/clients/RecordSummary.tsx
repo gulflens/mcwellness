@@ -47,11 +47,14 @@ function useRead<T>(url: string, parse: (body: unknown) => T): Load<T> {
   return state;
 }
 
-/** The current version of each issued report, newest first. */
+/**
+ * The newest current issued report. A withdrawn record (kept against the
+ * wrong client) is never this client's latest.
+ */
 export function latestIssued(reports: readonly ReportRow[]): ReportRow | null {
   const replaced = new Set(reports.map((r) => r.supersedesId).filter(Boolean));
   const current = reports
-    .filter((r) => r.status === 'issued' && r.issuedOn && !replaced.has(r.id))
+    .filter((r) => r.status === 'issued' && !r.withdrawn && r.issuedOn && !replaced.has(r.id))
     .sort((a, b) => (b.issuedOn ?? '').localeCompare(a.issuedOn ?? ''));
   return current[0] ?? null;
 }

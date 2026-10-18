@@ -92,6 +92,14 @@ describe('latestIssued', () => {
     expect(picked?.id).toBe(REPORT_C);
   });
 
+  it('never offers a withdrawn record as the latest', () => {
+    const picked = latestIssued([
+      report({ id: REPORT_A, issuedOn: '2026-09-01' }),
+      report({ id: REPORT_B, issuedOn: '2026-10-05', withdrawn: true }),
+    ]);
+    expect(picked?.id).toBe(REPORT_A);
+  });
+
   it('answers null when nothing has been issued', () => {
     expect(latestIssued([report({ status: 'draft', issuedOn: null })])).toBeNull();
   });
