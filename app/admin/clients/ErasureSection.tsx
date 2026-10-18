@@ -611,7 +611,11 @@ export function ErasureSection({
             </div>
           ) : mayAsk ? (
             <div className="drawer__actions">
-              <Button variant="danger" onClick={() => setAsking(true)}>
+              {/* Secondary until the person has chosen to begin: an erasure request
+                  is a right the household holds, so it is always findable, but it is
+                  never the loudest thing on a record (DESIGN.md, Don'ts). The steps
+                  that act keep the danger button. */}
+              <Button variant="secondary" onClick={() => setAsking(true)}>
                 Record erasure request
               </Button>
             </div>

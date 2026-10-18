@@ -8,6 +8,7 @@ import { ActivationSummary } from './ActivationSummary';
 import { ErasureSection } from './ErasureSection';
 import { Textarea } from './FormAtoms';
 import { IdentityForm } from './IdentityForm';
+import { RecordSummary } from './RecordSummary';
 import { contactDisplayName } from './contactName';
 import { canActivate, consentsOutstanding, practiceToday, toActivationRecord } from './activation';
 import { canAskForErasure, canErase } from './clientAccess';
@@ -160,8 +161,15 @@ export function OverviewTab({
     }
   }
 
+  const inProgramme =
+    record.status === 'active' || record.status === 'paused' || record.status === 'closed';
+
   return (
     <div className="tab-section">
+      {/* The answer first (DESIGN.md, "The record workspace"): progress,
+          balance, latest report. A lead has no programme yet, and an erased
+          record has nothing left to summarise. */}
+      {inProgramme ? <RecordSummary clientId={record.id} /> : null}
       {record.status === 'lead' ? (
         <div className="tab-section">
           <ActivationSummary missing={gate.missing} toSign={toSign} />
@@ -253,73 +261,78 @@ export function OverviewTab({
           onCancel={() => setEditing(false)}
         />
       ) : (
-        <dl className="record-facts">
-          <div className="record-facts__row">
-            <dt>Date of birth</dt>
-            <dd className="numeric">
-              {record.dateOfBirth
-                ? `${new Date(record.dateOfBirth).toLocaleDateString('en-GB')} (age ${age})`
-                : 'Not recorded'}
-            </dd>
-          </div>
-          <div className="record-facts__row">
-            <dt>Sex at birth</dt>
-            <dd>{record.sexAtBirth ? SEX_LABELS[record.sexAtBirth] : 'Not recorded'}</dd>
-          </div>
-          <div className="record-facts__row">
-            <dt>Preferred language</dt>
-            <dd>
-              {record.preferredLocale === 'ar' ? 'Arabic' : 'English'}
-              <p className="small muted">
-                Decides the language of this household&rsquo;s consent wording and erasure letters.
-                Cannot be changed from this screen yet.
-              </p>
-            </dd>
-          </div>
-          <div className="record-facts__row">
-            <dt>Referral</dt>
-            <dd>{record.referralSource ?? 'Not recorded'}</dd>
-          </div>
-          <div className="record-facts__row">
-            <dt>Key contacts</dt>
-            <dd>
-              {record.contacts.length === 0 ? (
-                'None yet'
-              ) : (
-                <ul className="record-facts__list">
-                  {record.contacts.map((contact) => (
-                    <li key={contact.id}>
-                      <span>
-                        {`${contactDisplayName(contact, record)} (${(RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship).toLowerCase()})`}
-                      </span>
-                      {contact.phone ? (
-                        <span className="numeric muted">{contact.phone}</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </dd>
-          </div>
-          <div className="record-facts__row">
-            <dt>Primary location</dt>
-            <dd>
-              {primaryLocation ? (
-                <ul className="record-facts__list">
-                  <li>{EMIRATE_LABELS[primaryLocation.emirate] ?? primaryLocation.emirate}</li>
-                  {primaryLocation.displayAddress ? (
-                    <li>{primaryLocation.displayAddress}</li>
-                  ) : null}
-                  {primaryLocation.makaniNumber ? (
-                    <li className="numeric muted">Makani {primaryLocation.makaniNumber}</li>
-                  ) : null}
-                </ul>
-              ) : (
-                'Not recorded'
-              )}
-            </dd>
-          </div>
-        </dl>
+        <section className="record-details" aria-labelledby="record-details-heading">
+          <h3 id="record-details-heading" className="record-details__heading">
+            Details
+          </h3>
+          <dl className="record-facts">
+            <div className="record-facts__row">
+              <dt>Date of birth</dt>
+              <dd className="numeric">
+                {record.dateOfBirth
+                  ? `${new Date(record.dateOfBirth).toLocaleDateString('en-GB')} (age ${age})`
+                  : 'Not recorded'}
+              </dd>
+            </div>
+            <div className="record-facts__row">
+              <dt>Sex at birth</dt>
+              <dd>{record.sexAtBirth ? SEX_LABELS[record.sexAtBirth] : 'Not recorded'}</dd>
+            </div>
+            <div className="record-facts__row">
+              <dt>Preferred language</dt>
+              <dd>
+                {record.preferredLocale === 'ar' ? 'Arabic' : 'English'}
+                <p className="small muted">
+                  Decides the language of this household&rsquo;s consent wording and erasure
+                  letters. Cannot be changed from this screen yet.
+                </p>
+              </dd>
+            </div>
+            <div className="record-facts__row">
+              <dt>Referral</dt>
+              <dd>{record.referralSource ?? 'Not recorded'}</dd>
+            </div>
+            <div className="record-facts__row">
+              <dt>Key contacts</dt>
+              <dd>
+                {record.contacts.length === 0 ? (
+                  'None yet'
+                ) : (
+                  <ul className="record-facts__list">
+                    {record.contacts.map((contact) => (
+                      <li key={contact.id}>
+                        <span>
+                          {`${contactDisplayName(contact, record)} (${(RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship).toLowerCase()})`}
+                        </span>
+                        {contact.phone ? (
+                          <span className="numeric muted">{contact.phone}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </dd>
+            </div>
+            <div className="record-facts__row">
+              <dt>Primary location</dt>
+              <dd>
+                {primaryLocation ? (
+                  <ul className="record-facts__list">
+                    <li>{EMIRATE_LABELS[primaryLocation.emirate] ?? primaryLocation.emirate}</li>
+                    {primaryLocation.displayAddress ? (
+                      <li>{primaryLocation.displayAddress}</li>
+                    ) : null}
+                    {primaryLocation.makaniNumber ? (
+                      <li className="numeric muted">Makani {primaryLocation.makaniNumber}</li>
+                    ) : null}
+                  </ul>
+                ) : (
+                  'Not recorded'
+                )}
+              </dd>
+            </div>
+          </dl>
+        </section>
       )}
       <ErasureSection
         record={record}

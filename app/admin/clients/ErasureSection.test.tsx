@@ -147,10 +147,10 @@ function mount(
 }
 
 describe('recording that a household has asked', () => {
-  it('is a destructive button, and says what recording does before anything is sent', async () => {
+  it('opens with a quiet button, and says what recording does before anything is sent', async () => {
     const calls = mount(<ErasureSection record={record} mayAsk mayErase />, { requests: [] });
     const open = await screen.findByRole('button', { name: 'Record erasure request' });
-    expect(open.className).toContain('button--danger');
+    expect(open.className).not.toContain('button--danger');
     fireEvent.click(open);
     expect(await screen.findByText(/Recording the request erases nothing yet\./)).toBeTruthy();
     expect(screen.getByText(/cannot be undone/)).toBeTruthy();
