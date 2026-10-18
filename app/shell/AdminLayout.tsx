@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
+import { PageSkeleton } from './components/PageSkeleton';
 import { Outlet } from 'react-router';
 import { LocationSharing } from '../therapist/location/LocationSharing';
 import {
@@ -241,17 +242,16 @@ export function AdminLayout({ actorName }: { actorName: string }) {
          * The screens arrive one at a time rather than in the file everybody
          * downloads at sign-in (`app/shell/App.tsx`), so the wait belongs
          * here, inside the chrome: the rail and the header stay where they
-         * are and only this panel is briefly empty. Nothing is drawn in that
-         * gap deliberately — every screen already says what it is loading
-         * once it has arrived, and a second message in front of it would say
-         * the same thing twice.
+         * are and only this panel waits. It waits with the page's own
+         * furniture rather than empty (DESIGN.md, States; ADR 0004), so the
+         * column holds its shape and the arrival is not a jump.
          */}
         {/* Somebody moved to an office role who once agreed to share their
             location can still withdraw from here (docs/SPEC/dispatch.md
             section 15.11). Nothing at all for anybody else, and never a
             sender: positions are only ever sent from the person's own day. */}
         <LocationSharing withdrawOnly />
-        <Suspense fallback={null}>
+        <Suspense fallback={<PageSkeleton />}>
           <Outlet />
         </Suspense>
       </main>

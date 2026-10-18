@@ -81,3 +81,48 @@ function cellClass<Row>(column: Column<Row>): string | undefined {
   ];
   return classes.filter(Boolean).join(' ') || undefined;
 }
+
+/**
+ * The table while its rows are on their way (DESIGN.md, States: loading holds
+ * the shape). The real headers and still placeholder rows, so the page does
+ * not jump when the data lands; no shimmer. The sentence a screen used to show
+ * is kept for assistive technology, and the region says it is busy.
+ */
+export function TableSkeleton<Row>({
+  columns,
+  label,
+  rows = 6,
+}: {
+  columns: readonly Column<Row>[];
+  /** What is loading, as a sentence ("Loading the client list."). */
+  label: string;
+  rows?: number;
+}) {
+  return (
+    <div className="ledger__scroll" aria-busy="true">
+      <p className="visually-hidden">{label}</p>
+      <table className="ledger ledger--pinned ledger--skeleton" aria-hidden="true">
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column.key} scope="col" className={cellClass(column)}>
+                {column.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }, (_, index) => (
+            <tr key={index}>
+              {columns.map((column) => (
+                <td key={column.key} className={cellClass(column)}>
+                  <span className="ledger__placeholder" />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
