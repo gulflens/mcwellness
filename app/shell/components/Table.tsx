@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ControlledTable } from './table/ControlledTable';
 
 /**
  * The ledger's table: sticky header, 44px rows, hairline rules, no zebra, no
@@ -23,6 +24,27 @@ export type Column<Row> = {
    */
   fit?: boolean;
   render: (row: Row) => ReactNode;
+  /**
+   * The value a column filter tests (text, a number, or an ISO date), for a
+   * table with `controls`. Without it the column cannot be filtered.
+   */
+  value?: (row: Row) => string | number | null;
+  /** The filter the column's menu offers: a checklist, contains, a range, dates. */
+  filter?: 'values' | 'text' | 'number' | 'date';
+  /** False for a column that must always show (the name that opens a record). */
+  hideable?: boolean;
+};
+
+/**
+ * Opts a table into the spreadsheet controls: columns resized by dragging a
+ * header's edge, hidden and shown, reordered, and filtered (table/
+ * ControlledTable.tsx). The id names where this table's layout is kept on
+ * the device.
+ */
+export type TableControls = {
+  id: string;
+  /** What a row is, singular and plural, for "Showing 12 of 50 clients". */
+  noun?: readonly [string, string];
 };
 
 export function Table<Row>({
@@ -31,13 +53,27 @@ export function Table<Row>({
   rowKey,
   caption,
   empty,
+  controls,
 }: {
   columns: readonly Column<Row>[];
   rows: readonly Row[];
   rowKey: (row: Row) => string;
   caption: string;
   empty?: ReactNode;
+  controls?: TableControls;
 }) {
+  if (controls) {
+    return (
+      <ControlledTable
+        columns={columns}
+        rows={rows}
+        rowKey={rowKey}
+        caption={caption}
+        empty={empty}
+        controls={controls}
+      />
+    );
+  }
   return (
     <div className="ledger__scroll">
       <table className="ledger ledger--pinned">

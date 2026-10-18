@@ -41,7 +41,10 @@ const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 // sent) rather than searched. The page itself is capped the same way for the
 // same reason — one audit row per listed client, never per matching client.
 const MIN_SEARCH_LENGTH = 2;
-const PAGE_SIZE = 50;
+// The whole list, so the table's own filters see every client (the operator,
+// 2026-10-18: filters in the browser, rows loaded in full). A ceiling, not a
+// page: past it the response says `truncated` and the screen says so.
+const PAGE_SIZE = 1000;
 
 const Query = z.object({
   status: z.enum(STATUSES).optional(),

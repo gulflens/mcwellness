@@ -80,7 +80,7 @@ describe('tallyEnquiries', () => {
 });
 
 describe('ENQUIRY_PAGE', () => {
-  it('is a page a person can read, not the whole table', () => {
-    expect(ENQUIRY_PAGE).toBe(100);
+  it('loads the whole table this practice holds, with a ceiling', () => {
+    expect(ENQUIRY_PAGE).toBe(1000);
   });
 });

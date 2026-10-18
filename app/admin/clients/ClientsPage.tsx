@@ -245,10 +245,22 @@ export function ClientsPage() {
 
   const columns = useMemo<Column<ClientRow>[]>(
     () => [
-      { key: 'mrn', header: 'Record', numeric: true, fit: true, render: (row) => row.mrn },
+      {
+        key: 'mrn',
+        header: 'Record',
+        numeric: true,
+        fit: true,
+        render: (row) => row.mrn,
+        value: (row) => row.mrn,
+        filter: 'text',
+      },
       {
         key: 'name',
         header: 'Name',
+        // The door to the record, so it always shows.
+        hideable: false,
+        value: (row) => `${row.givenName} ${row.familyName}`,
+        filter: 'text',
         render: (row) => (
           <span className="name">
             <button type="button" className="link" onClick={() => selectClient(row)}>
@@ -262,17 +274,26 @@ export function ClientsPage() {
         header: 'Age',
         numeric: true,
         fit: true,
+        value: (row) => row.age,
+        filter: 'number',
         render: (row) => (row.age === null ? <NotRecorded /> : String(row.age)),
       },
       {
         key: 'status',
         header: 'Status',
         fit: true,
+        value: (row) => row.status.charAt(0).toUpperCase() + row.status.slice(1),
+        filter: 'values',
         render: (row) => <ClientStatusChip status={row.status} />,
       },
       {
         key: 'contact',
         header: 'Primary contact',
+        value: (row) =>
+          row.contact
+            ? (RELATIONSHIPS[row.contact.relationship] ?? row.contact.relationship)
+            : null,
+        filter: 'values',
         render: (row) =>
           row.contact ? (
             <span className="contact">
@@ -288,6 +309,8 @@ export function ClientsPage() {
       {
         key: 'emirate',
         header: 'Emirate',
+        value: (row) => (row.emirate ? (EMIRATES[row.emirate] ?? row.emirate) : null),
+        filter: 'values',
         render: (row) => (row.emirate ? (EMIRATES[row.emirate] ?? row.emirate) : <NotRecorded />),
       },
     ],
@@ -397,7 +420,14 @@ export function ClientsPage() {
                 ? 'This list shows the clients you are booked with. You have no visits booked.'
                 : 'No clients match.'
             }
+            controls={{ id: 'clients', noun: ['client', 'clients'] }}
           />
+        ) : null}
+        {state.kind === 'ready' && state.response.truncated ? (
+          <Note>
+            More clients matched than the list holds at once. Narrow the search or the filters above
+            to find the rest.
+          </Note>
         ) : null}
       </div>
       {clientId ? (

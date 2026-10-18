@@ -149,6 +149,12 @@ function firstLine(text: string | null): string {
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 }
 
+/** The day in the practice's time zone, as yyyy-mm-dd, for a date filter. */
+const dayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' });
+function practiceDay(iso: string): string {
+  return dayFormat.format(new Date(iso));
+}
+
 export function EnquiriesPage() {
   const { apiFetch } = useAuth();
   const [enquiries, setEnquiries] = useState<Enquiry[] | null>(null);
@@ -393,21 +399,29 @@ export function EnquiriesPage() {
   const received: Column<Enquiry> = {
     key: 'received',
     header: 'Received',
+    value: (row) => practiceDay(row.receivedAt),
+    filter: 'date',
     render: (row) => datedStamp.format(new Date(row.receivedAt)),
   };
   const from: Column<Enquiry> = {
     key: 'source',
     header: 'From',
+    value: (row) => SOURCE_LABELS[row.source],
+    filter: 'values',
     render: (row) => SOURCE_LABELS[row.source],
   };
   const actioned = (header: string): Column<Enquiry> => ({
     key: 'actioned',
     header,
+    value: (row) => (row.actionedAt ? practiceDay(row.actionedAt) : null),
+    filter: 'date',
     render: (row) => (row.actionedAt ? datedStamp.format(new Date(row.actionedAt)) : '—'),
   });
   const by: Column<Enquiry> = {
     key: 'by',
     header: 'By',
+    value: (row) => row.actionedByName,
+    filter: 'values',
     render: (row) => row.actionedByName ?? '—',
   };
 
@@ -416,6 +430,8 @@ export function EnquiriesPage() {
   const who: Column<Enquiry> = {
     key: 'name',
     header: 'Name',
+    value: (row) => (carriesAPerson(row) ? row.name : null),
+    filter: 'text',
     // A dismissed row with nobody left on it says so, rather than a dash that
     // reads as a blank.
     render: (row) => {
@@ -436,11 +452,15 @@ export function EnquiriesPage() {
   const number: Column<Enquiry> = {
     key: 'number',
     header: 'WhatsApp',
+    value: (row) => row.whatsappE164,
+    filter: 'text',
     render: (row) => row.whatsappE164 ?? '—',
   };
   const message: Column<Enquiry> = {
     key: 'message',
     header: 'Message',
+    value: (row) => row.message,
+    filter: 'text',
     render: (row) => (
       <span className="enquiries__message" title={row.message ?? undefined}>
         {firstLine(row.message)}
@@ -450,6 +470,19 @@ export function EnquiriesPage() {
   const details: Column<Enquiry> = {
     key: 'details',
     header: 'Details',
+    value: (row) =>
+      [
+        row.enquiringFor ? ENQUIRING_FOR_LABELS[row.enquiringFor] : null,
+        row.interest ? INTEREST_LABELS[row.interest] : null,
+        row.area,
+        row.concern,
+        row.preferredTime,
+        row.contactMethod,
+        row.email,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    filter: 'text',
     render: (row) => {
       // What the discovery-call form asked, so the call goes the way the
       // person asked for it; the widget sends none of these.
@@ -501,7 +534,13 @@ export function EnquiriesPage() {
     details,
     actioned('Dismissed'),
     by,
-    { key: 'why', header: 'Why', render: (row) => row.dismissReason ?? '—' },
+    {
+      key: 'why',
+      header: 'Why',
+      render: (row) => row.dismissReason ?? '—',
+      value: (row) => row.dismissReason,
+      filter: 'text',
+    },
     {
       key: 'actions',
       header: '',
@@ -530,6 +569,8 @@ export function EnquiriesPage() {
       key: 'received',
       header: 'Received',
       render: (row) => stamp.format(new Date(row.receivedAt)),
+      value: (row) => practiceDay(row.receivedAt),
+      filter: 'date',
     },
     who,
     number,
@@ -539,6 +580,9 @@ export function EnquiriesPage() {
     {
       key: 'status',
       header: 'Status',
+      value: (row) =>
+        enquiryWaitingDays(row.status, row.receivedAt, new Date()) === null ? 'New' : 'Waiting',
+      filter: 'values',
       render: (row) => {
         // Still new after thirty days: surfaced, never dismissed by itself
         // (domain/enquiry/waiting.ts, the operator's decision of 10 September).
@@ -702,6 +746,7 @@ export function EnquiriesPage() {
             rows={shown}
             rowKey={(row) => row.id}
             empty={<Note>{NOTHING[status][source]}</Note>}
+            controls={{ id: `enquiries-${status}`, noun: ['enquiry', 'enquiries'] }}
           />
           {/*
             Under any table longer than a page, and kept there once the last

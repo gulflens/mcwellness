@@ -92,6 +92,13 @@ Taken on 7 September 2026, each with the recommendation accepted.
    Every column stays reachable; no column is dropped and none is hidden. The
    operator chose this as "pin the first columns"; section 8 records why it
    became one column rather than two.
+   **Amended 18 October 2026, on the operator's request:** the clients,
+   enquiries, books and billing ledger tables gained spreadsheet column
+   controls (`app/shell/components/table/`). The *screen* still drops and hides
+   nothing on its own: every column shows by default, and a narrow display
+   still pins and scrolls. A *person* may now hide a column, resize it,
+   reorder it and filter by it, on their own device, with Show all and Reset
+   layout always one press away; a column that opens a record cannot be hidden.
 
 ## 4. The three tiers
 

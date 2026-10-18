@@ -17,8 +17,13 @@ import { ENQUIRY_SOURCES, type EnquirySource } from './parse';
 export const ENQUIRY_STATUSES = ['new', 'converted', 'dismissed'] as const;
 export type EnquiryStatus = (typeof ENQUIRY_STATUSES)[number];
 
-/** A page a person can read. The rest is a press away, and counted above the table. */
-export const ENQUIRY_PAGE = 100;
+/**
+ * As many as the table loads at once: every enquiry this practice holds, so
+ * the table's own column filters see them all (the operator, 2026-10-18).
+ * A ceiling, not a page: past it the rest is a press away, and counted above
+ * the table.
+ */
+export const ENQUIRY_PAGE = 1000;
 
 /** Where a page stopped: the row's own moment and its id, so a tie still has an order. */
 export type EnquiryCursor = { receivedAt: string; id: string };

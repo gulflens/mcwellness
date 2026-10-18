@@ -98,10 +98,19 @@ export function InvoicesSection() {
 
   const columns = useMemo<Column<InvoiceRow>[]>(
     () => [
-      { key: 'reference', header: 'Number', render: (row) => row.reference },
+      {
+        key: 'reference',
+        header: 'Number',
+        render: (row) => row.reference,
+        value: (row) => row.reference,
+        filter: 'text',
+        hideable: false,
+      },
       {
         key: 'client',
         header: 'Client',
+        value: (row) => `${row.clientName} ${row.clientMrn}`,
+        filter: 'text',
         render: (row) => (
           <span className="name">
             <span>{row.clientName}</span>
@@ -112,6 +121,8 @@ export function InvoicesSection() {
       {
         key: 'kind',
         header: 'For',
+        value: (row) => KIND_LABELS[row.kind],
+        filter: 'values',
         // A forgiven call-out fee stays in the book, with its number and its
         // figures, and stops counting in the balance (migration 408). So the
         // row says so: without it the total owed and the charges listed above
@@ -130,6 +141,8 @@ export function InvoicesSection() {
         key: 'issued',
         header: 'Issued',
         numeric: true,
+        value: (row) => row.issuedOn,
+        filter: 'date',
         render: (row) => formatDate(row.issuedOn),
       },
       {
@@ -139,6 +152,8 @@ export function InvoicesSection() {
         header: 'Discount',
         numeric: true,
         align: 'end',
+        value: (row) => row.discountFils / 100,
+        filter: 'number',
         render: (row) => (row.discountFils > 0 ? formatFils(row.discountFils) : '—'),
       },
       {
@@ -146,6 +161,8 @@ export function InvoicesSection() {
         header: 'Net (AED)',
         numeric: true,
         align: 'end',
+        value: (row) => row.netFils / 100,
+        filter: 'number',
         render: (row) => formatFils(row.netFils),
       },
       // The VAT column is shown only while the practice charges VAT. A column
@@ -158,6 +175,8 @@ export function InvoicesSection() {
               numeric: true,
               align: 'end' as const,
               render: (row: InvoiceRow) => formatFils(row.vatFils),
+              value: (row: InvoiceRow) => row.vatFils / 100,
+              filter: 'number' as const,
             },
           ]
         : []),
@@ -166,6 +185,8 @@ export function InvoicesSection() {
         header: 'Total',
         numeric: true,
         align: 'end',
+        value: (row) => row.grossFils / 100,
+        filter: 'number',
         render: (row) => formatFils(row.grossFils),
       },
       {
@@ -216,9 +237,14 @@ export function InvoicesSection() {
           </p>
 
           {error ? <Note tone="critical">{error}</Note> : null}
-          {state.response.truncated ? <Note>The fifty most recent invoices are shown.</Note> : null}
+          {state.response.truncated ? (
+            <Note>
+              Only the most recent invoices are shown: more were issued than the list holds at once.
+            </Note>
+          ) : null}
           <Table
             caption="Invoices"
+            controls={{ id: 'billing-invoices', noun: ['invoice', 'invoices'] }}
             columns={columns}
             rows={state.response.invoices}
             rowKey={(row) => row.id}
