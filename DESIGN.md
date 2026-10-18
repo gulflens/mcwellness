@@ -159,11 +159,11 @@ components:
 
 **Creative North Star: "The Calm Instrument"**
 
-McWellness is a wellness practice whose product reads as measurement: closer to a well-made laboratory instrument than to a spa, and closer to that than to a spreadsheet. The person using it should feel that the practice is careful, precise and quietly expensive. Three things carry that feeling, in this order:
+McWellness is a wellness practice whose product reads as measurement: closer to a well-made measuring instrument than to a spa, and closer to that than to a spreadsheet. The person using it should feel that the practice is careful, precise and quietly expensive. Three things carry that feeling, in this order:
 
 1. **One focal point per screen.** Every screen answers one question first and visibly: the client's next visit and progress on a record, the day's route on Today, what is owed on Billing. Everything else steps back.
 2. **One bold figure.** The session ribbon (`docs/DESIGN-BRIEF.md` section 5) is where the product spends its boldness: a client's whole programme as one strip, on the client's home screen, beside every client in the console, and on the report cover. Restraint everywhere else exists to frame it.
-3. **Finish.** White working surfaces with real depth, figures large enough to read across a room, controls that ease rather than flip, loading that holds the page's shape, and an ending with weight after every high-stakes action.
+3. **Finish.** White working surfaces with real depth, figures large enough to read at a glance, controls that ease rather than flip, loading that holds the page's shape, and an ending with weight after every high-stakes action.
 
 The chrome carries the practice; the figures carry the data. The practice's violet, `#380473`, sampled from its mark and printed on every invoice, is the single accent: the rail's ground, the one primary action, links, the selected section and the focus ring. Inside a figure, colour is signal only, the five EEG bands and three status states. The two never meet (the Separation Rule).
 
@@ -253,7 +253,7 @@ The console is a two-column grid: the rail on the inline start and a content col
 3. **Panel:** the working content (a table, a form, an overview) on a white surface panel, `--r-3` radius, hairline edge in Rule, `--s-6` padding for forms and overviews, flush for tables.
 
 ### The record workspace
-The client record and enrolment are full pages inside the shell: "Back to clients", then the **record header** (the client's name at display size, the Arabic name beneath, the record number in numeric small, the status chip, the programme stage, and the record's primary action at the inline end), then a 192px sticky section column beside a white content panel. Sections are vertical tabs with a brand-wash selected state and arrow, Home and End keys. At a container width of 767px or less the sections become a labelled select.
+The client record and enrolment are full pages inside the shell: "Back to clients", then the **record header** (the client's name at display size, the Arabic name beneath, the record number in numeric small, the status chip, the programme stage, and the record's primary action at the inline end), then a 192px sticky section column beside a white content panel. Sections are vertical tabs with a brand-wash selected state and arrow, Home and End keys. At a container width of 767px or less the sections become a labelled select. Display-size names belong to the staff console; screens shown in a client's home keep names at body size.
 
 **The overview leads with the answer.** A record's first section shows, in this order: next visit (date, arrival window, readiness), programme (session x of N with the ribbon), household balance, latest report. Demographic facts sit in a Details block beneath. A destructive action never appears on the overview.
 
@@ -307,7 +307,7 @@ Never: page-load choreography, staggered entrances, shimmer, bounce, parallax, a
 
 **Errors sit with their cause.** A field's error takes its hint slot in critical ink with `aria-invalid` and `aria-describedby`; there is no red border. An outcome failing (a save, a load) is a critical Note with `role="alert"`, beside the thing that failed.
 
-**High-stakes actions end on a confirmation.** Issuing an invoice, recording consent, recording erasure and completing a session finish on a confirmation state: what happened, in one sentence; the key figure at display size where there is one; the document to download or send; and what happens next. Not a Note line.
+**High-stakes actions end on a confirmation.** Issuing an invoice, recording consent, recording erasure and completing a session finish on a confirmation state: what happened, in one sentence; the key figure at display size where there is one; where the action produces a document, that document to download or send through an approved channel; and what happens next. Not a Note line. An erasure confirmation carries no identifier of the erased client in its sentence, figure, link or URL; any document link uses an opaque key.
 
 **Offline is a calm band,** never a red alert. Working offline is normal on the instrument.
 
