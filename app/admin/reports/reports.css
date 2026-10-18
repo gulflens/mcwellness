@@ -61,7 +61,7 @@
 }
 
 .ribbon-block__legend {
-  color: var(--slate);
+  color: var(--ink-2);
 }
 
 /* --------------------------------------------------------------------------
@@ -79,7 +79,7 @@
 
 .reports__reason {
   display: block;
-  color: var(--slate);
+  color: var(--ink-2);
 }
 
 /* --------------------------------------------------------------------------
@@ -125,7 +125,7 @@
 }
 
 .report-editor__figures dt {
-  color: var(--slate);
+  color: var(--ink-2);
 }
 
 .report-editor__figures dd {
@@ -190,7 +190,7 @@
 }
 
 .report-view__facts dt {
-  color: var(--slate);
+  color: var(--ink-2);
 }
 
 .report-view__facts dd {
@@ -211,7 +211,7 @@
   flex-wrap: wrap;
   gap: var(--s-3);
   padding-block: var(--s-1);
-  color: var(--slate);
+  color: var(--ink-2);
 }
 
 /* A brain map's other language, named beneath its facts (brief Q). */
@@ -219,5 +219,5 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  color: var(--slate);
+  color: var(--ink-2);
 }

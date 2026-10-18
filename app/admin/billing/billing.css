@@ -75,7 +75,7 @@
 .figures__item dt {
   font-size: var(--t-small);
   line-height: var(--lh-small);
-  color: var(--slate);
+  color: var(--ink-2);
 }
 
 .figures__item dd {

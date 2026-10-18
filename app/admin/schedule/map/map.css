@@ -35,7 +35,7 @@
   background: var(--surface);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
-  font-size: 0.875rem;
+  font-size: var(--t-small);
   cursor: pointer;
 }
 
@@ -58,8 +58,9 @@
   border: 1px solid var(--rule);
   border-radius: var(--r-2);
   background: var(--surface);
-  color: var(--slate);
-  font-size: 0.75rem;
+  /* Second ink, not slate: slate is for marks, never text (DESIGN.md). */
+  color: var(--ink-2);
+  font-size: var(--t-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -148,7 +149,7 @@
   border-radius: var(--r-2);
   background: var(--surface);
   color: var(--ink);
-  font-size: 0.75rem;
+  font-size: var(--t-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
