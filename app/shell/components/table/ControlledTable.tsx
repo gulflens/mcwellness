@@ -186,9 +186,35 @@ export function ControlledTable<Row>({
 
   /** The widest thing in a column, header included, as the browser lays it out. */
   function widestCell(key: string): number {
+    const host = table.current?.parentElement;
     const cells = table.current?.querySelectorAll<HTMLElement>(`[data-col="${CSS.escape(key)}"]`);
+    if (!host || !cells || cells.length === 0) return 0;
+    // A cell's own box is the column's width, not its content's: a cell wider
+    // than what it holds reports its own width, so measuring the cells made
+    // "Fit to contents" grow a wide column a little every time. Each cell's
+    // content is copied into an unconstrained box in the same font instead,
+    // and that box's natural width plus the cell's padding is what it needs.
+    const probe = document.createElement('div');
+    probe.className = 'ledger__probe';
+    probe.setAttribute('aria-hidden', 'true');
+    host.appendChild(probe);
     let widest = 0;
-    for (const cell of cells ?? []) widest = Math.max(widest, cell.scrollWidth);
+    try {
+      for (const cell of cells) {
+        const style = getComputedStyle(cell);
+        const box = document.createElement('div');
+        box.style.font = style.font;
+        box.style.letterSpacing = style.letterSpacing;
+        box.style.fontVariantNumeric = style.fontVariantNumeric;
+        box.append(...Array.from(cell.childNodes, (node) => node.cloneNode(true)));
+        probe.replaceChildren(box);
+        const padding =
+          parseFloat(style.paddingInlineStart || '0') + parseFloat(style.paddingInlineEnd || '0');
+        widest = Math.max(widest, Math.ceil(box.getBoundingClientRect().width + padding));
+      }
+    } finally {
+      probe.remove();
+    }
     return widest;
   }
 
