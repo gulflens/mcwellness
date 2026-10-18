@@ -125,6 +125,9 @@
   border-radius: var(--r-2);
   text-decoration: none;
   color: var(--brand-pale);
+  transition:
+    background-color var(--motion-control) var(--ease),
+    color var(--motion-control) var(--ease);
 }
 
 /* No violet ground reaches the 3.0 a state needs against the rail -- the best
@@ -284,6 +287,10 @@ a.rail__child.rail__child--current {
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color var(--motion-control) var(--ease),
+    border-color var(--motion-control) var(--ease),
+    color var(--motion-control) var(--ease);
 }
 
 .sections__tab:hover,
@@ -684,7 +691,13 @@ a.rail__child.rail__child--current {
   background: var(--surface);
   color: var(--ink);
   font-weight: var(--w-medium);
-  cursor: pointer;
+  cursor: pointer; /* Controls ease rather than flip (DESIGN.md, Motion): colour only, over
+     the control duration, and instant under reduced motion. */
+  transition:
+    background-color var(--motion-control) var(--ease),
+    border-color var(--motion-control) var(--ease),
+    color var(--motion-control) var(--ease);
+  /* Not box-shadow: the focus ring is a shadow and must appear at once. */
 }
 
 /* The one primary action on a page is the practice's colour, not the page's ink
@@ -748,10 +761,23 @@ a.rail__child.rail__child--current {
   color: var(--critical);
 }
 
-/* The table */
+/* The table, on a white panel (DESIGN.md, The Panel Rule; ADR 0004). The
+   paper ground is the space between things; the rows people work in sit on
+   the surface, bounded by a hairline and the panel radius, so a list reads as
+   a working surface rather than a spreadsheet laid on the page. */
 .ledger__scroll {
   overflow-x: auto;
-  border-block-start: var(--hairline) solid var(--rule);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+/* Already on a surface (the record's content panel, a drawer): no panel
+   inside a panel, only the opening hairline it always had. */
+:where(.client-workspace__content, .drawer) .ledger__scroll {
+  border-width: 0;
+  border-block-start-width: var(--hairline);
+  border-radius: 0;
 }
 
 .ledger {
@@ -762,7 +788,7 @@ a.rail__child.rail__child--current {
 .ledger th {
   position: sticky;
   inset-block-start: 0;
-  background: var(--paper);
+  background: var(--surface);
   text-align: start;
   font-size: var(--t-small);
   line-height: var(--lh-small);
@@ -814,8 +840,9 @@ a.rail__child.rail__child--current {
 }
 
 .status__dot {
-  inline-size: 6px;
-  block-size: 6px;
+  /* 8px: large enough to scan down a 44px row (DESIGN.md, Status-in-Words). */
+  inline-size: var(--s-2);
+  block-size: var(--s-2);
   border-radius: 50%;
   background: var(--slate);
 }
@@ -1259,7 +1286,18 @@ a.rail__item.rail__item--active:active {
 .ledger--pinned td:first-child {
   position: sticky;
   inset-inline-start: 0;
-  background: var(--paper);
+  background: var(--surface);
+}
+
+/* A quiet row under the pointer, so the eye keeps its place across a wide
+   row. Eased over the control duration, and instant under reduced motion. The
+   pinned cell takes the same tint, or it would read as a column apart. */
+.ledger td {
+  transition: background-color var(--motion-control) var(--ease);
+}
+
+.ledger:not(.ledger--skeleton) tbody tr:not(.ledger__empty):hover > td {
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
 }
 
 /* A rule between every pair of columns, not only after the record (the owner,
@@ -1727,4 +1765,44 @@ a.rail__item.rail__item--active:active {
 
 .admin[data-rail-mode='overlay'] .rail__badge {
   position: static;
+}
+
+/* Loading holds the shape (DESIGN.md, States; ADR 0004): still blocks in the
+   paper tone where text will be. No shimmer, no animation of any kind. */
+.ledger__placeholder,
+.page-skeleton__heading,
+.page-skeleton__row {
+  display: block;
+  border-radius: var(--r-1);
+  background: color-mix(in srgb, var(--ink) 7%, var(--surface));
+}
+
+.ledger__placeholder {
+  block-size: var(--s-3);
+  inline-size: min(100%, 8rem);
+}
+
+.page-skeleton__heading {
+  block-size: var(--lh-h1);
+  inline-size: min(100%, 14rem);
+  margin-block-end: var(--s-6);
+  background: color-mix(in srgb, var(--ink) 9%, var(--paper));
+}
+
+.page-skeleton__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  padding: var(--s-6);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.page-skeleton__row {
+  block-size: var(--s-3);
+}
+
+.page-skeleton__row:nth-child(odd) {
+  inline-size: 72%;
 }

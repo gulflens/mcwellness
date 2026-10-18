@@ -14,7 +14,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
 import { displayPhone } from '../../shell/components/phoneDisplay';
 import { ClientStatusChip } from '../../shell/components/StatusChip';
-import { Table, type Column } from '../../shell/components/Table';
+import { Table, TableSkeleton, type Column } from '../../shell/components/Table';
 import './clients.css';
 import { ClientDrawer } from './ClientDrawer';
 import { EnrolmentWizard } from './EnrolmentWizard';
@@ -380,7 +380,9 @@ export function ClientsPage() {
             </Select>
           ) : null}
         </div>
-        {state.kind === 'loading' ? <Note>Loading the client list.</Note> : null}
+        {state.kind === 'loading' ? (
+          <TableSkeleton columns={columns} label="Loading the client list." />
+        ) : null}
         {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
         {state.kind === 'ready' ? (
           <Table
