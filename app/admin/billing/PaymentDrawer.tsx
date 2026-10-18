@@ -6,6 +6,7 @@ import {
 } from '../../api/billing/ledger-schema';
 import type { ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import type { Outcome } from '../../shell/components/Confirmation';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { useAttemptKey } from './attempt';
@@ -44,7 +45,8 @@ export function PaymentDrawer({
   client: ClientRow;
   outstandingFils: number;
   onClose: () => void;
-  onRecorded: (summary: string) => void;
+  /** The sentence, and the outcome a confirmation shows above it. */
+  onRecorded: (summary: string, outcome: Outcome) => void;
 }) {
   const { apiFetch } = useAuth();
   const drawerRef = useRef<HTMLElement>(null);
@@ -124,6 +126,13 @@ export function PaymentDrawer({
             `${client.familyName}` +
             (body.payment.receiptReference ? `, receipt ${body.payment.receiptReference}` : '') +
             '.',
+          {
+            title: body.payment.receiptReference
+              ? `Payment recorded, receipt ${body.payment.receiptReference}`
+              : 'Payment recorded',
+            figure: `AED ${formatFils(body.payment.amountFils)}`,
+            figureLabel: 'Received',
+          },
         );
         return;
       }

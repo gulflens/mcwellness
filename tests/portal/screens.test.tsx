@@ -351,7 +351,9 @@ describe('Money', () => {
         '/api/portal/money': () => json({ error: 'forbidden', code: 'money_not_shown' }, 403),
       },
     });
-    expect(await screen.findByText('This part of the record is not yours to open.')).toBeTruthy();
+    expect(
+      await screen.findByText('This part of the record is not available on your account.'),
+    ).toBeTruthy();
   });
 
   it('reads in Arabic', async () => {

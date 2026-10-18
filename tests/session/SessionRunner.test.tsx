@@ -550,6 +550,9 @@ describe('the summary and the check-out', () => {
     });
     expect(close.body.visitActuals).toMatchObject({ salikCrossings: 2, parkingCostFils: 0 });
     expect(await screen.findByRole('heading', { name: 'Checked out' })).toBeTruthy();
+    // The end says which session this was, and claims no more than the close proves.
+    expect(screen.getByText('Session 12 of 30')).toBeTruthy();
+    expect(screen.getByText('The visit is recorded.')).toBeTruthy();
   });
 
   it('says the same numbers the record was given', async () => {

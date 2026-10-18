@@ -5,6 +5,7 @@ import { DraftResponse } from '../../api/reports/schema';
 import { CloseResponse, EventsResponse, type ServiceTypeOption } from '../../api/sessions/schema';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button } from '../../shell/components/Controls';
+import { CheckIcon } from '../../shell/components/Icons';
 import { PostStep } from './PostStep';
 import { PreflightStep } from './PreflightStep';
 import { RunStep } from './RunStep';
@@ -712,8 +713,25 @@ export function SessionRunner({
         ) : null}
 
         {step === 'done' ? (
-          <div className="step">
+          <div className="step step--done">
+            {/* The end of the visit is the one moment on this screen with any
+                ceremony (DESIGN.md, States; the operator kept the rest of the
+                session screen as it is): a calm mark and which session this
+                was. It claims no more than the close proves: the outbox can
+                set aside an event the server refused, so "everything arrived"
+                is not a sentence this step may say. */}
+            <span className="step__done-mark" aria-hidden="true">
+              <CheckIcon />
+            </span>
             <h1>Checked out</h1>
+            <div className="step__done-figure">
+              <p className="small">{visit.of === null ? 'This visit' : 'Programme'}</p>
+              <p className="step__done-number numeric">
+                {visit.of === null
+                  ? `Session ${visit.number}`
+                  : `Session ${visit.number} of ${visit.of}`}
+              </p>
+            </div>
             <p className="note">The visit is recorded.</p>
             {report === 'failed' ? <p className="note small">{REPORT_FAILED}</p> : null}
             <div className="step__dock">

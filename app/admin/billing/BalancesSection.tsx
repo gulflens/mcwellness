@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BalanceResponse, type ServiceBalanceRow } from '../../api/billing/ledger-schema';
 import type { ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { Confirmation, type Outcome } from '../../shell/components/Confirmation';
 import { Button, Note } from '../../shell/components/Controls';
 import { BillingNote } from './BillingNote';
 import { Table, type Column } from '../../shell/components/Table';
@@ -68,7 +69,7 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
   const [client, setClient] = useState<ClientRow | null>(null);
   const [state, setState] = useState<State>({ kind: 'idle' });
   const [payingOpen, setPayingOpen] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; outcome: Outcome } | null>(null);
 
   const clientId = client?.id ?? null;
 
@@ -176,9 +177,21 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
       </div>
 
       {note ? (
-        <div role="status">
-          <Note>{note}</Note>
-        </div>
+        <Confirmation
+          outcome={note.outcome}
+          actions={
+            <>
+              <a className="button button--primary" href="#receipts">
+                See the receipt
+              </a>
+              <Button variant="quiet" onClick={() => setNote(null)}>
+                Done
+              </Button>
+            </>
+          }
+        >
+          <p>{note.text}</p>
+        </Confirmation>
       ) : null}
       {showing === 'idle' ? <Note>Find a client to see what they have left.</Note> : null}
       {showing === 'loading' ? <Note>Loading the balance.</Note> : null}
@@ -278,9 +291,9 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
           client={client}
           outstandingFils={balance?.outstandingFils ?? 0}
           onClose={() => setPayingOpen(false)}
-          onRecorded={(summary) => {
+          onRecorded={(summary, outcome) => {
             setPayingOpen(false);
-            setNote(summary);
+            setNote({ text: summary, outcome });
             load();
           }}
         />

@@ -11,6 +11,7 @@ import {
 import type { ClientRow } from '../../api/clients/schema';
 import { isRealText, MINIMUM_REASON } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import type { Outcome } from '../../shell/components/Confirmation';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
@@ -91,7 +92,8 @@ export function SellPackageDrawer({
 }: {
   bundle: PackageRow;
   onClose: () => void;
-  onSold: (summary: string) => void;
+  /** The sentence, and the outcome a confirmation shows above it. */
+  onSold: (summary: string, outcome: Outcome) => void;
 }) {
   const { apiFetch } = useAuth();
   const drawerRef = useRef<HTMLElement>(null);
@@ -257,6 +259,11 @@ export function SellPackageDrawer({
         onSold(
           `${bundle.name} sold to ${client.givenName} ${client.familyName} for AED ` +
             `${formatFils(body.purchase.grossFils)}, invoice ${body.invoiceReference}.`,
+          {
+            title: `Invoice ${body.invoiceReference} issued`,
+            figure: `AED ${formatFils(body.purchase.grossFils)}`,
+            figureLabel: 'Total',
+          },
         );
         return;
       }

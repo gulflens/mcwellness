@@ -63,7 +63,7 @@ function MoneyLine({ money }: { money: MoneySummary }) {
       <dt>{label}</dt>
       <dd>
         {owed === 0 ? (
-          <span>{words.t('amountsInAed')}</span>
+          <span>{words.t('nothingToPay')}</span>
         ) : (
           <span className="numeric portal__figure">{words.money(Math.abs(owed))}</span>
         )}

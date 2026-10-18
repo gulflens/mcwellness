@@ -331,6 +331,10 @@ describe('BalancesSection', () => {
       await screen.findByText('AED 735.00 recorded from Hazel Harbour, receipt RCP-000004.'),
     ).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
+    // A confirmation, not a note line: the outcome as a heading, focused, and the figure.
+    const heading = screen.getByRole('heading', { name: 'Payment recorded, receipt RCP-000004' });
+    expect(document.activeElement).toBe(heading);
+    expect(screen.getByText('AED 735.00')).toBeTruthy();
   });
 
   it('offers no payment door to somebody who may not record one', async () => {
