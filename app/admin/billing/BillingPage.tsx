@@ -103,7 +103,7 @@ export function BillingPage() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, [navigate]);
   // The tabs are one row a thumb slides along on a phone (billing.css,
-  // `.sections--one-row`), so the section the reader is on is brought into
+  // `.billing-tabs`), so the section the reader is on is brought into
   // that row's view, sideways only: the page itself does not move.
   const tabsRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -196,7 +196,7 @@ export function BillingPage() {
         }
       />
 
-      <nav ref={tabsRef} className="sections sections--one-row" aria-label="Billing sections">
+      <nav ref={tabsRef} className="sections billing-tabs" aria-label="Billing sections">
         {SECTIONS.map((entry) => (
           <button
             key={entry.key}

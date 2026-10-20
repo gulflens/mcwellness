@@ -1150,10 +1150,12 @@
 /*
   Billing's five section tabs on one row that a thumb slides along, rather than
   three rows of wrapped tabs above every section on a phone (operator,
-  20 October 2026). A modifier of the shell's own `.sections`, scoped to this
-  page: the other screens that use the tabs keep them as they are.
+  20 October 2026). Its own class beside the shell's `.sections`, and only
+  layout: the tabs' look stays the shell's, in the always-loaded stylesheet
+  tests/lint/tabs-are-always-styled.test.ts keeps it in, and the other screens
+  that use the tabs keep them as they are.
 */
-.sections--one-row {
+.billing-tabs {
   flex-wrap: nowrap;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
@@ -1161,11 +1163,11 @@
   scroll-snap-type: inline proximity;
 }
 
-.sections--one-row::-webkit-scrollbar {
+.billing-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.sections--one-row .sections__tab {
+.billing-tabs > * {
   flex: none;
   scroll-snap-align: start;
 }
