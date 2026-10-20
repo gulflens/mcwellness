@@ -3821,8 +3821,8 @@ builds. The one peer session on the machine answered clear before the upload.
 PR 274's checks both passed against main (`606c4e2d`). It was squash-merged
 onto that same commit, so main's tree at `78420673` is identical to the one
 the PR's checks tested (`fbf1a894`). Main's own `verify` had passed before the
-upload; its `verify-db` was still running. Front end only, so the pass was a
-build alone.
+upload; its `verify-db` was still running then and passed a few minutes
+after the build. Front end only, so the pass was a build alone.
 - The packages table, and the folded "Withdrawn" list beside it, show a
   bundle's contents one service to a line ("1 × Consultation", "2 × Brain map
   (QEEG)", "15 × Neurofeedback session") in a labelled list, where they were
