@@ -221,6 +221,10 @@ export type SetPackageStatusInput = z.infer<typeof SetPackageStatusInput>;
 export const MovePackageInput = z.object({ direction: z.enum(['up', 'down']) }).strict();
 export type MovePackageInput = z.infer<typeof MovePackageInput>;
 
+/** The packages on offer, every one of them, in the order they are to be listed. */
+export const ReorderPackagesInput = z.object({ order: z.array(z.uuid()).min(1).max(500) }).strict();
+export type ReorderPackagesInput = z.infer<typeof ReorderPackagesInput>;
+
 export const PackageResponse = z.object({ package: PackageRow });
 export type PackageResponse = z.infer<typeof PackageResponse>;
 

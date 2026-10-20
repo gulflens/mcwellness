@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import {
   applyDiscount,
   movePackage,
+  reorderPackages,
   nextVersionCode,
   planPackageEdit,
   resolveSaleVat,
@@ -21,6 +22,7 @@ import {
   CreatePackageInput,
   EditPackageInput,
   MovePackageInput,
+  ReorderPackagesInput,
   PackageResponse,
   PackagesResponse,
   SetPackageStatusInput,
@@ -657,6 +659,48 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
     const was = new Map(current.rows.map((row) => [row.id, row.position]));
     for (const { id, position } of moved) {
+      if (was.get(id) === position) continue;
+      await db.query(
+        'update package set position = $2 where id = $1 and tenant_id = app.current_tenant_id()',
+        [id, position],
+      );
+    }
+    const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
+    const vatRegistered = await readVatRegistered(db);
+    const packages = await readPackages(db, today, vatRegistered);
+    return c.json(PackagesResponse.parse({ packages, vatRegistered }), 200);
+  });
+
+  // The whole order at once (operator, 20 October 2026): what a tile dragged
+  // across the list sends, so a package carried from the end to the start is
+  // one request and one reason, not a run of moves. The rule is
+  // `reorderPackages`'s; locking and writing back only what changed are the
+  // move route's, above, for the same reasons.
+  api.post('/api/billing/packages/reorder', async (c) => {
+    const actor = c.get('actor');
+    const requestId = c.get('requestId');
+    if (!mayWriteCatalogue(actor, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    if (!requestReason(c).trim()) {
+      return c.json({ error: 'bad_request', code: 'reason_required', requestId }, 400);
+    }
+    const body = ReorderPackagesInput.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const db = c.get('db');
+    await db.query('select id from package where tenant_id = app.current_tenant_id() for update');
+    const current = await db.query<{ id: string; status: 'active' | 'inactive'; position: number }>(
+      'select id, status, position from package where tenant_id = app.current_tenant_id() ' +
+        'order by position, name',
+    );
+    const reordered = reorderPackages(current.rows, body.data.order);
+    if (reordered === null) {
+      return c.json({ error: 'conflict', code: 'stale_order', requestId }, 409);
+    }
+    const was = new Map(current.rows.map((row) => [row.id, row.position]));
+    for (const { id, position } of reordered) {
       if (was.get(id) === position) continue;
       await db.query(
         'update package set position = $2 where id = $1 and tenant_id = app.current_tenant_id()',
