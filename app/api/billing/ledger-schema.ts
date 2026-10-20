@@ -198,6 +198,10 @@ export type AddPackagePriceInput = z.infer<typeof AddPackagePriceInput>;
 export const SetPackageStatusInput = z.object({ status: z.enum(['active', 'inactive']) }).strict();
 export type SetPackageStatusInput = z.infer<typeof SetPackageStatusInput>;
 
+/** One place up or down the practice's list (operator, 20 October 2026). */
+export const MovePackageInput = z.object({ direction: z.enum(['up', 'down']) }).strict();
+export type MovePackageInput = z.infer<typeof MovePackageInput>;
+
 export const PackageResponse = z.object({ package: PackageRow });
 export type PackageResponse = z.infer<typeof PackageResponse>;
 

@@ -222,6 +222,21 @@ name, contents, and a Reinstate action — rather than hiding it outright, so
 the catalogue a household is shown stays short without the practice losing
 track of what it used to sell.
 
+**The order is the practice's own** (operator, 20 October 2026: Silver, Gold,
+Platinum, then Complimentary, an order no price or name gives). Each package
+carries a `position`, 1 first (migration 414), and the list is read in that
+order. Move up and Move down on each row of the table move a bundle one place,
+past the nearest bundle still on offer — `POST /api/billing/packages/:id/move`
+with `{ "direction": "up" | "down" }` and an `X-Reason` header, behind the same
+`mayWriteCatalogue` gate. The rule is `domain/billing/packageOrder.ts`'s
+`movePackage`: a withdrawn bundle does not move, nor can the first go up or the
+last down (each `409 cannot_move`), and every successful move renumbers the
+whole list from one. A new bundle goes last, whoever writes it (a trigger
+before insert), and a reinstated one goes last rather than back between two
+the practice has ordered since. Positions are not unique: two bundles added or
+reinstated at the same moment may share one until the next move, and the list
+breaks the tie by name.
+
 ---
 
 ## 3. Payment methods

@@ -27,6 +27,8 @@ export type {
 } from './balance';
 export { cashCollectedBetween, monthlyMoney } from './recognition';
 export type { CollectedPayment, LedgerCredit, MonthlyMoney } from './recognition';
+export { movePackage } from './packageOrder';
+export type { OrderedPackage, PackageMove } from './packageOrder';
 export { refundOnTermination } from './refund';
 export type { DeliveredCount, RefundLine, RefundQuote, SingleRate } from './refund';
 export {

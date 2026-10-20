@@ -876,3 +876,170 @@ describe('withdrawing a package', () => {
     expect(rows[0]?.reason).toBe('offering it again');
   });
 });
+
+/**
+ * `POST /api/billing/packages/:id/move` (operator, 20 October 2026): the
+ * practice sets the order its packages are listed in by hand, one place at a
+ * time. Runs after the withdrawing suite, whose second practice and lead
+ * practitioner it reuses.
+ */
+describe('ordering the packages', () => {
+  const MOVE_REASON = { 'x-reason': 'Moved in the packages list' };
+
+  async function activeNames(): Promise<string[]> {
+    const list = (await (
+      await h.call('GET', '/api/billing/packages', SEEDED.owner)
+    ).json()) as PackagesResponse;
+    return list.packages.filter((p) => p.status === 'active').map((p) => p.name);
+  }
+
+  async function idOf(name: string): Promise<string> {
+    const list = (await (
+      await h.call('GET', '/api/billing/packages', SEEDED.owner)
+    ).json()) as PackagesResponse;
+    const found = list.packages.find((p) => p.name === name);
+    if (!found) throw new Error(`No package named ${name}`);
+    return found.id;
+  }
+
+  it('puts a newly added package at the end of the list', async () => {
+    const created = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...silverInput(h, SEED_TODAY),
+      code: 'order-under-test',
+      name: 'Order fixture',
+      nameAr: 'اختبار الترتيب',
+    });
+    expect(created.status).toBe(201);
+    expect((await activeNames()).at(-1)).toBe('Order fixture');
+  });
+
+  it('moves a package one place up, and the list keeps the new order', async () => {
+    const before = await activeNames();
+    const res = await h.call(
+      'POST',
+      `/api/billing/packages/${await idOf('Order fixture')}/move`,
+      SEEDED.owner,
+      { direction: 'up' },
+      MOVE_REASON,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PackagesResponse;
+    const after = body.packages.filter((p) => p.status === 'active').map((p) => p.name);
+    const expected = [...before];
+    expected.splice(before.length - 2, 2, 'Order fixture', before.at(-2)!);
+    expect(after).toEqual(expected);
+    expect(await activeNames()).toEqual(expected);
+  });
+
+  it('moves a package back down', async () => {
+    const res = await h.call(
+      'POST',
+      `/api/billing/packages/${await idOf('Order fixture')}/move`,
+      SEEDED.owner,
+      { direction: 'down' },
+      MOVE_REASON,
+    );
+    expect(res.status).toBe(200);
+    expect((await activeNames()).at(-1)).toBe('Order fixture');
+  });
+
+  it('refuses to move the last package further down', async () => {
+    const res = await h.call(
+      'POST',
+      `/api/billing/packages/${await idOf('Order fixture')}/move`,
+      SEEDED.owner,
+      { direction: 'down' },
+      MOVE_REASON,
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { code?: string }).toMatchObject({ code: 'cannot_move' });
+  });
+
+  it('refuses without a reason', async () => {
+    const res = await h.call(
+      'POST',
+      `/api/billing/packages/${await idOf('Order fixture')}/move`,
+      SEEDED.owner,
+      { direction: 'up' },
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { code?: string }).toMatchObject({ code: 'reason_required' });
+  });
+
+  it('refuses a lead practitioner', async () => {
+    const res = await h.callAs(
+      'POST',
+      `/api/billing/packages/${await idOf('Order fixture')}/move`,
+      LEAD_PRACTITIONER_AUTH,
+      { direction: 'up' },
+      MOVE_REASON,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("answers 404 for another practice's package", async () => {
+    const res = await h.callAs(
+      'POST',
+      `/api/billing/packages/${await idOf('Order fixture')}/move`,
+      OTHER_TENANT_ADMIN_AUTH,
+      { direction: 'up' },
+      MOVE_REASON,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('writes the reason onto the audit row of both packages that swapped places', async () => {
+    const names = await activeNames();
+    const above = names.at(-2)!;
+    const fixture = await idOf('Order fixture');
+    const neighbour = await idOf(above);
+    const reason = { 'x-reason': 'Swapped to read the audit trail' };
+    const res = await h.call(
+      'POST',
+      `/api/billing/packages/${fixture}/move`,
+      SEEDED.owner,
+      { direction: 'up' },
+      reason,
+    );
+    expect(res.status).toBe(200);
+    for (const id of [fixture, neighbour]) {
+      const { rows } = await h.owner.query<{ reason: string | null }>(
+        "select reason from audit_log where entity_type = 'package' and entity_id = $1 " +
+          "and action = 'update' order by occurred_at desc, id desc limit 1",
+        [id],
+      );
+      expect(rows[0]?.reason).toBe('Swapped to read the audit trail');
+    }
+    // Put it back, so the suite's own order is what it was.
+    const back = await h.call(
+      'POST',
+      `/api/billing/packages/${fixture}/move`,
+      SEEDED.owner,
+      { direction: 'down' },
+      MOVE_REASON,
+    );
+    expect(back.status).toBe(200);
+  });
+
+  it('puts a reinstated package at the end, not back where it was', async () => {
+    const first = (await activeNames())[0]!;
+    const id = await idOf(first);
+    const withdrawn = await h.call(
+      'PATCH',
+      `/api/billing/packages/${id}`,
+      SEEDED.owner,
+      { status: 'inactive' },
+      { 'x-reason': 'no longer offered' },
+    );
+    expect(withdrawn.status).toBe(200);
+    const back = await h.call(
+      'PATCH',
+      `/api/billing/packages/${id}`,
+      SEEDED.owner,
+      { status: 'active' },
+      { 'x-reason': 'offering it again' },
+    );
+    expect(back.status).toBe(200);
+    expect((await activeNames()).at(-1)).toBe(first);
+  });
+});

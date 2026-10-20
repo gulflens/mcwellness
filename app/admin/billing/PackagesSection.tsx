@@ -38,6 +38,17 @@ const REINSTATE_REASON = 'Reinstated from the packages list';
 const REINSTATE_FAILED_MESSAGE = 'This package could not be reinstated. Try again.';
 
 /**
+ * The practice orders its packages by hand, one place at a time (operator,
+ * 20 October 2026). Like Reinstate, a move asks nothing, so its reason for the
+ * audit trail is fixed.
+ */
+const MOVE_REASON = {
+  up: 'Moved up in the packages list',
+  down: 'Moved down in the packages list',
+} as const;
+const MOVE_FAILED_MESSAGE = 'The order could not be changed. Try again.';
+
+/**
  * A bundle's contents, one service to a line (operator, 20 October 2026): a
  * comma-joined sentence made "2 × Brain map (QEEG)" hard to pick out of the row.
  */
@@ -61,6 +72,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   const [sellingSession, setSellingSession] = useState(false);
   const [withdrawing, setWithdrawing] = useState<PackageRow | null>(null);
   const [reinstatingId, setReinstatingId] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
   const [note, setNote] = useState<{ text: string; tone?: 'critical' } | null>(null);
 
   const load = useCallback(() => {
@@ -111,7 +123,49 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
     [apiFetch, load],
   );
 
+  /**
+   * One place up or down. The server answers with the whole list in its new
+   * order, so the table redraws from that rather than guessing it here. One
+   * move at a time: every Move button waits while one is in flight.
+   */
+  const move = useCallback(
+    async (row: PackageRow, direction: 'up' | 'down') => {
+      setNote(null);
+      setMoving(true);
+      try {
+        const res = await apiFetch(`/api/billing/packages/${row.id}/move`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-reason': MOVE_REASON[direction] },
+          body: JSON.stringify({ direction }),
+        });
+        if (res.ok) {
+          const body = PackagesResponse.parse(await res.json());
+          setState({ kind: 'ready', packages: body.packages, vatRegistered: body.vatRegistered });
+          return;
+        }
+        setNote({ text: MOVE_FAILED_MESSAGE, tone: 'critical' });
+      } catch {
+        setNote({ text: MOVE_FAILED_MESSAGE, tone: 'critical' });
+      } finally {
+        setMoving(false);
+      }
+    },
+    [apiFetch],
+  );
+
+  // The main table's own rows: active bundles only, unchanged otherwise. A
+  // withdrawn bundle moves to the folded group below rather than leaving the
+  // table altogether (round 62).
+  const activePackages = useMemo(
+    () => (state.kind === 'ready' ? state.packages.filter((row) => row.status === 'active') : []),
+    [state],
+  );
+  const withdrawnPackages =
+    state.kind === 'ready' ? state.packages.filter((row) => row.status === 'inactive') : [];
+
   const columns = useMemo<Column<PackageRow>[]>(() => {
+    const firstId = activePackages[0]?.id;
+    const lastId = activePackages.at(-1)?.id;
     const base: Column<PackageRow>[] = [
       {
         key: 'name',
@@ -148,6 +202,24 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
                   }}
                 >
                   Withdraw
+                </button>
+                <button
+                  type="button"
+                  className="button button--quiet"
+                  aria-label={`Move ${row.name} up`}
+                  disabled={moving || row.id === firstId}
+                  onClick={() => void move(row, 'up')}
+                >
+                  Move up
+                </button>
+                <button
+                  type="button"
+                  className="button button--quiet"
+                  aria-label={`Move ${row.name} down`}
+                  disabled={moving || row.id === lastId}
+                  onClick={() => void move(row, 'down')}
+                >
+                  Move down
                 </button>
               </span>
             ) : null}
@@ -225,7 +297,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
       },
     ];
     return base;
-  }, [canWrite]);
+  }, [canWrite, activePackages, moving, move]);
 
   // The folded group's own two columns: a name with Reinstate beside it, and
   // the contents — nothing else, because nothing else is sellable or priced
@@ -257,14 +329,6 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
     };
     return [name, contents];
   }, [canWrite, reinstatingId, reinstate]);
-
-  // The main table's own rows: active bundles only, unchanged otherwise. A
-  // withdrawn bundle moves to the folded group below rather than leaving the
-  // table altogether (round 62).
-  const activePackages =
-    state.kind === 'ready' ? state.packages.filter((row) => row.status === 'active') : [];
-  const withdrawnPackages =
-    state.kind === 'ready' ? state.packages.filter((row) => row.status === 'inactive') : [];
 
   // Drift is a fact about what the practice is still selling, so a withdrawn
   // bundle — priced or not, on sale or not — never raises it (round 62).

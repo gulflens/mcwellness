@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import {
   applyDiscount,
+  movePackage,
   resolveSaleVat,
   resolveVat,
   validateNewPrice,
@@ -16,6 +17,7 @@ import { readVatRegistered } from './supplier';
 import {
   AddPackagePriceInput,
   CreatePackageInput,
+  MovePackageInput,
   PackageResponse,
   PackagesResponse,
   SetPackageStatusInput,
@@ -99,7 +101,7 @@ type PriceDbRow = {
 
 const PACKAGES_SQL =
   'select id, code, name, name_ar, list_price_fils, expiry_amount, expiry_unit, status ' +
-  'from package where tenant_id = app.current_tenant_id() order by list_price_fils, name';
+  'from package where tenant_id = app.current_tenant_id() order by position, name';
 
 // The components, each carrying what its service costs on its own today: the
 // price with the greatest valid_from at or before today, which is exactly
@@ -555,9 +557,13 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const db = c.get('db');
+    // A bundle brought back goes to the end of the list (operator, 20 October
+    // 2026), so it never lands between two the practice has already ordered.
     const updated = await db.query<{ id: string }>(
-      'update package set status = $2::active_status where id = $1 ' +
-        'and tenant_id = app.current_tenant_id() returning id',
+      'update package set status = $2::active_status, position = case ' +
+        "when $2 = 'active' and status = 'inactive' then (select coalesce(max(position), 0) + 1 " +
+        'from package where tenant_id = app.current_tenant_id()) else position end ' +
+        'where id = $1 and tenant_id = app.current_tenant_id() returning id',
       [packageId, body.data.status],
     );
     if (updated.rowCount === 0) {
@@ -570,5 +576,58 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       throw new Error('The package just updated could not be read back.');
     }
     return c.json(PackageResponse.parse({ package: row }), 200);
+  });
+
+  // One place up or down the practice's list (operator, 20 October 2026).
+  // The rule is `domain/billing/packageOrder.ts`'s; this route locks the
+  // practice's packages so two moves at once cannot interleave, and writes
+  // back only the positions that changed. Each is an update the audit trigger
+  // records with the request's reason, which is required here as Withdraw's.
+  api.post('/api/billing/packages/:id/move', async (c) => {
+    const actor = c.get('actor');
+    const requestId = c.get('requestId');
+    if (!mayWriteCatalogue(actor, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const packageId = c.req.param('id');
+    if (!isUuid(packageId)) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    if (!requestReason(c).trim()) {
+      return c.json({ error: 'bad_request', code: 'reason_required', requestId }, 400);
+    }
+    const body = MovePackageInput.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const db = c.get('db');
+    // Lock first, then read in order: under read committed, a `for update`
+    // that waited on another move re-reads its rows but does not sort them
+    // again, so an ordered read in the same statement could hand
+    // `movePackage` a stale order (schema review, PR 277).
+    await db.query('select id from package where tenant_id = app.current_tenant_id() for update');
+    const current = await db.query<{ id: string; status: 'active' | 'inactive'; position: number }>(
+      'select id, status, position from package where tenant_id = app.current_tenant_id() ' +
+        'order by position, name',
+    );
+    if (!current.rows.some((row) => row.id === packageId)) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    const moved = movePackage(current.rows, packageId, body.data.direction);
+    if (moved === null) {
+      return c.json({ error: 'conflict', code: 'cannot_move', requestId }, 409);
+    }
+    const was = new Map(current.rows.map((row) => [row.id, row.position]));
+    for (const { id, position } of moved) {
+      if (was.get(id) === position) continue;
+      await db.query(
+        'update package set position = $2 where id = $1 and tenant_id = app.current_tenant_id()',
+        [id, position],
+      );
+    }
+    const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
+    const vatRegistered = await readVatRegistered(db);
+    const packages = await readPackages(db, today, vatRegistered);
+    return c.json(PackagesResponse.parse({ packages, vatRegistered }), 200);
   });
 }
