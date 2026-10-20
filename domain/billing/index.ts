@@ -27,7 +27,7 @@ export type {
 } from './balance';
 export { cashCollectedBetween, monthlyMoney } from './recognition';
 export type { CollectedPayment, LedgerCredit, MonthlyMoney } from './recognition';
-export { movePackage } from './packageOrder';
+export { movePackage, reorderPackages } from './packageOrder';
 export { nextVersionCode, planPackageEdit } from './packageEdit';
 export type { EditablePackage, PackageEditPlan } from './packageEdit';
 export type { OrderedPackage, PackageMove } from './packageOrder';
