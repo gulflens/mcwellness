@@ -25,7 +25,10 @@ export type EditablePackage = {
 export type PackageEditPlan =
   | { ok: true; kind: 'in_place'; componentsChanged: boolean }
   | { ok: true; kind: 'new_version' }
-  | { ok: false; code: 'version_starts_today' };
+  | {
+      ok: false;
+      code: 'superseded' | 'withdrawn' | 'duplicate_component' | 'version_starts_today';
+    };
 
 function sameContents(a: EditablePackage['components'], b: EditablePackage['components']): boolean {
   if (a.length !== b.length) return false;
@@ -36,8 +39,16 @@ function sameContents(a: EditablePackage['components'], b: EditablePackage['comp
 export function planPackageEdit(
   current: EditablePackage,
   edit: EditablePackage,
-  at: { sold: boolean; validFrom: string; today: string },
+  at: { replaced: boolean; withdrawn: boolean; sold: boolean; validFrom: string; today: string },
 ): PackageEditPlan {
+  // A version a later one replaced is history, and a withdrawn package is off
+  // the list until it is reinstated: neither is edited.
+  if (at.replaced) return { ok: false, code: 'superseded' };
+  if (at.withdrawn) return { ok: false, code: 'withdrawn' };
+  // One line per service; the quantity says how many.
+  if (new Set(edit.components.map((c) => c.serviceTypeId)).size !== edit.components.length) {
+    return { ok: false, code: 'duplicate_component' };
+  }
   const componentsChanged = !sameContents(current.components, edit.components);
   if (!componentsChanged || !at.sold) return { ok: true, kind: 'in_place', componentsChanged };
   // The old version is withdrawn the moment the new one is written, so the new
@@ -52,12 +63,14 @@ const CODE_MAX = 40;
 
 /**
  * The code of a package's next version: the code it started with, suffixed
- * `-v2`, `-v3`… and shortened to fit, never leaving a hyphen doubled.
+ * `-v2`, `-v3`… and shortened to fit, never leaving a hyphen doubled. Only the
+ * suffix the last version was given comes off, so a first code that happens
+ * to end in `-v2` keeps it.
  */
 export function nextVersionCode(code: string, version: number): string {
   const suffix = `-v${version}`;
-  const base = code
-    .replace(/-v\d+$/, '')
+  const previous = `-v${version - 1}`;
+  const base = (version > 2 && code.endsWith(previous) ? code.slice(0, -previous.length) : code)
     .slice(0, CODE_MAX - suffix.length)
     .replace(/-+$/, '');
   return `${base}${suffix}`;

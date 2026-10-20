@@ -47,7 +47,26 @@ comment on column public.package.supersedes_id is
 comment on column public.package.amendment_reason is
   'Why this version replaced the last; null for a first version.';
 
+-- **Has it been sold?** An edit decides between the two paths by whether any
+-- purchase names the package. A purchase of an erased client is hidden from
+-- the office by `client_erasure_gate`, so the route asks this function, which
+-- counts every purchase in the caller's own practice and answers only yes or
+-- no. The same question 403's guard answers, from the same side of row
+-- security.
+create function app.package_was_sold(p_package_id uuid) returns boolean
+language sql stable security definer
+set search_path = pg_catalog, pg_temp
+as $$
+  select exists (
+    select 1 from public.package_purchase
+     where package_id = p_package_id and tenant_id = app.current_tenant_id()
+  );
+$$;
+revoke execute on function app.package_was_sold(uuid) from public;
+grant execute on function app.package_was_sold(uuid) to app_role;
+
 -- rollback:
+--   drop function if exists app.package_was_sold(uuid);
 --   drop index if exists public.package_one_successor;
 --   alter table public.package drop constraint if exists package_version_chain;
 --   alter table public.package drop constraint if exists package_supersedes_same_practice;

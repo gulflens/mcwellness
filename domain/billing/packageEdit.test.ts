@@ -8,6 +8,9 @@ const NF_SESSION = '00000004-0000-4000-8000-000000000005';
 
 const TODAY = '2026-10-20';
 
+/** A package still on the list: not replaced, not withdrawn. */
+const OPEN = { replaced: false, withdrawn: false };
+
 const gold: EditablePackage = {
   listPriceFils: 1_997_500,
   term: null,
@@ -26,13 +29,15 @@ describe('planPackageEdit', () => {
       term: { amount: 12, unit: 'month' as const },
     };
     expect(
-      planPackageEdit(gold, edit, { sold: true, validFrom: '2026-11-01', today: TODAY }),
+      planPackageEdit(gold, edit, { ...OPEN, sold: true, validFrom: '2026-11-01', today: TODAY }),
     ).toEqual({ ok: true, kind: 'in_place', componentsChanged: false });
   });
 
   it('reads the same contents in another order as unchanged', () => {
     const edit = { ...gold, components: [...gold.components].reverse() };
-    expect(planPackageEdit(gold, edit, { sold: true, validFrom: TODAY, today: TODAY })).toEqual({
+    expect(
+      planPackageEdit(gold, edit, { ...OPEN, sold: true, validFrom: TODAY, today: TODAY }),
+    ).toEqual({
       ok: true,
       kind: 'in_place',
       componentsChanged: false,
@@ -47,7 +52,9 @@ describe('planPackageEdit', () => {
         { serviceTypeId: NF_SESSION, quantity: 25 },
       ],
     };
-    expect(planPackageEdit(gold, edit, { sold: false, validFrom: TODAY, today: TODAY })).toEqual({
+    expect(
+      planPackageEdit(gold, edit, { ...OPEN, sold: false, validFrom: TODAY, today: TODAY }),
+    ).toEqual({
       ok: true,
       kind: 'in_place',
       componentsChanged: true,
@@ -61,7 +68,9 @@ describe('planPackageEdit', () => {
         c.serviceTypeId === NF_SESSION ? { ...c, quantity: 25 } : c,
       ),
     };
-    expect(planPackageEdit(gold, edit, { sold: true, validFrom: TODAY, today: TODAY })).toEqual({
+    expect(
+      planPackageEdit(gold, edit, { ...OPEN, sold: true, validFrom: TODAY, today: TODAY }),
+    ).toEqual({
       ok: true,
       kind: 'new_version',
     });
@@ -70,8 +79,52 @@ describe('planPackageEdit', () => {
   it('starts a new version today, so the package is never off sale between the two', () => {
     const edit = { ...gold, components: [{ serviceTypeId: NF_SESSION, quantity: 30 }] };
     expect(
-      planPackageEdit(gold, edit, { sold: true, validFrom: '2026-11-01', today: TODAY }),
+      planPackageEdit(gold, edit, { ...OPEN, sold: true, validFrom: '2026-11-01', today: TODAY }),
     ).toEqual({ ok: false, code: 'version_starts_today' });
+  });
+
+  it('changes an unsold package in place from a later date, as any price may', () => {
+    const edit = { ...gold, components: [{ serviceTypeId: NF_SESSION, quantity: 30 }] };
+    expect(
+      planPackageEdit(gold, edit, { ...OPEN, sold: false, validFrom: '2026-11-01', today: TODAY }),
+    ).toEqual({ ok: true, kind: 'in_place', componentsChanged: true });
+  });
+
+  it('refuses a version a later one replaced, before anything else', () => {
+    expect(
+      planPackageEdit(gold, gold, {
+        replaced: true,
+        withdrawn: true,
+        sold: true,
+        validFrom: TODAY,
+        today: TODAY,
+      }),
+    ).toEqual({ ok: false, code: 'superseded' });
+  });
+
+  it('refuses a withdrawn package until it is reinstated', () => {
+    expect(
+      planPackageEdit(gold, gold, {
+        ...OPEN,
+        withdrawn: true,
+        sold: false,
+        validFrom: TODAY,
+        today: TODAY,
+      }),
+    ).toEqual({ ok: false, code: 'withdrawn' });
+  });
+
+  it('refuses the same service twice: the quantity says how many', () => {
+    const edit = {
+      ...gold,
+      components: [
+        { serviceTypeId: NF_SESSION, quantity: 10 },
+        { serviceTypeId: NF_SESSION, quantity: 5 },
+      ],
+    };
+    expect(
+      planPackageEdit(gold, edit, { ...OPEN, sold: false, validFrom: TODAY, today: TODAY }),
+    ).toEqual({ ok: false, code: 'duplicate_component' });
   });
 });
 
@@ -86,6 +139,10 @@ describe('nextVersionCode', () => {
     const code = nextVersionCode(long, 12);
     expect(code).toHaveLength(40);
     expect(code.endsWith('-v12')).toBe(true);
+  });
+
+  it('keeps a first code that happens to end like a version, adding its own', () => {
+    expect(nextVersionCode('gold-v2', 2)).toBe('gold-v2-v2');
   });
 
   it('never leaves a hyphen before the suffix doubled', () => {

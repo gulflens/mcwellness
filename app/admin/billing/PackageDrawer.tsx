@@ -549,7 +549,7 @@ export function PackageDrawer({
             onChange={setValidFrom}
             hint={
               editing
-                ? 'Changes apply to sales from this date. Families who already bought keep what they bought.'
+                ? 'The new price starts on this date. A new list price, term or contents apply to new sales straight away. Families who already bought keep what they bought.'
                 : undefined
             }
           />

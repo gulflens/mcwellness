@@ -1174,6 +1174,31 @@ describe('editing a package', () => {
         throw new Error(`Could not sell the editing fixture: ${sold.status}`);
     });
 
+    it("edits a sold package's price, list price and term in place, leaving the sale as it was", async () => {
+      const purchase = async () =>
+        (
+          await h.owner.query(
+            'select id, list_price_fils, net_fils, vat_fils, expires_on ' +
+              'from package_purchase where package_id = $1',
+            [packageId],
+          )
+        ).rows;
+      const before = await purchase();
+      const res = await h.call(
+        'PUT',
+        `/api/billing/packages/${packageId}`,
+        SEEDED.owner,
+        { ...editBody({ nf: 20, validFrom: '2026-09-05', listPriceFils: 1_700_000 }), term: null },
+        EDIT_REASON,
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as PackageResponse;
+      expect(body.package.id).toBe(packageId);
+      expect(body.package.listPriceFils).toBe(1_700_000);
+      expect(body.package.term).toBeNull();
+      expect(await purchase()).toEqual(before);
+    });
+
     it('starts a new version today, or not at all', async () => {
       const res = await h.call(
         'PUT',
@@ -1229,7 +1254,8 @@ describe('editing a package', () => {
       expect(rows[0]).toEqual({
         version: 2,
         supersedes_id: packageId,
-        amendment_reason: 'Twenty sessions from now on',
+        // The price row's words, the same the Notes column shows.
+        amendment_reason: 'Twenty sessions from now on.',
       });
       const audit = await h.owner.query<{ reason: string | null }>(
         "select reason from audit_log where entity_type = 'package' and entity_id = $1 " +
@@ -1239,7 +1265,7 @@ describe('editing a package', () => {
       expect(audit.rows[0]?.reason).toBe('Twenty sessions from now on');
     });
 
-    it('will not edit or reinstate the version it replaced', async () => {
+    it('will not edit, reinstate or price the version it replaced', async () => {
       const edited = await h.call(
         'PUT',
         `/api/billing/packages/${packageId}`,
@@ -1260,6 +1286,18 @@ describe('editing a package', () => {
       expect((await reinstated.json()) as { code?: string }).toMatchObject({
         code: 'superseded',
       });
+      const priced = await h.call(
+        'POST',
+        `/api/billing/packages/${packageId}/price`,
+        SEEDED.owner,
+        {
+          discount: null,
+          validFrom: '2026-09-10',
+          amendmentReason: 'Pricing a replaced version',
+        },
+      );
+      expect(priced.status).toBe(409);
+      expect((await priced.json()) as { code?: string }).toMatchObject({ code: 'superseded' });
     });
   });
 });

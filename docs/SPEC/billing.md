@@ -245,8 +245,11 @@ drawer filled in, its name fixed; `PUT /api/billing/packages/:id`, behind
 `domain/billing/packageEdit.ts`'s `planPackageEdit`:
 
 - Anything but the contents, or the contents of a package nobody has bought,
-  changes **in place**. It applies to new sales only: every sale keeps its own
-  figures and its own end date.
+  changes **in place**, and straight away for new sales: the list price, the
+  term and the contents are the package's own, and only the new price waits
+  for its "On sale from" date. Every sale keeps its own figures and its own
+  end date, so nobody who already bought is touched. "Sold" counts every
+  purchase, an erased client's too (`app.package_was_sold`, migration 415).
 - The contents of a package somebody has bought cannot change (403's guard),
   so that edit writes **a new version** — the same name, Arabic name and place
   in the list, `version` one higher, `supersedes_id` naming the old one,
@@ -258,6 +261,13 @@ drawer filled in, its name fixed; `PUT /api/billing/packages/:id`, behind
 - Every edit writes a new price row, so `validateNewPrice` applies: on or after
   today, and after the price it replaces — a second edit on the day a price
   started takes effect tomorrow at the earliest.
+- A sale and an edit of the same package do not interleave: the sale holds the
+  package `for share` and the edit `for update`, so a buyer's credits always
+  follow the contents they were sold.
+- Once a sold package has a new version, a sale dated before the edit cannot be
+  recorded against either: the old version is off the list and the new one is
+  priced from the day it was made. Record a late sale before editing the
+  contents, or date it on or after the edit.
 
 **The table's columns** (operator, 20 October 2026): Package, Contents, List,
 Discount, VAT, Total, Runs for, Priced from, and Notes last — the price row's

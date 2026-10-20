@@ -343,6 +343,15 @@ export function applyPackageDiscount(
 }
 
 /** Writes the row `checkPackagePrice` has already approved. */
+/** Whether a later version has replaced this package (migration 415). */
+async function isReplaced(db: Db, packageId: string): Promise<boolean> {
+  const { rows } = await db.query(
+    'select 1 from package where tenant_id = app.current_tenant_id() and supersedes_id = $1',
+    [packageId],
+  );
+  return rows.length > 0;
+}
+
 /** A bundle's contents, numbered in the order given. */
 async function insertComponents(
   db: Db,
@@ -521,6 +530,9 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!bundle) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
+    if (await isReplaced(db, packageId)) {
+      return c.json({ error: 'conflict', code: 'superseded', requestId }, 409);
+    }
 
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
     const approval = await checkPackagePrice(db, packageId, body.data, today);
@@ -574,12 +586,13 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
     const db = c.get('db');
     // A version a later one replaced stays retired: bringing it back would put
-    // two of the same package on the list (migration 415).
-    const replaced = await db.query(
-      'select 1 from package where tenant_id = app.current_tenant_id() and supersedes_id = $1',
+    // two of the same package on the list (migration 415). The row is locked
+    // first, so an edit making that successor cannot slip in between.
+    await db.query(
+      'select 1 from package where tenant_id = app.current_tenant_id() and id = $1 for update',
       [packageId],
     );
-    if (replaced.rows[0]) {
+    if (await isReplaced(db, packageId)) {
       return c.json({ error: 'conflict', code: 'superseded', requestId }, 409);
     }
     // A bundle brought back goes to the end of the list (operator, 20 October
@@ -681,12 +694,6 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const input = body.data;
-    if (
-      new Set(input.components.map((component) => component.serviceTypeId)).size !==
-      input.components.length
-    ) {
-      return c.json({ error: 'bad_request', code: 'duplicate_component', requestId }, 400);
-    }
     const db = c.get('db');
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
 
@@ -711,36 +718,17 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!bundle) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
-    const replaced = await db.query(
-      'select 1 from package where tenant_id = app.current_tenant_id() and supersedes_id = $1',
-      [packageId],
-    );
-    if (replaced.rows[0]) {
-      return c.json({ error: 'conflict', code: 'superseded', requestId }, 409);
-    }
-    if (bundle.status !== 'active') {
-      return c.json({ error: 'conflict', code: 'withdrawn', requestId }, 409);
-    }
-
-    const services = await db.query<{ id: string }>(
-      'select id from service_type where tenant_id = app.current_tenant_id() and id = any($1::uuid[])',
-      [input.components.map((component) => component.serviceTypeId)],
-    );
-    if (services.rows.length !== input.components.length) {
-      return c.json({ error: 'not_found', requestId }, 404);
-    }
-
-    const [components, sold] = await Promise.all([
+    const [components, sold, replaced] = await Promise.all([
       db.query<{ service_type_id: string; quantity: number }>(
         'select service_type_id, quantity from package_component ' +
           'where tenant_id = app.current_tenant_id() and package_id = $1',
         [packageId],
       ),
-      db.query(
-        'select 1 from package_purchase where tenant_id = app.current_tenant_id() ' +
-          'and package_id = $1 limit 1',
-        [packageId],
-      ),
+      // Through migration 415's function: it counts a purchase of an erased
+      // client too, which row security hides from the office, so a package
+      // only they bought still reads as sold and is edited as a new version.
+      db.query<{ sold: boolean }>('select app.package_was_sold($1) as sold', [packageId]),
+      isReplaced(db, packageId),
     ]);
     const plan = planPackageEdit(
       {
@@ -755,10 +743,33 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         })),
       },
       input,
-      { sold: sold.rows.length > 0, validFrom: input.price.validFrom, today },
+      {
+        replaced,
+        withdrawn: bundle.status !== 'active',
+        sold: sold.rows[0]?.sold === true,
+        validFrom: input.price.validFrom,
+        today,
+      },
     );
     if (!plan.ok) {
-      return c.json({ error: 'unprocessable', code: plan.code, requestId }, 422);
+      const status = {
+        superseded: 409,
+        withdrawn: 409,
+        duplicate_component: 400,
+        version_starts_today: 422,
+      }[plan.code];
+      return c.json({ error: 'refused', code: plan.code, requestId }, status as 400 | 409 | 422);
+    }
+
+    // Only services the practice still offers: a retired one could be put in
+    // a package that then could never be sold.
+    const services = await db.query<{ id: string }>(
+      'select id from service_type where tenant_id = app.current_tenant_id() ' +
+        "and status = 'active' and id = any($1::uuid[])",
+      [input.components.map((component) => component.serviceTypeId)],
+    );
+    if (services.rows.length !== input.components.length) {
+      return c.json({ error: 'not_found', requestId }, 404);
     }
 
     // The price is checked against the row it will belong to: the package
@@ -821,7 +832,9 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
           bundle.position,
           version,
           packageId,
-          reason.slice(0, 200),
+          // The same words the price row carries, so the version and the
+          // Notes column never say two different things.
+          input.price.amendmentReason,
         ],
       );
       const newId = inserted.rows[0]?.id;
