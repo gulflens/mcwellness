@@ -83,5 +83,30 @@ export function practiceTodayInWords(now: Date = new Date()): string {
   }).format(now);
 }
 
+/**
+ * A stored date drawn for a person, in the practice's zone and never the
+ * computer's: a colleague abroad sees the day it was in Dubai (operator,
+ * 20 October 2026). A bare calendar day such as a birthday is drawn as itself.
+ */
+const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function drawn(iso: string, options: Intl.DateTimeFormatOptions): string {
+  const calendarDay = CALENDAR_DAY.test(iso);
+  return new Intl.DateTimeFormat('en-GB', {
+    ...options,
+    timeZone: calendarDay ? 'UTC' : PRACTICE_TIME_ZONE,
+  }).format(new Date(calendarDay ? `${iso}T00:00:00Z` : iso));
+}
+
+/** 04/09/2026 */
+export function practiceDate(iso: string): string {
+  return drawn(iso, { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+/** 4 September 2026 */
+export function practiceDateLong(iso: string): string {
+  return drawn(iso, { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
 export { canActivate, consentsOutstanding };
 export type { Missing };

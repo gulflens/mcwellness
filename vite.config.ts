@@ -26,6 +26,10 @@ export default defineConfig(({ mode }) => {
       environment: 'node',
       // Database tests (tests/db and every tests/<stream>/db) run through vitest.db.config.ts.
       exclude: [...configDefaults.exclude, 'tests/db/**', 'tests/**/db/**'],
+      // Run on a clock far from Dubai, so a date drawn in the computer's own
+      // zone instead of the practice's fails here, not for a colleague abroad
+      // (operator, 20 October 2026, working from the United States).
+      env: { TZ: 'America/Los_Angeles' },
     },
   };
 });

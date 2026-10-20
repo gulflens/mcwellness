@@ -10,7 +10,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { isActiveOn } from './ConsentTab';
 import { Textarea } from './FormAtoms';
-import { practiceToday } from './activation';
+import { practiceDate, practiceToday } from './activation';
 
 /**
  * The six questions in the agreement's own words (docs/CONSENT/agreement.en.md).
@@ -155,8 +155,7 @@ export function HealthTab({
       ) : (
         <>
           <p className="small muted">
-            Asked on{' '}
-            <span className="numeric">{new Date(current.askedAt).toLocaleDateString('en-GB')}</span>
+            Asked on <span className="numeric">{practiceDate(current.askedAt)}</span>
             {current.wordingVersion ? ` under agreement ${current.wordingVersion}` : ''}.
           </p>
           <ul className="record-rows" aria-label="Health answers">

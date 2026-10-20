@@ -8,7 +8,7 @@ import {
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { useFocusOnOpen } from '../../shell/components/useFocusOnOpen';
-import { practiceToday } from './activation';
+import { practiceDate, practiceToday } from './activation';
 import { contactDisplayName } from './contactName';
 import { PURPOSE_LABELS } from './consentPurposeLabels';
 import { DocumentLink } from './DocumentLink';
@@ -291,7 +291,7 @@ export function ConsentTab({
                   <p>{PURPOSE_LABELS[purpose] ?? purpose}</p>
                   <p className="small muted">
                     {active
-                      ? `On file since ${new Date(active.givenAt).toLocaleDateString('en-GB')}`
+                      ? `On file since ${practiceDate(active.givenAt)}`
                       : isRequired
                         ? 'Needed before this client can be activated'
                         : 'Not recorded'}
@@ -301,11 +301,9 @@ export function ConsentTab({
                       <span>{STATUS_LABELS[consent.status] ?? consent.status}</span>
                       <span>{METHOD_LABELS[consent.method] ?? consent.method}</span>
                       <span>Given by {nameOf(consent.givenByContactId)}</span>
-                      <span>{new Date(consent.givenAt).toLocaleDateString('en-GB')}</span>
+                      <span>{practiceDate(consent.givenAt)}</span>
                       {consent.withdrawnAt ? (
-                        <span>
-                          Withdrawn {new Date(consent.withdrawnAt).toLocaleDateString('en-GB')}
-                        </span>
+                        <span>Withdrawn {practiceDate(consent.withdrawnAt)}</span>
                       ) : null}
                       {/* Why it went, from the trail rather than a column: a
                         withdrawal always carries a reason and the tab that
