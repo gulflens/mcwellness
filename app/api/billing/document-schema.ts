@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { SEND_CHANNELS } from '../../../domain/shared/sending';
+import { distinct, SearchText } from './ledger-schema';
+import { decodeReceiptCursor } from './search';
 
 /**
  * The shapes the document routes accept and answer. Imported by the routes and
@@ -79,12 +81,15 @@ export const MonthlyMoneyResponse = z.object({
 });
 export type MonthlyMoneyResponse = z.infer<typeof MonthlyMoneyResponse>;
 
+/** How the money came: in hand, by bank transfer, or through a payment link. */
+export const PaymentMethod = z.enum(['cash', 'transfer', 'link']);
+
 /** One payment in the receipt book. */
 export const ReceiptRow = z.object({
   id: z.uuid(),
   /** "RCP-000004"; null only on a payment recorded before the receipt book existed. */
   receiptReference: z.string().nullable(),
-  method: z.enum(['cash', 'transfer', 'link']),
+  method: PaymentMethod,
   amountFils: z.number().int().positive(),
   /** A bank reference or a payment link's own id. Never a card number. */
   reference: z.string().nullable(),
@@ -104,6 +109,36 @@ export const ReceiptsResponse = z.object({
   truncated: z.boolean().optional(),
 });
 export type ReceiptsResponse = z.infer<typeof ReceiptsResponse>;
+
+/**
+ * `POST /api/billing/payments/search` — the receipt book searched, filtered
+ * and paged, with the same search box the invoice book has.
+ *
+ * `search` is matched anywhere in the receipt's number, the number of the
+ * invoice it settles, the client's record number and the client's name.
+ * `before` is the `nextBefore` the previous page handed back, and nothing
+ * else: a payment has no gapless number to resume from, so the cursor names
+ * the last row's moment and id, and a cursor this API did not make is refused
+ * rather than guessed at.
+ */
+export const PaymentSearchInput = z
+  .object({
+    search: SearchText.optional(),
+    methods: z.array(PaymentMethod).min(1).max(3).refine(distinct, 'Each method once.').optional(),
+    before: z
+      .string()
+      .max(200)
+      .refine((value) => decodeReceiptCursor(value) !== null, 'Not a cursor from this book.')
+      .optional(),
+  })
+  .strict();
+export type PaymentSearchInput = z.infer<typeof PaymentSearchInput>;
+
+/** The receipt book's page, with where to resume when more matched. */
+export const PaymentSearchResponse = ReceiptsResponse.omit({ truncated: true }).extend({
+  nextBefore: z.string().nullable(),
+});
+export type PaymentSearchResponse = z.infer<typeof PaymentSearchResponse>;
 
 /**
  * A contact a document may be sent to. Deliberately without the number or the
