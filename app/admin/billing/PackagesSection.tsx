@@ -3,7 +3,7 @@ import { termWords } from '@domain/billing';
 import { PackagesResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
-import { ChevronIcon } from '../../shell/components/Icons';
+import { ArrowDownIcon, ArrowUpIcon, ChevronIcon } from '../../shell/components/Icons';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate } from './BillingPage';
 import { formatDiscount, formatFils } from './money';
@@ -178,11 +178,11 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           <span className="name">
             <span>{row.name}</span>
             {canWrite ? (
-              <span className="row-actions cell-action">
+              <span className="row-actions row-actions--buttons cell-action">
                 {row.sellable ? (
                   <button
                     type="button"
-                    className="button button--quiet"
+                    className="button button--tonal button--compact"
                     onClick={() => {
                       setNote(null);
                       setSelling(row);
@@ -195,7 +195,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
                 )}
                 <button
                   type="button"
-                  className="button button--quiet"
+                  className="button button--neutral button--compact"
                   onClick={() => {
                     setNote(null);
                     setWithdrawing(row);
@@ -205,21 +205,23 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
                 </button>
                 <button
                   type="button"
-                  className="button button--quiet"
+                  className="button button--quiet button--icon"
                   aria-label={`Move ${row.name} up`}
+                  title="Move up"
                   disabled={moving || row.id === firstId}
                   onClick={() => void move(row, 'up')}
                 >
-                  Move up
+                  <ArrowUpIcon />
                 </button>
                 <button
                   type="button"
-                  className="button button--quiet"
+                  className="button button--quiet button--icon"
                   aria-label={`Move ${row.name} down`}
+                  title="Move down"
                   disabled={moving || row.id === lastId}
                   onClick={() => void move(row, 'down')}
                 >
-                  Move down
+                  <ArrowDownIcon />
                 </button>
               </span>
             ) : null}

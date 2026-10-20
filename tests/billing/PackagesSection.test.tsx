@@ -521,3 +521,28 @@ describe('PackagesSection, ordering', () => {
     expect(screen.queryByRole('button', { name: /^Move / })).toBeNull();
   });
 });
+
+describe('PackagesSection, row buttons', () => {
+  it('draws Sell to a client and Withdraw as filled buttons', async () => {
+    mount(OWNER, [SILVER]);
+    await screen.findByText('Silver');
+    expect(screen.getByRole('button', { name: 'Sell to a client' }).className).toContain(
+      'button--tonal',
+    );
+    expect(screen.getByRole('button', { name: 'Withdraw' }).className).toContain('button--neutral');
+  });
+
+  it('draws Move up and Move down as arrows, named for a screen reader and on hover', async () => {
+    mount(OWNER, [SILVER]);
+    await screen.findByText('Silver');
+    for (const [name, title] of [
+      ['Move Silver up', 'Move up'],
+      ['Move Silver down', 'Move down'],
+    ] as const) {
+      const button = screen.getByRole('button', { name });
+      expect(button.textContent).toBe('');
+      expect(button.querySelector('svg')).toBeTruthy();
+      expect(button.getAttribute('title')).toBe(title);
+    }
+  });
+});

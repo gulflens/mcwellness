@@ -379,3 +379,57 @@
 .fold[open] .fold__chevron {
   rotate: 180deg;
 }
+
+/*
+  A package row's own buttons (operator, 20 October 2026): Sell to a client
+  and Withdraw are drawn as buttons with a fill, so they read as things to
+  press rather than words in the row; Move up and Move down are arrows.
+  Sell carries a wash of the practice's violet, Withdraw the page's neutral
+  grey, so the sale is the stronger of the two without becoming the page's
+  one primary action.
+
+  The wash is mixed from `--brand` and `--surface` rather than taken from
+  `--brand-pale`, which has no dark-ground value: mixed, it holds on either
+  ground. Its label, the violet nudged toward the ink, measures 11.8 on the
+  light ground and 5.9 on the dark; Withdraw's ink on paper, 14.3 and 16.2.
+*/
+.row-actions--buttons {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.button--tonal {
+  --tonal-fill: color-mix(in srgb, var(--brand) 14%, var(--surface));
+  background: var(--tonal-fill);
+  border-color: var(--tonal-fill);
+  color: color-mix(in srgb, var(--brand) 70%, var(--ink));
+}
+
+.button--tonal:hover:not(:disabled) {
+  --tonal-fill: color-mix(in srgb, var(--brand) 22%, var(--surface));
+}
+
+.button--neutral {
+  background: var(--paper);
+  border-color: var(--paper);
+  color: var(--ink);
+}
+
+.button--neutral:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--paper) 88%, var(--ink));
+  border-color: color-mix(in srgb, var(--paper) 88%, var(--ink));
+}
+
+/* A row's buttons are smaller than a page's: the row is the target too. */
+.button--compact {
+  min-block-size: 2rem;
+  padding-inline: var(--s-3);
+}
+
+/* An arrow alone, square, the same height as the buttons beside it. */
+.button--icon {
+  min-block-size: 2rem;
+  min-inline-size: 2rem;
+  padding: 0;
+}

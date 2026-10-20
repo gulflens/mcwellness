@@ -130,6 +130,18 @@ export const ChevronIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const ArrowUpIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M10 15V5M5.5 9.5L10 5l4.5 4.5" />
+  </Icon>
+);
+
+export const ArrowDownIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M10 5v10M5.5 10.5L10 15l4.5-4.5" />
+  </Icon>
+);
+
 export const CloseIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M5 5l10 10M15 5L5 15" />
