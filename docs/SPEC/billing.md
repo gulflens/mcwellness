@@ -237,6 +237,15 @@ the practice has ordered since. Positions are not unique: two bundles added or
 reinstated at the same moment may share one until the next move, and the list
 breaks the tie by name.
 
+**The table's columns** (operator, 20 October 2026): Package, Contents, List,
+Discount, VAT, Total, Runs for, Priced from, and Notes last — the price row's
+`amendment_reason`, or "Not on sale" for a bundle with no price yet. There is
+no separate net "Price now" column: while the practice is not registered for
+VAT it only repeated Total, and the operator chose to drop it outright. Once
+the practice registers, the net price is Total less VAT and is not a column of
+its own; restoring one is a decision for then, not a regression. (The service
+price list of section 2.3 keeps its net, VAT and gross columns.)
+
 ---
 
 ## 3. Payment methods
