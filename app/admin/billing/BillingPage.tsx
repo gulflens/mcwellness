@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { termWords } from '@domain/billing';
 import { canActor } from '@domain/shared/actor';
 import { PricesResponse, type PriceRow } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, PageHeader } from '../../shell/components/Controls';
-import { Table, type Column } from '../../shell/components/Table';
 import './billing.css';
 import { BalancesSection } from './BalancesSection';
 import { InvoicesSection } from './InvoicesSection';
-import { formatDiscount, formatFils } from './money';
+import { formatFils } from './money';
 import { PackagesSection } from './PackagesSection';
 import { PriceDrawer } from './PriceDrawer';
+import { PriceList } from './PriceList';
 import { ReceiptsSection } from './ReceiptsSection';
 
 /**
@@ -105,6 +104,7 @@ export function BillingPage() {
   }, [navigate]);
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [changing, setChanging] = useState<PriceRow | null>(null);
   // Names the service and the new price once a save succeeds (the design
   // review's ask: a calm confirmation, not silence). It dismisses itself on
   // the next action this page offers — opening the drawer again — rather
@@ -143,86 +143,22 @@ export function BillingPage() {
     }
   }, [load, section]);
 
-  const columns = useMemo<Column<PriceRow>[]>(
-    () => [
-      {
-        key: 'service',
-        header: 'Service',
-        render: (row) => (
-          <span className="name">
-            <span>{row.serviceTypeName}</span>
-          </span>
-        ),
-      },
-      {
-        // The one column that names the currency (docs/DESIGN-BRIEF.md: say
-        // it once); every other money column is obviously the same currency
-        // and stays bare.
-        key: 'listPrice',
-        header: 'List price (AED)',
-        numeric: true,
-        align: 'end',
-        render: (row) => formatFils(row.listPriceFils),
-      },
-      {
-        // The share when that is how the discount was set, the sum when it
-        // was a sum, and an em dash when there is none: the column says what
-        // was given, not how the row happens to store it.
-        key: 'discount',
-        header: 'Discount',
-        numeric: true,
-        align: 'end',
-        render: (row) => formatDiscount(row),
-      },
-      {
-        key: 'unitPrice',
-        header: 'Price',
-        numeric: true,
-        align: 'end',
-        render: (row) => formatFils(row.unitPriceFils),
-      },
-      {
-        key: 'vat',
-        header: 'VAT',
-        numeric: true,
-        align: 'end',
-        render: (row) => formatFils(row.vatFils),
-      },
-      {
-        key: 'total',
-        header: 'Total',
-        numeric: true,
-        align: 'end',
-        render: (row) => formatFils(row.grossFils),
-      },
-      {
-        // How long a credit sold at this price lasts, in the rule's own words,
-        // and "No expiry" where the price sets no term. A term on a price is
-        // carried forward through every amendment, so this list is where it is
-        // seen — read exactly as the Packages list's own "Runs for" column is.
-        key: 'term',
-        header: 'Runs for',
-        numeric: true,
-        render: (row) => termWords(row.term)?.en ?? 'No expiry',
-      },
-      {
-        key: 'validFrom',
-        header: 'Effective from',
-        numeric: true,
-        render: (row) => formatDate(row.validFrom),
-      },
-    ],
-    [],
-  );
-
   const openDrawer = useCallback(() => {
     setSuccessNote(null);
+    setChanging(null);
+    setDrawerOpen(true);
+  }, []);
+  // A row's own "Change price": the same drawer, its service chosen already.
+  const changePrice = useCallback((row: PriceRow) => {
+    setSuccessNote(null);
+    setChanging(row);
     setDrawerOpen(true);
   }, []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const onCreated = useCallback(
     (price: PriceRow) => {
       setDrawerOpen(false);
+      setChanging(null);
       setSuccessNote(
         `${price.serviceTypeName}'s price is now AED ${formatFils(price.unitPriceFils)}.`,
       );
@@ -288,13 +224,7 @@ export function BillingPage() {
             </p>
           ) : null}
           {state.kind === 'ready' ? (
-            <Table
-              caption="Current prices"
-              columns={columns}
-              rows={state.response.prices}
-              rowKey={(row) => row.id}
-              empty="No prices are set yet."
-            />
+            <PriceList prices={state.response.prices} canWrite={canWrite} onChange={changePrice} />
           ) : null}
           {drawerOpen ? (
             <PriceDrawer
@@ -303,6 +233,7 @@ export function BillingPage() {
               // The rows already on screen, so the drawer can show the term
               // the price it supersedes carries without asking for it again.
               currentPrices={state.kind === 'ready' ? state.response.prices : []}
+              changing={changing}
             />
           ) : null}
         </>

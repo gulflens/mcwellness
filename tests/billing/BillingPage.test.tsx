@@ -294,6 +294,69 @@ describe('BillingPage', () => {
   });
 });
 
+/**
+ * A ResizeObserver that reports one width at once, standing in for a layout
+ * jsdom does not do: the price list asks its own width to choose a table or
+ * cards (app/admin/billing/useWidth.ts).
+ */
+function narrowTo(width: number) {
+  class FixedObserver {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      this.callback(
+        [{ target, contentRect: { width } } as unknown as ResizeObserverEntry],
+        this as unknown as ResizeObserver,
+      );
+    }
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal('ResizeObserver', FixedObserver);
+}
+
+describe('changing a price, and the list on a narrow screen', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('offers "Change price" on each service, which opens the drawer on that service', async () => {
+    mount(OWNER, { body: PRICES });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Change the price of Neurofeedback session' }),
+    );
+    expect(
+      await screen.findByRole('heading', { name: 'Change the price of Neurofeedback session' }),
+    ).toBeTruthy();
+    await screen.findByRole('option', { name: 'Neurofeedback session' });
+    expect(screen.getByLabelText('Service')).toHaveProperty('value', NF_SESSION_ID);
+  });
+
+  it('offers no "Change price" to a lead practitioner', async () => {
+    mount(LEAD_PRACTITIONER, { body: PRICES });
+    await screen.findByText('Neurofeedback session');
+    expect(screen.queryByRole('button', { name: /^Change the price of / })).toBeNull();
+  });
+
+  it('draws one card per service, every figure named beside it, when the list is narrow', async () => {
+    narrowTo(400);
+    mount(OWNER, { body: PRICES });
+    const card = await screen.findByRole('article', { name: 'Neurofeedback session' });
+    expect(document.querySelector('table')).toBeNull();
+    const terms = Array.from(card.querySelectorAll('dt')).map((dt) => dt.textContent);
+    expect(terms).toEqual([
+      'List price (AED)',
+      'Discount',
+      'Price',
+      'VAT',
+      'Runs for',
+      'Effective from',
+    ]);
+    expect(card.textContent).toContain('945.00');
+    expect(card.textContent).toContain('Setting the launch price.');
+    expect(
+      screen.getByRole('button', { name: 'Change the price of Neurofeedback session' }),
+    ).toBeTruthy();
+  });
+});
+
 describe('the money screen’s four sections', () => {
   it('opens on Prices, and asks for nothing else until another section is opened', async () => {
     const { fetchImpl } = mount(OWNER, { body: PRICES });

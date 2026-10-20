@@ -713,3 +713,69 @@
   flex: none;
   white-space: nowrap;
 }
+
+/*
+  The price list (operator, 20 October 2026): the ledger's table with a
+  desk's room, one card per service without it (PriceList.tsx asks the list's
+  own width). The card is the package tile's: the same surface, hairline and
+  labelled figures, so the two catalogues read as one family.
+*/
+.price-list {
+  margin-block-start: var(--s-4);
+}
+
+.price-total {
+  font-weight: var(--w-medium);
+}
+
+.price-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.price-cards > li {
+  display: flex;
+}
+
+.price-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  inline-size: 100%;
+  padding: var(--s-4);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.price-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.price-card__name {
+  margin: 0;
+  font-size: var(--t-body);
+  font-weight: var(--w-medium);
+}
+
+.price-card__total {
+  flex: none;
+  margin: 0;
+  font-weight: var(--w-medium);
+}
+
+.price-card__reason {
+  margin: 0;
+}
+
+.price-card__change {
+  margin-block-start: auto;
+  inline-size: 100%;
+}
