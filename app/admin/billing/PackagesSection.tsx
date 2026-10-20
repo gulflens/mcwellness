@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { termWords } from '@domain/billing';
 import { PackagesResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
@@ -37,23 +37,20 @@ type State =
 const REINSTATE_REASON = 'Reinstated from the packages list';
 const REINSTATE_FAILED_MESSAGE = 'This package could not be reinstated. Try again.';
 
-function contentsOf(row: PackageRow): string {
-  return row.components
-    .map((component) => `${component.quantity} × ${component.serviceTypeName}`)
-    .join(', ');
-}
-
 /**
- * Text in a table cell that is allowed to take a second line.
- *
- * The shell's `.ledger td` is `nowrap`, which is right for a figure and wrong
- * for a sentence: the contents of a programme and the reason behind its price
- * are both sentences, and holding them on one line pushed this table past
- * 1,600px — so at 1024 and even at 1440 the action at the end of the row was
- * off-screen entirely. White space inherits, so a block child sets it back.
+ * A bundle's contents, one service to a line (operator, 20 October 2026): a
+ * comma-joined sentence made "2 × Brain map (QEEG)" hard to pick out of the row.
  */
-function Wrapped({ children }: { children: ReactNode }) {
-  return <span className="cell-wrap">{children}</span>;
+function Contents({ row }: { row: PackageRow }) {
+  return (
+    <ul className="cell-wrap cell-lines" aria-label={`${row.name} contents`}>
+      {row.components.map((component) => (
+        <li key={component.serviceTypeId}>
+          {`${component.quantity} × ${component.serviceTypeName}`}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function PackagesSection({ canWrite }: { canWrite: boolean }) {
@@ -160,7 +157,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
       {
         key: 'contents',
         header: 'Contents',
-        render: (row) => <Wrapped>{contentsOf(row)}</Wrapped>,
+        render: (row) => <Contents row={row} />,
       },
       {
         key: 'list',
@@ -256,7 +253,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
     const contents: Column<PackageRow> = {
       key: 'contents',
       header: 'Contents',
-      render: (row) => <Wrapped>{contentsOf(row)}</Wrapped>,
+      render: (row) => <Contents row={row} />,
     };
     return [name, contents];
   }, [canWrite, reinstatingId, reinstate]);
