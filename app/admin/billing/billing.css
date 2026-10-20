@@ -406,8 +406,16 @@
   color: color-mix(in srgb, var(--brand) 70%, var(--ink));
 }
 
+/* Hover and press restate the fill: the shell's own `.button:hover` and
+   `.button:active` set a background of their own, and a rule that only
+   changed the variable would lose to them. */
 .button--tonal:hover:not(:disabled) {
-  --tonal-fill: color-mix(in srgb, var(--brand) 22%, var(--surface));
+  background: color-mix(in srgb, var(--brand) 22%, var(--surface));
+  border-color: color-mix(in srgb, var(--brand) 22%, var(--surface));
+}
+
+.button--tonal:active:not(:disabled) {
+  background: color-mix(in srgb, var(--brand) 28%, var(--surface));
 }
 
 .button--neutral {
@@ -421,15 +429,19 @@
   border-color: color-mix(in srgb, var(--paper) 88%, var(--ink));
 }
 
+.button--neutral:active:not(:disabled) {
+  background: color-mix(in srgb, var(--paper) 80%, var(--ink));
+}
+
 /* A row's buttons are smaller than a page's: the row is the target too. */
 .button--compact {
-  min-block-size: 2rem;
+  min-block-size: var(--s-8);
   padding-inline: var(--s-3);
 }
 
 /* An arrow alone, square, the same height as the buttons beside it. */
 .button--icon {
-  min-block-size: 2rem;
-  min-inline-size: 2rem;
+  min-block-size: var(--s-8);
+  min-inline-size: var(--s-8);
   padding: 0;
 }
