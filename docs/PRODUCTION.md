@@ -3923,3 +3923,27 @@ the pass was a build alone.
 **Verified.** Health 200 in 0.45 s and deep health 200 in 0.47 s.
 `BillingPage-CjHru_RZ.css` carries `button--tonal` and `button--icon`, and
 `BillingPage-DhJ5ppTq.js` uses both.
+
+## What was done on 2026-10-20: the fifty-fifth live pass — a Notes column, and no Price now
+
+**05:16 UTC: main `8f7d3932`, PR 281, on the operator's word.** Its checks
+passed on `6b9179a5`, whose tree main's equals (`5e3e5aa7`). Front end only, so
+the pass was a build alone.
+- Billing › Packages: the price's reason moves to a Notes column, last on the
+  right ("Not on sale" for a bundle with no price), and the Price now column
+  is gone: while the practice is not registered for VAT it only repeated Total
+  (`docs/SPEC/billing.md` section 2.5 records the columns and what changes once
+  the practice registers).
+
+**Databases: untouched.** Both stay at 139.
+
+**Build.** The host's build list ended at the 54th pass (`01a15782`).
+- Archive `mcwellness-8f7d3932.tar.gz`, 8,056,526 bytes. TUS create 201, then
+  PATCH 204 with the offset equal to the size.
+- Build `01a157bc`, stored settings.
+- Entry `index-z3gMzppm.js` → `index-BPTUfJHy.js`, flipped about 70 s after
+  the start call. No restart.
+
+**Verified.** Health 200 and deep health 200. `BillingPage-CI0jQDVr.js`
+carries the `notes` column with the header `Notes`; "Price now" remains only
+as the Add package drawer's field label.
