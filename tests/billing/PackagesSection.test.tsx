@@ -145,27 +145,39 @@ describe('PackagesSection', () => {
     expect(screen.queryByText('12 months')).toBeNull();
   });
 
-  it('shows the list price and the price now as two separate figures', async () => {
+  it('shows the list price, the VAT and the total, with no separate Price now column', async () => {
     mount(OWNER, [SILVER]);
     await screen.findByText('Silver');
-    // AED 12,150 published, AED 10,325 charged, VAT on top of the second.
+    // AED 12,150 published; VAT on top of what is charged, and the total.
     expect(screen.getByText('12,150.00')).toBeTruthy();
-    expect(screen.getByText('10,325.00')).toBeTruthy();
     expect(screen.getByText('516.25')).toBeTruthy();
     expect(screen.getByText('10,841.25')).toBeTruthy();
     expect(screen.getByText('List (AED)')).toBeTruthy();
-    expect(screen.getByText('Price now')).toBeTruthy();
+    // The operator's decision of 20 October 2026: Price now mirrored Total.
+    expect(screen.queryByText('Price now')).toBeNull();
+    expect(screen.queryByText('10,325.00')).toBeNull();
+  });
+
+  it("puts the price's reason in a Notes column at the end of the row", async () => {
+    mount(OWNER, [SILVER]);
+    const table = await screen.findByRole('table', { name: 'Packages' });
+    const headers = within(table)
+      .getAllByRole('columnheader')
+      .map((th) => th.textContent);
+    expect(headers.at(-1)).toBe('Notes');
+    const cells = within(within(table).getAllByRole('row')[1]!).getAllByRole('cell');
+    expect(cells.at(-1)?.textContent).toBe("Launch pricing, ends on the founder's word.");
   });
 
   it('says in one line that no VAT is charged while the practice is not registered', async () => {
     mount(OWNER, [SILVER_UNREGISTERED], false);
     await screen.findByText('Silver');
     // The sentence, the VAT column left where it is, and the total reading
-    // the price: AED 10,325 in both the price and the total column.
+    // the price: AED 10,325, once, in Total.
     expect(screen.getByText(NO_VAT_NOTE)).toBeTruthy();
     expect(screen.getByText('VAT')).toBeTruthy();
     expect(screen.getByText('0.00')).toBeTruthy();
-    expect(screen.getAllByText('10,325.00')).toHaveLength(2);
+    expect(screen.getAllByText('10,325.00')).toHaveLength(1);
   });
 
   it('says nothing extra once the practice is registered for VAT', async () => {
