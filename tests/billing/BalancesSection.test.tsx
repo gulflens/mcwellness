@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BalancesSection } from '../../app/admin/billing/BalancesSection';
-import { json, mountWith, OWNER } from './harness';
+import { json, mountWith, narrowTo, OWNER } from './harness';
 
 afterEach(cleanup);
 
@@ -354,5 +354,72 @@ describe('BalancesSection', () => {
         'This balance could not be loaded. Try again.',
       ),
     );
+  });
+});
+
+describe('the balance at a glance', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('names the family it is about, with the record number, above the figures', async () => {
+    mount(balance());
+    await findClient();
+    const header = await screen.findByRole('region', { name: 'Client' });
+    expect(header.textContent).toContain('Hazel Harbour');
+    expect(header.textContent).toContain('MW-000001');
+    expect(header.querySelector('.balance__avatar')?.textContent).toBe('HH');
+    expect(within(header).getByRole('button', { name: 'Record a payment' })).toBeTruthy();
+  });
+
+  it('draws what is owed as the one figure to notice, and a credit plainly', async () => {
+    mount(balance());
+    await findClient();
+    const owed = (await screen.findByText('Outstanding')).closest('.figures__item');
+    expect(owed?.className).toContain('figures__item--owed');
+    cleanup();
+    mount(balance({ outstandingFils: -50_000, chargedFils: 0, paidFils: 50_000 }));
+    await findClient();
+    const credit = (await screen.findByText('In credit')).closest('.figures__item');
+    expect(credit?.className).not.toContain('figures__item--owed');
+  });
+
+  it('shows what has been delivered as a bar beside the words, the bar hidden from a screen reader', async () => {
+    mount(balance());
+    await findClient();
+    const words = await screen.findByText('2 of 15');
+    const progress = words.closest('.progress');
+    const bar = progress?.querySelector('.progress__bar');
+    expect(bar?.getAttribute('aria-hidden')).toBe('true');
+    expect((bar?.firstElementChild as HTMLElement | null)?.style.inlineSize).toBe('13%');
+  });
+
+  it('lists one card per service, with what is left and when it runs out, on a narrow screen', async () => {
+    narrowTo(360);
+    mount(balance());
+    await findClient();
+    const cards = await screen.findByRole('list', { name: 'Sessions this client has left' });
+    expect(document.querySelector('table')).toBeNull();
+    const first = within(cards).getAllByRole('listitem')[0]!;
+    expect(first.textContent).toContain('Neurofeedback session');
+    expect(first.textContent).toContain('12 left');
+    expect(first.textContent).toContain('2 of 15');
+    expect(first.textContent).toContain('Runs out 2 Sept 2027');
+    // On a phone the one action docks to the foot rather than the header.
+    const docked = document.querySelector('.balance__pay--docked');
+    expect(docked?.textContent).toBe('Record a payment');
+    expect(
+      screen.getByRole('region', { name: 'Client' }).querySelector('.balance__pay'),
+    ).toBeNull();
+  });
+});
+
+describe('choosing another family', () => {
+  it('names the chosen family once, in their header, and Change goes back to the search', async () => {
+    mount(balance());
+    await findClient();
+    await screen.findByRole('region', { name: 'Client' });
+    expect(screen.queryByRole('searchbox', { name: 'Client' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose another client' }));
+    expect(screen.getByRole('searchbox', { name: 'Client' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Client' })).toBeNull();
   });
 });

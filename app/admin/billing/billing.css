@@ -713,3 +713,461 @@
   flex: none;
   white-space: nowrap;
 }
+
+/*
+  The price list (operator, 20 October 2026): the ledger's table with a
+  desk's room, one card per service without it (PriceList.tsx asks the list's
+  own width). The card is the package tile's: the same surface, hairline and
+  labelled figures, so the two catalogues read as one family.
+*/
+.price-list {
+  margin-block-start: var(--s-4);
+}
+
+.price-total {
+  font-weight: var(--w-medium);
+}
+
+.price-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.price-cards > li {
+  display: flex;
+}
+
+.price-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  inline-size: 100%;
+  padding: var(--s-4);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.price-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.price-card__name {
+  margin: 0;
+  font-size: var(--t-body);
+  font-weight: var(--w-medium);
+}
+
+.price-card__total {
+  flex: none;
+  margin: 0;
+  font-weight: var(--w-medium);
+}
+
+.price-card__reason {
+  margin: 0;
+}
+
+.price-card__change {
+  margin-block-start: auto;
+  inline-size: 100%;
+}
+
+/*
+  One family's balance (operator, 20 October 2026): whose it is, the four
+  figures as tiles with what is owed drawn to be noticed, what is left as
+  bars, then the packages bought. On a phone Record a payment docks to the
+  foot of the screen, where a thumb is.
+*/
+.balance__client {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin-block: var(--s-4);
+  padding: var(--s-4);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.balance__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--row);
+  block-size: var(--row);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 14%, var(--surface));
+  color: var(--brand);
+  font-weight: var(--w-medium);
+}
+
+.balance__who {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.balance__name {
+  font-size: var(--t-body);
+  font-weight: var(--w-medium);
+}
+
+.balance__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+  gap: var(--s-3);
+}
+
+.balance__figures .figures__item {
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.balance__figures .figures__item dd:first-of-type {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--w-medium);
+}
+
+/* Owing is the one figure that asks for something. */
+.figures__item--owed {
+  background: color-mix(in srgb, var(--attention) 10%, var(--surface)) !important;
+  border-color: color-mix(in srgb, var(--attention) 45%, var(--surface)) !important;
+}
+
+.figures__item--owed dd:first-of-type {
+  color: var(--attention);
+}
+
+.balance__services .figures__heading {
+  margin-block-start: var(--s-6);
+}
+
+/* Delivered out of bought: the words, and a bar that repeats them. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-inline-size: 8rem;
+}
+
+.progress__bar {
+  display: block;
+  block-size: var(--s-2);
+  border-radius: var(--r-1);
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  overflow: hidden;
+}
+
+.progress__fill {
+  display: block;
+  block-size: 100%;
+  background: var(--brand);
+}
+
+.service-cards {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.service-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+}
+
+.service-card + .service-card {
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.service-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+
+.service-card__name {
+  font-weight: var(--w-medium);
+}
+
+.service-card__left {
+  flex: none;
+  font-weight: var(--w-medium);
+}
+
+/* On a phone the payment docks to the foot of the screen, where a thumb is:
+   the last thing in the balance, stuck to the bottom while the rest scrolls
+   beneath it (BalancesSection.tsx decides which, by the balance's width). */
+.balance__pay--docked {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 2;
+  margin-block-start: var(--s-4);
+  padding-block: var(--s-3) calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.balance__pay--docked .button {
+  inline-size: 100%;
+}
+
+/*
+  A growing book (operator, 20 October 2026): a search field, a row of chips
+  for one kind of row, the rows in bands by month or day, and "Show older"
+  beneath. Shared by the invoice book and the receipt book.
+*/
+.ledger-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin-block: var(--s-4);
+}
+
+.ledger-search__field {
+  display: flex;
+  flex: 1 1 18rem;
+  align-items: center;
+  gap: var(--s-2);
+  max-inline-size: 28rem;
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  color: var(--ink-2);
+}
+
+.ledger-search__field:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+/* The field draws the focus ring, so the input inside it does not draw a
+   second one. */
+.ledger-search__field input:focus,
+.ledger-search__field input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ledger-search__field input {
+  flex: 1;
+  min-inline-size: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+}
+
+/* One row of chips, which a thumb slides along when it is wider than the
+   screen rather than wrapping into three rows above the book. */
+.ledger-search__chips {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: var(--s-2);
+  min-inline-size: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+
+.ledger-search__chips::-webkit-scrollbar {
+  display: none;
+}
+
+.ledger-search__chips .chip {
+  flex: none;
+}
+
+.chip {
+  min-block-size: var(--s-10);
+  padding-inline: var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--t-small);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+
+.ledger-book__empty {
+  margin-block: var(--s-4);
+}
+
+.ledger-book__more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  margin-block: var(--s-4);
+}
+
+/* A month's or a day's band across the ledger, quieter than a heading. */
+.ledger__band th {
+  position: static;
+  block-size: auto;
+  padding-block: var(--s-2);
+  background: color-mix(in srgb, var(--ink) 4%, var(--paper));
+  font-weight: var(--w-medium);
+  color: var(--ink-2);
+  text-align: start;
+}
+
+/* A phone's book: bands, then rows that open to show their actions. */
+.ledger-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.ledger-list__band {
+  margin: var(--s-2) 0 var(--s-2);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+  color: var(--ink-2);
+}
+
+.ledger-list__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+
+.ledger-list__item + .ledger-list__item {
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.ledger-list__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  inline-size: 100%;
+  min-block-size: 4rem;
+  padding: var(--s-2) var(--s-4);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ledger-list__who {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.ledger-list__amount {
+  flex: none;
+  align-items: flex-end;
+  font-weight: var(--w-medium);
+}
+
+.ledger-list__amount .small {
+  font-weight: var(--w-regular);
+}
+
+.ledger-list__method {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--s-10);
+  block-size: var(--s-10);
+  border-radius: 50%;
+}
+
+.ledger-list__actions {
+  padding: 0 var(--s-4) var(--s-3);
+}
+
+/* The receipt book's head: the month's receipts, and Record a payment. */
+.receipts__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.receipts__month {
+  margin: 0;
+}
+
+/* How it was paid, as a mark beside the words: a neutral disc, because hue
+   inside the console is reserved for band data and three status states. */
+.method-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--s-10);
+  block-size: var(--s-10);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  color: var(--ink-2);
+}
+
+.method-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+/*
+  Billing's five section tabs on one row that a thumb slides along, rather than
+  three rows of wrapped tabs above every section on a phone (operator,
+  20 October 2026). Its own class beside the shell's `.sections`, and only
+  layout: the tabs' look stays the shell's, in the always-loaded stylesheet
+  tests/lint/tabs-are-always-styled.test.ts keeps it in, and the other screens
+  that use the tabs keep them as they are.
+*/
+.billing-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  scroll-snap-type: inline proximity;
+}
+
+.billing-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.billing-tabs > * {
+  flex: none;
+  scroll-snap-align: start;
+}

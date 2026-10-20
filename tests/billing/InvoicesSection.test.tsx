@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvoicesSection } from '../../app/admin/billing/InvoicesSection';
-import { json, mountWith, OWNER } from './harness';
+import { json, mountWith, narrowTo, OWNER } from './harness';
 
 afterEach(cleanup);
 
@@ -25,8 +25,8 @@ const FIGURES = {
  */
 function routes(body: Record<string, unknown>, registered = false) {
   return (url: string) => {
-    if (url === '/api/billing/invoices') {
-      return json({ practiceVatRegistered: registered, ...body });
+    if (url === '/api/billing/invoices/search') {
+      return json({ practiceVatRegistered: registered, nextBefore: null, ...body });
     }
     if (url === '/api/billing/summary') return json(FIGURES);
     return null;
@@ -113,11 +113,6 @@ describe('InvoicesSection', () => {
     expect(screen.queryByText(/^Waived 3 Sept/)).toBeNull();
   });
 
-  it('says so when a page has been cut short', async () => {
-    mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES, truncated: true }));
-    expect(await screen.findByText('The fifty most recent invoices are shown.')).toBeTruthy();
-  });
-
   it('says so when nothing has been invoiced yet', async () => {
     mountWith(OWNER, <InvoicesSection />, routes({ invoices: [] }));
     expect(await screen.findByText('No invoice has been issued yet.')).toBeTruthy();
@@ -125,7 +120,7 @@ describe('InvoicesSection', () => {
 
   it('names the problem when the book fails to load', async () => {
     mountWith(OWNER, <InvoicesSection />, (url) => {
-      if (url === '/api/billing/invoices') return json({ error: 'forbidden' }, 403);
+      if (url === '/api/billing/invoices/search') return json({ error: 'forbidden' }, 403);
       if (url === '/api/billing/summary') return json(FIGURES);
       return null;
     });
@@ -194,8 +189,8 @@ describe('the three figures above the book', () => {
   it('still shows the book when the figures cannot be had', async () => {
     // They are a courtesy beside the book, not the reason to be on the screen.
     mountWith(OWNER, <InvoicesSection />, (url) => {
-      if (url === '/api/billing/invoices') {
-        return json({ practiceVatRegistered: false, invoices: INVOICES });
+      if (url === '/api/billing/invoices/search') {
+        return json({ practiceVatRegistered: false, nextBefore: null, invoices: INVOICES });
       }
       if (url === '/api/billing/summary') return json({ error: 'internal' }, 500);
       return null;
@@ -214,8 +209,8 @@ describe('opening a document from a row', () => {
     const opened = vi.spyOn(window, 'open').mockReturnValue(null);
 
     const { requests } = mountWith(OWNER, <InvoicesSection />, (url, init) => {
-      if (url === '/api/billing/invoices') {
-        return json({ practiceVatRegistered: false, invoices: INVOICES });
+      if (url === '/api/billing/invoices/search') {
+        return json({ practiceVatRegistered: false, nextBefore: null, invoices: INVOICES });
       }
       if (url === '/api/billing/summary') return json(FIGURES);
       if (url === '/api/billing/documents' && init?.method === 'POST') {
@@ -253,8 +248,8 @@ describe('opening a document from a row', () => {
     const opened = vi.spyOn(window, 'open').mockReturnValue(null);
 
     mountWith(OWNER, <InvoicesSection />, (url, init) => {
-      if (url === '/api/billing/invoices') {
-        return json({ practiceVatRegistered: false, invoices: INVOICES });
+      if (url === '/api/billing/invoices/search') {
+        return json({ practiceVatRegistered: false, nextBefore: null, invoices: INVOICES });
       }
       if (url === '/api/billing/summary') return json(FIGURES);
       if (url === '/api/billing/documents' && init?.method === 'POST') {
@@ -278,8 +273,8 @@ describe('opening a document from a row', () => {
   it('says so when the filed document and a re-render no longer agree', async () => {
     const opened = vi.spyOn(window, 'open').mockReturnValue(null);
     mountWith(OWNER, <InvoicesSection />, (url, init) => {
-      if (url === '/api/billing/invoices') {
-        return json({ practiceVatRegistered: false, invoices: INVOICES });
+      if (url === '/api/billing/invoices/search') {
+        return json({ practiceVatRegistered: false, nextBefore: null, invoices: INVOICES });
       }
       if (url === '/api/billing/summary') return json(FIGURES);
       if (url === '/api/billing/documents' && init?.method === 'POST') {
@@ -318,8 +313,8 @@ describe('opening a document from a row', () => {
 describe('sending a document from a row', () => {
   it('opens the drawer on the document, having made it first', async () => {
     mountWith(OWNER, <InvoicesSection />, (url, init) => {
-      if (url === '/api/billing/invoices') {
-        return json({ practiceVatRegistered: false, invoices: INVOICES });
+      if (url === '/api/billing/invoices/search') {
+        return json({ practiceVatRegistered: false, nextBefore: null, invoices: INVOICES });
       }
       if (url === '/api/billing/summary') return json(FIGURES);
       if (url === '/api/billing/documents' && init?.method === 'POST') {
@@ -369,5 +364,118 @@ describe('the discount column', () => {
     expect(screen.getByText('Discount')).toBeTruthy();
     expect(screen.getByText('1,825.00')).toBeTruthy();
     expect(screen.getByText('—')).toBeTruthy();
+  });
+});
+
+/**
+ * Finding one invoice, and the rest of the book (operator, 20 October 2026):
+ * a search and a filter, sent in a request's body, and fifty at a time.
+ */
+describe('finding an invoice, and the older ones', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function bodies(requests: { url: string; body: unknown }[]) {
+    return requests
+      .filter((r) => r.url === '/api/billing/invoices/search')
+      .map((r) => r.body as Record<string, unknown>);
+  }
+
+  it('asks for the first page in a request body, never the address', async () => {
+    const { requests } = mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }));
+    await screen.findByText('INV-000002');
+    const ask = requests.find((r) => r.url.startsWith('/api/billing/invoices'));
+    expect(ask?.url).toBe('/api/billing/invoices/search');
+    expect(ask?.method).toBe('POST');
+    expect(bodies(requests)[0]).toEqual({});
+  });
+
+  it('searches by what is typed, the words in the body and not in the URL', async () => {
+    const { requests } = mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }));
+    await screen.findByText('INV-000002');
+    fireEvent.change(screen.getByLabelText('Find an invoice'), {
+      target: { value: 'Harbour' },
+    });
+    await waitFor(() => expect(bodies(requests).at(-1)).toEqual({ search: 'Harbour' }));
+    expect(requests.every((r) => !r.url.includes('Harbour'))).toBe(true);
+  });
+
+  it('narrows the book to one kind, and All takes the filter off', async () => {
+    const { requests } = mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }));
+    await screen.findByText('INV-000002');
+    const group = screen.getByRole('group', { name: 'What it was for' });
+    const packages = within(group).getByRole('button', { name: 'Packages' });
+    fireEvent.click(packages);
+    await waitFor(() => expect(bodies(requests).at(-1)).toEqual({ kinds: ['package'] }));
+    expect(packages.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(group).getByRole('button', { name: 'All' }));
+    await waitFor(() => expect(bodies(requests).at(-1)).toEqual({}));
+  });
+
+  it('says no invoice matches, rather than that none was ever issued, while searching', async () => {
+    mountWith(OWNER, <InvoicesSection />, routes({ invoices: [] }));
+    await screen.findByText('No invoice has been issued yet.');
+    fireEvent.change(screen.getByLabelText('Find an invoice'), { target: { value: 'zz' } });
+    expect(await screen.findByText('No invoice matches.')).toBeTruthy();
+  });
+
+  it('shows the older invoices beneath the newest, asking before the last one shown', async () => {
+    // The first page ends at INV-000002; the next is everything before it.
+    const august = { ...INVOICES[1]!, issuedOn: '2026-08-30' };
+    const { requests } = mountWith(OWNER, <InvoicesSection />, (url, init) => {
+      if (url === '/api/billing/invoices/search') {
+        const body = JSON.parse(String(init?.body)) as { before?: number };
+        return body.before === 2
+          ? json({ practiceVatRegistered: false, nextBefore: null, invoices: [august] })
+          : json({ practiceVatRegistered: false, nextBefore: 2, invoices: [INVOICES[0]] });
+      }
+      if (url === '/api/billing/summary') return json(FIGURES);
+      return null;
+    });
+    await screen.findByText('INV-000002');
+    expect(screen.queryByText('INV-000001')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show older invoices' }));
+    expect(await screen.findByText('INV-000001')).toBeTruthy();
+    expect(screen.getByText('INV-000002')).toBeTruthy();
+    expect(bodies(requests).at(-1)).toEqual({ before: 2 });
+    // The last page says so by having no button.
+    expect(screen.queryByRole('button', { name: 'Show older invoices' })).toBeNull();
+    // A month apart, so two bands.
+    expect(screen.getByText('September 2026')).toBeTruthy();
+    expect(screen.getByText('August 2026')).toBeTruthy();
+  });
+
+  it('shows one amount column while the practice charges no VAT, and three once it does', async () => {
+    mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }, false));
+    await screen.findByText('INV-000002');
+    expect(screen.getByText('Amount (AED)')).toBeTruthy();
+    expect(screen.queryByText('Net (AED)')).toBeNull();
+    cleanup();
+    mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }, true));
+    await screen.findByText('INV-000002');
+    expect(screen.getByText('Net (AED)')).toBeTruthy();
+    expect(screen.getByText('Total')).toBeTruthy();
+    expect(screen.queryByText('Amount (AED)')).toBeNull();
+  });
+
+  it("draws a tablet's table, the number over its date and the client over what it was for", async () => {
+    narrowTo(700);
+    mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }));
+    await screen.findByText('INV-000002');
+    const headers = [...document.querySelectorAll('thead th')].map((th) => th.textContent);
+    expect(headers).toEqual(['Invoice', 'Client', 'Amount (AED)', 'Document']);
+  });
+
+  it("lists a phone's invoices a month at a time, and a tap shows the two actions", async () => {
+    narrowTo(360);
+    mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }));
+    const month = await screen.findByRole('region', { name: 'Invoices, September 2026' });
+    expect(document.querySelector('table')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open PDF' })).toBeNull();
+    const row = within(month).getAllByRole('button')[0]!;
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Open PDF' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
   });
 });

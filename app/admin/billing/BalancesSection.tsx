@@ -9,6 +9,7 @@ import { formatDate } from './BillingPage';
 import { ClientPicker } from './ClientPicker';
 import { formatDiscount, formatFils } from './money';
 import { PaymentDrawer } from './PaymentDrawer';
+import { roomFor, useWidth } from './useWidth';
 
 /**
  * What one family has left, and what it owes.
@@ -118,11 +119,10 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
       {
         key: 'progress',
         header: 'Delivered',
-        numeric: true,
-        align: 'end',
         // "Session 3 of 15" as a family would count it: the visits they have
-        // had, out of the visits they bought.
-        render: (row) => `${row.delivered} of ${row.purchased}`,
+        // had, out of the visits they bought, and a bar that shows the same
+        // at a glance.
+        render: (row) => <Progress row={row} />,
       },
       {
         key: 'remaining',
@@ -169,11 +169,35 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
       ? { tone: warningFor.tone, text: warningFor.say(balance.nextExpiryOn) }
       : null;
 
+  const [listRef, listWidth] = useWidth<HTMLDivElement>();
+  const [balanceRef, balanceWidth] = useWidth<HTMLDivElement>();
+  // On a phone the payment docks to the foot of the balance; with more room it
+  // sits in the client's own header. One button, in one place or the other.
+  const docked = !roomFor(balanceWidth, PAY_IN_HEADER_NEEDS);
+  const payButton = canWrite ? (
+    <div className={docked ? 'balance__pay balance__pay--docked' : 'balance__pay'}>
+      <Button
+        variant="primary"
+        onClick={() => {
+          setNote(null);
+          setPayingOpen(true);
+        }}
+      >
+        Record a payment
+      </Button>
+    </div>
+  ) : null;
+
   return (
-    <>
-      <div className="toolbar">
-        <ClientPicker id="balance-client" label="Client" selected={client} onSelect={setClient} />
-      </div>
+    <div ref={balanceRef} className="balance">
+      {/* The picker until a family is chosen; then their own header below says
+          whose balance this is, with Change beside it, rather than the picker
+          naming them a second time. */}
+      {balance && client ? null : (
+        <div className="toolbar">
+          <ClientPicker id="balance-client" label="Client" selected={client} onSelect={setClient} />
+        </div>
+      )}
 
       {note ? (
         <div role="status">
@@ -186,9 +210,33 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
         <Note tone="critical">This balance could not be loaded. Try again.</Note>
       ) : null}
 
-      {balance ? (
+      {balance && client ? (
         <>
-          <dl className="figures">
+          {/* Whose balance this is, and the one thing done from here. */}
+          <section className="balance__client" aria-label="Client">
+            <span className="balance__avatar" aria-hidden="true">
+              {initials(client)}
+            </span>
+            <span className="name balance__who">
+              <span className="balance__name">
+                {client.givenName} {client.familyName}
+              </span>
+              <span className="small muted">{client.mrn}</span>
+            </span>
+            <Button
+              variant="quiet"
+              aria-label="Choose another client"
+              onClick={() => {
+                setNote(null);
+                setClient(null);
+              }}
+            >
+              Change
+            </Button>
+            {docked ? null : payButton}
+          </section>
+
+          <dl className="figures balance__figures">
             <div className="figures__item">
               {/* A programme holds sessions, brain maps and a consultation,
                   so the total across them is credits — the ledger's word for
@@ -206,7 +254,11 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
               <dt>Paid</dt>
               <dd className="numeric">{formatFils(balance.paidFils)}</dd>
             </div>
-            <div className="figures__item">
+            {/* Owing is the one figure that asks for something, so it is the one
+                drawn in the attention wash; in credit or settled it is plain. */}
+            <div
+              className={`figures__item${balance.outstandingFils > 0 ? ' figures__item--owed' : ''}`}
+            >
               <dt>{balance.outstandingFils < 0 ? 'In credit' : 'Outstanding'}</dt>
               <dd className="numeric">{formatFils(Math.abs(balance.outstandingFils))}</dd>
             </div>
@@ -214,27 +266,37 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
 
           {warning ? <BillingNote tone={warning.tone}>{warning.text}</BillingNote> : null}
 
-          {canWrite ? (
-            <div className="section__actions">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setNote(null);
-                  setPayingOpen(true);
-                }}
-              >
-                Record a payment
-              </Button>
-            </div>
-          ) : null}
-
-          <Table
-            caption="Sessions this client has left"
-            columns={columns}
-            rows={balance.services}
-            rowKey={(row) => row.serviceTypeId}
-            empty="No sessions remaining yet."
-          />
+          <div ref={listRef} className="balance__services">
+            <h2 className="figures__heading">Sessions left</h2>
+            {roomFor(listWidth, TABLE_NEEDS) ? (
+              <Table
+                caption="Sessions this client has left"
+                columns={columns}
+                rows={balance.services}
+                rowKey={(row) => row.serviceTypeId}
+                empty="No sessions remaining yet."
+              />
+            ) : balance.services.length === 0 ? (
+              <p className="small muted">No sessions remaining yet.</p>
+            ) : (
+              <ul className="service-cards" aria-label="Sessions this client has left">
+                {balance.services.map((row) => (
+                  <li key={row.serviceTypeId} className="service-card">
+                    <span className="service-card__top">
+                      <span className="service-card__name">{row.serviceTypeName}</span>
+                      <span className="service-card__left numeric">{row.remaining} left</span>
+                    </span>
+                    <Progress row={row} />
+                    <span className="small muted">
+                      {row.nextExpiryOn ? `Runs out ${formatDate(row.nextExpiryOn)}` : NO_EXPIRY}
+                      {row.forfeited > 0 ? `. ${row.forfeited} forfeited` : ''}
+                      {`. Value left ${formatFils(row.remainingValueNetFils)} before VAT`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {balance.purchases.length > 0 ? (
             <div className="purchases">
@@ -270,6 +332,8 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
               </ul>
             </div>
           ) : null}
+
+          {docked ? payButton : null}
         </>
       ) : null}
 
@@ -285,6 +349,40 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
           }}
         />
       ) : null}
-    </>
+    </div>
+  );
+}
+
+/**
+ * Six columns need about 640px to sit on a line each; below that each
+ * service is a card of its own (useWidth.ts asks the list's own width).
+ */
+const TABLE_NEEDS = 640;
+
+/** The compact tier's edge (docs/SPEC/responsive-console.md section 4). */
+const PAY_IN_HEADER_NEEDS = 768;
+
+/** "JV": the avatar's two letters, from the names the picker returned. */
+function initials(client: ClientRow): string {
+  return `${client.givenName.charAt(0)}${client.familyName.charAt(0)}`.toUpperCase();
+}
+
+/**
+ * Delivered out of bought, in words and as a bar. The words are the figure; the
+ * bar only repeats them, so it is hidden from a screen reader rather than read
+ * twice.
+ */
+function Progress({ row }: { row: ServiceBalanceRow }) {
+  const share = row.purchased > 0 ? Math.min(1, row.delivered / row.purchased) : 0;
+  return (
+    <span className="progress">
+      <span className="progress__bar" aria-hidden="true">
+        <span className="progress__fill" style={{ inlineSize: `${Math.round(share * 100)}%` }} />
+      </span>
+      <span className="small">
+        <span className="numeric">{`${row.delivered} of ${row.purchased}`}</span>
+        <span className="muted"> delivered</span>
+      </span>
+    </span>
   );
 }

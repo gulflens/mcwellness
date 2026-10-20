@@ -113,17 +113,25 @@ export function PriceDrawer({
   onClose,
   onCreated,
   currentPrices,
+  changing = null,
 }: {
   onClose: () => void;
   onCreated: (price: PriceRow) => void;
   currentPrices: readonly PriceRow[];
+  /**
+   * The price a row's "Change price" opened the drawer on: its service is
+   * chosen already. A change is still a new price that supersedes this one
+   * (docs/SPEC/billing.md section 2.3), so everything else is asked as
+   * "Add price" asks it.
+   */
+  changing?: PriceRow | null;
 }) {
   const { apiFetch } = useAuth();
   const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const [serviceTypes, setServiceTypes] = useState<ServiceTypesState>({ kind: 'loading' });
-  const [serviceTypeId, setServiceTypeId] = useState('');
+  const [serviceTypeId, setServiceTypeId] = useState(changing?.serviceTypeId ?? '');
   const [price, setPrice] = useState('');
   const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
   const [discountValue, setDiscountValue] = useState('');
@@ -338,7 +346,9 @@ export function PriceDrawer({
     >
       <header className="drawer__header">
         <div className="drawer__title">
-          <h2 id="price-drawer-title">Add price</h2>
+          <h2 id="price-drawer-title">
+            {changing ? `Change the price of ${changing.serviceTypeName}` : 'Add price'}
+          </h2>
         </div>
         <button
           ref={closeRef}

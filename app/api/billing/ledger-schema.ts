@@ -419,11 +419,20 @@ export type BalanceResponse = z.infer<typeof BalanceResponse>;
 // Invoices
 // ---------------------------------------------------------------------------
 
+export const InvoiceKind = z.enum([
+  'session',
+  'package',
+  'statement',
+  'call_out_fee',
+  'single_session',
+]);
+export type InvoiceKind = z.infer<typeof InvoiceKind>;
+
 export const InvoiceRow = z.object({
   id: z.uuid(),
   reference: z.string(),
   number: z.number().int().positive(),
-  kind: z.enum(['session', 'package', 'statement', 'call_out_fee', 'single_session']),
+  kind: InvoiceKind,
   issuedOn: z.string(),
   clientId: z.uuid(),
   clientMrn: z.string(),
@@ -462,6 +471,55 @@ export const InvoicesResponse = z.object({
   truncated: z.boolean().optional(),
 });
 export type InvoicesResponse = z.infer<typeof InvoicesResponse>;
+
+/**
+ * What a person types into a book's search box: cleaned like every other piece
+ * of free text, trimmed, and at most a hundred characters. Nothing at all, or
+ * nothing but spaces, is no search rather than a search for nothing, so a
+ * cleared box is the same request as a box never touched.
+ *
+ * It travels in a body and never in a query string, because what it holds is
+ * usually a name (.claude/rules/ui.md).
+ */
+export const SearchText = z
+  .string()
+  .transform((value) => cleanText(value, 101))
+  .refine((value) => Array.from(value).length <= 100, 'A search is at most 100 characters.')
+  .transform((value) => (value === '' ? undefined : value));
+
+/** True when no value in the list appears twice. */
+export function distinct(values: readonly unknown[]): boolean {
+  return new Set(values).size === values.length;
+}
+
+/**
+ * `POST /api/billing/invoices/search` — the invoice book searched, filtered and
+ * paged past its first fifty rows.
+ *
+ * `search` is matched anywhere in the invoice's reference, the client's record
+ * number and the client's name as the book shows it. `before` is the `number`
+ * the previous page's `nextBefore` named: invoice numbers are gapless and
+ * never reused within a practice (402_billing_document.sql), so the number
+ * alone is a stable place to resume from.
+ */
+export const InvoiceSearchInput = z
+  .object({
+    search: SearchText.optional(),
+    kinds: z.array(InvoiceKind).min(1).max(5).refine(distinct, 'Each kind once.').optional(),
+    before: z.number().int().positive().max(INT4_MAX).optional(),
+  })
+  .strict();
+export type InvoiceSearchInput = z.infer<typeof InvoiceSearchInput>;
+
+/**
+ * The same book as `InvoicesResponse`, with where to resume in place of the
+ * `truncated` flag: `nextBefore` is the last row's number when more matched,
+ * and null when this page is the end.
+ */
+export const InvoiceSearchResponse = InvoicesResponse.omit({ truncated: true }).extend({
+  nextBefore: z.number().int().positive().nullable(),
+});
+export type InvoiceSearchResponse = z.infer<typeof InvoiceSearchResponse>;
 
 // ---------------------------------------------------------------------------
 // The refund calculator, and the waiver
