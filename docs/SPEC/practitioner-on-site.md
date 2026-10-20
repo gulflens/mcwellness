@@ -138,7 +138,8 @@ reach, English only, logical properties, tokens only.
 
 **5.1 Clients** — `/clients`. A search field, and beneath it the results:
 first name, family initial, record number, and the emirate of their primary
-address. It searches the same way the console's does (`GET /api/clients?q=`)
+address. It searches the same way the console's does (`POST /api/clients/search`,
+the text in the body, never the address)
 and shows nothing until something is typed, because a list of every household
 is not a thing to leave open on a phone in someone's living room. One button
 beneath: **Enrol a client**. Reached from Today's own header.
@@ -196,7 +197,7 @@ One new route — `PUT /api/practitioners/:id/abilities`, the owner and an admin
 `X-Reason` required, taking the whole set for that practitioner so a grant and
 a revocation in the same breath are one act — and `GET /api/practitioners`
 (pull request 126) gains each practitioner's abilities. Every other screen
-calls, unchanged: `GET /api/clients?q=`,
+calls, unchanged: `POST /api/clients/search`,
 `POST /api/clients`, `GET/PATCH /api/clients/:id`, the contacts, locations,
 goals and consents routes beneath it, `GET /api/clients/consent-wording`,
 `GET /api/clients/consent-witnesses`, `GET /api/clients/goal-categories`.
