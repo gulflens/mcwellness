@@ -6,7 +6,8 @@ import { Field, Note } from '../../shell/components/Controls';
 /**
  * Finding one family, by record number or by name, through the client list
  * route the client-record stream already owns
- * (`GET /api/clients?q=`) — never a second search of billing's own.
+ * (`POST /api/clients/search`, the name in the body) — never a second search
+ * of billing's own.
  *
  * A single keystroke does not sweep the practice: the route treats a query
  * shorter than two characters as absent, and this waits a beat before asking
@@ -48,7 +49,12 @@ export function ClientPicker({
     let live = true;
     const timer = setTimeout(() => {
       setState({ kind: 'searching' });
-      void apiFetch(`/api/clients?q=${encodeURIComponent(trimmed)}`)
+      // The name in the body, never the address (operator, 20 October 2026).
+      void apiFetch('/api/clients/search', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ q: trimmed }),
+      })
         .then(async (res) => {
           if (!live) return;
           if (!res.ok) {

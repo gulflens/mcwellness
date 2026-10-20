@@ -90,8 +90,8 @@ function isPartialEmiratesId(term: string): boolean {
  * An Emirates ID is never put in the address: it goes to POST
  * /api/clients/lookup in a request body, where no proxy's access log can pick
  * it up (.claude/rules/ui.md; app/api/clients/list.ts says the same from the
- * other side). Anything else is the ordinary `?q=` search over names and
- * record numbers.
+ * other side). A name or record number goes to POST /api/clients/search, in a
+ * body for the same reason; only the filters, with nothing typed, are a GET.
  *
  * Neither filter, status nor emirate, is applied to a lookup, deliberately: an
  * identity number names at most one client, and filtering it away would answer
@@ -117,10 +117,25 @@ export function searchRequest(
   // Nothing is sent at all until the number is whole. The table keeps whatever it
   // was showing, and a line under the box says what is still wanted.
   if (isPartialEmiratesId(term)) return 'partial-emirates-id';
+  // A name, or a record number, goes in a body too (operator, 20 October
+  // 2026): the address carries only the two filters, which name nobody.
+  if (term) {
+    return {
+      url: '/api/clients/search',
+      init: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          q: term,
+          ...(status ? { status } : {}),
+          ...(emirate ? { emirate } : {}),
+        }),
+      },
+    };
+  }
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (emirate) params.set('emirate', emirate);
-  if (term) params.set('q', term);
   return { url: `/api/clients${params.size > 0 ? `?${params.toString()}` : ''}` };
 }
 
