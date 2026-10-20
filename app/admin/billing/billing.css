@@ -1088,3 +1088,35 @@
 .ledger-list__actions {
   padding: 0 var(--s-4) var(--s-3);
 }
+
+/* The receipt book's head: the month's receipts, and Record a payment. */
+.receipts__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.receipts__month {
+  margin: 0;
+}
+
+/* How it was paid, as a mark beside the words: a neutral disc, because hue
+   inside the console is reserved for band data and three status states. */
+.method-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--s-10);
+  block-size: var(--s-10);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  color: var(--ink-2);
+}
+
+.method-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}

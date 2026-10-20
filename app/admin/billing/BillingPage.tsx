@@ -242,7 +242,7 @@ export function BillingPage() {
       {section === 'packages' ? <PackagesSection canWrite={canWrite} /> : null}
       {section === 'balances' ? <BalancesSection canWrite={canWrite} /> : null}
       {section === 'invoices' ? <InvoicesSection /> : null}
-      {section === 'receipts' ? <ReceiptsSection /> : null}
+      {section === 'receipts' ? <ReceiptsSection canWrite={canWrite} /> : null}
     </section>
   );
 }
