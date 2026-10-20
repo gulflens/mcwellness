@@ -3848,3 +3848,56 @@ builds.
 - `BillingPage-vzr153ak.js` carries `cell-lines` and the list's
   `contents` label, and `BillingPage-2lnQ9L-R.css` carries
   `.cell-lines{margin:0;padding:0;list-style:none}`.
+
+## What was done on 2026-10-20: the fifty-third live pass — the packages in the practice's own order, dates in Dubai time, and a service renamed
+
+**03:05 UTC: one row of data, on the operator's word.** Production's
+`service_type` `brain-map` (`30d64b31…`) was renamed from "Brain map (QEEG)"
+to "Brain Map QEEG" in one guarded update (by id, code and the old name). Its
+Arabic name is unchanged. Issued invoices keep the old wording, because every
+`invoice_line.description` is a snapshot; new sales carry the new name.
+
+**03:44 UTC: main `adc61d70`, PRs 276 and 277, on the operator's word.** Each
+PR's checks passed, and each was squash-merged onto the commit its checks ran
+against, so main's tree at `adc61d70` is the one PR 277's checks tested
+(`db584378`).
+- PR 276: the client record's Consent, Documents, Health, Overview and
+  Erasure tabs draw dates in Asia/Dubai (a date of birth as itself), and the
+  qEEG editor takes today from the practice's clock. The operator was
+  working from the United States, where these showed the day before. The unit
+  suite now runs on `America/Los_Angeles`.
+- PR 277: Billing › Packages has Move up and Move down on each row
+  (`POST /api/billing/packages/:id/move`); the list reads by
+  `package.position`; a new or reinstated package goes last.
+
+**Databases, 138 → 139: migration 414 from the file**, through
+`supabase db query --linked --file`, staging (`~/.mcwellness-go-live-staging`)
+then production (`~/.mcwellness-go-live`). One transaction each that refused
+to start unless the ledger held 138 rows and no 414, with its own
+`schema_migration` row.
+- `414_package_position.sql`, sha256 `4cf69be6…feff6e3a`, the same checksum
+  the local runner records.
+- Staging after: 139, packages Silver 1, Gold 2, Platinum 3, trigger present.
+- Production after: 139, numbered in the old price order (Josh 1 withdrawn,
+  Silver 2, Complimentary 3, Gold 4, Platinum 5).
+
+**Production's order, set as the operator asked.** One transaction with
+`app.reason` "The practice's order of 20 October 2026: Silver, Gold,
+Platinum, Complimentary": Silver 1, Gold 2, Platinum 3, Complimentary 4, and
+the withdrawn Josh 5. The audit rows carry the reason. This ran before the
+build; the old code ignored the column.
+
+**Build.** Before the upload the host's build list ended at the 52nd pass
+(`01a1573e`), so there were no unrecorded builds.
+- Archive `mcwellness-adc61d70.tar.gz`, 8,052,977 bytes. TUS create 201, then
+  PATCH 204 with the offset equal to the size.
+- Build `01a15769`, stored settings, 65 s.
+- Entry `index-BcXDYCxC.js` → `index-CglwSZTQ.js`, flipped about 60 s after
+  the start call. No restart.
+
+**Verified.**
+- Health 200 and deep health 200 in 0.48 s.
+- The old entry answered 200 from one CDN edge just after the flip and 404 on
+  the next check; a nonsense asset path answers 404.
+- `BillingPage-CIXb9C8R.js` carries "Moved up in the packages list";
+  `ClientsPage-DJb7kvN1.js` carries `Asia/Dubai`.
