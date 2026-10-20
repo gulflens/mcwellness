@@ -19,6 +19,13 @@
 -- (`domain/billing/packageOrder.ts`), and two packages added at the same
 -- moment may share a number until then; the list breaks a tie by name.
 --
+-- **Why "goes last" is SQL and not `domain/`.** Rule 4 keeps business rules
+-- in `domain/`; how a package *moves* is there. Where a new one lands is a
+-- default for a column, like 413's document language, and only a trigger
+-- holds it for every writer — the seed and tests insert packages too. The
+-- reinstate route's `max(position) + 1` is the same default, applied when a
+-- withdrawn bundle comes back (docs/SPEC/billing.md section 2.5).
+--
 -- A move is an update to `package`, so the audit trigger it already carries
 -- (401) records it, with the reason the request gives.
 --
@@ -43,7 +50,7 @@ comment on column public.package.position is
 
 create function app.package_position_last() returns trigger
 language plpgsql
-set search_path = pg_catalog, public
+set search_path = pg_catalog, pg_temp
 as $$
 begin
   if new.position is null then
@@ -54,6 +61,8 @@ begin
   return new;
 end;
 $$;
+
+revoke execute on function app.package_position_last() from public;
 
 create trigger package_position_last before insert on public.package
   for each row execute function app.package_position_last();

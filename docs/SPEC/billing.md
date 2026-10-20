@@ -229,11 +229,13 @@ order. Move up and Move down on each row of the table move a bundle one place,
 past the nearest bundle still on offer — `POST /api/billing/packages/:id/move`
 with `{ "direction": "up" | "down" }` and an `X-Reason` header, behind the same
 `mayWriteCatalogue` gate. The rule is `domain/billing/packageOrder.ts`'s
-`movePackage`: a withdrawn bundle does not move, the first cannot go up nor the
-last down (`409 cannot_move`), and the whole list is renumbered from one so a
-gap or tie closes. A new bundle goes last, whoever writes it (a trigger before
-insert), and a reinstated one goes last rather than back between two the
-practice has ordered since.
+`movePackage`: a withdrawn bundle does not move, nor can the first go up or the
+last down (each `409 cannot_move`), and every successful move renumbers the
+whole list from one. A new bundle goes last, whoever writes it (a trigger
+before insert), and a reinstated one goes last rather than back between two
+the practice has ordered since. Positions are not unique: two bundles added or
+reinstated at the same moment may share one until the next move, and the list
+breaks the tie by name.
 
 ---
 

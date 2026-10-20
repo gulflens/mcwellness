@@ -601,9 +601,14 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const db = c.get('db');
+    // Lock first, then read in order: under read committed, a `for update`
+    // that waited on another move re-reads its rows but does not sort them
+    // again, so an ordered read in the same statement could hand
+    // `movePackage` a stale order (schema review, PR 277).
+    await db.query('select id from package where tenant_id = app.current_tenant_id() for update');
     const current = await db.query<{ id: string; status: 'active' | 'inactive'; position: number }>(
       'select id, status, position from package where tenant_id = app.current_tenant_id() ' +
-        'order by position, name for update',
+        'order by position, name',
     );
     if (!current.rows.some((row) => row.id === packageId)) {
       return c.json({ error: 'not_found', requestId }, 404);

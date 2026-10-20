@@ -988,13 +988,37 @@ describe('ordering the packages', () => {
     expect(res.status).toBe(404);
   });
 
-  it('writes the reason onto the audit row of each package that moved', async () => {
-    const { rows } = await h.owner.query<{ reason: string | null }>(
-      "select reason from audit_log where entity_type = 'package' and entity_id = $1 " +
-        "and action = 'update' order by occurred_at desc limit 1",
-      [await idOf('Order fixture')],
+  it('writes the reason onto the audit row of both packages that swapped places', async () => {
+    const names = await activeNames();
+    const above = names.at(-2)!;
+    const fixture = await idOf('Order fixture');
+    const neighbour = await idOf(above);
+    const reason = { 'x-reason': 'Swapped to read the audit trail' };
+    const res = await h.call(
+      'POST',
+      `/api/billing/packages/${fixture}/move`,
+      SEEDED.owner,
+      { direction: 'up' },
+      reason,
     );
-    expect(rows[0]?.reason).toBe('Moved in the packages list');
+    expect(res.status).toBe(200);
+    for (const id of [fixture, neighbour]) {
+      const { rows } = await h.owner.query<{ reason: string | null }>(
+        "select reason from audit_log where entity_type = 'package' and entity_id = $1 " +
+          "and action = 'update' order by occurred_at desc, id desc limit 1",
+        [id],
+      );
+      expect(rows[0]?.reason).toBe('Swapped to read the audit trail');
+    }
+    // Put it back, so the suite's own order is what it was.
+    const back = await h.call(
+      'POST',
+      `/api/billing/packages/${fixture}/move`,
+      SEEDED.owner,
+      { direction: 'down' },
+      MOVE_REASON,
+    );
+    expect(back.status).toBe(200);
   });
 
   it('puts a reinstated package at the end, not back where it was', async () => {
