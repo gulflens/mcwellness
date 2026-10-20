@@ -822,7 +822,7 @@
 
 .balance__figures {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
   gap: var(--s-3);
 }
 
@@ -962,6 +962,14 @@
   outline-offset: 1px;
 }
 
+/* The field draws the focus ring, so the input inside it does not draw a
+   second one. */
+.ledger-search__field input:focus,
+.ledger-search__field input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .ledger-search__field input {
   flex: 1;
   min-inline-size: 0;
@@ -972,11 +980,25 @@
   color: var(--ink);
 }
 
-/* One row the thumb can slide along on a phone, wrapping with room. */
+/* One row of chips, which a thumb slides along when it is wider than the
+   screen rather than wrapping into three rows above the book. */
 .ledger-search__chips {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
   gap: var(--s-2);
+  min-inline-size: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+
+.ledger-search__chips::-webkit-scrollbar {
+  display: none;
+}
+
+.ledger-search__chips .chip {
+  flex: none;
 }
 
 .chip {
@@ -1076,6 +1098,10 @@
   font-weight: var(--w-medium);
 }
 
+.ledger-list__amount .small {
+  font-weight: var(--w-regular);
+}
+
 .ledger-list__method {
   display: grid;
   flex: none;
@@ -1119,4 +1145,27 @@
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
+}
+
+/*
+  Billing's five section tabs on one row that a thumb slides along, rather than
+  three rows of wrapped tabs above every section on a phone (operator,
+  20 October 2026). A modifier of the shell's own `.sections`, scoped to this
+  page: the other screens that use the tabs keep them as they are.
+*/
+.sections--one-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  scroll-snap-type: inline proximity;
+}
+
+.sections--one-row::-webkit-scrollbar {
+  display: none;
+}
+
+.sections--one-row .sections__tab {
+  flex: none;
+  scroll-snap-align: start;
 }

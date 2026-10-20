@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { canActor } from '@domain/shared/actor';
 import { PricesResponse, type PriceRow } from '../../api/billing/schema';
@@ -102,6 +102,15 @@ export function BillingPage() {
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, [navigate]);
+  // The tabs are one row a thumb slides along on a phone (billing.css,
+  // `.sections--one-row`), so the section the reader is on is brought into
+  // that row's view, sideways only: the page itself does not move.
+  const tabsRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const current = tabsRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [section]);
+
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [changing, setChanging] = useState<PriceRow | null>(null);
@@ -187,7 +196,7 @@ export function BillingPage() {
         }
       />
 
-      <nav className="sections" aria-label="Billing sections">
+      <nav ref={tabsRef} className="sections sections--one-row" aria-label="Billing sections">
         {SECTIONS.map((entry) => (
           <button
             key={entry.key}

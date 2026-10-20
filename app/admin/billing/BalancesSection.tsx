@@ -190,9 +190,14 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
 
   return (
     <div ref={balanceRef} className="balance">
-      <div className="toolbar">
-        <ClientPicker id="balance-client" label="Client" selected={client} onSelect={setClient} />
-      </div>
+      {/* The picker until a family is chosen; then their own header below says
+          whose balance this is, with Change beside it, rather than the picker
+          naming them a second time. */}
+      {balance && client ? null : (
+        <div className="toolbar">
+          <ClientPicker id="balance-client" label="Client" selected={client} onSelect={setClient} />
+        </div>
+      )}
 
       {note ? (
         <div role="status">
@@ -218,6 +223,16 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
               </span>
               <span className="small muted">{client.mrn}</span>
             </span>
+            <Button
+              variant="quiet"
+              aria-label="Choose another client"
+              onClick={() => {
+                setNote(null);
+                setClient(null);
+              }}
+            >
+              Change
+            </Button>
             {docked ? null : payButton}
           </section>
 

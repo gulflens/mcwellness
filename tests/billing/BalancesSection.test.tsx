@@ -411,3 +411,15 @@ describe('the balance at a glance', () => {
     ).toBeNull();
   });
 });
+
+describe('choosing another family', () => {
+  it('names the chosen family once, in their header, and Change goes back to the search', async () => {
+    mount(balance());
+    await findClient();
+    await screen.findByRole('region', { name: 'Client' });
+    expect(screen.queryByRole('searchbox', { name: 'Client' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose another client' }));
+    expect(screen.getByRole('searchbox', { name: 'Client' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Client' })).toBeNull();
+  });
+});
