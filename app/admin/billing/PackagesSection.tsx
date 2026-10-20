@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { termWords } from '@domain/billing';
 import { PackagesResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
-import { ArrowDownIcon, ArrowUpIcon, ChevronIcon } from '../../shell/components/Icons';
-import { Table, type Column } from '../../shell/components/Table';
-import { formatDate } from './BillingPage';
-import { formatDiscount, formatFils } from './money';
+import { ChevronIcon } from '../../shell/components/Icons';
+import { formatFils } from './money';
 import { PackageDrawer } from './PackageDrawer';
+import { PackageGrid, PackageTile, WithdrawnTile } from './PackageGrid';
+import { PackageReorder } from './PackageReorder';
 import { SellPackageDrawer } from './SellPackageDrawer';
 import { SellSessionDrawer } from './SellSessionDrawer';
 import { WithdrawPackageDrawer } from './WithdrawPackageDrawer';
@@ -17,7 +16,7 @@ import { WithdrawPackageDrawer } from './WithdrawPackageDrawer';
  * visit.
  *
  * "List" is what the contents come to bought one at a time; the Discount,
- * VAT and Total columns say what it actually sells for, and Notes why (the
+ * VAT and Total figures say what it actually sells for, and the note why (the
  * operator dropped a Price now column on 20 October 2026: while the practice
  * is not registered for VAT it only repeated Total). A bundle whose contents
  * have drifted away from its published list price says so quietly rather than
@@ -39,31 +38,12 @@ const REINSTATE_REASON = 'Reinstated from the packages list';
 const REINSTATE_FAILED_MESSAGE = 'This package could not be reinstated. Try again.';
 
 /**
- * The practice orders its packages by hand, one place at a time (operator,
- * 20 October 2026). Like Reinstate, a move asks nothing, so its reason for the
- * audit trail is fixed.
+ * The practice orders its packages by hand, by carrying one to its place on
+ * the Reorder board (operator, 20 October 2026). Like Reinstate, a reorder
+ * asks nothing, so its reason for the audit trail is fixed.
  */
-const MOVE_REASON = {
-  up: 'Moved up in the packages list',
-  down: 'Moved down in the packages list',
-} as const;
-const MOVE_FAILED_MESSAGE = 'The order could not be changed. Try again.';
-
-/**
- * A bundle's contents, one service to a line (operator, 20 October 2026): a
- * comma-joined sentence made "2 × Brain map (QEEG)" hard to pick out of the row.
- */
-function Contents({ row }: { row: PackageRow }) {
-  return (
-    <ul className="cell-wrap cell-lines" aria-label={`${row.name} contents`}>
-      {row.components.map((component) => (
-        <li key={component.serviceTypeId}>
-          {`${component.quantity} × ${component.serviceTypeName}`}
-        </li>
-      ))}
-    </ul>
-  );
-}
+const REORDER_REASON = 'Reordered in the packages list';
+const REORDER_FAILED_MESSAGE = 'The order could not be changed. Try again.';
 
 export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   const { apiFetch } = useAuth();
@@ -74,7 +54,8 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   const [withdrawing, setWithdrawing] = useState<PackageRow | null>(null);
   const [editingRow, setEditingRow] = useState<PackageRow | null>(null);
   const [reinstatingId, setReinstatingId] = useState<string | null>(null);
-  const [moving, setMoving] = useState(false);
+  const [reordering, setReordering] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
   const [note, setNote] = useState<{ text: string; tone?: 'critical' } | null>(null);
 
   const load = useCallback(() => {
@@ -126,219 +107,54 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   );
 
   /**
-   * One place up or down. The server answers with the whole list in its new
-   * order, so the table redraws from that rather than guessing it here. One
-   * move at a time: every Move button waits while one is in flight.
+   * The whole order at once, shown the moment the package is let go and then
+   * replaced by the server's answer. A failed save puts the list back as the
+   * server has it and says so. One save at a time: the board waits.
    */
-  const move = useCallback(
-    async (row: PackageRow, direction: 'up' | 'down') => {
+  const saveOrder = useCallback(
+    async (order: string[]) => {
       setNote(null);
-      setMoving(true);
+      setSavingOrder(true);
+      setState((current) => {
+        if (current.kind !== 'ready') return current;
+        const place = new Map(order.map((id, index) => [id, index]));
+        const packages = [...current.packages].sort(
+          (a, b) => (place.get(a.id) ?? Infinity) - (place.get(b.id) ?? Infinity),
+        );
+        return { ...current, packages };
+      });
       try {
-        const res = await apiFetch(`/api/billing/packages/${row.id}/move`, {
+        const res = await apiFetch('/api/billing/packages/reorder', {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-reason': MOVE_REASON[direction] },
-          body: JSON.stringify({ direction }),
+          headers: { 'content-type': 'application/json', 'x-reason': REORDER_REASON },
+          body: JSON.stringify({ order }),
         });
         if (res.ok) {
           const body = PackagesResponse.parse(await res.json());
           setState({ kind: 'ready', packages: body.packages, vatRegistered: body.vatRegistered });
           return;
         }
-        setNote({ text: MOVE_FAILED_MESSAGE, tone: 'critical' });
+        setNote({ text: REORDER_FAILED_MESSAGE, tone: 'critical' });
+        load();
       } catch {
-        setNote({ text: MOVE_FAILED_MESSAGE, tone: 'critical' });
+        setNote({ text: REORDER_FAILED_MESSAGE, tone: 'critical' });
+        load();
       } finally {
-        setMoving(false);
+        setSavingOrder(false);
       }
     },
-    [apiFetch],
+    [apiFetch, load],
   );
 
-  // The main table's own rows: active bundles only, unchanged otherwise. A
+  // The main grid's own tiles: active bundles only, unchanged otherwise. A
   // withdrawn bundle moves to the folded group below rather than leaving the
-  // table altogether (round 62).
+  // page altogether (round 62).
   const activePackages = useMemo(
     () => (state.kind === 'ready' ? state.packages.filter((row) => row.status === 'active') : []),
     [state],
   );
   const withdrawnPackages =
     state.kind === 'ready' ? state.packages.filter((row) => row.status === 'inactive') : [];
-
-  const columns = useMemo<Column<PackageRow>[]>(() => {
-    const firstId = activePackages[0]?.id;
-    const lastId = activePackages.at(-1)?.id;
-    const base: Column<PackageRow>[] = [
-      {
-        key: 'name',
-        header: 'Package',
-        // The row's own action lives here, in the first column, rather than
-        // in one of its own at the far end: the first column is the one the
-        // shell pins when the table scrolls sideways, so "Sell to a client"
-        // is reachable at every width instead of only on a wide screen.
-        render: (row) => (
-          <span className="name">
-            <span>{row.name}</span>
-            {canWrite ? (
-              <span className="row-actions row-actions--buttons cell-action">
-                {row.sellable ? (
-                  <button
-                    type="button"
-                    className="button button--tonal button--compact"
-                    onClick={() => {
-                      setNote(null);
-                      setSelling(row);
-                    }}
-                  >
-                    Sell to a client
-                  </button>
-                ) : (
-                  <span className="small muted">Needs a price for every service</span>
-                )}
-                <button
-                  type="button"
-                  className="button button--neutral button--compact"
-                  aria-label={`Edit ${row.name}`}
-                  onClick={() => {
-                    setNote(null);
-                    setEditingRow(row);
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="button button--neutral button--compact"
-                  onClick={() => {
-                    setNote(null);
-                    setWithdrawing(row);
-                  }}
-                >
-                  Withdraw
-                </button>
-                <button
-                  type="button"
-                  className="button button--quiet button--icon"
-                  aria-label={`Move ${row.name} up`}
-                  title="Move up"
-                  disabled={moving || row.id === firstId}
-                  onClick={() => void move(row, 'up')}
-                >
-                  <ArrowUpIcon />
-                </button>
-                <button
-                  type="button"
-                  className="button button--quiet button--icon"
-                  aria-label={`Move ${row.name} down`}
-                  title="Move down"
-                  disabled={moving || row.id === lastId}
-                  onClick={() => void move(row, 'down')}
-                >
-                  <ArrowDownIcon />
-                </button>
-              </span>
-            ) : null}
-          </span>
-        ),
-      },
-      {
-        key: 'contents',
-        header: 'Contents',
-        render: (row) => <Contents row={row} />,
-      },
-      {
-        key: 'list',
-        header: 'List (AED)',
-        numeric: true,
-        align: 'end',
-        render: (row) => formatFils(row.listPriceFils),
-      },
-      {
-        // What came off the list: the share when that is how it was set, the
-        // sum when it was a sum (docs/SPEC/billing.md section 2.4).
-        key: 'discount',
-        header: 'Discount',
-        numeric: true,
-        align: 'end',
-        render: (row) => (row.currentPrice ? formatDiscount(row.currentPrice) : '—'),
-      },
-      {
-        key: 'vat',
-        header: 'VAT',
-        numeric: true,
-        align: 'end',
-        render: (row) => (row.currentPrice ? formatFils(row.currentPrice.vatFils) : '—'),
-      },
-      {
-        key: 'total',
-        header: 'Total',
-        numeric: true,
-        align: 'end',
-        render: (row) => (row.currentPrice ? formatFils(row.currentPrice.grossFils) : '—'),
-      },
-      {
-        key: 'expiry',
-        header: 'Runs for',
-        numeric: true,
-        // The term in the rule's own words, and "No expiry" where there is
-        // none — a fact said plainly rather than a cell left blank for a
-        // reader to guess at (the operator's ruling of 12 September 2026).
-        render: (row) => termWords(row.term)?.en ?? 'No expiry',
-      },
-      {
-        key: 'from',
-        header: 'Priced from',
-        numeric: true,
-        render: (row) => (row.currentPrice ? formatDate(row.currentPrice.validFrom) : '—'),
-      },
-      {
-        // Why the price is the price, written on the row when the founder
-        // sets it, at the end of the row where a sentence has room (operator,
-        // 20 October 2026). It replaced a Price now column that, while the
-        // practice is not registered for VAT, only repeated Total.
-        key: 'notes',
-        header: 'Notes',
-        render: (row) =>
-          row.currentPrice ? (
-            <span className="cell-wrap">{row.currentPrice.amendmentReason}</span>
-          ) : (
-            'Not on sale'
-          ),
-      },
-    ];
-    return base;
-  }, [canWrite, activePackages, moving, move]);
-
-  // The folded group's own two columns: a name with Reinstate beside it, and
-  // the contents — nothing else, because nothing else is sellable or priced
-  // once a bundle is withdrawn (docs/SPEC/billing.md).
-  const withdrawnColumns = useMemo<Column<PackageRow>[]>(() => {
-    const name: Column<PackageRow> = {
-      key: 'name',
-      header: 'Package',
-      render: (row) => (
-        <span className="name">
-          <span>{row.name}</span>
-          {canWrite ? (
-            <button
-              type="button"
-              className="button button--quiet cell-action"
-              disabled={reinstatingId === row.id}
-              onClick={() => void reinstate(row)}
-            >
-              Reinstate
-            </button>
-          ) : null}
-        </span>
-      ),
-    };
-    const contents: Column<PackageRow> = {
-      key: 'contents',
-      header: 'Contents',
-      render: (row) => <Contents row={row} />,
-    };
-    return [name, contents];
-  }, [canWrite, reinstatingId, reinstate]);
 
   // Drift is a fact about what the practice is still selling, so a withdrawn
   // bundle — priced or not, on sale or not — never raises it (round 62).
@@ -371,6 +187,19 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
             Sell a session
           </Button>
         ) : null}
+        {/* Two packages or more: one alone has no order to set. */}
+        {canWrite && (reordering || activePackages.length > 1) ? (
+          <Button
+            variant="secondary"
+            aria-pressed={reordering}
+            onClick={() => {
+              setNote(null);
+              setReordering((on) => !on);
+            }}
+          >
+            {reordering ? 'Done' : 'Reorder'}
+          </Button>
+        ) : null}
       </div>
 
       {note ? (
@@ -390,10 +219,10 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         </Note>
       ) : null}
       {/*
-        One line, and only while it is true. The VAT column and the Total
+        One line, and only while it is true. The VAT figure and the Total
         beside it read as a five per cent that is not charged unless something
         says the practice is outside the tax altogether (migration 406); the
-        columns stay as they are, because they are right the day a
+        figures stay as they are, because they are right the day a
         registration is granted.
       */}
       {state.kind === 'ready' && !state.vatRegistered ? (
@@ -401,18 +230,38 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           The practice is not registered for VAT, so no VAT is charged and the total is the price.
         </p>
       ) : null}
-      {state.kind === 'ready' ? (
-        <Table
-          caption="Packages"
-          columns={columns}
+      {state.kind === 'ready' && reordering ? (
+        <PackageReorder rows={activePackages} saving={savingOrder} onReorder={saveOrder} />
+      ) : null}
+      {state.kind === 'ready' && !reordering ? (
+        <PackageGrid
+          label="Packages"
           rows={activePackages}
-          rowKey={(row) => row.id}
           empty={
             withdrawnPackages.length > 0
               ? 'Every package is withdrawn.'
               : 'No packages are set up yet.'
           }
-        />
+        >
+          {(row) => (
+            <PackageTile
+              row={row}
+              canWrite={canWrite}
+              onSell={() => {
+                setNote(null);
+                setSelling(row);
+              }}
+              onEdit={() => {
+                setNote(null);
+                setEditingRow(row);
+              }}
+              onWithdraw={() => {
+                setNote(null);
+                setWithdrawing(row);
+              }}
+            />
+          )}
+        </PackageGrid>
       ) : null}
 
       {withdrawnPackages.length > 0 ? (
@@ -421,12 +270,16 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
             <span>{`Withdrawn (${withdrawnPackages.length})`}</span>
             <ChevronIcon className="fold__chevron" />
           </summary>
-          <Table
-            caption="Withdrawn packages"
-            columns={withdrawnColumns}
-            rows={withdrawnPackages}
-            rowKey={(row) => row.id}
-          />
+          <PackageGrid label="Withdrawn packages" rows={withdrawnPackages}>
+            {(row) => (
+              <WithdrawnTile
+                row={row}
+                canWrite={canWrite}
+                reinstating={reinstatingId === row.id}
+                onReinstate={() => void reinstate(row)}
+              />
+            )}
+          </PackageGrid>
         </details>
       ) : null}
 

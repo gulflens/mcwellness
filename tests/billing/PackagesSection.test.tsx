@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PackagesSection } from '../../app/admin/billing/PackagesSection';
 import { json, LEAD_PRACTITIONER, mountWith, OWNER } from './harness';
 
@@ -158,15 +158,68 @@ describe('PackagesSection', () => {
     expect(screen.queryByText('10,325.00')).toBeNull();
   });
 
-  it("puts the price's reason in a Notes column at the end of the row", async () => {
+  it("puts the price's reason in the package's own tile, beneath its figures", async () => {
     mount(OWNER, [SILVER]);
-    const table = await screen.findByRole('table', { name: 'Packages' });
-    const headers = within(table)
-      .getAllByRole('columnheader')
-      .map((th) => th.textContent);
-    expect(headers.at(-1)).toBe('Notes');
-    const cells = within(within(table).getAllByRole('row')[1]!).getAllByRole('cell');
-    expect(cells.at(-1)?.textContent).toBe("Launch pricing, ends on the founder's word.");
+    const tile = await screen.findByRole('article', { name: 'Silver' });
+    expect(tile.querySelector('.tile__notes')?.textContent).toBe(
+      "Launch pricing, ends on the founder's word.",
+    );
+  });
+
+  it('lays the packages out as a row of tiles, one to a package, rather than a table', async () => {
+    // The operator's decision of 20 October 2026: a nine-column table had to
+    // scroll sideways on a tablet and a phone; a tile reflows instead.
+    mount(OWNER, [SILVER, UNSELLABLE]);
+    const grid = await screen.findByRole('list', { name: 'Packages' });
+    expect(grid.className).toContain('package-grid');
+    expect(
+      within(grid)
+        .getAllByRole('article')
+        .map((tile) => tile.querySelector('h3')?.textContent),
+    ).toEqual(['Silver', 'Compassionate Inquiry course']);
+    expect(document.querySelector('table')).toBeNull();
+  });
+
+  it('offers no scroll buttons while every tile fits in the row', async () => {
+    mount(OWNER, [SILVER, UNSELLABLE]);
+    await screen.findByRole('list', { name: 'Packages' });
+    expect(screen.queryByRole('button', { name: 'Previous packages' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Next packages' })).toBeNull();
+  });
+
+  it('slides the row sideways a screen at a time once it is wider than its space', async () => {
+    // One row, like a shelf of films: on a narrow screen the tiles run off the
+    // edge and the row scrolls, rather than wrapping into a second row.
+    mount(OWNER, [SILVER, UNSELLABLE]);
+    const row = await screen.findByRole('list', { name: 'Packages' });
+    const scrollBy = vi.fn();
+    Object.defineProperties(row, {
+      scrollWidth: { configurable: true, value: 900 },
+      clientWidth: { configurable: true, value: 300 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+      scrollBy: { configurable: true, value: scrollBy },
+    });
+    fireEvent.scroll(row);
+
+    // At the start, only Next is offered.
+    expect(screen.queryByRole('button', { name: 'Previous packages' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Next packages' }));
+    expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ left: 270 }));
+
+    // At the end, only Previous.
+    row.scrollLeft = 600;
+    fireEvent.scroll(row);
+    expect(await screen.findByRole('button', { name: 'Previous packages' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Next packages' })).toBeNull();
+  });
+
+  it('names each figure beside its value, so a tile reads without a column header', async () => {
+    mount(OWNER, [SILVER]);
+    const tile = await screen.findByRole('article', { name: 'Silver' });
+    const terms = Array.from(tile.querySelectorAll('dt')).map((dt) => dt.textContent);
+    expect(terms).toEqual(['List (AED)', 'Discount', 'VAT', 'Runs for', 'Priced from']);
+    const values = Array.from(tile.querySelectorAll('dd')).map((dd) => dd.textContent);
+    expect(values).toEqual(['12,150.00', '1,825.00', '516.25', '12 months', expect.any(String)]);
   });
 
   it('says in one line that no VAT is charged while the practice is not registered', async () => {
@@ -230,26 +283,12 @@ describe('PackagesSection', () => {
     ).toBeNull();
   });
 
-  it('keeps the row\u2019s action in the first column, where a narrow screen can still reach it', async () => {
-    // The action used to sit in a column of its own at the far end of a table
-    // that needed about 1,600px, so at 1024 — and at 1440 — it was off-screen
-    // with no way to scroll a table that had no visible scrollbar. The first
-    // column is the one the shell pins when the table scrolls sideways.
+  it("keeps every one of a package's actions inside its own tile", async () => {
     mount(OWNER, [SILVER]);
-    const sell = await screen.findByRole('button', { name: 'Sell to a client' });
-    const cell = sell.closest('td');
-    expect(cell).toBeTruthy();
-    expect(cell?.parentElement?.firstElementChild).toBe(cell);
-  });
-
-  it('lets the contents and the price reason take a second line rather than widening the table', async () => {
-    mount(OWNER, [SILVER]);
-    const contents = await screen.findByRole('list', { name: 'Silver contents' });
-    // `white-space` inherits, so a cell that holds a sentence sets it back.
-    expect(contents.className).toContain('cell-wrap');
-    expect(screen.getByText("Launch pricing, ends on the founder's word.").className).toContain(
-      'cell-wrap',
-    );
+    const tile = await screen.findByRole('article', { name: 'Silver' });
+    for (const name of ['Sell to a client', 'Edit Silver', 'Withdraw']) {
+      expect(within(tile).getByRole('button', { name })).toBeTruthy();
+    }
   });
 
   it('opens the sell drawer against the package that was clicked', async () => {
@@ -330,7 +369,7 @@ describe('PackagesSection', () => {
     expect(screen.getByRole('status').textContent).toBe('Silver withdrawn.');
   });
 
-  it('lists a withdrawn package under a folded "Withdrawn (1)" disclosure, not in the table', async () => {
+  it('lists a withdrawn package under a folded "Withdrawn (1)" disclosure, not in the grid', async () => {
     mount(OWNER, [SILVER, GOLD_WITHDRAWN]);
     await screen.findByText('Silver');
     const summary = screen.getByText('Withdrawn (1)').closest('summary');
@@ -343,12 +382,12 @@ describe('PackagesSection', () => {
     // triangle is suppressed by CSS (round-62 review), so the summary carries
     // its own chevron rather than reading as a plain, unopenable line.
     expect(summary?.querySelector('.fold__chevron')).toBeTruthy();
-    // "Not in the table": every <table> outside the fold carries only the
-    // active row, whether the fold is open or shut.
-    const tables = Array.from(document.querySelectorAll('table'));
-    const mainTable = tables.find((t) => !t.closest('details'));
-    expect(mainTable?.textContent).toContain('Silver');
-    expect(mainTable?.textContent).not.toContain('Gold');
+    // "Not in the grid": the main grid carries only the active package,
+    // whether the fold is open or shut.
+    const grid = screen.getByRole('list', { name: 'Packages' });
+    expect(grid.closest('details')).toBeNull();
+    expect(grid.textContent).toContain('Silver');
+    expect(grid.textContent).not.toContain('Gold');
 
     fireEvent.click(summary as HTMLElement);
     expect(await screen.findByRole('button', { name: 'Reinstate' })).toBeTruthy();
@@ -443,8 +482,9 @@ describe('the discount column', () => {
 });
 
 /**
- * The practice orders its packages by hand (operator, 20 October 2026): a
- * Move up and a Move down on each row, one place at a time.
+ * The practice orders its packages by hand (operator, 20 October 2026): one
+ * Reorder button at the top of the section opens a board where a package is
+ * held and carried to its place. The tiles carry no arrows.
  */
 describe('PackagesSection, ordering', () => {
   const GOLD = {
@@ -460,77 +500,145 @@ describe('PackagesSection, ordering', () => {
     name: 'Platinum',
   };
 
-  function names(): string[] {
-    const table = screen.getByRole('table', { name: 'Packages' });
-    return within(table)
-      .getAllByRole('row')
-      .slice(1)
-      .map(
-        (row) =>
-          within(row).getAllByRole('cell')[0]?.querySelector('.name > span')?.textContent ?? '',
-      );
+  function boardNames(): string[] {
+    const board = screen.getByRole('list', { name: 'Packages order' });
+    return within(board)
+      .getAllByRole('button')
+      .map((card) => card.querySelector('.reorder__name')?.textContent ?? '');
   }
 
-  it('offers Move up and Move down on each row, except past either end', async () => {
+  function reorderCalls(fetchImpl: unknown): [string, RequestInit][] {
+    return (
+      fetchImpl as { mock: { calls: [string, RequestInit | undefined][] } }
+    ).mock.calls.filter(([url]) => url === '/api/billing/packages/reorder') as [
+      string,
+      RequestInit,
+    ][];
+  }
+
+  function mountOrdering(answer: () => Response | null = () => null) {
+    let packages = [SILVER, GOLD, PLATINUM];
+    return mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (url === '/api/billing/packages' && method === 'GET') {
+        return json({ packages, vatRegistered: true });
+      }
+      if (url === '/api/billing/packages/reorder') {
+        const failed = answer();
+        if (failed) return failed;
+        const { order } = JSON.parse(String(init?.body)) as { order: string[] };
+        packages = order.map((id) => packages.find((p) => p.id === id)!);
+        return json({ packages, vatRegistered: true });
+      }
+      return null;
+    });
+  }
+
+  it('draws no arrows on the tiles, and offers one Reorder button for the whole list', async () => {
     mount(OWNER, [SILVER, GOLD, PLATINUM]);
     await screen.findByText('Platinum');
-    expect(screen.getByRole('button', { name: 'Move Silver up' })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: 'Move Silver down' })).toHaveProperty(
-      'disabled',
-      false,
-    );
-    expect(screen.getByRole('button', { name: 'Move Gold up' })).toHaveProperty('disabled', false);
-    expect(screen.getByRole('button', { name: 'Move Platinum down' })).toHaveProperty(
-      'disabled',
-      true,
-    );
+    expect(screen.queryByRole('button', { name: /^Move / })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Reorder' })).toHaveLength(1);
   });
 
-  it('moves a package up, sending a fixed reason, and shows the order the server returns', async () => {
-    const { fetchImpl } = mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
-      const method = init?.method ?? 'GET';
-      if (url === '/api/billing/packages' && method === 'GET') {
-        return json({ packages: [SILVER, GOLD, PLATINUM], vatRegistered: true });
-      }
-      if (url === `/api/billing/packages/${PLATINUM.id}/move` && method === 'POST') {
-        return json({ packages: [SILVER, PLATINUM, GOLD], vatRegistered: true });
-      }
-      return null;
-    });
-    await screen.findByText('Platinum');
-    expect(names()).toEqual(['Silver', 'Gold', 'Platinum']);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Move Platinum up' }));
-    await waitFor(() => expect(names()).toEqual(['Silver', 'Platinum', 'Gold']));
-
-    const calls = (fetchImpl as unknown as { mock: { calls: [string, RequestInit | undefined][] } })
-      .mock.calls;
-    const move = calls.find(([calledUrl]) => calledUrl.endsWith('/move'));
-    const [, init] = move as [string, RequestInit];
-    expect(new Headers(init.headers).get('x-reason')).toBe('Moved up in the packages list');
-    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
-    expect(JSON.parse(String(init.body))).toEqual({ direction: 'up' });
-  });
-
-  it('says so, in the critical tone, when a move fails, and keeps the order it had', async () => {
-    mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
-      const method = init?.method ?? 'GET';
-      if (url === '/api/billing/packages' && method === 'GET') {
-        return json({ packages: [SILVER, GOLD], vatRegistered: true });
-      }
-      if (url.endsWith('/move')) return json({ error: 'conflict', code: 'cannot_move' }, 409);
-      return null;
-    });
-    await screen.findByText('Gold');
-    fireEvent.click(screen.getByRole('button', { name: 'Move Gold up' }));
-    expect(await screen.findByText('The order could not be changed. Try again.')).toBeTruthy();
-    expect(names()).toEqual(['Silver', 'Gold']);
-  });
-
-  it('offers no move to someone who cannot change the catalogue', async () => {
+  it('offers no Reorder for a single package, or to someone who cannot change the catalogue', async () => {
+    mount(OWNER, [SILVER]);
+    await screen.findByText('Silver');
+    expect(screen.queryByRole('button', { name: 'Reorder' })).toBeNull();
+    cleanup();
     mount(LEAD_PRACTITIONER, [SILVER, GOLD]);
     await screen.findByText('Gold');
-    expect(screen.queryByRole('button', { name: /^Move / })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reorder' })).toBeNull();
+  });
+
+  it('opens a board of every package in order, and Done closes it', async () => {
+    mountOrdering();
+    fireEvent.click(await screen.findByRole('button', { name: 'Reorder' }));
+    expect(boardNames()).toEqual(['Silver', 'Gold', 'Platinum']);
+    // The tiles and their buttons step aside while the order is being set.
+    expect(screen.queryByRole('button', { name: 'Sell to a client' })).toBeNull();
+    const done = screen.getByRole('button', { name: 'Done' });
+    expect(done.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(done);
+    expect(screen.queryByRole('list', { name: 'Packages order' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Sell to a client' })).toHaveLength(3);
+  });
+
+  it('carries a held package over another to take its place, and saves the whole order once', async () => {
+    const { fetchImpl } = mountOrdering();
+    fireEvent.click(await screen.findByRole('button', { name: 'Reorder' }));
+    const platinum = screen.getByRole('button', { name: 'Platinum, position 3 of 3' });
+    const silver = screen.getByRole('button', { name: 'Silver, position 1 of 3' });
+
+    // jsdom lays nothing out, so the point under the finger is answered here.
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => silver;
+    try {
+      fireEvent.pointerDown(platinum, { button: 0, pointerId: 1 });
+      fireEvent.pointerMove(platinum, { pointerId: 1 });
+      // The others make way while it is still held; nothing is saved yet.
+      expect(boardNames()).toEqual(['Platinum', 'Silver', 'Gold']);
+      expect(reorderCalls(fetchImpl)).toHaveLength(0);
+      fireEvent.pointerUp(platinum, { pointerId: 1 });
+    } finally {
+      document.elementFromPoint = original;
+    }
+
+    await waitFor(() => expect(reorderCalls(fetchImpl)).toHaveLength(1));
+    const [, init] = reorderCalls(fetchImpl)[0]!;
+    expect(new Headers(init.headers).get('x-reason')).toBe('Reordered in the packages list');
+    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+    expect(JSON.parse(String(init.body))).toEqual({ order: [PLATINUM.id, SILVER.id, GOLD.id] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    const grid = screen.getByRole('list', { name: 'Packages' });
+    expect(
+      within(grid)
+        .getAllByRole('article')
+        .map((tile) => tile.querySelector('h3')?.textContent),
+    ).toEqual(['Platinum', 'Silver', 'Gold']);
+  });
+
+  it('puts a package back where it was when the drag is cancelled', async () => {
+    const { fetchImpl } = mountOrdering();
+    fireEvent.click(await screen.findByRole('button', { name: 'Reorder' }));
+    const gold = screen.getByRole('button', { name: 'Gold, position 2 of 3' });
+    const silver = screen.getByRole('button', { name: 'Silver, position 1 of 3' });
+    const original = document.elementFromPoint;
+    document.elementFromPoint = () => silver;
+    try {
+      fireEvent.pointerDown(gold, { button: 0, pointerId: 1 });
+      fireEvent.pointerMove(gold, { pointerId: 1 });
+      fireEvent.pointerCancel(gold, { pointerId: 1 });
+    } finally {
+      document.elementFromPoint = original;
+    }
+    expect(boardNames()).toEqual(['Silver', 'Gold', 'Platinum']);
+    expect(reorderCalls(fetchImpl)).toHaveLength(0);
+  });
+
+  it('moves a focused package one place with the arrow keys, and says where it landed', async () => {
+    const { fetchImpl } = mountOrdering();
+    fireEvent.click(await screen.findByRole('button', { name: 'Reorder' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Gold, position 2 of 3' }), {
+      key: 'ArrowLeft',
+    });
+    expect(boardNames()).toEqual(['Gold', 'Silver', 'Platinum']);
+    expect(screen.getByText('Gold moved to position 1 of 3.')).toBeTruthy();
+    await waitFor(() => expect(reorderCalls(fetchImpl)).toHaveLength(1));
+    expect(JSON.parse(String(reorderCalls(fetchImpl)[0]![1].body))).toEqual({
+      order: [GOLD.id, SILVER.id, PLATINUM.id],
+    });
+  });
+
+  it('says so, in the critical tone, when the order cannot be saved, and shows the order it had', async () => {
+    mountOrdering(() => json({ error: 'conflict', code: 'stale_order' }, 409));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reorder' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Platinum, position 3 of 3' }), {
+      key: 'ArrowUp',
+    });
+    expect(await screen.findByText('The order could not be changed. Try again.')).toBeTruthy();
+    await waitFor(() => expect(boardNames()).toEqual(['Silver', 'Gold', 'Platinum']));
   });
 });
 
@@ -542,20 +650,6 @@ describe('PackagesSection, row buttons', () => {
       'button--tonal',
     );
     expect(screen.getByRole('button', { name: 'Withdraw' }).className).toContain('button--neutral');
-  });
-
-  it('draws Move up and Move down as arrows, named for a screen reader and on hover', async () => {
-    mount(OWNER, [SILVER]);
-    await screen.findByText('Silver');
-    for (const [name, title] of [
-      ['Move Silver up', 'Move up'],
-      ['Move Silver down', 'Move down'],
-    ] as const) {
-      const button = screen.getByRole('button', { name });
-      expect(button.textContent).toBe('');
-      expect(button.querySelector('svg')).toBeTruthy();
-      expect(button.getAttribute('title')).toBe(title);
-    }
   });
 });
 
