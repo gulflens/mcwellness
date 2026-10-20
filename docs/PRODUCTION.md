@@ -3814,3 +3814,37 @@ builds. The one peer session on the machine answered clear before the upload.
 - "Close case", "Not recorded" and "erases nothing yet" are in
   `ClientsPage-DPRiviyh.js`.
 - The runtime log shows the usual two clean start blocks and no error.
+
+## What was done on 2026-10-20: the fifty-second live pass — a package's contents, one service to a line
+
+**02:57 UTC (06:57 +04): main `78420673`, PR 274, on the operator's word.**
+PR 274's checks both passed against main (`606c4e2d`). It was squash-merged
+onto that same commit, so main's tree at `78420673` is identical to the one
+the PR's checks tested (`fbf1a894`). Main's own `verify` had passed before the
+upload; its `verify-db` was still running. Front end only, so the pass was a
+build alone.
+- The packages table, and the folded "Withdrawn" list beside it, show a
+  bundle's contents one service to a line ("1 × Consultation", "2 × Brain map
+  (QEEG)", "15 × Neurofeedback session") in a labelled list, where they were
+  one comma-joined sentence.
+- The service's catalogue name is unchanged; the Sell package drawer and
+  client balances still use the comma line.
+
+**Databases: untouched.** No migration and no policy file. Both stay at 138.
+
+**Build.** Before the upload the host's build list ended at the 51st pass
+(`01a14523`, `mcwellness-e8fdd5fa.tar.gz`), so there were no unrecorded
+builds.
+- Archive `mcwellness-78420673.tar.gz`, 8,044,096 bytes. TUS create 201, then
+  PATCH 204 with the offset equal to the size.
+- Build `01a1573e`, stored settings, 63 s.
+- Entry `index-CSAgLIPi.js` → `index-BcXDYCxC.js`, flipped about 60 s after
+  the start call; the main stylesheet `index-gViIp_PA.css` is unchanged, as
+  the change lives in the billing chunk. No restart.
+
+**Verified.**
+- Health 200 in 0.54 s and deep health 200 in 0.54 s.
+- The old entry and a nonsense asset path both answer 404.
+- `BillingPage-vzr153ak.js` carries `cell-lines` and the list's
+  `contents` label, and `BillingPage-2lnQ9L-R.css` carries
+  `.cell-lines{margin:0;padding:0;list-style:none}`.
