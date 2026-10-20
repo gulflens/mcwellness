@@ -126,9 +126,13 @@ describe('PackagesSection', () => {
     // English only (operator's decision of 7 September 2026,
     // docs/DESIGN-BRIEF.md section 10 item 4).
     expect(screen.queryByText('الفضية')).toBeNull();
+    // One line per service in the bundle, in the order the package lists them.
+    const contents = screen.getByRole('list', { name: 'Silver contents' });
     expect(
-      screen.getByText('1 × Consultation, 2 × Brain map (QEEG), 15 × Neurofeedback session'),
-    ).toBeTruthy();
+      within(contents)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['1 × Consultation', '2 × Brain map (QEEG)', '15 × Neurofeedback session']);
     expect(screen.getByText('12 months')).toBeTruthy();
   });
 
@@ -228,9 +232,7 @@ describe('PackagesSection', () => {
 
   it('lets the contents and the price reason take a second line rather than widening the table', async () => {
     mount(OWNER, [SILVER]);
-    const contents = await screen.findByText(
-      '1 × Consultation, 2 × Brain map (QEEG), 15 × Neurofeedback session',
-    );
+    const contents = await screen.findByRole('list', { name: 'Silver contents' });
     // `white-space` inherits, so a cell that holds a sentence sets it back.
     expect(contents.className).toContain('cell-wrap');
     expect(screen.getByText("Launch pricing, ends on the founder's word.").className).toContain(

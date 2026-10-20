@@ -267,6 +267,13 @@
   max-inline-size: 22rem;
 }
 
+/* A short list inside a cell, one item to a line, without bullets or indent. */
+.cell-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 /*
   The row's action, beneath the name it acts on. It sits in the first column
   on purpose: that is the column the shell pins when the table scrolls
