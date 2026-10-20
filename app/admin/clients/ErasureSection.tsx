@@ -12,6 +12,7 @@ import { useFocusOnOpen } from '../../shell/components/useFocusOnOpen';
 import { Textarea } from './FormAtoms';
 import { contactName } from './contactName';
 import { DocumentLink } from './DocumentLink';
+import { practiceDateLong } from './activation';
 
 /**
  * Being forgotten, on the Overview tab (docs/SPEC/client-record.md section 8).
@@ -87,17 +88,9 @@ function counted(n: number, one: string, many: string): ReactNode {
   );
 }
 
-function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
 /** The message the practice sends with the letter, in the household's own language. */
 function draftMessage(record: ClientRecordResponse, performedAt: string): string {
-  const day = formatDay(performedAt);
+  const day = practiceDateLong(performedAt);
   return record.preferredLocale === 'ar'
     ? `مرحباً. معك McWellness. حُذف سجلك كما طلبت، بتاريخ ${day}. نرسل إليك التأكيد الخطي مع هذه الرسالة.`
     : `Hello. This is McWellness. Your record was erased, as you asked, on ${day}. The written confirmation is with this message.`;
@@ -314,14 +307,14 @@ export function ErasureSection({
       {performed ? (
         <>
           <Note tone="attention">
-            Erased on {formatDay(performed.performedAt as string)}
+            Erased on {practiceDateLong(performed.performedAt as string)}
             {performed.performedByName ? ` by ${performed.performedByName}` : ''}. Nothing more can
             be filed against this record.
           </Note>
           <dl className="record-facts">
             <div className="record-facts__row">
               <dt>Asked on</dt>
-              <dd className="numeric">{formatDay(performed.requestedAt)}</dd>
+              <dd className="numeric">{practiceDateLong(performed.requestedAt)}</dd>
             </div>
             <div className="record-facts__row">
               <dt>Asked by</dt>
@@ -490,7 +483,7 @@ export function ErasureSection({
           <dl className="record-facts">
             <div className="record-facts__row">
               <dt>Asked on</dt>
-              <dd className="numeric">{formatDay(open.requestedAt)}</dd>
+              <dd className="numeric">{practiceDateLong(open.requestedAt)}</dd>
             </div>
             <div className="record-facts__row">
               <dt>Reason given</dt>

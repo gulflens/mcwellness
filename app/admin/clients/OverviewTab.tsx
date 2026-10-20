@@ -9,7 +9,13 @@ import { ErasureSection } from './ErasureSection';
 import { Textarea } from './FormAtoms';
 import { IdentityForm } from './IdentityForm';
 import { contactDisplayName } from './contactName';
-import { canActivate, consentsOutstanding, practiceToday, toActivationRecord } from './activation';
+import {
+  canActivate,
+  consentsOutstanding,
+  practiceDate,
+  practiceToday,
+  toActivationRecord,
+} from './activation';
 import { canAskForErasure, canErase } from './clientAccess';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -258,7 +264,7 @@ export function OverviewTab({
             <dt>Date of birth</dt>
             <dd className="numeric">
               {record.dateOfBirth
-                ? `${new Date(record.dateOfBirth).toLocaleDateString('en-GB')} (age ${age})`
+                ? `${practiceDate(record.dateOfBirth)} (age ${age})`
                 : 'Not recorded'}
             </dd>
           </div>

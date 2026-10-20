@@ -9,6 +9,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import { DocumentLink } from './DocumentLink';
 import { compressToFit, type UploadFile } from './fileUpload';
+import { practiceDate } from './activation';
 
 /**
  * Documents (docs/SPEC/client-record.md section 4.2): what the practice holds
@@ -236,12 +237,10 @@ export function DocumentsTab({
                       </p>
                       {document.isImmutable ? <p className="small muted">Unchangeable</p> : null}
                     </td>
-                    <td className="numeric">
-                      {new Date(document.uploadedAt).toLocaleDateString('en-GB')}
-                    </td>
+                    <td className="numeric">{practiceDate(document.uploadedAt)}</td>
                     <td className="numeric">
                       {document.retentionUntil
-                        ? new Date(document.retentionUntil).toLocaleDateString('en-GB')
+                        ? practiceDate(document.retentionUntil)
                         : 'Not on a fixed clock'}
                     </td>
                     <td>

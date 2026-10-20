@@ -53,6 +53,7 @@ import type { ReportRow } from '../../../api/reports/schema';
 import { Button, Field, Note, Select } from '../../../shell/components/Controls';
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { DateField } from '../../../shell/components/DateField';
+import { practiceToday } from '../../clients/activation';
 import { Textarea } from '../../clients/FormAtoms';
 import { canDraftReports, canSupersedeReports, mayOfferSigning } from '../reportsAccess';
 import { comparableReports, comparedFromRow, earlierLabel } from './earlier';
@@ -616,7 +617,7 @@ export function QeegEditor({
           signing={signing}
           content={content}
           ownLocale={ownLocale}
-          mayOffer={mayOfferSigning(actor, now.toISOString().slice(0, 10))}
+          mayOffer={mayOfferSigning(actor, practiceToday(now))}
           busy={draft.saving}
         />
       )}
