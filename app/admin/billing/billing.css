@@ -929,3 +929,162 @@
 .balance__pay--docked .button {
   inline-size: 100%;
 }
+
+/*
+  A growing book (operator, 20 October 2026): a search field, a row of chips
+  for one kind of row, the rows in bands by month or day, and "Show older"
+  beneath. Shared by the invoice book and the receipt book.
+*/
+.ledger-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin-block: var(--s-4);
+}
+
+.ledger-search__field {
+  display: flex;
+  flex: 1 1 18rem;
+  align-items: center;
+  gap: var(--s-2);
+  max-inline-size: 28rem;
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  color: var(--ink-2);
+}
+
+.ledger-search__field:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.ledger-search__field input {
+  flex: 1;
+  min-inline-size: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+}
+
+/* One row the thumb can slide along on a phone, wrapping with room. */
+.ledger-search__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.chip {
+  min-block-size: var(--s-10);
+  padding-inline: var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--t-small);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+
+.ledger-book__empty {
+  margin-block: var(--s-4);
+}
+
+.ledger-book__more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  margin-block: var(--s-4);
+}
+
+/* A month's or a day's band across the ledger, quieter than a heading. */
+.ledger__band th {
+  position: static;
+  block-size: auto;
+  padding-block: var(--s-2);
+  background: color-mix(in srgb, var(--ink) 4%, var(--paper));
+  font-weight: var(--w-medium);
+  color: var(--ink-2);
+  text-align: start;
+}
+
+/* A phone's book: bands, then rows that open to show their actions. */
+.ledger-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.ledger-list__band {
+  margin: var(--s-2) 0 var(--s-2);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+  color: var(--ink-2);
+}
+
+.ledger-list__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  overflow: hidden;
+}
+
+.ledger-list__item + .ledger-list__item {
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.ledger-list__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  inline-size: 100%;
+  min-block-size: 4rem;
+  padding: var(--s-2) var(--s-4);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ledger-list__who {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.ledger-list__amount {
+  flex: none;
+  align-items: flex-end;
+  font-weight: var(--w-medium);
+}
+
+.ledger-list__method {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--s-10);
+  block-size: var(--s-10);
+  border-radius: 50%;
+}
+
+.ledger-list__actions {
+  padding: 0 var(--s-4) var(--s-3);
+}

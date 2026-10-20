@@ -46,13 +46,17 @@ export type Route = (url: string, init?: RequestInit) => Response | null;
 
 /** Renders `element` with `/api/me` answered and every other route stubbed. */
 export function mountWith(me: unknown, element: ReactElement, routes: Route) {
-  const requests: { url: string; body: unknown }[] = [];
+  const requests: { url: string; method: string; body: unknown }[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(me);
     const answer = routes(url, init);
     if (answer) {
-      requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      requests.push({
+        url,
+        method: init?.method ?? 'GET',
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
       return answer;
     }
     throw new Error(`Unexpected fetch: ${url}`);
