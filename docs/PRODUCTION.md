@@ -4055,3 +4055,42 @@ running was the memory plugin's summariser.
   `ledger-search`, `ledger__band`, `method-mark` and `billing-tabs`.
 - Both search routes answer 401 without a sign-in.
 - The runtime log shows three clean start blocks and no error or warning.
+
+## What was done on 2026-10-20: the fifty-eighth live pass — a client search sends the name in a body, never the address
+
+**18:50 UTC: main `67be3cc7`, PR 289, on the operator's word.** Its checks
+passed on `7367a9b5`; main differs from that tree only by the 57th pass's own
+record in this file (PR 288). Main's own `verify` and `verify-db` passed on
+`67be3cc7` before the archive was made.
+- The security review of PR 287 found that the client search put what a
+  person typed, usually a name, in a query string (`GET /api/clients?q=`).
+- New `POST /api/clients/search` takes `{ q?, status?, emirate? }` in the body
+  and keeps the list's rule, schedule scope, page, audit and erasure rules.
+- `GET /api/clients` takes its two filters only. It refuses `q` with
+  `use_search` and any other parameter with 400.
+- The four screens that search send the text in the body: Clients, Billing's
+  client picker, and Scheduling's New appointment and Log a past session
+  drawers.
+- `docs/CHANGE-REQUESTS/billing-16.md` lists the files touched in the
+  client-record and scheduling streams' paths.
+
+**Databases: untouched.** No migration and no policy file. Both stay at 140.
+
+**Build.** Before the upload the host's latest build was the 57th pass's
+(`01a15a77`), so there were no unrecorded builds. The only other session
+running was the memory plugin's summariser.
+- Archive `mcwellness-67be3cc7.tar.gz`, 8,110,167 bytes, sha256 `2bb59869…`,
+  through `hosting_deploy` with the stored settings passed explicitly and read
+  back unchanged.
+- Build `01a15aa6`, 18:50:50 to 18:51:56 UTC.
+- Entry `index-Dke_W8aw.js` → `index-BSOWZS-C.js`, flipped about 70 s after
+  the start. No restart.
+
+**Verified.**
+- Health 200 in 0.39 s and deep health 200 in 0.36 s. The old entry answers
+  404.
+- `BillingPage-lzOt-MHJ.js`, `ClientsPage-DTXUwGyq.js` and
+  `SchedulePage-BQyrn-7q.js` each carry `/api/clients/search`, and none
+  carries `clients?q=`.
+- `POST /api/clients/search` without a sign-in answers 401.
+- The runtime log shows three clean start blocks and no error or warning.
