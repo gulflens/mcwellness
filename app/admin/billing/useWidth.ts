@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /**
  * How wide the element is, asked of the element itself rather than the
@@ -12,13 +12,16 @@ import { useEffect, useRef, useState } from 'react';
  * been measured — the first paint, and jsdom, which lays nothing out — and
  * every caller reads null as "room enough", so the table is the default and
  * a phone swaps it once, before anyone has read it.
+ *
+ * The ref is a callback, not an object: the element it measures often appears
+ * only once its data has loaded, after the component's first effect has run.
  */
-export function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number | null] {
-  const ref = useRef<T>(null);
+export function useWidth<T extends HTMLElement>(): [(element: T | null) => void, number | null] {
+  const [element, setElement] = useState<T | null>(null);
   const [width, setWidth] = useState<number | null>(null);
+  const ref = useCallback((next: T | null) => setElement(next), []);
 
   useEffect(() => {
-    const element = ref.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(([entry]) => {
       const measured = entry?.contentRect.width ?? 0;
@@ -27,7 +30,7 @@ export function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, n
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [element]);
 
   return [ref, width];
 }

@@ -64,3 +64,26 @@ export function mountWith(me: unknown, element: ReactElement, routes: Route) {
   );
   return { fetchImpl, requests, unmount };
 }
+
+/**
+ * A ResizeObserver that reports one width at once, standing in for a layout
+ * jsdom does not do: the price list asks its own width to choose a table or
+ * cards (app/admin/billing/useWidth.ts).
+ */
+export function narrowTo(width: number) {
+  class FixedObserver {
+    private readonly callback: ResizeObserverCallback;
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+    }
+    observe(target: Element) {
+      this.callback(
+        [{ target, contentRect: { width } } as unknown as ResizeObserverEntry],
+        this as unknown as ResizeObserver,
+      );
+    }
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal('ResizeObserver', FixedObserver);
+}

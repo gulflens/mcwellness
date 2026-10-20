@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BillingPage } from '../../app/admin/billing/BillingPage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
+import { narrowTo } from './harness';
 import type { AuthProvider } from '../../app/shell/auth/types';
 
 afterEach(cleanup);
@@ -293,26 +294,6 @@ describe('BillingPage', () => {
     );
   });
 });
-
-/**
- * A ResizeObserver that reports one width at once, standing in for a layout
- * jsdom does not do: the price list asks its own width to choose a table or
- * cards (app/admin/billing/useWidth.ts).
- */
-function narrowTo(width: number) {
-  class FixedObserver {
-    constructor(private readonly callback: ResizeObserverCallback) {}
-    observe(target: Element) {
-      this.callback(
-        [{ target, contentRect: { width } } as unknown as ResizeObserverEntry],
-        this as unknown as ResizeObserver,
-      );
-    }
-    unobserve() {}
-    disconnect() {}
-  }
-  vi.stubGlobal('ResizeObserver', FixedObserver);
-}
 
 describe('changing a price, and the list on a narrow screen', () => {
   afterEach(() => vi.unstubAllGlobals());

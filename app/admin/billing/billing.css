@@ -779,3 +779,153 @@
   margin-block-start: auto;
   inline-size: 100%;
 }
+
+/*
+  One family's balance (operator, 20 October 2026): whose it is, the four
+  figures as tiles with what is owed drawn to be noticed, what is left as
+  bars, then the packages bought. On a phone Record a payment docks to the
+  foot of the screen, where a thumb is.
+*/
+.balance__client {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin-block: var(--s-4);
+  padding: var(--s-4);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.balance__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--row);
+  block-size: var(--row);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 14%, var(--surface));
+  color: var(--brand);
+  font-weight: var(--w-medium);
+}
+
+.balance__who {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.balance__name {
+  font-size: var(--t-body);
+  font-weight: var(--w-medium);
+}
+
+.balance__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: var(--s-3);
+}
+
+.balance__figures .figures__item {
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.balance__figures .figures__item dd:first-of-type {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--w-medium);
+}
+
+/* Owing is the one figure that asks for something. */
+.figures__item--owed {
+  background: color-mix(in srgb, var(--attention) 10%, var(--surface)) !important;
+  border-color: color-mix(in srgb, var(--attention) 45%, var(--surface)) !important;
+}
+
+.figures__item--owed dd:first-of-type {
+  color: var(--attention);
+}
+
+.balance__services .figures__heading {
+  margin-block-start: var(--s-6);
+}
+
+/* Delivered out of bought: the words, and a bar that repeats them. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-inline-size: 8rem;
+}
+
+.progress__bar {
+  display: block;
+  block-size: var(--s-2);
+  border-radius: var(--r-1);
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  overflow: hidden;
+}
+
+.progress__fill {
+  display: block;
+  block-size: 100%;
+  background: var(--brand);
+}
+
+.service-cards {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.service-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+}
+
+.service-card + .service-card {
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.service-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+
+.service-card__name {
+  font-weight: var(--w-medium);
+}
+
+.service-card__left {
+  flex: none;
+  font-weight: var(--w-medium);
+}
+
+/* On a phone the payment docks to the foot of the screen, where a thumb is:
+   the last thing in the balance, stuck to the bottom while the rest scrolls
+   beneath it (BalancesSection.tsx decides which, by the balance's width). */
+.balance__pay--docked {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 2;
+  margin-block-start: var(--s-4);
+  padding-block: var(--s-3) calc(var(--s-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.balance__pay--docked .button {
+  inline-size: 100%;
+}
