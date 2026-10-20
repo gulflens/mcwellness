@@ -319,3 +319,136 @@ describe('the term a new programme runs for', () => {
     expect(sentTerms(requests)).toHaveLength(0);
   });
 });
+
+/**
+ * Edit (operator, 20 October 2026): the same drawer, filled in from the
+ * package, with its name fixed and everything else open to change.
+ */
+describe('PackageDrawer, editing', () => {
+  const SILVER = {
+    id: '00000004-0000-4000-8000-000000000201',
+    code: 'silver',
+    name: 'Silver',
+    nameAr: null,
+    listPriceFils: 1_215_000,
+    term: { amount: 12, unit: 'month' as const },
+    status: 'active' as const,
+    components: [
+      {
+        serviceTypeId: CONSULTATION,
+        serviceTypeCode: 'consultation',
+        serviceTypeName: 'Consultation',
+        serviceTypeNameAr: null,
+        quantity: 1,
+        lineNo: 1,
+        standaloneNetFils: 0,
+      },
+      {
+        serviceTypeId: BRAIN_MAP,
+        serviceTypeCode: 'brain-map',
+        serviceTypeName: 'Brain map',
+        serviceTypeNameAr: null,
+        quantity: 2,
+        lineNo: 2,
+        standaloneNetFils: 82_500,
+      },
+      {
+        serviceTypeId: NF_SESSION,
+        serviceTypeCode: 'nf-session',
+        serviceTypeName: 'Neurofeedback session',
+        serviceTypeNameAr: null,
+        quantity: 15,
+        lineNo: 3,
+        standaloneNetFils: 70_000,
+      },
+    ],
+    currentPrice: {
+      id: '00000004-0000-4000-8000-000000000301',
+      listPriceFils: 1_215_000,
+      discountFils: 182_500,
+      discountBasisPoints: null,
+      amountFils: 1_032_500,
+      vatRateBasisPoints: 0,
+      vatFils: 0,
+      grossFils: 1_032_500,
+      validFrom: '2026-09-02',
+      amendmentReason: "Launch pricing, ends on the founder's word.",
+    },
+    componentsTotalFils: 1_215_000,
+    sellable: true,
+  };
+
+  function mountEditing(answer = json({ package: SILVER }, 200)) {
+    const onSaved: unknown[] = [];
+    const mounted = mountWith(
+      OWNER,
+      <PackageDrawer
+        editing={SILVER}
+        onClose={() => undefined}
+        onCreated={(row) => onSaved.push(row)}
+      />,
+      (url, init) => {
+        if (url === '/api/billing/prices') return json({ prices: PRICES, vatRegistered: true });
+        if (url === `/api/billing/packages/${SILVER.id}` && init?.method === 'PUT') return answer;
+        return null;
+      },
+    );
+    return { ...mounted, onSaved };
+  }
+
+  it('opens filled in from the package, with its name fixed', async () => {
+    mountEditing();
+    expect(await screen.findByRole('heading', { name: 'Edit package' })).toBeTruthy();
+    await screen.findByLabelText(/Brain map/);
+    expect(screen.getByLabelText('Name')).toHaveProperty('value', 'Silver');
+    expect(screen.getByLabelText('Name')).toHaveProperty('readOnly', true);
+    expect(screen.queryByLabelText('Code')).toBeNull();
+    expect(screen.getByLabelText(/Neurofeedback session/)).toHaveProperty('value', '15');
+    expect(screen.getByLabelText(/^List price/)).toHaveProperty('value', '12,150.00');
+    expect(screen.getByLabelText(/^Price now/)).toHaveProperty('value', '10,325.00');
+  });
+
+  it('saves the change with its reason, and never sends the name', async () => {
+    const { fetchImpl, onSaved } = mountEditing();
+    await screen.findByLabelText(/Neurofeedback session/);
+    fireEvent.change(screen.getByLabelText(/Neurofeedback session/), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText(/^Why this change/), {
+      target: { value: 'Twenty sessions from now on.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(onSaved).toHaveLength(1));
+
+    const calls = (fetchImpl as unknown as { mock: { calls: [string, RequestInit | undefined][] } })
+      .mock.calls;
+    const put = calls.find(([, init]) => init?.method === 'PUT');
+    const [, init] = put as [string, RequestInit];
+    expect(new Headers(init.headers).get('x-reason')).toBe('Twenty sessions from now on.');
+    const sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(sent).not.toHaveProperty('name');
+    expect(sent).not.toHaveProperty('code');
+    expect(sent.components).toEqual([
+      { serviceTypeId: CONSULTATION, quantity: 1 },
+      { serviceTypeId: BRAIN_MAP, quantity: 2 },
+      { serviceTypeId: NF_SESSION, quantity: 20 },
+    ]);
+    expect(sent.price).toMatchObject({
+      discount: { kind: 'amount', fils: 182_500 },
+      amendmentReason: 'Twenty sessions from now on.',
+    });
+  });
+
+  it('says in plain words why a sold package cannot change its contents from a later date', async () => {
+    mountEditing(json({ error: 'unprocessable', code: 'version_starts_today' }, 422));
+    await screen.findByLabelText(/Neurofeedback session/);
+    fireEvent.change(screen.getByLabelText(/Neurofeedback session/), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText(/^Why this change/), {
+      target: { value: 'Twenty sessions from now on.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(
+      await screen.findByText(
+        'This package has been sold, so new contents go on sale today. Set "On sale from" to today.',
+      ),
+    ).toBeTruthy();
+  });
+});

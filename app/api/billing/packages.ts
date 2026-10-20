@@ -2,6 +2,8 @@ import type { Hono } from 'hono';
 import {
   applyDiscount,
   movePackage,
+  nextVersionCode,
+  planPackageEdit,
   resolveSaleVat,
   resolveVat,
   validateNewPrice,
@@ -17,6 +19,7 @@ import { readVatRegistered } from './supplier';
 import {
   AddPackagePriceInput,
   CreatePackageInput,
+  EditPackageInput,
   MovePackageInput,
   PackageResponse,
   PackagesResponse,
@@ -101,7 +104,11 @@ type PriceDbRow = {
 
 const PACKAGES_SQL =
   'select id, code, name, name_ar, list_price_fils, expiry_amount, expiry_unit, status ' +
-  'from package where tenant_id = app.current_tenant_id() order by position, name';
+  'from package p where tenant_id = app.current_tenant_id() ' +
+  // A version replaced by a later one is history, not a package on the list
+  // (migration 415): its buyers reach it through their purchase.
+  'and not exists (select 1 from package s where s.supersedes_id = p.id) ' +
+  'order by position, name';
 
 // The components, each carrying what its service costs on its own today: the
 // price with the greatest valid_from at or before today, which is exactly
@@ -336,6 +343,21 @@ export function applyPackageDiscount(
 }
 
 /** Writes the row `checkPackagePrice` has already approved. */
+/** A bundle's contents, numbered in the order given. */
+async function insertComponents(
+  db: Db,
+  packageId: string,
+  components: readonly { serviceTypeId: string; quantity: number }[],
+): Promise<void> {
+  for (const [index, component] of components.entries()) {
+    await db.query(
+      'insert into package_component (tenant_id, package_id, service_type_id, quantity, ' +
+        'line_no, created_by) values (app.current_tenant_id(), $1, $2, $3, $4, app.current_actor_id())',
+      [packageId, component.serviceTypeId, component.quantity, index + 1],
+    );
+  }
+}
+
 async function insertPackagePrice(
   db: Db,
   packageId: string,
@@ -461,13 +483,7 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       throw new Error('Insert of a package did not return an id.');
     }
 
-    for (const [index, component] of input.components.entries()) {
-      await db.query(
-        'insert into package_component (tenant_id, package_id, service_type_id, quantity, ' +
-          'line_no, created_by) values (app.current_tenant_id(), $1, $2, $3, $4, app.current_actor_id())',
-        [packageId, component.serviceTypeId, component.quantity, index + 1],
-      );
-    }
+    await insertComponents(db, packageId, input.components);
 
     await insertPackagePrice(db, packageId, applied, input.price, approval);
 
@@ -557,6 +573,15 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const db = c.get('db');
+    // A version a later one replaced stays retired: bringing it back would put
+    // two of the same package on the list (migration 415).
+    const replaced = await db.query(
+      'select 1 from package where tenant_id = app.current_tenant_id() and supersedes_id = $1',
+      [packageId],
+    );
+    if (replaced.rows[0]) {
+      return c.json({ error: 'conflict', code: 'superseded', requestId }, 409);
+    }
     // A bundle brought back goes to the end of the list (operator, 20 October
     // 2026), so it never lands between two the practice has already ordered.
     const updated = await db.query<{ id: string }>(
@@ -629,5 +654,194 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const vatRegistered = await readVatRegistered(db);
     const packages = await readPackages(db, today, vatRegistered);
     return c.json(PackagesResponse.parse({ packages, vatRegistered }), 200);
+  });
+
+  // Editing a package: everything but its name (operator, 20 October 2026).
+  // The rule is `domain/billing/packageEdit.ts`'s: in place, or — when the
+  // contents of a package somebody has bought change — a new version with the
+  // same name and place, the old one withdrawn and out of the list. Either way
+  // a new price row is written, whose reason the table shows as its Notes. The
+  // request's X-Reason lands on every audit row the edit writes.
+  api.put('/api/billing/packages/:id', async (c) => {
+    const actor = c.get('actor');
+    const requestId = c.get('requestId');
+    if (!mayWriteCatalogue(actor, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const packageId = c.req.param('id');
+    if (!isUuid(packageId)) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const reason = requestReason(c).trim();
+    if (!reason) {
+      return c.json({ error: 'bad_request', code: 'reason_required', requestId }, 400);
+    }
+    const body = EditPackageInput.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const input = body.data;
+    if (
+      new Set(input.components.map((component) => component.serviceTypeId)).size !==
+      input.components.length
+    ) {
+      return c.json({ error: 'bad_request', code: 'duplicate_component', requestId }, 400);
+    }
+    const db = c.get('db');
+    const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
+
+    const found = await db.query<{
+      id: string;
+      code: string;
+      name: string;
+      name_ar: string | null;
+      list_price_fils: number;
+      expiry_amount: number | null;
+      expiry_unit: 'day' | 'month' | null;
+      status: 'active' | 'inactive';
+      position: number;
+      version: number;
+    }>(
+      'select id, code, name, name_ar, list_price_fils, expiry_amount, expiry_unit, status, ' +
+        'position, version from package where tenant_id = app.current_tenant_id() and id = $1 ' +
+        'for update',
+      [packageId],
+    );
+    const bundle = found.rows[0];
+    if (!bundle) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    const replaced = await db.query(
+      'select 1 from package where tenant_id = app.current_tenant_id() and supersedes_id = $1',
+      [packageId],
+    );
+    if (replaced.rows[0]) {
+      return c.json({ error: 'conflict', code: 'superseded', requestId }, 409);
+    }
+    if (bundle.status !== 'active') {
+      return c.json({ error: 'conflict', code: 'withdrawn', requestId }, 409);
+    }
+
+    const services = await db.query<{ id: string }>(
+      'select id from service_type where tenant_id = app.current_tenant_id() and id = any($1::uuid[])',
+      [input.components.map((component) => component.serviceTypeId)],
+    );
+    if (services.rows.length !== input.components.length) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+
+    const [components, sold] = await Promise.all([
+      db.query<{ service_type_id: string; quantity: number }>(
+        'select service_type_id, quantity from package_component ' +
+          'where tenant_id = app.current_tenant_id() and package_id = $1',
+        [packageId],
+      ),
+      db.query(
+        'select 1 from package_purchase where tenant_id = app.current_tenant_id() ' +
+          'and package_id = $1 limit 1',
+        [packageId],
+      ),
+    ]);
+    const plan = planPackageEdit(
+      {
+        listPriceFils: bundle.list_price_fils,
+        term:
+          bundle.expiry_amount !== null && bundle.expiry_unit !== null
+            ? { amount: bundle.expiry_amount, unit: bundle.expiry_unit }
+            : null,
+        components: components.rows.map((row) => ({
+          serviceTypeId: row.service_type_id,
+          quantity: row.quantity,
+        })),
+      },
+      input,
+      { sold: sold.rows.length > 0, validFrom: input.price.validFrom, today },
+    );
+    if (!plan.ok) {
+      return c.json({ error: 'unprocessable', code: plan.code, requestId }, 422);
+    }
+
+    // The price is checked against the row it will belong to: the package
+    // itself in place, or nothing yet for a new version.
+    const approval = await checkPackagePrice(
+      db,
+      plan.kind === 'in_place' ? packageId : null,
+      input.price,
+      today,
+    );
+    if (!approval.ok) {
+      return c.json({ error: 'bad_request', code: approval.code, requestId }, approval.status);
+    }
+    let applied: AppliedDiscount;
+    try {
+      applied = applyPackageDiscount(input.listPriceFils, input.price);
+    } catch {
+      return c.json({ error: 'bad_request', code: 'discount_too_large', requestId }, 400);
+    }
+
+    let resultId = packageId;
+    if (plan.kind === 'in_place') {
+      await db.query(
+        'update package set list_price_fils = $2, expiry_amount = $3, expiry_unit = $4 ' +
+          'where id = $1 and tenant_id = app.current_tenant_id()',
+        [packageId, input.listPriceFils, input.term?.amount ?? null, input.term?.unit ?? null],
+      );
+      if (plan.componentsChanged) {
+        // Allowed only because nobody has bought it: 403's guard refuses
+        // otherwise, whatever this route believed.
+        await db.query(
+          'delete from package_component where tenant_id = app.current_tenant_id() ' +
+            'and package_id = $1',
+          [packageId],
+        );
+        await insertComponents(db, packageId, input.components);
+      }
+    } else {
+      const version = bundle.version + 1;
+      const code = nextVersionCode(bundle.code, version);
+      const taken = await db.query(
+        'select 1 from package where tenant_id = app.current_tenant_id() and code = $1',
+        [code],
+      );
+      if (taken.rows[0]) {
+        return c.json({ error: 'conflict', code: 'code_taken', requestId }, 409);
+      }
+      const inserted = await db.query<{ id: string }>(
+        'insert into package (tenant_id, code, name, name_ar, list_price_fils, expiry_amount, ' +
+          'expiry_unit, position, version, supersedes_id, amendment_reason, created_by) ' +
+          'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ' +
+          'app.current_actor_id()) returning id',
+        [
+          code,
+          bundle.name,
+          bundle.name_ar,
+          input.listPriceFils,
+          input.term?.amount ?? null,
+          input.term?.unit ?? null,
+          bundle.position,
+          version,
+          packageId,
+          reason.slice(0, 200),
+        ],
+      );
+      const newId = inserted.rows[0]?.id;
+      if (!newId) {
+        throw new Error('Insert of a package version did not return an id.');
+      }
+      await insertComponents(db, newId, input.components);
+      await db.query(
+        "update package set status = 'inactive' where id = $1 and tenant_id = app.current_tenant_id()",
+        [packageId],
+      );
+      resultId = newId;
+    }
+    await insertPackagePrice(db, resultId, applied, input.price, approval);
+
+    const packages = await readPackages(db, today, await readVatRegistered(db));
+    const row = packages.find((p) => p.id === resultId);
+    if (!row) {
+      throw new Error('The package just edited could not be read back.');
+    }
+    return c.json(PackageResponse.parse({ package: row }), 200);
   });
 }

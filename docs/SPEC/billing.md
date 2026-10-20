@@ -237,6 +237,28 @@ the practice has ordered since. Positions are not unique: two bundles added or
 reinstated at the same moment may share one until the next move, and the list
 breaks the tie by name.
 
+**Editing a package** (operator, 20 October 2026): everything but its name —
+contents, list price, discount or price now, the date it takes effect, the term,
+and the reason the Notes column shows. Edit on each row opens the Add package
+drawer filled in, its name fixed; `PUT /api/billing/packages/:id`, behind
+`mayWriteCatalogue`, with the reason as `X-Reason`. The rule is
+`domain/billing/packageEdit.ts`'s `planPackageEdit`:
+
+- Anything but the contents, or the contents of a package nobody has bought,
+  changes **in place**. It applies to new sales only: every sale keeps its own
+  figures and its own end date.
+- The contents of a package somebody has bought cannot change (403's guard),
+  so that edit writes **a new version** — the same name, Arabic name and place
+  in the list, `version` one higher, `supersedes_id` naming the old one,
+  `amendment_reason` the edit's reason, and a code suffixed `-v2`, `-v3`…
+  (migration 415). The old one is withdrawn, drops out of the list, and cannot
+  be reinstated (`409 superseded`). Its buyers keep exactly what they bought. A
+  new version goes on sale today (`422 version_starts_today` otherwise), so the
+  package is never off sale between the two.
+- Every edit writes a new price row, so `validateNewPrice` applies: on or after
+  today, and after the price it replaces — a second edit on the day a price
+  started takes effect tomorrow at the earliest.
+
 **The table's columns** (operator, 20 October 2026): Package, Contents, List,
 Discount, VAT, Total, Runs for, Priced from, and Notes last — the price row's
 `amendment_reason`, or "Not on sale" for a bundle with no price yet. There is

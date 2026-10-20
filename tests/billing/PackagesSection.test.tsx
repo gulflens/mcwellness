@@ -558,3 +558,25 @@ describe('PackagesSection, row buttons', () => {
     }
   });
 });
+
+describe('PackagesSection, editing', () => {
+  it('offers Edit on each row, which opens the package in the drawer', async () => {
+    mountWith(OWNER, <PackagesSection canWrite />, (url) => {
+      if (url === '/api/billing/packages') return json({ packages: [SILVER], vatRegistered: true });
+      if (url === '/api/billing/prices') return json({ prices: [], vatRegistered: true });
+      return null;
+    });
+    await screen.findByText('Silver');
+    const edit = screen.getByRole('button', { name: 'Edit Silver' });
+    expect(edit.textContent).toBe('Edit');
+    fireEvent.click(edit);
+    expect(await screen.findByRole('heading', { name: 'Edit package' })).toBeTruthy();
+    expect(screen.getByLabelText('Name')).toHaveProperty('value', 'Silver');
+  });
+
+  it('offers no Edit to someone who cannot change the catalogue', async () => {
+    mount(LEAD_PRACTITIONER, [SILVER]);
+    await screen.findByText('Silver');
+    expect(screen.queryByRole('button', { name: 'Edit Silver' })).toBeNull();
+  });
+});

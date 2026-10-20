@@ -28,6 +28,8 @@ export type {
 export { cashCollectedBetween, monthlyMoney } from './recognition';
 export type { CollectedPayment, LedgerCredit, MonthlyMoney } from './recognition';
 export { movePackage } from './packageOrder';
+export { nextVersionCode, planPackageEdit } from './packageEdit';
+export type { EditablePackage, PackageEditPlan } from './packageEdit';
 export type { OrderedPackage, PackageMove } from './packageOrder';
 export { refundOnTermination } from './refund';
 export type { DeliveredCount, RefundLine, RefundQuote, SingleRate } from './refund';
