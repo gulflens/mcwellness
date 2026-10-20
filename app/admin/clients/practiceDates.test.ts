@@ -6,6 +6,12 @@ import { practiceDate, practiceDateLong, practiceToday } from './activation';
 const LATE_EVENING_UTC = '2026-09-03T21:30:00Z';
 
 describe('dates drawn in the practice zone, wherever the computer is', () => {
+  it('runs on a clock far from Dubai, so these tests can tell the zones apart', () => {
+    // vite.config.ts pins the suite to the US west coast; if that ever stops
+    // reaching the workers, every test below would pass for the wrong reason.
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe('America/Los_Angeles');
+  });
+
   it('writes an instant as the day it was in Dubai', () => {
     expect(practiceDate(LATE_EVENING_UTC)).toBe('04/09/2026');
   });
