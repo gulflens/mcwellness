@@ -429,3 +429,95 @@ describe('the discount column', () => {
     expect(screen.getByText('1,825.00')).toBeTruthy();
   });
 });
+
+/**
+ * The practice orders its packages by hand (operator, 20 October 2026): a
+ * Move up and a Move down on each row, one place at a time.
+ */
+describe('PackagesSection, ordering', () => {
+  const GOLD = {
+    ...SILVER,
+    id: '00000004-0000-4000-8000-000000000204',
+    code: 'gold',
+    name: 'Gold',
+  };
+  const PLATINUM = {
+    ...SILVER,
+    id: '00000004-0000-4000-8000-000000000205',
+    code: 'platinum',
+    name: 'Platinum',
+  };
+
+  function names(): string[] {
+    const table = screen.getByRole('table', { name: 'Packages' });
+    return within(table)
+      .getAllByRole('row')
+      .slice(1)
+      .map(
+        (row) =>
+          within(row).getAllByRole('cell')[0]?.querySelector('.name > span')?.textContent ?? '',
+      );
+  }
+
+  it('offers Move up and Move down on each row, except past either end', async () => {
+    mount(OWNER, [SILVER, GOLD, PLATINUM]);
+    await screen.findByText('Platinum');
+    expect(screen.getByRole('button', { name: 'Move Silver up' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Move Silver down' })).toHaveProperty(
+      'disabled',
+      false,
+    );
+    expect(screen.getByRole('button', { name: 'Move Gold up' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Move Platinum down' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+  });
+
+  it('moves a package up, sending a fixed reason, and shows the order the server returns', async () => {
+    const { fetchImpl } = mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (url === '/api/billing/packages' && method === 'GET') {
+        return json({ packages: [SILVER, GOLD, PLATINUM], vatRegistered: true });
+      }
+      if (url === `/api/billing/packages/${PLATINUM.id}/move` && method === 'POST') {
+        return json({ packages: [SILVER, PLATINUM, GOLD], vatRegistered: true });
+      }
+      return null;
+    });
+    await screen.findByText('Platinum');
+    expect(names()).toEqual(['Silver', 'Gold', 'Platinum']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move Platinum up' }));
+    await waitFor(() => expect(names()).toEqual(['Silver', 'Platinum', 'Gold']));
+
+    const calls = (fetchImpl as unknown as { mock: { calls: [string, RequestInit | undefined][] } })
+      .mock.calls;
+    const move = calls.find(([calledUrl]) => calledUrl.endsWith('/move'));
+    const [, init] = move as [string, RequestInit];
+    expect(new Headers(init.headers).get('x-reason')).toBe('Moved up in the packages list');
+    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+    expect(JSON.parse(String(init.body))).toEqual({ direction: 'up' });
+  });
+
+  it('says so, in the critical tone, when a move fails, and keeps the order it had', async () => {
+    mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (url === '/api/billing/packages' && method === 'GET') {
+        return json({ packages: [SILVER, GOLD], vatRegistered: true });
+      }
+      if (url.endsWith('/move')) return json({ error: 'conflict', code: 'cannot_move' }, 409);
+      return null;
+    });
+    await screen.findByText('Gold');
+    fireEvent.click(screen.getByRole('button', { name: 'Move Gold up' }));
+    expect(await screen.findByText('The order could not be changed. Try again.')).toBeTruthy();
+    expect(names()).toEqual(['Silver', 'Gold']);
+  });
+
+  it('offers no move to someone who cannot change the catalogue', async () => {
+    mount(LEAD_PRACTITIONER, [SILVER, GOLD]);
+    await screen.findByText('Gold');
+    expect(screen.queryByRole('button', { name: /^Move / })).toBeNull();
+  });
+});
