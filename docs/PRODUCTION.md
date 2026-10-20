@@ -3947,3 +3947,54 @@ the pass was a build alone.
 **Verified.** Health 200 and deep health 200. `BillingPage-CI0jQDVr.js`
 carries the `notes` column with the header `Notes`; "Price now" remains only
 as the Add package drawer's field label.
+
+## What was done on 2026-10-20: the fifty-sixth live pass — editing a package, and packages as a sliding row of tiles
+
+**16:51 UTC: main `349c3f2e`, PRs 283 and 285, on the operator's word.** PR
+285's checks passed on `addfbc88`, whose tree main's equals (`86afa56f`), and
+main's own `verify` and `verify-db` passed on `349c3f2e` before the archive was
+made.
+- PR 283: Billing › Packages › Edit changes everything but a package's name.
+  When the contents of a package somebody has bought change, the edit writes a
+  new version and withdraws the old one.
+- PR 285: Billing › Packages is one row of tiles, not a table. The row slides
+  sideways and snaps when it runs out of room; Previous and Next show only at
+  an edge that hides a tile, and only with a mouse. Sell to a client spans the
+  tile, with Edit and Withdraw half each beneath it. Move up and Move down are
+  gone: a Reorder button opens a board where a package is dragged to its place
+  or moved with the arrow keys, saved in one request
+  (`POST /api/billing/packages/reorder`, reason "Reordered in the packages
+  list"). `docs/CHANGE-REQUESTS/billing-15.md` asks the trunk for the
+  "tables, not cards" exception.
+
+**Databases, 139 → 140: migration 415 was already applied, before this pass
+and without a record here.** Staging at 06:13:56 UTC and production at
+06:14:12 UTC, each with its ledger row. Both rows carry sha256
+`b682c3cb…bcb780d67`, the file's own and the local runner's. Both databases
+have the three `package` columns (`version`, `supersedes_id`,
+`amendment_reason`), `app.package_was_sold` and `package_one_successor`.
+Nothing was applied in this pass. The 55th pass's build ran against the
+migrated schema for about ten and a half hours; it never read the new columns,
+and all three have defaults.
+
+**Build.** Before the upload the host's latest build was the 55th pass's
+(`01a157bc`), so there were no unrecorded builds, and no other session was
+running.
+- Archive `mcwellness-349c3f2e.tar.gz` (`git archive --prefix=mcwellness/ |
+  gzip -9`), 8,074,387 bytes, sha256 `da168ac8…`. Uploaded and built through
+  `hosting_deploy`, with the stored settings passed explicitly (Hono, Node 24,
+  root `mcwellness`, output `.`, `build:production`, entry
+  `app/api/start.mjs`, npm) and read back unchanged.
+- Build `01a15a39`, 16:51:32 to 16:52:36 UTC.
+- Entry `index-BPTUfJHy.js` → `index-7-BNq2EV.js`, flipped about 60 s after
+  the start. No restart.
+
+**Verified.**
+- Health 200 in 0.42 s and deep health 200 in 0.58 s. The old entry answers
+  404.
+- `BillingPage-HD5llXz1.js` carries `packages/reorder`, "Reordered in the
+  packages list", "Packages order" and "Edit package", and no "Move up".
+- `BillingPage-Bcp-rRIo.css` carries `package-carousel`, `scroll-snap-type`,
+  `reorder__board` and `tile__actions--grid`.
+- `POST /api/billing/packages/reorder` without a sign-in answers 401.
+- The runtime log shows three clean start blocks and no error or warning.
