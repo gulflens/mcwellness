@@ -16,9 +16,10 @@ import { WithdrawPackageDrawer } from './WithdrawPackageDrawer';
  * What the practice sells as a programme, beside what it sells as a single
  * visit.
  *
- * Two money columns, because there are two figures and neither is derived
- * from the other: "List" is what the contents come to bought one at a time,
- * and "Price now" is what it is actually selling for. A bundle whose contents
+ * "List" is what the contents come to bought one at a time; the Discount,
+ * VAT and Total columns say what it actually sells for, and Notes why (the
+ * operator dropped a Price now column on 20 October 2026: while the practice
+ * is not registered for VAT it only repeated Total). A bundle whose contents
  * have drifted away from its published list price says so quietly rather than
  * silently correcting one of the two — that is the founder's decision to
  * take, not the screen's.
@@ -250,25 +251,6 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         render: (row) => (row.currentPrice ? formatDiscount(row.currentPrice) : '—'),
       },
       {
-        key: 'price',
-        header: 'Price now',
-        numeric: true,
-        align: 'end',
-        // The figure and why it is the figure. A price list where "AED
-        // 10,325" sits alone invites the question this column already holds
-        // the answer to — the reason is written on the row when the founder
-        // sets it, and reading it should not need a second screen.
-        render: (row) =>
-          row.currentPrice ? (
-            <span className="name">
-              <span className="numeric">{formatFils(row.currentPrice.amountFils)}</span>
-              <span className="small muted cell-wrap">{row.currentPrice.amendmentReason}</span>
-            </span>
-          ) : (
-            'Not on sale'
-          ),
-      },
-      {
         key: 'vat',
         header: 'VAT',
         numeric: true,
@@ -296,6 +278,20 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         header: 'Priced from',
         numeric: true,
         render: (row) => (row.currentPrice ? formatDate(row.currentPrice.validFrom) : '—'),
+      },
+      {
+        // Why the price is the price, written on the row when the founder
+        // sets it, at the end of the row where a sentence has room (operator,
+        // 20 October 2026). It replaced a Price now column that, while the
+        // practice is not registered for VAT, only repeated Total.
+        key: 'notes',
+        header: 'Notes',
+        render: (row) =>
+          row.currentPrice ? (
+            <span className="cell-wrap">{row.currentPrice.amendmentReason}</span>
+          ) : (
+            'Not on sale'
+          ),
       },
     ];
     return base;
