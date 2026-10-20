@@ -19,6 +19,11 @@ describe('dates drawn in the practice zone, wherever the computer is', () => {
     expect(practiceDateLong('2015-04-01')).toBe('1 April 2015');
   });
 
+  it('draws a dash for a malformed date rather than failing the screen', () => {
+    expect(practiceDate('not a date')).toBe('—');
+    expect(practiceDateLong('')).toBe('—');
+  });
+
   it("takes today from Dubai's clock, not the computer's", () => {
     expect(practiceToday(new Date(LATE_EVENING_UTC))).toBe('2026-09-04');
   });

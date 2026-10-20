@@ -92,10 +92,13 @@ const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 function drawn(iso: string, options: Intl.DateTimeFormatOptions): string {
   const calendarDay = CALENDAR_DAY.test(iso);
+  const date = new Date(calendarDay ? `${iso}T00:00:00Z` : iso);
+  // A malformed value draws a dash rather than throwing and taking the tab down.
+  if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('en-GB', {
     ...options,
     timeZone: calendarDay ? 'UTC' : PRACTICE_TIME_ZONE,
-  }).format(new Date(calendarDay ? `${iso}T00:00:00Z` : iso));
+  }).format(date);
 }
 
 /** 04/09/2026 */
