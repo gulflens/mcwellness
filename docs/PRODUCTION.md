@@ -3998,3 +3998,60 @@ running.
   `reorder__board` and `tile__actions--grid`.
 - `POST /api/billing/packages/reorder` without a sign-in answers 401.
 - The runtime log shows three clean start blocks and no error or warning.
+
+## What was done on 2026-10-20: the fifty-seventh live pass — Prices, Balances, Invoices and Receipts for every screen, with search and paging
+
+**17:59 UTC: main `8066d556`, PR 287, on the operator's word.** Its checks
+passed on `c62a96de`, whose tree main's equals (`04491809`), and main's own
+`verify` and `verify-db` passed on `8066d556` before the archive was made.
+- Each section draws one layout, chosen by the room it has beside the rail
+  (`app/admin/billing/useWidth.ts`). Only that one is in the page, so a screen
+  reader never meets two copies of a figure.
+- Prices: a table with a desk's room and a card per service on a phone. Each
+  row's **Change price** opens the price drawer on that service; a change
+  still adds a new price.
+- Balances: the chosen family's header carries Record a payment and Change.
+  The four figures are tiles, with Outstanding marked when money is owed.
+  Sessions left are progress bars. On a phone the payment button docks to the
+  foot of the screen.
+- Invoices: the month's figures, a search, filter chips by type, the book in
+  bands by month, and **Show older invoices**. While the practice is not
+  registered for VAT, one Amount column replaces Net and Total. There is a
+  full table, a slimmer tablet table and a phone list.
+- Receipts: the month's receipts, **Record a payment** (whose payment, then
+  the payment drawer with what that family owes), a search, filter chips by
+  method, the book in bands by day by the practice's calendar, and **Show
+  older payments**.
+- `POST /api/billing/invoices/search` and `POST /api/billing/payments/search`
+  carry the search text in the body, never a URL. They keep the GETs'
+  permission, audit (`logReads` for exactly the rows returned), tenant scoping
+  and erasure: an erased household is not found by its old name. A receipt
+  cursor is opaque and refused unless this API made it.
+- Billing's section tabs are one row a thumb slides along on a phone. The
+  tabs' look stays in `shell.css`.
+- Security and compliance reviews both passed. The security review's one
+  note, a receipt cursor dated 0000 surfacing as a 500, was fixed before the
+  merge.
+
+**Databases: untouched.** No migration and no policy file. Both stay at 140.
+
+**Build.** Before the upload the host's latest build was the 56th pass's
+(`01a15a39`), so there were no unrecorded builds. The only other session
+running was the memory plugin's summariser.
+- Archive `mcwellness-8066d556.tar.gz` (`git archive --prefix=mcwellness/ |
+  gzip -9`), 8,105,781 bytes, sha256 `8f697230…`, through `hosting_deploy`
+  with the stored settings passed explicitly and read back unchanged.
+- Build `01a15a77`, 17:59:32 to 18:00:35 UTC.
+- Entry `index-7-BNq2EV.js` → `index-Dke_W8aw.js`, flipped about 60 s after
+  the start. No restart.
+
+**Verified.**
+- Health 200 in 0.43 s and deep health 200 in 0.41 s. The old entry answers
+  404.
+- `BillingPage-CdPA9bGZ.js` carries `invoices/search`, `payments/search`,
+  "Show older invoices", "Show older payments", "Change the price of", "Whose
+  payment is it" and "Choose another client".
+- `BillingPage-CGGQJeKe.css` carries `price-card`, `balance__pay--docked`,
+  `ledger-search`, `ledger__band`, `method-mark` and `billing-tabs`.
+- Both search routes answer 401 without a sign-in.
+- The runtime log shows three clean start blocks and no error or warning.
