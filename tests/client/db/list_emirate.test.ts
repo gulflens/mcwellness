@@ -57,6 +57,21 @@ async function list(query = '', as: string = AUTH.ownerA): Promise<Response> {
   return api.request(`/api/clients${query}`, { headers });
 }
 
+/** The search: the text in the body with the filters beside it, never in the URL. */
+async function searchIds(
+  body: Record<string, string>,
+  as: string = AUTH.ownerA,
+): Promise<string[]> {
+  const res = await api.request('/api/clients/search', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${await mint(as)}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  expect(res.status).toBe(200);
+  const listed = (await res.json()) as ClientListResponse;
+  return listed.clients.map((c) => c.id).sort();
+}
+
 async function ids(query: string, as: string = AUTH.ownerA): Promise<string[]> {
   const res = await list(query, as);
   expect(res.status).toBe(200);
@@ -170,8 +185,26 @@ describe('GET /api/clients — by emirate', () => {
   it('narrows together with the status filter and with a search, not instead of them', async () => {
     expect(await ids('?emirate=AUH&status=active')).toEqual([ACTIVE_IN_ABU_DHABI]);
     expect(await ids('?emirate=AUH&status=lead')).toEqual([IN_ABU_DHABI]);
-    expect(await ids('?emirate=AUH&q=Quarry')).toEqual([ACTIVE_IN_ABU_DHABI]);
-    expect(await ids('?emirate=DXB&q=Quarry')).toEqual([]);
+    expect(await searchIds({ emirate: 'AUH', q: 'Quarry' })).toEqual([ACTIVE_IN_ABU_DHABI]);
+    expect(await searchIds({ emirate: 'DXB', q: 'Quarry' })).toEqual([]);
+    expect(await searchIds({ emirate: 'AUH', status: 'active', q: 'Quarry' })).toEqual([
+      ACTIVE_IN_ABU_DHABI,
+    ]);
+  });
+
+  it('records each client a search lists as read, exactly as the list does', async () => {
+    const before = await owner.query<{ n: number }>(
+      "select count(*)::int as n from audit_log where entity_type = 'client' " +
+        "and entity_id = $1 and action = 'list'",
+      [ACTIVE_IN_ABU_DHABI],
+    );
+    expect(await searchIds({ q: 'Quarry' })).toEqual([ACTIVE_IN_ABU_DHABI]);
+    const after = await owner.query<{ n: number }>(
+      "select count(*)::int as n from audit_log where entity_type = 'client' " +
+        "and entity_id = $1 and action = 'list'",
+      [ACTIVE_IN_ABU_DHABI],
+    );
+    expect(after.rows[0]!.n).toBe(before.rows[0]!.n + 1);
   });
 
   it('refuses an emirate that is not one of the seven, rather than listing everybody', async () => {

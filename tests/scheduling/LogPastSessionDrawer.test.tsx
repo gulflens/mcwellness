@@ -46,7 +46,7 @@ function buildFetch(postResponse: () => Response) {
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost');
     const method = init?.method ?? 'GET';
-    if (url.pathname === '/api/clients' && method === 'GET') {
+    if (url.pathname === '/api/clients/search' && method === 'POST') {
       return new Response(JSON.stringify({ clients: [client], note: null }), { status: 200 });
     }
     if (url.pathname === '/api/appointments/options' && method === 'GET') {

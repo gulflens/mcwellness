@@ -103,7 +103,7 @@ function mount(
     OWNER,
     <SellPackageDrawer bundle={bundle} onClose={() => undefined} onSold={onSold} />,
     (url, init) => {
-      if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+      if (url === '/api/clients/search') return json({ clients: [CLIENT], note: null });
       if (url === '/api/billing/package-purchases' && init?.method === 'POST') {
         return json(
           {
@@ -525,7 +525,7 @@ describe('SellPackageDrawer: why a sale was refused', () => {
       OWNER,
       <SellPackageDrawer bundle={SILVER} onClose={() => undefined} onSold={() => undefined} />,
       (url, init) => {
-        if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+        if (url === '/api/clients/search') return json({ clients: [CLIENT], note: null });
         if (url === '/api/billing/package-purchases' && init?.method === 'POST') {
           return json({ error: 'unprocessable', requestId: 'r', ...answer }, 422);
         }

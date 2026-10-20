@@ -844,7 +844,10 @@ describe('what is left of an erased record', () => {
     const body = (await list.json()) as { clients: { id: string }[] };
     expect(body.clients.map((row) => row.id)).not.toContain(MAIN.client);
 
-    const search = await request(api, ADMIN_AUTH, `/api/clients?q=${MAIN.mrn}`);
+    const search = await request(api, ADMIN_AUTH, '/api/clients/search', {
+      method: 'POST',
+      body: JSON.stringify({ q: MAIN.mrn }),
+    });
     expect(((await search.json()) as { clients: unknown[] }).clients).toHaveLength(0);
   });
 

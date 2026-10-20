@@ -86,9 +86,13 @@ function mount(matches: (typeof row)[] = [], lookupStatus = 200, me: unknown = A
         ? json({ clients: matches, note: null })
         : json({ error: 'emirates_id_unavailable' }, lookupStatus);
     }
-    if (url.startsWith('/api/clients')) {
-      const q = new URL(url, 'http://localhost').searchParams.get('q');
+    if (url === '/api/clients/search') {
+      const { q } = JSON.parse(String(init?.body)) as { q?: string };
       return json({ clients: q ? matches : [], note: null });
+    }
+    if (url.startsWith('/api/clients')) {
+      // The address carries only the filters: a name is never in it.
+      return json({ clients: [], note: null });
     }
     return json({ error: 'not_found' }, 404);
   }) as unknown as typeof fetch;
@@ -148,14 +152,23 @@ describe('searchRequest', () => {
     }
   });
 
-  it('still searches a name, a record number and its bare digits', () => {
-    for (const term of ['Juniper', 'MW-000031', '000031', '']) {
-      const request = searchRequest('', term);
-      expect(typeof request === 'object' ? request.url.startsWith('/api/clients?') : false).toBe(
-        term !== '',
-      );
+  it('searches a name, a record number and its bare digits in a body, never the address', () => {
+    for (const term of ['Juniper', 'MW-000031', '000031']) {
+      const request = searchRequest('active', term, 'AUH');
+      if (typeof request !== 'object') throw new Error('Expected a request.');
+      expect(request.url).toBe('/api/clients/search');
+      expect(request.init?.method).toBe('POST');
+      expect(JSON.parse(String(request.init?.body))).toEqual({
+        q: term,
+        status: 'active',
+        emirate: 'AUH',
+      });
     }
+    // Nothing typed: the filters alone, which name nobody, stay in the address.
     expect(searchRequest('', '')).toEqual({ url: '/api/clients' });
+    expect(searchRequest('active', '', 'AUH')).toEqual({
+      url: '/api/clients?status=active&emirate=AUH',
+    });
   });
 });
 
@@ -199,13 +212,23 @@ describe('ClientsPage search', () => {
     expect(calls.slice(before).every((c) => c.url === '/api/clients/lookup')).toBe(true);
   });
 
-  it('searches names and record numbers through the ordinary query', async () => {
+  it('searches names and record numbers in a request body, never in the address', async () => {
     const calls = mount([row]);
     await screen.findByRole('table');
 
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Juniper' } });
 
-    await waitFor(() => expect(calls.some((c) => c.url === '/api/clients?q=Juniper')).toBe(true));
+    await waitFor(() =>
+      expect(
+        calls.some(
+          (c) =>
+            c.url === '/api/clients/search' &&
+            c.init?.method === 'POST' &&
+            JSON.parse(String(c.init?.body)).q === 'Juniper',
+        ),
+      ).toBe(true),
+    );
+    expect(calls.every((c) => !c.url.includes('Juniper'))).toBe(true);
     expect(calls.every((c) => c.url !== '/api/clients/lookup')).toBe(true);
   });
 
