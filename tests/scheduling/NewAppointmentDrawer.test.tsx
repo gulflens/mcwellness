@@ -62,7 +62,7 @@ function buildFetch(postResponse: () => Response, options = optionsResponse) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost');
     const method = init?.method ?? 'GET';
-    if (url.pathname === '/api/clients' && method === 'GET') {
+    if (url.pathname === '/api/clients/search' && method === 'POST') {
       return new Response(JSON.stringify({ clients: [client], note: null }), { status: 200 });
     }
     if (url.pathname === '/api/appointments/options' && method === 'GET') {
@@ -442,7 +442,7 @@ describe('NewAppointmentDrawer', () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), 'http://localhost');
       const method = init?.method ?? 'GET';
-      if (url.pathname === '/api/clients' && method === 'GET') {
+      if (url.pathname === '/api/clients/search' && method === 'POST') {
         return new Response(JSON.stringify({ clients: [client], note: null }), { status: 200 });
       }
       if (url.pathname === '/api/appointments/options' && method === 'GET') {
@@ -536,9 +536,9 @@ describe('NewAppointmentDrawer', () => {
     fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'I' } });
     expect(screen.getByText('Keep typing: search starts at two characters.')).toBeTruthy();
     // No search fetch for a single character.
-    expect(
-      fetchImpl.mock.calls.some(([input]) => String(input).startsWith('/api/clients?q=')),
-    ).toBe(false);
+    expect(fetchImpl.mock.calls.some(([input]) => String(input) === '/api/clients/search')).toBe(
+      false,
+    );
 
     fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Ir' } });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());

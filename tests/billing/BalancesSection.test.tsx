@@ -109,7 +109,7 @@ function balance(over: Record<string, unknown> = {}) {
 
 function mount(body: Record<string, unknown>, canWrite = true) {
   return mountWith(OWNER, <BalancesSection canWrite={canWrite} />, (url, init) => {
-    if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+    if (url === '/api/clients/search') return json({ clients: [CLIENT], note: null });
     if (url === `/api/billing/clients/${CLIENT_ID}/balance`) return json(body);
     if (url === '/api/billing/payments' && init?.method === 'POST') {
       return json(
@@ -342,7 +342,7 @@ describe('BalancesSection', () => {
 
   it('names the problem when a balance fails to load', async () => {
     mountWith(OWNER, <BalancesSection canWrite />, (url) => {
-      if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+      if (url === '/api/clients/search') return json({ clients: [CLIENT], note: null });
       if (url === `/api/billing/clients/${CLIENT_ID}/balance`)
         return json({ error: 'forbidden' }, 403);
       return null;

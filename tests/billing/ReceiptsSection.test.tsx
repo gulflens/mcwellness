@@ -219,7 +219,7 @@ describe('finding a payment, the older ones, and recording one', () => {
       emirate: 'DXB',
     };
     const { requests } = mountWith(OWNER, <ReceiptsSection canWrite />, (url, init) => {
-      if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+      if (url === '/api/clients/search') return json({ clients: [CLIENT], note: null });
       if (url === `/api/billing/clients/${CLIENT.id}/balance`) {
         return json({
           clientId: CLIENT.id,

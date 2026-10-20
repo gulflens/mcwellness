@@ -57,6 +57,14 @@ async function request(
   return target.request(path, { ...init, headers });
 }
 
+/** The search route: a name or record number travels in the body, never in the URL. */
+async function search(target: typeof api, sub: string, body: unknown): Promise<Response> {
+  return request(target, sub, '/api/clients/search', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 /** The lookup route: the identity number travels in the body, never in the URL. */
 async function lookup(
   target: typeof api,
@@ -155,16 +163,36 @@ describe('capturing an Emirates ID on create', () => {
     expect(noMatch.clients).toHaveLength(0);
 
     // The ordinary search refuses an identity number outright rather than searching
-    // it, whole or half-typed: one never travels in a query string
-    // (.claude/rules/ui.md), and the route is the floor under the browser's own rule.
+    // it as text, whole or half-typed, even in a body: the lookup hashes it, and a
+    // text search would hand the number itself to the query.
     for (const term of [digits, digits.slice(0, 14), '784', '78']) {
-      const asText = await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(term)}`);
+      const asText = await search(api, AUTH.ownerA, { q: term });
       expect(asText.status).toBe(400);
       expect(((await asText.json()) as { code?: string }).code).toBe('use_lookup');
     }
     // A record number is not mistaken for one.
-    const byMrn = await request(api, AUTH.ownerA, '/api/clients?q=MW-0');
+    const byMrn = await search(api, AUTH.ownerA, { q: 'MW-0' });
     expect(byMrn.status).toBe(200);
+    // And the address takes no text at all, an identity number least of all
+    // (.claude/rules/ui.md): the list refuses a `q` before it reads anything.
+    for (const term of [digits, 'Juniper']) {
+      const inAddress = await request(
+        api,
+        AUTH.ownerA,
+        `/api/clients?q=${encodeURIComponent(term)}`,
+      );
+      expect(inAddress.status).toBe(400);
+      expect(((await inAddress.json()) as { code?: string }).code).toBe('use_search');
+    }
+    // Nor any other key in the address: a name under another name is refused too.
+    const otherKey = await request(api, AUTH.ownerA, '/api/clients?name=Juniper');
+    expect(otherKey.status).toBe(400);
+    // The two filters, which name nobody, still work there.
+    const filtered = await request(api, AUTH.ownerA, '/api/clients?status=active');
+    expect(filtered.status).toBe(200);
+    // A body with anything but the three fields is refused, not quietly trimmed.
+    const stray = await search(api, AUTH.ownerA, { q: 'MW-0', clientId: digits });
+    expect(stray.status).toBe(400);
   });
 
   it('refuses a checksum that fails, and a duplicate on a second contact', async () => {
@@ -386,7 +414,7 @@ describe('who may search by identity number', () => {
     expect(res.note).toBe('schedule');
 
     // The table itself is unchanged for finance.
-    const byName = await request(api, FINANCE_AUTH, '/api/clients?q=Juniper');
+    const byName = await search(api, FINANCE_AUTH, { q: 'Juniper' });
     expect(byName.status).toBe(200);
     expect(((await byName.json()) as ClientListResponse).clients.length).toBeGreaterThan(0);
   });

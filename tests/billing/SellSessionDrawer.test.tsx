@@ -80,7 +80,7 @@ function mount(
     <SellSessionDrawer onClose={() => undefined} onSold={onSold} />,
     (url, init) => {
       if (url === '/api/billing/prices') return json({ prices: [price], vatRegistered });
-      if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+      if (url === '/api/clients/search') return json({ clients: [CLIENT], note: null });
       if (url === '/api/billing/session-purchases' && init?.method === 'POST') {
         return json(
           {
@@ -187,7 +187,7 @@ describe('SellSessionDrawer', () => {
       (url, init) => {
         if (url === '/api/billing/prices')
           return json({ prices: [NF_SESSION_PRICE], vatRegistered: false });
-        if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+        if (url === '/api/clients/search') return json({ clients: [CLIENT], note: null });
         if (url === '/api/billing/session-purchases' && init?.method === 'POST') {
           return json({ error: 'unprocessable', code: 'not_priced' }, 422);
         }

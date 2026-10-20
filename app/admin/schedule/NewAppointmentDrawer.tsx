@@ -171,7 +171,12 @@ export function NewAppointmentDrawer({
     let live = true;
     const timer = setTimeout(() => {
       setClientSearchState('loading');
-      void apiFetch(`/api/clients?q=${encodeURIComponent(query)}`)
+      // The name in the body, never the address (operator, 20 October 2026).
+      void apiFetch('/api/clients/search', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ q: query }),
+      })
         .then(async (res) => {
           if (!live) return;
           if (!res.ok) {

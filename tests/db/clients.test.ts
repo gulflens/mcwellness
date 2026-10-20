@@ -36,10 +36,23 @@ async function mint(sub: string): Promise<string> {
     .sign(KEY);
 }
 
+/**
+ * The list, or a search of it. A `?q=` written here is sent the way the screen
+ * sends it, in the body of POST /api/clients/search: the address takes no
+ * text, which the route refuses (app/api/clients/list.ts).
+ */
 async function list(sub: string, query = '', requestId?: string): Promise<Response> {
   const headers: Record<string, string> = { authorization: `Bearer ${await mint(sub)}` };
   if (requestId) headers['x-request-id'] = requestId;
-  return api.request(`/api/clients${query}`, { headers });
+  const params = new URLSearchParams(query.replace(/^\?/, ''));
+  const q = params.get('q');
+  if (q === null) return api.request(`/api/clients${query}`, { headers });
+  params.delete('q');
+  return api.request('/api/clients/search', {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ q, ...Object.fromEntries(params) }),
+  });
 }
 
 function authIdOf(index: number): string {
