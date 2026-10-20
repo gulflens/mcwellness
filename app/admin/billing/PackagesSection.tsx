@@ -72,6 +72,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   const [selling, setSelling] = useState<PackageRow | null>(null);
   const [sellingSession, setSellingSession] = useState(false);
   const [withdrawing, setWithdrawing] = useState<PackageRow | null>(null);
+  const [editingRow, setEditingRow] = useState<PackageRow | null>(null);
   const [reinstatingId, setReinstatingId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
   const [note, setNote] = useState<{ text: string; tone?: 'critical' } | null>(null);
@@ -194,6 +195,17 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
                 ) : (
                   <span className="small muted">Needs a price for every service</span>
                 )}
+                <button
+                  type="button"
+                  className="button button--neutral button--compact"
+                  aria-label={`Edit ${row.name}`}
+                  onClick={() => {
+                    setNote(null);
+                    setEditingRow(row);
+                  }}
+                >
+                  Edit
+                </button>
                 <button
                   type="button"
                   className="button button--neutral button--compact"
@@ -426,6 +438,18 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
             setNote({
               text: `${created.name} is on sale at AED ${formatFils(created.currentPrice?.amountFils ?? 0)}.`,
             });
+            load();
+          }}
+        />
+      ) : null}
+
+      {editingRow ? (
+        <PackageDrawer
+          editing={editingRow}
+          onClose={() => setEditingRow(null)}
+          onCreated={(saved) => {
+            setEditingRow(null);
+            setNote({ text: `${saved.name} updated.` });
             load();
           }}
         />

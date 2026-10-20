@@ -1043,3 +1043,261 @@ describe('ordering the packages', () => {
     expect((await activeNames()).at(-1)).toBe(first);
   });
 });
+
+/**
+ * `PUT /api/billing/packages/:id` (operator, 20 October 2026): everything but
+ * a package's name can be edited. In place while nobody has bought it, or for
+ * anything but its contents; as a new version, the old one retired, when the
+ * contents of a sold package change. Runs after the withdrawing suite, whose
+ * second practice and lead practitioner it reuses.
+ */
+describe('editing a package', () => {
+  const EDIT_REASON = { 'x-reason': 'Twenty sessions from now on' };
+  let packageId: string;
+
+  function editBody(overrides: { nf?: number; validFrom?: string; listPriceFils?: number } = {}) {
+    return {
+      listPriceFils: overrides.listPriceFils ?? 1_215_000,
+      term: { amount: 6, unit: 'month' as const },
+      components: [
+        { serviceTypeId: h.serviceTypeId('consultation'), quantity: 1 },
+        { serviceTypeId: h.serviceTypeId('brain-map'), quantity: 2 },
+        { serviceTypeId: h.serviceTypeId('nf-session'), quantity: overrides.nf ?? 15 },
+      ],
+      price: {
+        discount: { kind: 'amount' as const, fils: 182_500 },
+        validFrom: overrides.validFrom ?? SEED_TODAY,
+        amendmentReason: 'Twenty sessions from now on.',
+      },
+    };
+  }
+
+  async function list(): Promise<PackagesResponse['packages']> {
+    return (
+      (await (
+        await h.call('GET', '/api/billing/packages', SEEDED.owner)
+      ).json()) as PackagesResponse
+    ).packages;
+  }
+
+  beforeAll(async () => {
+    const created = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...silverInput(h, SEED_TODAY),
+      code: 'edit-under-test',
+      name: 'Edit fixture',
+      nameAr: 'اختبار التعديل',
+    });
+    if (created.status !== 201) {
+      throw new Error(`Could not create the editing fixture: ${created.status}`);
+    }
+    packageId = ((await created.json()) as PackageResponse).package.id;
+  });
+
+  it('refuses without a reason', async () => {
+    const res = await h.call('PUT', `/api/billing/packages/${packageId}`, SEEDED.owner, editBody());
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { code?: string }).toMatchObject({ code: 'reason_required' });
+  });
+
+  it('refuses a lead practitioner', async () => {
+    const res = await h.callAs(
+      'PUT',
+      `/api/billing/packages/${packageId}`,
+      LEAD_PRACTITIONER_AUTH,
+      editBody(),
+      EDIT_REASON,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("answers 404 for another practice's package", async () => {
+    const res = await h.callAs(
+      'PUT',
+      `/api/billing/packages/${packageId}`,
+      OTHER_TENANT_ADMIN_AUTH,
+      editBody(),
+      EDIT_REASON,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('refuses a second price on the day the current one started, naming why', async () => {
+    const res = await h.call(
+      'PUT',
+      `/api/billing/packages/${packageId}`,
+      SEEDED.owner,
+      editBody({ nf: 20 }),
+      EDIT_REASON,
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { code?: string }).toMatchObject({
+      code: 'date_not_after_current',
+    });
+  });
+
+  it('changes the contents in place while nobody has bought the package', async () => {
+    const res = await h.call(
+      'PUT',
+      `/api/billing/packages/${packageId}`,
+      SEEDED.owner,
+      editBody({ nf: 20, validFrom: '2026-09-03', listPriceFils: 1_565_000 }),
+      EDIT_REASON,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PackageResponse;
+    expect(body.package.id).toBe(packageId);
+    expect(body.package.name).toBe('Edit fixture');
+    expect(body.package.listPriceFils).toBe(1_565_000);
+    expect(body.package.term).toEqual({ amount: 6, unit: 'month' });
+    expect(body.package.components.find((c) => c.serviceTypeCode === 'nf-session')?.quantity).toBe(
+      20,
+    );
+    const { rows } = await h.owner.query<{ n: number }>(
+      'select count(*)::int as n from package_price where package_id = $1',
+      [packageId],
+    );
+    expect(rows[0]?.n).toBe(2);
+  });
+
+  describe('once a family has bought it', () => {
+    let clientId: string;
+    let versionId: string;
+
+    beforeAll(async () => {
+      clientId = h.clientId(13);
+      const sold = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+        packageId,
+        clientId,
+        purchasedOn: SEED_TODAY,
+      });
+      if (sold.status !== 201)
+        throw new Error(`Could not sell the editing fixture: ${sold.status}`);
+    });
+
+    it("edits a sold package's price, list price and term in place, leaving the sale as it was", async () => {
+      const purchase = async () =>
+        (
+          await h.owner.query(
+            'select id, list_price_fils, net_fils, vat_fils, expires_on ' +
+              'from package_purchase where package_id = $1',
+            [packageId],
+          )
+        ).rows;
+      const before = await purchase();
+      const res = await h.call(
+        'PUT',
+        `/api/billing/packages/${packageId}`,
+        SEEDED.owner,
+        { ...editBody({ nf: 20, validFrom: '2026-09-05', listPriceFils: 1_700_000 }), term: null },
+        EDIT_REASON,
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as PackageResponse;
+      expect(body.package.id).toBe(packageId);
+      expect(body.package.listPriceFils).toBe(1_700_000);
+      expect(body.package.term).toBeNull();
+      expect(await purchase()).toEqual(before);
+    });
+
+    it('starts a new version today, or not at all', async () => {
+      const res = await h.call(
+        'PUT',
+        `/api/billing/packages/${packageId}`,
+        SEEDED.owner,
+        editBody({ nf: 25, validFrom: '2026-09-04' }),
+        EDIT_REASON,
+      );
+      expect(res.status).toBe(422);
+      expect((await res.json()) as { code?: string }).toMatchObject({
+        code: 'version_starts_today',
+      });
+    });
+
+    it('makes a new version with the same name and place when its contents change', async () => {
+      const before = (await list()).filter((p) => p.status === 'active').map((p) => p.name);
+      const balanceBefore = (await (
+        await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner)
+      ).json()) as BalanceResponse;
+
+      const res = await h.call(
+        'PUT',
+        `/api/billing/packages/${packageId}`,
+        SEEDED.owner,
+        editBody({ nf: 25 }),
+        EDIT_REASON,
+      );
+      expect(res.status).toBe(200);
+      const version = ((await res.json()) as PackageResponse).package;
+      versionId = version.id;
+      expect(version.id).not.toBe(packageId);
+      expect(version.name).toBe('Edit fixture');
+      expect(version.code).toBe('edit-under-test-v2');
+      expect(version.sellable).toBe(true);
+      expect(version.components.find((c) => c.serviceTypeCode === 'nf-session')?.quantity).toBe(25);
+
+      const after = await list();
+      expect(after.some((p) => p.id === packageId)).toBe(false);
+      expect(after.filter((p) => p.status === 'active').map((p) => p.name)).toEqual(before);
+
+      const balanceAfter = (await (
+        await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner)
+      ).json()) as BalanceResponse;
+      expect(balanceAfter).toEqual(balanceBefore);
+    });
+
+    it('records the version, what it replaced and why', async () => {
+      const { rows } = await h.owner.query<{
+        version: number;
+        supersedes_id: string;
+        amendment_reason: string;
+      }>('select version, supersedes_id, amendment_reason from package where id = $1', [versionId]);
+      expect(rows[0]).toEqual({
+        version: 2,
+        supersedes_id: packageId,
+        // The price row's words, the same the Notes column shows.
+        amendment_reason: 'Twenty sessions from now on.',
+      });
+      const audit = await h.owner.query<{ reason: string | null }>(
+        "select reason from audit_log where entity_type = 'package' and entity_id = $1 " +
+          "and action = 'insert'",
+        [versionId],
+      );
+      expect(audit.rows[0]?.reason).toBe('Twenty sessions from now on');
+    });
+
+    it('will not edit, reinstate or price the version it replaced', async () => {
+      const edited = await h.call(
+        'PUT',
+        `/api/billing/packages/${packageId}`,
+        SEEDED.owner,
+        editBody(),
+        EDIT_REASON,
+      );
+      expect(edited.status).toBe(409);
+      expect((await edited.json()) as { code?: string }).toMatchObject({ code: 'superseded' });
+      const reinstated = await h.call(
+        'PATCH',
+        `/api/billing/packages/${packageId}`,
+        SEEDED.owner,
+        { status: 'active' },
+        { 'x-reason': 'bringing it back' },
+      );
+      expect(reinstated.status).toBe(409);
+      expect((await reinstated.json()) as { code?: string }).toMatchObject({
+        code: 'superseded',
+      });
+      const priced = await h.call(
+        'POST',
+        `/api/billing/packages/${packageId}/price`,
+        SEEDED.owner,
+        {
+          discount: null,
+          validFrom: '2026-09-10',
+          amendmentReason: 'Pricing a replaced version',
+        },
+      );
+      expect(priced.status).toBe(409);
+      expect((await priced.json()) as { code?: string }).toMatchObject({ code: 'superseded' });
+    });
+  });
+});

@@ -300,6 +300,13 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     // charges from the price and its own resolveSaleVat — but a list that
     // says one thing and a sale that charges another would be a trap for the
     // next reader.
+    // Held until the sale commits, so an edit of this package (which locks it
+    // for update) cannot change its contents between this read and the
+    // purchase: the buyer's credits follow the contents they were sold.
+    await db.query(
+      'select 1 from package where tenant_id = app.current_tenant_id() and id = $1 for share',
+      [input.packageId],
+    );
     const packages = await readPackages(db, input.purchasedOn, await readVatRegistered(db));
     const bundle = packages.find((row) => row.id === input.packageId);
     if (!bundle) {

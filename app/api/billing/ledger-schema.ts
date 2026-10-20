@@ -185,6 +185,25 @@ export const CreatePackageInput = z.object({
 });
 export type CreatePackageInput = z.infer<typeof CreatePackageInput>;
 
+/**
+ * Editing a package (operator, 20 October 2026): everything but its name,
+ * code and Arabic name. Every edit carries a price, whose reason becomes the
+ * row's Notes; `domain/billing/packageEdit.ts` decides whether it is written
+ * in place or as a new version.
+ */
+export const EditPackageInput = z
+  .object({
+    listPriceFils: Fils,
+    term: Term.nullable(),
+    components: z
+      .array(z.object({ serviceTypeId: z.uuid(), quantity: z.number().int().min(1).max(1000) }))
+      .min(1)
+      .max(20),
+    price: PackagePriceBody,
+  })
+  .strict();
+export type EditPackageInput = z.infer<typeof EditPackageInput>;
+
 export const AddPackagePriceInput = PackagePriceBody;
 export type AddPackagePriceInput = z.infer<typeof AddPackagePriceInput>;
 

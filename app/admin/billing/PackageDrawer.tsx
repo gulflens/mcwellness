@@ -13,7 +13,14 @@ import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { DiscountFields } from './DiscountFields';
 import { focusFirstInvalid } from './refusal';
-import { NO_TERM, readTerm, TermFields, type TermDraft, type TermRefusal } from './TermFields';
+import {
+  draftFrom,
+  NO_TERM,
+  readTerm,
+  TermFields,
+  type TermDraft,
+  type TermRefusal,
+} from './TermFields';
 import { useDrawer } from './useDrawer';
 import {
   AED_MAX_FILS,
@@ -60,6 +67,16 @@ const DISCOUNT_TOO_LARGE_MESSAGE = 'The discount is larger than the list price.'
 const ABOVE_LIST_MESSAGE =
   'The price now is above the list price. Raise the list price or lower the price now.';
 const DISAGREE_MESSAGE = 'The price now and the discount no longer agree. Retype one of them.';
+/** What an edit can be refused for, beyond what adding one can. */
+const EDIT_REFUSALS: Record<string, string> = {
+  version_starts_today:
+    'This package has been sold, so new contents go on sale today. Set "On sale from" to today.',
+  superseded: 'This package has been replaced by a newer version. Close this and edit that one.',
+  withdrawn: 'A withdrawn package cannot be edited. Reinstate it first.',
+  date_not_after_current:
+    'A price for this package already starts on or after that date. Choose a later date, such as tomorrow.',
+};
+
 const BAD_REQUEST_MESSAGES: Record<string, string> = {
   duplicate_component: 'Each service may appear once. Change the quantity instead.',
   discount_too_large: DISCOUNT_TOO_LARGE_MESSAGE,
@@ -90,40 +107,73 @@ function codeFrom(name: string): string {
     .slice(0, 40);
 }
 
+/**
+ * The discount a price row was set with, as the drawer's two fields hold it:
+ * a share when it was set as one, a sum when it was a sum, nothing otherwise.
+ */
+function discountDraftFrom(row: PackageRow | undefined): { kind: DiscountKind; value: string } {
+  const price = row?.currentPrice;
+  if (!price) return { kind: 'none', value: '' };
+  if (price.discountBasisPoints !== null) {
+    return { kind: 'percent', value: String(price.discountBasisPoints / 100) };
+  }
+  if (price.discountFils > 0) return { kind: 'amount', value: formatFils(price.discountFils) };
+  return { kind: 'none', value: '' };
+}
+
+/**
+ * `editing`, when given, opens the drawer on that package (operator,
+ * 20 October 2026): filled in from it, its name fixed, and saved with
+ * `PUT /api/billing/packages/:id`, which writes the change in place or as a
+ * new version (domain/billing/packageEdit.ts). `onCreated` then receives the
+ * package as it now stands.
+ */
 export function PackageDrawer({
   onClose,
   onCreated,
+  editing,
 }: {
   onClose: () => void;
   onCreated: (created: PackageRow) => void;
+  editing?: PackageRow;
 }) {
   const { apiFetch } = useAuth();
   const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const [prices, setPrices] = useState<PricesState>({ kind: 'loading' });
-  const [name, setName] = useState('');
+  const [name, setName] = useState(editing?.name ?? '');
   const [codeTouched, setCodeTouched] = useState(false);
   const [code, setCode] = useState('');
   // A new programme starts with no term at all: the credits it sells never
   // expire unless the practice says otherwise, and there is no default figure
   // and no default unit to be accepted by accident (the operator's ruling of
   // 12 September 2026).
-  const [term, setTerm] = useState<TermDraft>(NO_TERM);
-  const [quantities, setQuantities] = useState<Record<string, string>>({});
-  const [listPrice, setListPrice] = useState('');
-  const [listPriceTouched, setListPriceTouched] = useState(false);
+  const [term, setTerm] = useState<TermDraft>(() => (editing ? draftFrom(editing.term) : NO_TERM));
+  const [quantities, setQuantities] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (editing?.components ?? []).map((c) => [c.serviceTypeId, String(c.quantity)]),
+    ),
+  );
+  const [listPrice, setListPrice] = useState(() =>
+    editing ? formatFils(editing.listPriceFils) : '',
+  );
+  // An edit starts from the package's own list price, not the contents' total.
+  const [listPriceTouched, setListPriceTouched] = useState(editing !== undefined);
   // The price now as it was last set — by a discount, or by the founder
   // typing it — beside the list figure it was set against. When the list
   // moves afterwards the stored text is stale, and a discount is what
   // determines the price now, so the field is derived from the discount
   // rather than left showing a figure the server will not write.
-  const [salePrice, setSalePrice] = useState<{ text: string; listFils: number | null }>({
-    text: '',
-    listFils: null,
-  });
-  const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
-  const [discountValue, setDiscountValue] = useState('');
+  const [salePrice, setSalePrice] = useState<{ text: string; listFils: number | null }>(() =>
+    editing?.currentPrice
+      ? { text: formatFils(editing.currentPrice.amountFils), listFils: editing.listPriceFils }
+      : { text: '', listFils: null },
+  );
+  const [discountKind, setDiscountKind] = useState<DiscountKind>(
+    () => discountDraftFrom(editing).kind,
+  );
+  const [discountValue, setDiscountValue] = useState(() => discountDraftFrom(editing).value);
   const [validFrom, setValidFrom] = useState(() => isoDateIn(new Date(), PRACTICE_TIME_ZONE));
   const [reason, setReason] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -220,7 +270,7 @@ export function PackageDrawer({
 
     const errors: FieldErrors = {};
     if (name.trim().length < 1) errors.name = 'Give the package a name.';
-    if (!/^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/.test(effectiveCode)) {
+    if (!editing && !/^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/.test(effectiveCode)) {
       errors.code = 'A code is lower case letters, digits and hyphens, at least two characters.';
     }
     if (chosen.length === 0) errors.contents = 'Say how many of at least one service it contains.';
@@ -270,7 +320,52 @@ export function PackageDrawer({
       return;
     }
 
+    const components = chosen.map((entry) => ({
+      serviceTypeId: entry.price.serviceTypeId,
+      quantity: entry.quantity,
+    }));
+    const price = {
+      discount: discountBody(discountKind, discountValue),
+      validFrom,
+      amendmentReason: trimmedReason,
+    };
+
     setBusy(true);
+    if (editing) {
+      try {
+        // The name stays as it is, so it is not sent. The reason travels as
+        // X-Reason too, which lands it on every audit row the edit writes.
+        const res = await apiFetch(`/api/billing/packages/${editing.id}`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', 'x-reason': trimmedReason },
+          body: JSON.stringify({
+            listPriceFils: listFils,
+            term: reading.term,
+            components,
+            price,
+          }),
+        });
+        if (res.status === 200) {
+          onCreated(PackageResponse.parse(await res.json()).package);
+          return;
+        }
+        if (res.status === 403) {
+          setFormError("You don't have permission to edit a package.");
+          return;
+        }
+        const refused = (await res.json().catch(() => null)) as { code?: string } | null;
+        setFormError(
+          EDIT_REFUSALS[refused?.code ?? ''] ??
+            BAD_REQUEST_MESSAGES[refused?.code ?? ''] ??
+            GENERIC_MESSAGE,
+        );
+      } catch {
+        setFormError(GENERIC_MESSAGE);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     try {
       const res = await apiFetch('/api/billing/packages', {
         method: 'POST',
@@ -288,15 +383,8 @@ export function PackageDrawer({
           // Null, deliberately, when the programme has no term: the credits
           // it sells never expire, and the sale writes no date at all.
           term: reading.term,
-          components: chosen.map((entry) => ({
-            serviceTypeId: entry.price.serviceTypeId,
-            quantity: entry.quantity,
-          })),
-          price: {
-            discount: discountBody(discountKind, discountValue),
-            validFrom,
-            amendmentReason: trimmedReason,
-          },
+          components,
+          price,
         }),
       });
       if (res.status === 201) {
@@ -338,7 +426,7 @@ export function PackageDrawer({
     >
       <header className="drawer__header">
         <div className="drawer__title">
-          <h2 id="package-drawer-title">Add package</h2>
+          <h2 id="package-drawer-title">{editing ? 'Edit package' : 'Add package'}</h2>
         </div>
         <button
           ref={closeRef}
@@ -359,21 +447,25 @@ export function PackageDrawer({
             maxLength={120}
             value={name}
             onChange={(e) => setName(e.target.value)}
+            readOnly={editing !== undefined}
+            hint={editing ? "A package's name stays as it is." : undefined}
             error={fieldErrors.name}
           />
-          <Field
-            id="package-code"
-            label="Code"
-            type="text"
-            maxLength={40}
-            value={effectiveCode}
-            onChange={(e) => {
-              setCodeTouched(true);
-              setCode(e.target.value);
-            }}
-            hint="Used in exports and never shown to a family."
-            error={fieldErrors.code}
-          />
+          {editing ? null : (
+            <Field
+              id="package-code"
+              label="Code"
+              type="text"
+              maxLength={40}
+              value={effectiveCode}
+              onChange={(e) => {
+                setCodeTouched(true);
+                setCode(e.target.value);
+              }}
+              hint="Used in exports and never shown to a family."
+              error={fieldErrors.code}
+            />
+          )}
 
           <fieldset className="contents">
             <legend className="field__label">What it contains</legend>
@@ -455,10 +547,15 @@ export function PackageDrawer({
             label="On sale from"
             value={validFrom}
             onChange={setValidFrom}
+            hint={
+              editing
+                ? 'The new price starts on this date. A new list price, term or contents apply to new sales straight away. Families who already bought keep what they bought.'
+                : undefined
+            }
           />
           <Field
             id="package-reason"
-            label="Why this is the price"
+            label={editing ? 'Why this change (shown in Notes)' : 'Why this is the price'}
             type="text"
             maxLength={200}
             value={reason}
@@ -482,7 +579,7 @@ export function PackageDrawer({
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? 'Saving…' : 'Save package'}
+              {busy ? 'Saving…' : editing ? 'Save changes' : 'Save package'}
             </Button>
           </div>
         </form>
