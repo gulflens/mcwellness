@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import { ageOn, canActor, hasRole, isoDateIn } from '../../../domain/shared';
 import { EMIRATES } from '../../../domain/client/types';
@@ -27,9 +27,15 @@ import { logRefused } from './refused';
  * request body it reaches only this route, which hashes it with the same
  * keyed HMAC that sealed it and looks the client up by that fingerprint. The
  * number never enters this file's SQL text, a log, or an audit payload; only
- * its 32 bytes do. `?q=` still searches names and record numbers, and refuses
- * an identity number outright — whole or half-typed — rather than searching
- * it, so no caller can put one in a query string by accident or otherwise.
+ * its 32 bytes do.
+ *
+ * POST /api/clients/search: the same table, searched by name or record number
+ * (operator, 20 October 2026). For the same reason as the lookup: what a
+ * person types into a client search is usually a name, so it travels in a
+ * body. The GET keeps its two filters, which name nobody, and refuses a `q`
+ * outright, so no caller can put a name or an identity number in a query
+ * string by accident or otherwise. The search itself refuses an identity
+ * number too, whole or half-typed, and sends the caller to the lookup.
  */
 
 import { CLIENT_STATUSES as STATUSES, ClientListResponse, type ClientRow } from './schema';
@@ -43,16 +49,31 @@ const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 const MIN_SEARCH_LENGTH = 2;
 const PAGE_SIZE = 50;
 
-const Query = z.object({
+const Filters = {
   status: z.enum(STATUSES).optional(),
   // One of the seven, or the request is refused: a misspelt emirate must never
   // quietly list the whole practice as if no filter had been asked for.
   emirate: z.enum(EMIRATES).optional(),
-  q: z
-    .string()
-    .transform((value) => cleanText(value, 80))
-    .optional(),
-});
+};
+
+/** The address's half: the two filters, which name nobody. */
+const Query = z.object(Filters);
+
+/**
+ * The body's half: the filters and the text a person typed, which is usually
+ * a name and so never travels in an address (operator, 20 October 2026;
+ * .claude/rules/ui.md).
+ */
+const SearchBody = z
+  .object({
+    ...Filters,
+    q: z
+      .string()
+      .transform((value) => cleanText(value, 80))
+      .optional(),
+  })
+  .strict();
+type SearchBody = z.infer<typeof SearchBody>;
 
 /** Digits and hyphens as typed; the shape itself is judged by normaliseEmiratesId. */
 const LookupBody = z.object({ emiratesId: z.string().min(1).max(40) });
@@ -176,66 +197,107 @@ async function logListed(db: Db, clients: readonly ClientRow[]): Promise<void> {
   );
 }
 
+/**
+ * Whether this person may list clients at all, answered before anything they
+ * sent is read: a refusal is recorded as one whatever was asked. A collection
+ * action: nothing here names a specific row (client-record.md section 9), so a
+ * fresh id stands in as the entity, the same convention POST /api/clients uses
+ * (issue 13, third review round).
+ */
+async function refusedToList(c: Context<ApiEnv>, now: () => Date): Promise<Response | null> {
+  if (canActor(c.get('actor'), { type: 'client.list' }, {}, now())) return null;
+  await logRefused(c.get('db'), 'client', randomUUID(), null);
+  return c.json({ error: 'forbidden', requestId: c.get('requestId') }, 403);
+}
+
+/** The client table, filtered and searched, for both routes that read it. */
+async function listClients(
+  c: Context<ApiEnv>,
+  input: SearchBody,
+  now: () => Date,
+): Promise<Response> {
+  const actor = c.get('actor');
+  const requestId = c.get('requestId');
+  // A practitioner lists only the clients on their own schedule. This used to answer
+  // them an unconditional empty list, which was honest while
+  // app.client_visible_to_practitioner was a stub: there was no schedule to consult.
+  // Migration 201 gives it the real window, so the query below now runs under the
+  // read policies that call it and comes back with exactly the clients this
+  // practitioner is booked with — audited per client like any other list read. The
+  // note still travels, because an empty table means something different to them
+  // than to an admin: not "nobody matches" but "you are booked with nobody".
+  const scheduleScoped = !hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance');
+  // An identity number is looked up, never searched as text, even in a body: the
+  // lookup hashes it and searches by fingerprint, and a text search would put the
+  // number itself into this query's parameters (app/admin/clients/ClientsPage.tsx
+  // keeps the browser to the same rule).
+  if (input.q && isEmiratesIdShaped(input.q)) {
+    return c.json({ error: 'bad_request', code: 'use_lookup', requestId }, 400);
+  }
+  // Below the minimum, the term is dropped rather than searched (see
+  // MIN_SEARCH_LENGTH above): the unfiltered first page comes back, same as
+  // when `q` is absent. Measured on the escaped form, not the raw one: a
+  // lone wildcard character (`%` or `_`) escapes to two characters and is
+  // never a sweep risk in the first place — escaped, it matches only that
+  // literal punctuation, not "everything" — so it still searches.
+  const escaped = input.q ? escapeLike(input.q) : null;
+  const search = escaped && escaped.length >= MIN_SEARCH_LENGTH ? escaped : null;
+  const { rows } = await c
+    .get('db')
+    .query<Row>(SQL, [
+      input.status ?? null,
+      search ? likePattern(search) : null,
+      canListErasedClients(actor),
+      PAGE_SIZE + 1,
+      input.emirate ?? null,
+    ]);
+  const truncated = rows.length > PAGE_SIZE;
+  const page = truncated ? rows.slice(0, PAGE_SIZE) : rows;
+  const clients = toClientRows(page, isoDateIn(now(), PRACTICE_TIME_ZONE));
+  await logListed(c.get('db'), clients);
+  return c.json(
+    ClientListResponse.parse({
+      clients,
+      note: scheduleScoped ? 'schedule' : null,
+      ...(truncated ? { truncated: true } : {}),
+    }),
+  );
+}
+
 export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  // The table with no text to search: the first page, or one status or
+  // emirate. Nothing in the address names anybody. A `q` here is refused
+  // rather than searched, so no caller can put a name — or an identity number
+  // — in a query string, by accident or otherwise: by the time a route could
+  // look at it, the proxy has already logged the URL. The search is
+  // POST /api/clients/search.
   api.get('/api/clients', async (c) => {
-    const actor = c.get('actor');
-    const requestId = c.get('requestId');
-    if (!canActor(actor, { type: 'client.list' }, {}, now())) {
-      // A collection action: nothing here names a specific row (client-record.md
-      // section 9), so the request id stands in as the entity, the same convention
-      // POST /api/clients uses (issue 13, third review round).
-      await logRefused(c.get('db'), 'client', randomUUID(), null);
-      return c.json({ error: 'forbidden', requestId }, 403);
+    const refused = await refusedToList(c, now);
+    if (refused) return refused;
+    if (c.req.query('q') !== undefined) {
+      return c.json(
+        { error: 'bad_request', code: 'use_search', requestId: c.get('requestId') },
+        400,
+      );
     }
     const query = Query.safeParse(c.req.query());
     if (!query.success) {
-      return c.json({ error: 'bad_request', requestId }, 400);
+      return c.json({ error: 'bad_request', requestId: c.get('requestId') }, 400);
     }
-    // A practitioner lists only the clients on their own schedule. This used to answer
-    // them an unconditional empty list, which was honest while
-    // app.client_visible_to_practitioner was a stub: there was no schedule to consult.
-    // Migration 201 gives it the real window, so the query below now runs under the
-    // read policies that call it and comes back with exactly the clients this
-    // practitioner is booked with — audited per client like any other list read. The
-    // note still travels, because an empty table means something different to them
-    // than to an admin: not "nobody matches" but "you are booked with nobody".
-    const scheduleScoped = !hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance');
-    // The floor under the browser's own rule (app/admin/clients/ClientsPage.tsx), so a
-    // hand-written request cannot quietly put an identity number in a query string
-    // either. By the time this runs the proxy has already logged the URL, which is why
-    // the browser must never send one; this makes the contract explicit rather than
-    // leaving it to a comment.
-    if (query.data.q && isEmiratesIdShaped(query.data.q)) {
-      return c.json({ error: 'bad_request', code: 'use_lookup', requestId }, 400);
+    return listClients(c, query.data, now);
+  });
+
+  // The same table, searched by name or record number, with the text in the
+  // request body (operator, 20 October 2026). Everything else is the GET's:
+  // the rule, the schedule scope, the page, one audit row per client listed.
+  api.post('/api/clients/search', async (c) => {
+    const refused = await refusedToList(c, now);
+    if (refused) return refused;
+    const body = SearchBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', requestId: c.get('requestId') }, 400);
     }
-    // Below the minimum, the term is dropped rather than searched (see
-    // MIN_SEARCH_LENGTH above): the unfiltered first page comes back, same as
-    // when `q` is absent. Measured on the escaped form, not the raw one: a
-    // lone wildcard character (`%` or `_`) escapes to two characters and is
-    // never a sweep risk in the first place — escaped, it matches only that
-    // literal punctuation, not "everything" — so it still searches.
-    const escaped = query.data.q ? escapeLike(query.data.q) : null;
-    const search = escaped && escaped.length >= MIN_SEARCH_LENGTH ? escaped : null;
-    const { rows } = await c
-      .get('db')
-      .query<Row>(SQL, [
-        query.data.status ?? null,
-        search ? likePattern(search) : null,
-        canListErasedClients(actor),
-        PAGE_SIZE + 1,
-        query.data.emirate ?? null,
-      ]);
-    const truncated = rows.length > PAGE_SIZE;
-    const page = truncated ? rows.slice(0, PAGE_SIZE) : rows;
-    const clients = toClientRows(page, isoDateIn(now(), PRACTICE_TIME_ZONE));
-    await logListed(c.get('db'), clients);
-    return c.json(
-      ClientListResponse.parse({
-        clients,
-        note: scheduleScoped ? 'schedule' : null,
-        ...(truncated ? { truncated: true } : {}),
-      }),
-    );
+    return listClients(c, body.data, now);
   });
 
   api.post('/api/clients/lookup', async (c) => {
