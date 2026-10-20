@@ -3901,3 +3901,25 @@ build; the old code ignored the column.
   the next check; a nonsense asset path answers 404.
 - `BillingPage-CIXb9C8R.js` carries "Moved up in the packages list";
   `ClientsPage-DJb7kvN1.js` carries `Asia/Dubai`.
+
+## What was done on 2026-10-20: the fifty-fourth live pass — a package row's buttons
+
+**04:12 UTC: main `ce6106be`, PR 279, on the operator's word.** Its checks
+passed on `700ae4f4`, whose tree main's equals (`033b2f37`). Front end only, so
+the pass was a build alone.
+- Billing › Packages: Sell to a client is a rounded button with a violet wash
+  (`button--tonal`), Withdraw one with the neutral grey (`button--neutral`), and
+  Move up / Move down are arrow icons (`ArrowUpIcon` / `ArrowDownIcon`, recorded
+  in `docs/CHANGE-REQUESTS/billing-13.md`) whose accessible names are unchanged.
+
+**Databases: untouched.** Both stay at 139.
+
+**Build.** The host's build list ended at the 53rd pass (`01a15769`).
+- Archive `mcwellness-ce6106be.tar.gz`, 8,055,597 bytes. TUS create 201, then
+  PATCH 204 with the offset equal to the size.
+- Build `01a15782`, stored settings, 58 s.
+- Entry `index-CglwSZTQ.js` → `index-z3gMzppm.js`. No restart.
+
+**Verified.** Health 200 in 0.45 s and deep health 200 in 0.47 s.
+`BillingPage-CjHru_RZ.css` carries `button--tonal` and `button--icon`, and
+`BillingPage-DhJ5ppTq.js` uses both.
