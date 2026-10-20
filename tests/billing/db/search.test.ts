@@ -179,6 +179,7 @@ let sessionInvoice: Written;
 let kindsStatement: Written;
 let otherPracticeInvoice: Written;
 let erasedInvoice: Written;
+let erasedPayment: Paid;
 let transfer: Paid;
 let linkPayment: Paid;
 let namedPayment: Paid;
@@ -197,6 +198,9 @@ beforeAll(async () => {
   sessionInvoice = await deliverVisit(h.clientId(seeded.kinds));
   kindsStatement = await statement(tenant, h.clientId(seeded.kinds));
   erasedInvoice = await statement(tenant, h.clientId(seeded.erased));
+  // The erased household's payment is the book's oldest, out of the way of
+  // every page the tests below count.
+  erasedPayment = await payment(tenant, h.clientId(seeded.erased), 'cash', minutesBefore(600));
 
   transfer = await payment(
     tenant,
@@ -546,5 +550,12 @@ describe('an erased household', () => {
       listed.invoices.filter((row) => row.id === erasedInvoice.id),
     );
     expect(byReference.book.invoices).toHaveLength(1);
+
+    // The receipt book the same way: the payment stays, found by its receipt
+    // number, and not by the name the household asked to have removed.
+    const paidByName = await receipts({ search: `${client.givenName} ${client.familyName}` });
+    expect(paidByName.book.receipts.map((row) => row.id)).not.toContain(erasedPayment.id);
+    const paidByReference = await receipts({ search: erasedPayment.receipt_reference });
+    expect(paidByReference.book.receipts.map((row) => row.id)).toEqual([erasedPayment.id]);
   });
 });

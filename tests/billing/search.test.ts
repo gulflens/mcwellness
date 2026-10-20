@@ -66,6 +66,16 @@ describe('the receipt cursor', () => {
     expect(decodeReceiptCursor(base64url(`2026-13-45T99:00:00.000000Z|${PAYMENT_ID}`))).toBeNull();
     expect(decodeReceiptCursor(base64url(`'; drop table payment; --|${PAYMENT_ID}`))).toBeNull();
   });
+
+  it('refuses a moment before 1970, which the database could not hold and no payment has', () => {
+    // The year 0000 is a well-formed timestamp to JavaScript and to the
+    // pattern alike, and would otherwise reach the query as a server error.
+    expect(decodeReceiptCursor(base64url(`0000-01-01T00:00:00.000000Z|${PAYMENT_ID}`))).toBeNull();
+    expect(decodeReceiptCursor(base64url(`1969-12-31T23:59:59.000000Z|${PAYMENT_ID}`))).toBeNull();
+    expect(
+      decodeReceiptCursor(base64url(`1970-01-01T00:00:00.000000Z|${PAYMENT_ID}`)),
+    ).not.toBeNull();
+  });
 });
 
 describe('InvoiceSearchInput', () => {

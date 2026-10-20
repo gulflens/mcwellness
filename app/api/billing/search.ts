@@ -80,9 +80,15 @@ export function decodeReceiptCursor(text: string): ReceiptCursor | null {
 // `Date` rolls an impossible date over rather than refusing it (the 31st of
 // September is the 1st of October), so the moment is checked by writing it
 // back out and comparing the part a Date can hold.
+//
+// No payment in this book predates the epoch, and a year the database cannot
+// hold (the year 0000 passes both checks above) would reach the query and
+// fail there as a server error rather than be refused here as a bad cursor.
 function isRealMoment(receivedAt: string): boolean {
   const parsed = new Date(receivedAt);
   return (
-    !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 23) === receivedAt.slice(0, 23)
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.getUTCFullYear() >= 1970 &&
+    parsed.toISOString().slice(0, 23) === receivedAt.slice(0, 23)
   );
 }
