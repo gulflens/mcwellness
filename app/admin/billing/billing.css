@@ -445,3 +445,271 @@
   min-inline-size: var(--s-8);
   padding: 0;
 }
+
+/*
+  The packages as one row of tiles (operator, 20 October 2026), not a table:
+  a nine-column row scrolled sideways on a tablet and a phone. On a desk the
+  tiles share the row; once they no longer fit at 20rem each, the row slides
+  sideways inside itself and snaps a tile to its start, like a shelf of films.
+  On a narrow screen a tile takes 85% of the row, so the next one shows at the
+  edge and says there is more. The page body never scrolls sideways
+  (docs/SPEC/responsive-console.md section 8): only the row does.
+
+  Packages are a short catalogue the founder browses and acts on, not a
+  ledger, which is the exception recorded in docs/CHANGE-REQUESTS/billing-15.md.
+
+  The carousel is a size container so the tile's actions can fold on a phone
+  by the room the row has, not the screen.
+*/
+.package-carousel {
+  container: packages / inline-size;
+  position: relative;
+  margin-block-start: var(--s-4);
+}
+
+.package-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(min(85%, 20rem), 1fr);
+  gap: var(--s-4);
+  margin: 0;
+  padding: 0 0 var(--s-3);
+  list-style: none;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: inline mandatory;
+  scroll-padding-inline: 0;
+  scrollbar-width: thin;
+}
+
+.package-grid > li {
+  display: flex;
+  scroll-snap-align: start;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .package-grid {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Previous and Next, over the row's two edges, only while that edge hides a
+   tile. Round, on the surface, with the hairline every tile carries. */
+.package-carousel__nav {
+  position: absolute;
+  inset-block-start: 50%;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  inline-size: var(--s-10);
+  block-size: var(--s-10);
+  padding: 0;
+  translate: 0 -50%;
+  background: var(--surface);
+  color: var(--ink);
+  border: var(--hairline) solid var(--rule);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.package-carousel__nav:hover {
+  background: color-mix(in srgb, var(--surface) 88%, var(--ink));
+}
+
+.package-carousel__nav--before {
+  inset-inline-start: calc(-1 * var(--s-3));
+}
+
+.package-carousel__nav--after {
+  inset-inline-end: calc(-1 * var(--s-3));
+}
+
+/* The chevron points down; turned a quarter it points along the row. In
+   right-to-left the row runs the other way, so the turns swap. */
+.package-carousel__nav--before svg {
+  rotate: 90deg;
+}
+
+.package-carousel__nav--after svg {
+  rotate: -90deg;
+}
+
+/* A touch screen slides the row with a finger, as a phone's shelves do; the
+   buttons would only sit over a tile's figures there. */
+@media (hover: none) {
+  .package-carousel__nav {
+    display: none;
+  }
+}
+
+.package-carousel__nav--before:dir(rtl) svg {
+  rotate: -90deg;
+}
+
+.package-carousel__nav--after:dir(rtl) svg {
+  rotate: 90deg;
+}
+
+.package-grid__empty {
+  margin-block-start: var(--s-4);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  inline-size: 100%;
+  padding: var(--s-4);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+.tile__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.tile__name {
+  margin: 0;
+  font-size: var(--t-body);
+  font-weight: var(--w-medium);
+}
+
+.tile__total {
+  flex: none;
+  margin: 0;
+  font-weight: var(--w-medium);
+}
+
+.tile__contents {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+}
+
+/* Label above value: a column header's job, done in place. Two to a line in
+   a narrow tile, all five on one line when a tile has the grid to itself. */
+.tile__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: var(--s-2) var(--s-4);
+  margin: 0;
+  padding-block-start: var(--s-3);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.tile__figures dt {
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+}
+
+.tile__figures dd {
+  margin: 0;
+  font-size: var(--t-small);
+}
+
+.tile__notes {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+/* The actions sit at the foot, level across a row of tiles of unequal height. */
+.tile__actions {
+  margin-block-start: auto;
+  padding-block-start: var(--s-3);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+/* A package's three buttons at every width (operator, 20 October 2026): the
+   sale, the tile's main act, across the whole tile; Edit and Withdraw half
+   each beneath it. A package that cannot be sold says why in the sale's place. */
+.tile__actions--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+
+.tile__actions--grid > :first-child {
+  grid-column: 1 / -1;
+}
+
+/* The compact tier, asked of the row: a little less padding. */
+@container packages (max-width: 767px) {
+  .tile {
+    padding: var(--s-3);
+  }
+}
+
+/*
+  The Reorder board (operator, 20 October 2026): every package at once, small,
+  in rows that wrap, so a finger carrying one never has to slide a row along
+  at the same time. The held package lifts on the brand's wash; the others
+  make way beneath it.
+*/
+.reorder {
+  margin-block-start: var(--s-4);
+}
+
+.reorder__hint {
+  margin: 0 0 var(--s-3);
+}
+
+.reorder__board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reorder__card {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  inline-size: 100%;
+  min-block-size: var(--row);
+  padding: var(--s-3);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  cursor: grab;
+  /* The finger drags the package, not the page. */
+  touch-action: none;
+  user-select: none;
+}
+
+.reorder__card[aria-disabled] {
+  cursor: progress;
+}
+
+.reorder__card--held {
+  cursor: grabbing;
+  background: color-mix(in srgb, var(--brand) 14%, var(--surface));
+  border-color: var(--brand);
+}
+
+.reorder__grip {
+  display: inline-flex;
+  color: var(--slate);
+}
+
+.reorder__place {
+  min-inline-size: 1.5em;
+  color: var(--ink-2);
+}
+
+.reorder__name {
+  flex: 1;
+  font-weight: var(--w-medium);
+}
+
+.reorder__price {
+  flex: none;
+  white-space: nowrap;
+}

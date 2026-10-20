@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { movePackage, type OrderedPackage } from './packageOrder';
+import { movePackage, reorderPackages, type OrderedPackage } from './packageOrder';
 
 // Ids in the billing catalogue's reserved form (.claude/rules/testing.md).
 const SILVER = '00000004-0000-4000-8000-000000000401';
@@ -58,5 +58,41 @@ describe('movePackage', () => {
       { id: PLATINUM, position: 3 },
       { id: COMPLIMENTARY, position: 4 },
     ]);
+  });
+});
+
+describe('reorderPackages', () => {
+  it('puts the packages on offer in the order given, in one go', () => {
+    // Dragged from last to first: one request, not two moves.
+    expect(reorderPackages([silver, gold, platinum], [PLATINUM, SILVER, GOLD])).toEqual([
+      { id: PLATINUM, position: 1 },
+      { id: SILVER, position: 2 },
+      { id: GOLD, position: 3 },
+    ]);
+  });
+
+  it('leaves a withdrawn package in its own slot, out of sight of the rest', () => {
+    expect(reorderPackages([silver, withdrawn, gold, platinum], [GOLD, PLATINUM, SILVER])).toEqual([
+      { id: GOLD, position: 1 },
+      { id: WITHDRAWN, position: 2 },
+      { id: PLATINUM, position: 3 },
+      { id: SILVER, position: 4 },
+    ]);
+  });
+
+  it('accepts the order it already has, numbering it from one', () => {
+    expect(reorderPackages([silver, gold], [SILVER, GOLD])).toEqual([
+      { id: SILVER, position: 1 },
+      { id: GOLD, position: 2 },
+    ]);
+  });
+
+  it('refuses an order that is not exactly the packages on offer', () => {
+    // One missing, one extra, one twice, one withdrawn: each means the screen
+    // that sent it was out of date, and the list is not guessed at.
+    expect(reorderPackages([silver, gold, platinum], [GOLD, SILVER])).toBeNull();
+    expect(reorderPackages([silver, gold], [GOLD, SILVER, NOWHERE])).toBeNull();
+    expect(reorderPackages([silver, gold], [GOLD, GOLD])).toBeNull();
+    expect(reorderPackages([silver, gold, withdrawn], [GOLD, WITHDRAWN, SILVER])).toBeNull();
   });
 });

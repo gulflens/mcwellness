@@ -39,3 +39,29 @@ export function movePackage(
   [reordered[from], reordered[to]] = [reordered[to]!, reordered[from]!];
   return reordered.map((p, index) => ({ id: p.id, position: index + 1 }));
 }
+
+/**
+ * The packages on offer put in the order given, all at once: a tile dragged
+ * from the end of the list to its start is one change, not a run of moves
+ * (operator, 20 October 2026). A withdrawn package keeps its own slot, as
+ * `movePackage` steps over it.
+ *
+ * Null unless `order` names every package on offer exactly once and nothing
+ * else: a list that differs was drawn from an out-of-date screen, and the
+ * order is not guessed at.
+ */
+export function reorderPackages(
+  packages: readonly OrderedPackage[],
+  order: readonly string[],
+): { id: string; position: number }[] | null {
+  const active = packages.filter((p) => p.status === 'active');
+  const wanted = new Set(order);
+  if (wanted.size !== order.length || order.length !== active.length) return null;
+  if (!active.every((p) => wanted.has(p.id))) return null;
+
+  let next = 0;
+  return packages.map((p, index) => ({
+    id: p.status === 'active' ? order[next++]! : p.id,
+    position: index + 1,
+  }));
+}

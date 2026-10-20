@@ -1042,6 +1042,118 @@ describe('ordering the packages', () => {
     expect(back.status).toBe(200);
     expect((await activeNames()).at(-1)).toBe(first);
   });
+
+  /**
+   * `POST /api/billing/packages/reorder`: the whole order at once, which is
+   * what a tile dragged across the list sends (operator, 20 October 2026).
+   */
+  async function activeIds(): Promise<string[]> {
+    const list = (await (
+      await h.call('GET', '/api/billing/packages', SEEDED.owner)
+    ).json()) as PackagesResponse;
+    return list.packages.filter((p) => p.status === 'active').map((p) => p.id);
+  }
+
+  it('puts the packages in the order sent, in one request, and keeps it', async () => {
+    const before = await activeIds();
+    const reversed = [...before].reverse();
+    const res = await h.call(
+      'POST',
+      '/api/billing/packages/reorder',
+      SEEDED.owner,
+      { order: reversed },
+      MOVE_REASON,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PackagesResponse;
+    expect(body.packages.filter((p) => p.status === 'active').map((p) => p.id)).toEqual(reversed);
+    expect(await activeIds()).toEqual(reversed);
+
+    const back = await h.call(
+      'POST',
+      '/api/billing/packages/reorder',
+      SEEDED.owner,
+      { order: before },
+      MOVE_REASON,
+    );
+    expect(back.status).toBe(200);
+    expect(await activeIds()).toEqual(before);
+  });
+
+  it('refuses an order drawn from an out-of-date list', async () => {
+    const ids = await activeIds();
+    const res = await h.call(
+      'POST',
+      '/api/billing/packages/reorder',
+      SEEDED.owner,
+      { order: ids.slice(1) },
+      MOVE_REASON,
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { code?: string }).toMatchObject({ code: 'stale_order' });
+  });
+
+  it('refuses to reorder without a reason, or for a lead practitioner', async () => {
+    const order = await activeIds();
+    const unexplained = await h.call('POST', '/api/billing/packages/reorder', SEEDED.owner, {
+      order,
+    });
+    expect(unexplained.status).toBe(400);
+    expect((await unexplained.json()) as { code?: string }).toMatchObject({
+      code: 'reason_required',
+    });
+    const lead = await h.callAs(
+      'POST',
+      '/api/billing/packages/reorder',
+      LEAD_PRACTITIONER_AUTH,
+      { order },
+      MOVE_REASON,
+    );
+    expect(lead.status).toBe(403);
+  });
+
+  it("cannot reorder another practice's packages with this practice's ids", async () => {
+    // The other practice sees none of these ids, so to it the list is stale.
+    const res = await h.callAs(
+      'POST',
+      '/api/billing/packages/reorder',
+      OTHER_TENANT_ADMIN_AUTH,
+      { order: await activeIds() },
+      MOVE_REASON,
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('writes the reason onto the audit row of each package whose place changed', async () => {
+    const before = await activeIds();
+    const [first, second, ...rest] = before;
+    const swapped = [second!, first!, ...rest];
+    const reason = { 'x-reason': 'Dragged to read the audit trail' };
+    const res = await h.call(
+      'POST',
+      '/api/billing/packages/reorder',
+      SEEDED.owner,
+      { order: swapped },
+      reason,
+    );
+    expect(res.status).toBe(200);
+    for (const id of [first!, second!]) {
+      const { rows } = await h.owner.query<{ reason: string | null }>(
+        "select reason from audit_log where entity_type = 'package' and entity_id = $1 " +
+          "and action = 'update' order by occurred_at desc, id desc limit 1",
+        [id],
+      );
+      expect(rows[0]?.reason).toBe('Dragged to read the audit trail');
+    }
+    const back = await h.call(
+      'POST',
+      '/api/billing/packages/reorder',
+      SEEDED.owner,
+      { order: before },
+      MOVE_REASON,
+    );
+    expect(back.status).toBe(200);
+  });
 });
 
 /**
