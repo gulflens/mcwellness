@@ -184,6 +184,12 @@ describe('capturing an Emirates ID on create', () => {
       expect(inAddress.status).toBe(400);
       expect(((await inAddress.json()) as { code?: string }).code).toBe('use_search');
     }
+    // Nor any other key in the address: a name under another name is refused too.
+    const otherKey = await request(api, AUTH.ownerA, '/api/clients?name=Juniper');
+    expect(otherKey.status).toBe(400);
+    // The two filters, which name nobody, still work there.
+    const filtered = await request(api, AUTH.ownerA, '/api/clients?status=active');
+    expect(filtered.status).toBe(200);
     // A body with anything but the three fields is refused, not quietly trimmed.
     const stray = await search(api, AUTH.ownerA, { q: 'MW-0', clientId: digits });
     expect(stray.status).toBe(400);

@@ -56,8 +56,13 @@ const Filters = {
   emirate: z.enum(EMIRATES).optional(),
 };
 
-/** The address's half: the two filters, which name nobody. */
-const Query = z.object(Filters);
+/**
+ * The address's half: the two filters, which name nobody, and nothing else.
+ * Strict, so a parameter this route does not read — a name under another
+ * key, say — is refused rather than quietly dropped after the proxy has
+ * already logged it.
+ */
+const Query = z.object(Filters).strict();
 
 /**
  * The body's half: the filters and the text a person typed, which is usually

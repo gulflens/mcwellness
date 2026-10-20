@@ -24,8 +24,10 @@ for the streams that own them.
   records only for those who may see them, and `use_lookup` for anything
   shaped like an Emirates ID.
 - `GET /api/clients` keeps `status` and `emirate`, which name nobody, and now
-  refuses a `q` with 400 `use_search` before reading anything, as it already
-  refused an identity number. No caller can put a name in the address.
+  refuses a `q` with 400 `use_search`, as it already refused an identity
+  number. Its query is strict, so any other parameter is refused with 400
+  too (the security review's note): no caller can put a name in the address
+  under any key.
 
 **The callers**, each now a POST with the text in the body:
 
