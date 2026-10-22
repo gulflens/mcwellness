@@ -490,7 +490,14 @@ idempotency key travelling in the body). The rules, in short:
 - **The waiver and the note exclude each other.** `app.waive_call_out_fee`
   refuses a fee charged while registered for VAT (409 `vat_registered`) and an
   invoice that already has a credit note (409 `credited`); a registered fee is
-  corrected by credit note only.
+  corrected by credit note only. The credit waiver
+  (`POST /api/billing/entitlements/:id/waiver`) refuses, with the same 409
+  `credited`, a credit whose invoice has a credit note: the note already
+  settled that sale, and a replacement credit would be a session given twice.
+- **The reason is kept through an erasure.** `credit_note.reason` is part of
+  the financial record, as a credit's `waiver_reason` is, and an erasure leaves
+  it as written (unlike a void's `void_reason`, which an erasure replaces). So
+  the drawer says under the field: "Don't include names or health details."
 - **The books and the VAT return follow.** The note posts as
   `credit_note.issued` (`accounting.md` section 7, migration 455), and
   `app.vat_taxable_supplies_fils` is net of the credit notes issued in the

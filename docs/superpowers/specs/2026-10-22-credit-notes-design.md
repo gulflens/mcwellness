@@ -307,6 +307,10 @@ three recommendations:
 Settled by Claude:
 - A `session` invoice whose credit a void restored is treated as
   `single_session`.
-- Erasure keeps `credit_note.reason`, following the void precedent.
+- Erasure keeps `credit_note.reason`, following the `waiver_reason`
+  precedent: a reason written on a money record is part of the financial
+  record and is kept (the void's `void_reason` is the opposite case — it is
+  replaced with "Erased with the record"). The reason field asks for no
+  names or health details.
 - Credit notes on unregistered invoices still reduce the VAT-threshold
   figure, since the supply was reduced.
