@@ -87,6 +87,35 @@ describe('CreditNoteDrawer', () => {
     expect(confirm).toHaveProperty('disabled', false);
   });
 
+  it('keeps the confirm button disabled for a reason that says nothing', async () => {
+    mount();
+    await screen.findByText('7 unused of 10');
+    const confirm = screen.getByRole('button', { name: 'Issue credit note' });
+    const reason = screen.getByLabelText('Why is it being credited?');
+    fireEvent.change(reason, { target: { value: '........' } });
+    expect(confirm).toHaveProperty('disabled', true);
+    fireEvent.change(reason, { target: { value: 'a b c d e f g' } });
+    expect(confirm).toHaveProperty('disabled', true);
+  });
+
+  it('asks for no names or health details under the reason', async () => {
+    mount();
+    await screen.findByText('7 unused of 10');
+    expect(screen.getByText("Don't include names or health details.")).toBeTruthy();
+  });
+
+  it('asks for a reason in a few words when the server refuses it with a 400', async () => {
+    mount(json({ error: 'bad_request', code: 'invalid_request' }, 400));
+    await screen.findByText('7 unused of 10');
+    fireEvent.change(screen.getByLabelText('Why is it being credited?'), {
+      target: { value: 'sold twice' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Issue credit note' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Say why it is being credited, in a few words.',
+    );
+  });
+
   it('sends the reason with one idempotency key and reports the note', async () => {
     const { requests, onIssued } = mount();
     await screen.findByText('7 unused of 10');

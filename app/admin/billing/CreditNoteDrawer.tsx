@@ -5,6 +5,7 @@ import {
   IssueCreditNoteResponse,
   type InvoiceRow,
 } from '../../api/billing/ledger-schema';
+import { isRealText } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
@@ -25,8 +26,6 @@ import { useDrawer } from './useDrawer';
  * drawer opened again is a new decision and gets a new key.
  */
 
-const MIN_REASON = 8;
-
 const REFUSALS: Record<CreditRefusal, string> = {
   statement: 'A statement is a summary, not a sale, so it cannot be credited.',
   waived: 'This charge was waived, so there is nothing to credit.',
@@ -38,6 +37,8 @@ const REFUSALS: Record<CreditRefusal, string> = {
 const FORBIDDEN_MESSAGE = "You don't have permission to issue a credit note.";
 const NOT_FOUND_MESSAGE = 'This invoice is no longer there. Reload the list to see what changed.';
 const GENERIC_MESSAGE = 'The credit note could not be issued. Try again.';
+const REASON_MESSAGE = 'Say why it is being credited, in a few words.';
+const REASON_HINT = "Don't include names or health details.";
 const QUOTE_FAILED = 'What this would credit could not be worked out. Close this and try again.';
 
 type Quote =
@@ -89,7 +90,9 @@ export function CreditNoteDrawer({
   }, [apiFetch, invoice.id]);
 
   const trimmed = reason.trim();
-  const longEnough = Array.from(trimmed).length >= MIN_REASON;
+  // The server's own test (ledger-schema's Reason): eight characters that are
+  // not all spaces and not all the same one, so "........" is not a reason.
+  const longEnough = isRealText(trimmed);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -112,7 +115,8 @@ export function CreditNoteDrawer({
         setFormError(refusal.success ? REFUSALS[refusal.data] : GENERIC_MESSAGE);
         return;
       }
-      if (res.status === 403) setFormError(FORBIDDEN_MESSAGE);
+      if (res.status === 400) setFormError(REASON_MESSAGE);
+      else if (res.status === 403) setFormError(FORBIDDEN_MESSAGE);
       else if (res.status === 404) setFormError(NOT_FOUND_MESSAGE);
       else setFormError(GENERIC_MESSAGE);
     } catch {
@@ -176,6 +180,7 @@ export function CreditNoteDrawer({
                 label="Why is it being credited?"
                 type="text"
                 maxLength={200}
+                hint={REASON_HINT}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
               />
