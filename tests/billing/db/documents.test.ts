@@ -12,7 +12,13 @@ import type {
 } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import { IDS, seedClient, seedTenant } from '../../db/helpers';
-import { SEEDED, setPracticePrices, startHarness, type Harness } from './support';
+import {
+  SEEDED,
+  setPracticePrices,
+  setPracticeVatRegistration,
+  startHarness,
+  type Harness,
+} from './support';
 
 /**
  * Rendering an invoice, filing it, and handing somebody a link to it.
@@ -814,6 +820,51 @@ describe('a credit note’s PDF', () => {
     );
     expect(kept[0]?.kind).toBe('credit_note');
     expect(kept[0]?.retention_until?.getUTCFullYear()).toBe(2031);
+  });
+
+  it('states both dates and the supplier the credited invoice stated', async () => {
+    // Registered, so the supplier carries a VAT number to print.
+    await setPracticeVatRegistration(h, true);
+    try {
+      const { invoiceId, creditNoteId } = await creditedInvoice(5);
+      const filed = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+        kind: 'credit_note',
+        sourceId: creditNoteId,
+      });
+      expect(filed.status).toBe(201);
+      const page = await pageOf(((await filed.json()) as CreateDocumentResponse).document.id);
+
+      const { rows } = await h.owner.query<{
+        invoice_on: string;
+        note_on: string;
+        vat_trn: string | null;
+        address: string | null;
+      }>(
+        "select to_char(i.issued_on, 'YYYY-MM-DD') as invoice_on, " +
+          "to_char(n.issued_on, 'YYYY-MM-DD') as note_on, n.supplier_vat_trn as vat_trn, " +
+          'n.supplier_address as address from credit_note n join invoice i on i.id = n.invoice_id ' +
+          'where n.id = $1 and i.id = $2',
+        [creditNoteId, invoiceId],
+      );
+      const row = rows[0];
+      if (!row?.vat_trn || !row.address) throw new Error('The note carries no TRN or address.');
+      // The invoice was sold on the seed's day and credited today: two dates,
+      // and the page must tell them apart.
+      expect(row.invoice_on).not.toBe(row.note_on);
+      const flat = page.replace(/\s+/g, ' ');
+      expect(flat).toContain(formatDocumentDate(row.invoice_on));
+      expect(flat).toContain(formatDocumentDate(row.note_on));
+      expect(flat).toContain(row.vat_trn);
+      // The address is set one part to a line, at its commas.
+      expect(flat).toContain(
+        row.address
+          .split(',')
+          .map((part) => part.trim())
+          .join(' '),
+      );
+    } finally {
+      await setPracticeVatRegistration(h, false);
+    }
   });
 
   it('will not file a document for a credit note that is not there', async () => {
