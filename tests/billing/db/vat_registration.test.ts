@@ -301,3 +301,92 @@ describe('the ways round the rule, all closed', () => {
     ).rejects.toThrow(/not registered/i);
   });
 });
+
+/**
+ * The AED 375,000 registration threshold is measured on what the practice
+ * supplied, and a credit note reduces a supply (migration 981). Read the way
+ * the API reads it: as `app_role`, with the request's settings stamped.
+ */
+async function suppliesAsOf(asOf: string): Promise<number> {
+  const user = h.data.users[SEEDED.owner];
+  await h.owner.query('begin');
+  try {
+    await h.owner.query('set local role app_role');
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.actor_roles', 'finance', true), set_config('app.request_id', $3, true), " +
+        "set_config('app.reason', '', true)",
+      [h.data.tenant.id, user?.id ?? null, REQUEST_ID],
+    );
+    const { rows } = await h.owner.query<{ total: string }>(
+      'select app.vat_taxable_supplies_fils($1::date)::text as total',
+      [asOf],
+    );
+    return Number(rows[0]?.total);
+  } finally {
+    await h.owner.query('rollback');
+  }
+}
+
+/** Issues a credit note on the invoice, as the practice's finance role would. */
+async function issueCreditNote(invoiceId: string, key: string): Promise<void> {
+  const user = h.data.users[SEEDED.owner];
+  await h.owner.query('begin');
+  try {
+    await h.owner.query('set local role app_role');
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.actor_roles', 'finance', true), set_config('app.request_id', $3, true), " +
+        "set_config('app.reason', 'Invoiced in error.', true)",
+      [h.data.tenant.id, user?.id ?? null, REQUEST_ID],
+    );
+    await h.owner.query('select app.issue_credit_note($1, $2, $3)', [
+      invoiceId,
+      'Invoiced in error.',
+      key,
+    ]);
+    await h.owner.query('commit');
+  } catch (error) {
+    await h.owner.query('rollback').catch(() => undefined);
+    throw error;
+  }
+}
+
+/** A visit delivered and charged on the spot; its invoice. */
+async function chargedVisit(clientIndex: number): Promise<string> {
+  const sessionId = await deliverVisit(h.clientId(clientIndex), 'nf-session');
+  const { rows } = await h.owner.query<{ id: string }>(
+    'select id from invoice where session_id = $1',
+    [sessionId],
+  );
+  return String(rows[0]?.id);
+}
+
+describe('the VAT-threshold figure and credit notes', () => {
+  it('a credit note issued in the window reduces taxable supplies by its net', async () => {
+    await unregisterForVat();
+    const invoiceId = await chargedVisit(8);
+    // The database's own today, not the harness clock: invoices and notes are
+    // dated by the database (the tenant's day), whatever the test pretends.
+    const { rows } = await h.owner.query<{ day: string }>(
+      'select issued_on::text as day from invoice where id = $1',
+      [invoiceId],
+    );
+    const today = String(rows[0]?.day);
+    const before = await suppliesAsOf(today);
+    await issueCreditNote(invoiceId, '0000000c-0000-4000-8000-000000000981');
+    expect(await suppliesAsOf(today)).toBe(before - 70_000);
+  });
+
+  it('a credit note issued after the window leaves the figure alone', async () => {
+    await unregisterForVat();
+    const earlier = '2026-08-15';
+    const invoiceId = await chargedVisit(9);
+    await asOwner();
+    await h.owner.query('update invoice set issued_on = $2 where id = $1', [invoiceId, earlier]);
+    const before = await suppliesAsOf(earlier);
+    // Issued on the harness's day, which is after the day the figure counts to.
+    await issueCreditNote(invoiceId, '0000000c-0000-4000-8000-000000000982');
+    expect(await suppliesAsOf(earlier)).toBe(before);
+  });
+});
