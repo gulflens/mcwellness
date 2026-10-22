@@ -9,10 +9,12 @@ import {
   renderDocument,
   sharedDiscountBasisPoints,
   SIMPLIFIED_BASIS,
+  titleOf,
   toVisualOrder,
   waivedNotice,
   WORDS,
   layout,
+  type CreditNoteDocument,
   type InvoiceDocument,
   type InvoiceLine,
   type Page,
@@ -1022,5 +1024,74 @@ describe('a name with letters beyond Latin-1', () => {
     // U+00AD, the soft hyphen, is an instruction to break and has no glyph of its own.
     expect(undrawable([page('regular')], fonts).filter((code) => code !== 0x00ad)).toEqual([]);
     expect(undrawable([page('bold')], fonts).filter((code) => code !== 0x00ad)).toEqual([]);
+  });
+});
+
+/** The invoice above, credited whole. */
+function creditNoteFor(
+  supplier: SupplierSnapshot,
+  over: Partial<CreditNoteDocument> = {},
+): CreditNoteDocument {
+  const invoice: Partial<InvoiceDocument> = invoiceFor(supplier);
+  delete invoice.waivedOn;
+  delete invoice.suppliedOn;
+  return {
+    ...(invoice as Omit<InvoiceDocument, 'kind' | 'waivedOn' | 'suppliedOn'>),
+    kind: 'credit_note',
+    reference: 'CN-000001',
+    credits: { reference: 'INV-000123', issuedOn: '2026-09-02' },
+    reason: 'Invoiced to the wrong household by mistake.',
+    ...over,
+  };
+}
+
+describe('a credit note', () => {
+  it('a registered credit note is headed Tax Credit Note and names the invoice it credits', () => {
+    const page = extractAll(renderDocument(creditNoteFor(REGISTERED), fonts));
+    // The masthead sets the title in capitals, as it does "TAX INVOICE".
+    expect(page).toContain('TAX CREDIT NOTE');
+    expect(page).toContain('INV-000123');
+    expect(page).toContain('CN-000001');
+    expect(page).toContain('Total credited');
+    expect(page).toContain('Credits invoice');
+    expect(page).toContain('Reason');
+    expect(page).toContain('Invoiced to the wrong household by mistake.');
+    // The credit is a gross figure on a registered practice's page.
+    expect(page).toContain('735.00');
+    expect(page).not.toContain('TOTAL DUE');
+    expect(page).not.toContain('Payment details');
+  });
+
+  it('an unregistered one is headed Credit Note', () => {
+    const page = extractAll(renderDocument(creditNoteFor(UNREGISTERED), fonts));
+    expect(page).toContain('CREDIT NOTE');
+    expect(page).not.toContain('TAX CREDIT NOTE');
+    expect(page).not.toContain('TAX INVOICE');
+    expect(page).not.toContain('VAT registration number');
+    expect(page).toContain('Total credited');
+  });
+
+  it('an Arabic credit note uses إشعار دائن ضريبي', () => {
+    const page = extractAll(renderDocument(creditNoteFor(REGISTERED, { locale: 'ar' }), fonts));
+    expect(page).toContain(asCopied('إشعار دائن ضريبي'));
+    expect(page).toContain(asCopied('إجمالي المبلغ الدائن'));
+    expect(page).toContain(asCopied('السبب'));
+    expect(page).not.toContain('TAX CREDIT NOTE');
+  });
+
+  it('an unregistered Arabic one is plain إشعار دائن', () => {
+    const page = extractAll(renderDocument(creditNoteFor(UNREGISTERED, { locale: 'ar' }), fonts));
+    expect(page).toContain(asCopied('إشعار دائن'));
+    expect(page).not.toContain(asCopied('إشعار دائن ضريبي'));
+  });
+
+  it('renders to the same bytes twice and carries the credit note in its title', () => {
+    const a = renderDocument(creditNoteFor(REGISTERED), fonts);
+    const b = renderDocument(creditNoteFor(REGISTERED), fonts);
+    expect(createHash('sha256').update(a).digest('hex')).toBe(
+      createHash('sha256').update(b).digest('hex'),
+    );
+    expect(titleOf(creditNoteFor(REGISTERED))).toBe('Tax Credit Note CN-000001');
+    expect(titleOf(creditNoteFor(UNREGISTERED))).toBe('Credit Note CN-000001');
   });
 });

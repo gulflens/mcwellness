@@ -31,7 +31,12 @@
  * document's own snapshot (`model.ts`), asked through `chargesVat` alone.
  */
 
-import { chargesVat, type InvoiceDocument, type InvoiceLine } from './model';
+import {
+  chargesVat,
+  type CreditNoteDocument,
+  type InvoiceDocument,
+  type InvoiceLine,
+} from './model';
 import type { DocumentImage, FontSet, Page } from '../../shared/document';
 import { INK, LEFT, MUTED, PILL, RIGHT, VIOLET, WHITE, type TextOptions } from './sheet';
 import {
@@ -56,6 +61,7 @@ import {
   type SummaryRow,
 } from './page';
 import {
+  CREDIT_NOTE_BASIS,
   discountTotalLabel,
   formatDocumentDate,
   formatRate,
@@ -97,7 +103,7 @@ export const INVOICE_GEOMETRY = {
 
 /** Lays out an invoice, answering its pages and, per page, the boxes its blocks were drawn in. */
 export function invoiceLayout(
-  document_: InvoiceDocument,
+  document_: InvoiceDocument | CreditNoteDocument,
   fonts: FontSet,
   logo: DocumentImage | null,
 ): { pages: Page[]; blocks: Block[][] } {
@@ -107,10 +113,10 @@ export function invoiceLayout(
 }
 
 class InvoicePage extends DocumentPage {
-  private readonly document_: InvoiceDocument;
+  private readonly document_: InvoiceDocument | CreditNoteDocument;
   private readonly registered: boolean;
 
-  constructor(document_: InvoiceDocument, fonts: FontSet) {
+  constructor(document_: InvoiceDocument | CreditNoteDocument, fonts: FontSet) {
     super(fonts, document_.supplier, document_.reference, document_.locale);
     this.document_ = document_;
     this.registered = chargesVat(document_.supplier);
@@ -122,7 +128,7 @@ class InvoicePage extends DocumentPage {
     const footer = this.footer();
     this.sheet.setFloor(footer.top + GAP);
 
-    this.masthead(logo, this.registered ? WORDS.taxInvoice : WORDS.invoice);
+    this.masthead(logo, this.title());
     this.sheet.down(18);
     this.supplierAndNumber({ vat: this.registered }, this.numberPairs());
     this.hairlineAcross();
@@ -130,19 +136,60 @@ class InvoicePage extends DocumentPage {
       { caption: WORDS.billedToCaption, block: 'billedTo', ...this.document_.recipient },
       // Absent, caption and all, when the practice has recorded no account:
       // a bank transfer is the one way the page can say to pay.
-      this.document_.bank ? WORDS.transfer : null,
+      this.bank() ? WORDS.transfer : null,
     );
     this.sheet.down(18);
     this.table();
     this.sheet.down(16);
+    const bank = this.bank();
+    const credit = this.document_.kind === 'credit_note' ? this.document_ : null;
     this.lowerCards(
-      this.document_.bank
-        ? { laid: this.paymentCard(this.document_.bank), block: 'paymentCard' }
-        : null,
+      credit
+        ? { laid: this.creditsCard(credit), block: 'creditsCard' }
+        : bank
+          ? { laid: this.paymentCard(bank), block: 'paymentCard' }
+          : null,
       this.summary(),
       { laid: this.barCard(WORDS.taxInformation, this.taxSentences()), block: 'taxCard' },
     );
     footer.draw();
+  }
+
+  private title(): Phrase {
+    if (this.document_.kind === 'credit_note') {
+      return this.registered ? WORDS.taxCreditNote : WORDS.creditNote;
+    }
+    return this.registered ? WORDS.taxInvoice : WORDS.invoice;
+  }
+
+  /** A credit note asks for nothing, so it has no account to pay into. */
+  private bank(): InvoiceDocument['bank'] {
+    return this.document_.kind === 'credit_note' ? null : this.document_.bank;
+  }
+
+  /**
+   * The invoice a credit note credits and why: its reference and day, and the
+   * reason as typed, wrapping within the card.
+   */
+  private creditsCard(credit: CreditNoteDocument): Laid {
+    const label = (phrase: Phrase): string => (this.lang === 'both' ? phrase.en : this.say(phrase));
+    const day =
+      this.lang === 'both'
+        ? formatDocumentDate(credit.credits.issuedOn)
+        : this.date(credit.credits.issuedOn);
+    return this.rowsCard(
+      WORDS.creditsInvoice,
+      [
+        {
+          label: label(WORDS.invoiceNo),
+          value: credit.credits.reference,
+          options: { bold: true, rgb: VIOLET },
+        },
+        { label: label(WORDS.issueDate), value: day, options: { bold: true } },
+        { label: label(WORDS.reason), value: credit.reason, options: {} },
+      ],
+      null,
+    );
   }
 
   /**
@@ -159,7 +206,7 @@ class InvoicePage extends DocumentPage {
     });
     const pairs: NumberPair[] = [
       {
-        label: WORDS.invoiceNo,
+        label: this.document_.kind === 'credit_note' ? WORDS.creditNoteNo : WORDS.invoiceNo,
         value: {
           text: this.document_.reference,
           size: TYPE.reference,
@@ -168,7 +215,7 @@ class InvoicePage extends DocumentPage {
       },
       { label: WORDS.issueDate, value: date(this.document_.issuedOn) },
     ];
-    if (this.document_.suppliedOn) {
+    if (this.document_.kind === 'invoice' && this.document_.suppliedOn) {
       pairs.push({ label: WORDS.dateOfSupply, value: date(this.document_.suppliedOn) });
     }
     return pairs;
@@ -481,6 +528,21 @@ class InvoicePage extends DocumentPage {
   private summary(): Laid {
     const document_ = this.document_;
     const label = (phrase: Phrase): string => (this.lang === 'both' ? phrase.en : this.say(phrase));
+    if (document_.kind === 'credit_note') {
+      // What came off, and nothing about a discount or a balance due.
+      const rows: SummaryRow[] = this.registered
+        ? [
+            { label: label(WORDS.net), value: money(document_.netFils) },
+            { label: this.vatLabel(), value: money(document_.vatFils) },
+          ]
+        : [];
+      return this.summaryCard(
+        WORDS.creditNoteSummary,
+        rows,
+        WORDS.totalCredited,
+        money(document_.grossFils),
+      );
+    }
     const rows: SummaryRow[] = [
       { label: label(WORDS.subtotal), value: money(document_.netFils + document_.discountFils) },
     ];
@@ -516,11 +578,13 @@ class InvoicePage extends DocumentPage {
    */
   private taxSentences(): Sentence[] {
     const sentences: Sentence[] = [];
-    if (this.document_.waivedOn) {
+    if (this.document_.kind === 'invoice' && this.document_.waivedOn) {
       sentences.push({ phrase: waivedNotice(this.document_.waivedOn), grey: INK });
     }
+    const registeredBasis =
+      this.document_.kind === 'credit_note' ? CREDIT_NOTE_BASIS : SIMPLIFIED_BASIS;
     sentences.push({
-      phrase: this.registered ? SIMPLIFIED_BASIS : NOT_REGISTERED_BASIS,
+      phrase: this.registered ? registeredBasis : NOT_REGISTERED_BASIS,
       grey: MUTED,
     });
     return sentences;

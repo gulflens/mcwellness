@@ -49,6 +49,7 @@ export type {
 } from '../../shared/document';
 export { chargesVat, sharedDiscountBasisPoints } from './model';
 export type {
+  CreditNoteDocument,
   InvoiceDocument,
   InvoiceLine,
   DocumentLocale,
@@ -63,6 +64,7 @@ export type { Block, BlockName } from './render';
 export {
   arabicDocumentDate,
   callOutFeeDescription,
+  CREDIT_NOTE_BASIS,
   discountTotalLabel,
   formatDocumentDate,
   formatRate,
