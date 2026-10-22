@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InvoicesSection } from '../../app/admin/billing/InvoicesSection';
-import { json, mountWith, narrowTo, OWNER } from './harness';
+import { json, LEAD_PRACTITIONER, mountWith, narrowTo, OWNER } from './harness';
 
 afterEach(cleanup);
 
@@ -50,6 +50,7 @@ const INVOICES = [
     waivedAt: null,
     documentId: null,
     creditNoteReference: null,
+    creditNoteId: null,
   },
   {
     id: '00000004-0000-4000-8000-000000000501',
@@ -68,6 +69,7 @@ const INVOICES = [
     waivedAt: null,
     documentId: null,
     creditNoteReference: null,
+    creditNoteId: null,
   },
 ];
 
@@ -479,5 +481,78 @@ describe('finding an invoice, and the older ones', () => {
     expect(row.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('button', { name: 'Open PDF' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
+  });
+});
+
+describe('crediting an invoice', () => {
+  const FINANCE = { ...OWNER, roles: ['finance'] };
+  const quote = {
+    ok: true,
+    plan: {
+      netFils: 70_000,
+      vatFils: 3_500,
+      grossFils: 73_500,
+      releasedNetFils: 0,
+      usedCredits: 0,
+      unusedCredits: 0,
+    },
+  };
+
+  it('offers Issue credit note to finance and not to a practitioner', async () => {
+    mountWith(FINANCE, <InvoicesSection />, routes({ invoices: INVOICES }));
+    await screen.findByText('INV-000002');
+    expect(screen.getAllByRole('button', { name: 'Issue credit note' }).length).toBe(2);
+    cleanup();
+    mountWith(LEAD_PRACTITIONER, <InvoicesSection />, routes({ invoices: INVOICES }));
+    await screen.findByText('INV-000002');
+    expect(screen.queryByRole('button', { name: 'Issue credit note' })).toBeNull();
+  });
+
+  it('reads Credited CN-000001 on the row once the note is issued', async () => {
+    const note = {
+      creditNote: {
+        id: '00000006-0000-4000-8000-000000000001',
+        reference: 'CN-000001',
+        grossFils: 73_500,
+        issuedOn: '2026-10-23',
+      },
+    };
+    mountWith(FINANCE, <InvoicesSection />, (url, init) => {
+      if (url.endsWith('/credit-quote')) return json(quote);
+      if (url.endsWith('/credit-note') && init?.method === 'POST') return json(note, 201);
+      return routes({ invoices: [INVOICES[0]] })(url);
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Issue credit note' }));
+    fireEvent.change(await screen.findByLabelText('Why is it being credited?'), {
+      target: { value: 'sold twice' },
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Issue credit note' }).at(-1)!);
+    expect(await screen.findByText('Credited CN-000001')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Issue credit note' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Open credit note PDF' })).toBeTruthy();
+  });
+
+  it('opens the credit note PDF through the document route', async () => {
+    const credited = {
+      ...INVOICES[0],
+      creditNoteReference: 'CN-000004',
+      creditNoteId: '00000006-0000-4000-8000-000000000004',
+    };
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const { requests } = mountWith(FINANCE, <InvoicesSection />, (url) => {
+      if (url === '/api/billing/documents') {
+        return json({ document: { id: '00000007-0000-4000-8000-000000000001' } });
+      }
+      if (url.endsWith('/link')) return json({ url: 'https://files.example/cn.pdf' });
+      return routes({ invoices: [credited] })(url);
+    });
+    expect(await screen.findByText('Credited CN-000004')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open credit note PDF' }));
+    await waitFor(() => expect(open).toHaveBeenCalled());
+    expect(requests.find((r) => r.url === '/api/billing/documents')?.body).toEqual({
+      kind: 'credit_note',
+      sourceId: credited.creditNoteId,
+    });
+    open.mockRestore();
   });
 });

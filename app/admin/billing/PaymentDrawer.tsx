@@ -15,10 +15,10 @@ import { AED_MAX_FILS, formatFils, isAedAmountTooLarge, parseAedToFils } from '.
 
 /**
  * "Record a payment" — money that arrived, written down once and never
- * edited. A payment recorded in error is corrected by a credit note, not by
- * changing what the practice said it received: `payment` grants no update and
- * no delete at all (402_billing_document.sql), so the drawer says as much
- * before it saves rather than offering an undo that does not exist.
+ * edited. `payment` grants no update and no delete at all
+ * (402_billing_document.sql), so a payment cannot be changed once recorded
+ * (a credit note corrects an invoice, never a payment), and the drawer says as
+ * much before it saves rather than offering an undo that does not exist.
  *
  * The amount is offered as whatever is outstanding, because that is what is
  * usually handed over, and it is a field rather than a fixed figure because
@@ -215,7 +215,7 @@ export function PaymentDrawer({
           />
 
           <p className="small muted">
-            A payment is written down once. Correcting one is a credit note, not an edit.
+            A payment can't be changed once recorded. If one was recorded in error, tell the owner.
           </p>
 
           {formError ? <Note tone="critical">{formError}</Note> : null}

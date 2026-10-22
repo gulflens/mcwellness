@@ -7,9 +7,9 @@ import { IdempotencyKey, RecordPaymentInput, RecordPaymentResponse } from './led
  * `POST /api/billing/payments` — money arrived.
  *
  * Append-only, by construction: `payment` grants no update and no delete
- * (402_billing_document.sql), so a payment recorded in error is corrected by
- * a credit note, not by editing what the practice said it received. Credit
- * notes are the next pull request's.
+ * (402_billing_document.sql), so a payment cannot be changed once recorded.
+ * A credit note corrects an invoice, not a payment: one recorded in error is
+ * for the owner to deal with, never an edit here.
  *
  * A payment may name the invoice it settles, or none at all — a family paying
  * something off account is ordinary in a home-visit practice. Naming one is

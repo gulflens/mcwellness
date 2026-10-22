@@ -306,6 +306,7 @@ describe('what a note changes elsewhere', () => {
     const book = InvoicesResponse.parse(await res.json());
     const row = book.invoices.find((invoice) => invoice.id === invoiceId);
     expect(row?.creditNoteReference).toBe(creditNote.reference);
+    expect(row?.creditNoteId).toBe(creditNote.id);
     const other = book.invoices.find((invoice) => invoice.creditNoteReference === null);
     expect(other).toBeDefined();
   });

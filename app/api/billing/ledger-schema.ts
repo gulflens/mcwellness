@@ -462,6 +462,8 @@ export const InvoiceRow = z.object({
    * or null when none has been issued. An invoice has at most one.
    */
   creditNoteReference: z.string().nullable(),
+  /** That note's id, which the screen needs to open its PDF. Null with the reference. */
+  creditNoteId: z.uuid().nullable(),
 });
 export type InvoiceRow = z.infer<typeof InvoiceRow>;
 

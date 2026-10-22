@@ -26,7 +26,8 @@ import { useAuth } from '../../shell/auth/AuthContext';
  * what the browser was asked to open.
  */
 
-export type DocumentSource = { invoiceId: string } | { paymentId: string };
+export type DocumentSource =
+  { invoiceId: string } | { paymentId: string } | { creditNoteId: string };
 
 const MESSAGES: Record<string, string> = {
   storage_unavailable: 'The document store cannot be reached. Try again shortly.',
@@ -50,7 +51,11 @@ export function useDocumentActions() {
       const res = await apiFetch('/api/billing/documents', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(source),
+        body: JSON.stringify(
+          'creditNoteId' in source
+            ? { kind: 'credit_note', sourceId: source.creditNoteId }
+            : source,
+        ),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;

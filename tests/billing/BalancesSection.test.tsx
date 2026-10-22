@@ -318,9 +318,10 @@ describe('BalancesSection', () => {
     expect(screen.getByText('AED 735.00 is outstanding.')).toBeTruthy();
     expect(
       screen.getByText(
-        'A payment is written down once. Correcting one is a credit note, not an edit.',
+        "A payment can't be changed once recorded. If one was recorded in error, tell the owner.",
       ),
     ).toBeTruthy();
+    expect(screen.queryByText(/credit note/i)).toBeNull();
   });
 
   it('confirms a recorded payment by naming the amount and the family', async () => {

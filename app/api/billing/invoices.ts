@@ -55,6 +55,8 @@ const COLUMNS =
   // 416 allows one per invoice).
   '(select n.reference from credit_note n where n.tenant_id = i.tenant_id ' +
   '  and n.invoice_id = i.id) as credit_note_reference, ' +
+  '(select n.id from credit_note n where n.tenant_id = i.tenant_id ' +
+  '  and n.invoice_id = i.id) as credit_note_id, ' +
   "c.given_name || ' ' || c.family_name as client_name " +
   'from invoice i join client c on c.id = i.client_id ' +
   // The rendered PDF, when one has been filed. It hangs off billing_document
@@ -106,6 +108,7 @@ type InvoiceDbRow = {
   waived_on: string | null;
   document_id: string | null;
   credit_note_reference: string | null;
+  credit_note_id: string | null;
 };
 
 export function mountInvoices(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -223,5 +226,6 @@ function toInvoiceRow(row: InvoiceDbRow): InvoiceRow {
     waivedAt: row.waived_on,
     documentId: row.document_id,
     creditNoteReference: row.credit_note_reference,
+    creditNoteId: row.credit_note_id,
   };
 }
