@@ -5,7 +5,8 @@ import {
   type BalanceResponse,
   type PackagesResponse,
 } from '../../../app/api/billing/ledger-schema';
-import { SEED_TODAY } from '../../../db/seed/generate';
+import { SEED_TENANT_ID, SEED_TODAY } from '../../../db/seed/generate';
+import { seedUser } from '../../db/helpers';
 import {
   SEEDED,
   setPracticePrices,
@@ -28,6 +29,12 @@ const NOW = () => new Date(`${SEED_TODAY}T09:00:00+04:00`);
 const REASON = 'Invoiced to the wrong household by mistake.';
 
 let h: Harness;
+
+/** Holds the finance role and nothing else (the seeded owner holds it too). */
+const FINANCE_ONLY = {
+  userId: '0000000d-0000-4000-8000-0000000000f1',
+  authId: '0000000d-0000-4000-8000-0000000000f2',
+} as const;
 let keySeq = 0;
 
 function nextKey(): string {
@@ -110,6 +117,13 @@ beforeAll(async () => {
     silverInput(h, SEED_TODAY),
   );
   if (silver.status !== 201) throw new Error('Silver could not be created.');
+  await seedUser(h.owner, {
+    id: FINANCE_ONLY.userId,
+    tenantId: SEED_TENANT_ID,
+    authId: FINANCE_ONLY.authId,
+    displayName: 'Synthetic Bookkeeper',
+    roles: ['finance'],
+  });
 }, 120_000);
 
 afterAll(async () => {
@@ -153,6 +167,30 @@ describe('POST /api/billing/invoices/:id/credit-note', () => {
     const invoiceId = await sellSession(4);
     const res = await issue(invoiceId, { reason: 'Too sho', idempotencyKey: nextKey() });
     expect(res.status).toBe(400);
+  });
+
+  it('issues a note for an admin alone', async () => {
+    const invoiceId = await sellSession(14);
+    const res = await issue(invoiceId, { reason: REASON, idempotencyKey: nextKey() }, SEEDED.admin);
+    expect(res.status).toBe(201);
+  });
+
+  it('issues a note for finance alone, and lets finance read the quote', async () => {
+    const invoiceId = await sellSession(15);
+    const quote = await h.callAs(
+      'GET',
+      `/api/billing/invoices/${invoiceId}/credit-quote`,
+      FINANCE_ONLY.authId,
+    );
+    expect(quote.status).toBe(200);
+    const res = await h.callAs(
+      'POST',
+      `/api/billing/invoices/${invoiceId}/credit-note`,
+      FINANCE_ONLY.authId,
+      { reason: REASON, idempotencyKey: nextKey() },
+    );
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as Note).creditNote.reference).toMatch(/^CN-\d{6}$/);
   });
 
   it('refuses a practitioner with a 403', async () => {
