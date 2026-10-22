@@ -43,9 +43,9 @@ You do not post sales or payments. The system does, from billing:
   money owed.
 - **Session used:** sessions owed released to income.
 
-Posting runs when someone opens Books, or from **Bring the books up to
-date** on the Overview. Until the nightly job is scheduled, open Books before
-reading any figure.
+Posting runs every night at 03:00 Dubai time, whenever someone opens Books,
+and from **Bring the books up to date** on the Overview. A figure read in the
+afternoon may miss the morning's payments until Books is opened.
 
 ## Correcting a mistake
 
