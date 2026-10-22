@@ -169,6 +169,26 @@ describe('creditableFor', () => {
     ).toEqual({ ok: false, refusal: 'nothing_left' });
   });
 
+  it('refuses a session whose credit was refunded or has expired', () => {
+    for (const kind of ['single_session', 'session'] as const) {
+      for (const status of ['refunded', 'expired'] as const) {
+        expect(creditableFor(invoice({ kind }), creditsOf(1, status)), `${kind} ${status}`).toEqual(
+          { ok: false, refusal: 'nothing_left' },
+        );
+      }
+    }
+  });
+
+  it('still credits a session whose refunded credit was replaced by an available one', () => {
+    const plan = planOf(
+      creditableFor(invoice({ kind: 'single_session' }), [
+        ...creditsOf(1, 'refunded'),
+        ...creditsOf(1, 'available'),
+      ]),
+    );
+    expect(plan.creditedEntitlementIds).toEqual(['available-0']);
+  });
+
   it("refuses an erased client's invoice", () => {
     expect(creditableFor(invoice({ clientErased: true }), [])).toEqual({
       ok: false,

@@ -11,6 +11,9 @@
  *   - A package: only what the client has not used, at the net each credit
  *     was allocated (so a discounted package is credited at its discounted
  *     rate), with the VAT in the same proportion.
+ *   - A session whose credit was refunded or has expired: nothing — refused
+ *     as `nothing_left`, so a refund is never followed by a note for the same
+ *     money.
  *
  * The same rules are mirrored in SQL where the database must hold them; this
  * is the specification. Pure: no I/O, no clock (.claude/rules/testing.md).
@@ -127,6 +130,18 @@ export function creditableFor(
         false,
       ),
     };
+  }
+
+  // A session whose credit was refunded or lapsed has nothing left to
+  // correct: the refund already gave the money back, and crediting the
+  // invoice as well would give it back twice (an expired credit is the
+  // practice's to have kept). Only when no credit on it is still available.
+  if (
+    (invoice.kind === 'single_session' || invoice.kind === 'session') &&
+    available.length === 0 &&
+    credits.some((credit) => credit.status === 'refunded' || credit.status === 'expired')
+  ) {
+    return { ok: false, refusal: 'nothing_left' };
   }
 
   // A sold-ahead session whose credit is still unused, or a delivered-visit

@@ -29,6 +29,9 @@
 --     replacement on the same invoice; the spec's settled answer) — the whole
 --     net, proportional VAT (which is the line's own VAT at a whole credit),
 --     all of it released.
+--   - A sold-ahead or delivered session with no available credit and one
+--     refunded or expired: refused nothing_left (a refund is not followed by
+--     a note for the same money).
 --   - Anything else creditable: the whole invoice, each line's VAT copied
 --     exactly, nothing released.
 --
@@ -233,6 +236,13 @@ begin
       raise exception 'credit_note_refused:nothing_left';
     end if;
     v_branch := 'package';
+  elsif v_kind in ('single_session', 'session') and cardinality(v_available) = 0
+        and exists (select 1 from public.entitlement e
+                     where e.tenant_id = v_tenant_id and e.invoice_id = v_invoice.id
+                       and e.status in ('refunded', 'expired')) then
+    -- A refunded or lapsed credit: nothing left to correct, and a note on top
+    -- of a refund would give the same money back twice.
+    raise exception 'credit_note_refused:nothing_left';
   elsif v_kind in ('single_session', 'session') and cardinality(v_available) > 0 then
     v_branch := 'released';
   else

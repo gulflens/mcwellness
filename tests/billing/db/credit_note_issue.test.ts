@@ -575,14 +575,38 @@ describe('the SQL and creditableFor', () => {
       await deliver(9);
       await deliver(9, 'brain-map');
       const statement = await statementInvoice(10);
+      // A sold-ahead session whose credit was refunded, and one whose credit
+      // lapsed: both nothing_left, in SQL as in TypeScript.
+      const soldAheadRefunded = await sellSession(4);
+      const soldAheadExpired = await sellSession(10);
+      await h.owner.query(
+        "update entitlement set status = 'refunded' where invoice_id = $1 and status = 'available'",
+        [soldAheadRefunded],
+      );
+      await h.owner.query(
+        "update entitlement set status = 'expired' where invoice_id = $1 and status = 'available'",
+        [soldAheadExpired],
+      );
 
-      const cases = { fee, delivered, soldAhead, soldAheadUsed, restored, pkg, statement };
+      const cases = {
+        fee,
+        delivered,
+        soldAhead,
+        soldAheadUsed,
+        restored,
+        pkg,
+        statement,
+        soldAheadRefunded,
+        soldAheadExpired,
+      };
+      const refusedCases: string[] = [];
       for (const [name, invoiceId] of Object.entries(cases)) {
         const { invoice, credits } = await creditableInputs(invoiceId);
         const expected = creditableFor(invoice, credits);
         const result = await issue(invoiceId);
         if (!expected.ok) {
           expect(result.error?.message, name).toBe(`credit_note_refused:${expected.refusal}`);
+          refusedCases.push(`${name}:${expected.refusal}`);
           continue;
         }
         const id = issuedId(result);
@@ -619,6 +643,12 @@ describe('the SQL and creditableFor', () => {
           name,
         ).toEqual([...expected.plan.creditedEntitlementIds].sort());
       }
+
+      expect(refusedCases.sort()).toEqual([
+        'soldAheadExpired:nothing_left',
+        'soldAheadRefunded:nothing_left',
+        'statement:statement',
+      ]);
 
       // And the cases are the ones they claim to be: VAT was charged, and the
       // restored and sold-ahead credits really came off sessions owed.
