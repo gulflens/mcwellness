@@ -2,6 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PackagesResponse } from '../../../app/api/billing/ledger-schema';
 import { requireDatabaseUrl } from '../../../db/runner/apply';
+import { IDS, seedClient, seedTenant } from '../../db/helpers';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import {
   creditableFor,
@@ -841,6 +842,44 @@ describe('what is refused', () => {
     ]);
     const result = await issue(invoiceId);
     expect(result.error?.message).toBe('credit_note_refused:client_erased');
+  });
+
+  it('finds no invoice of another practice, and writes nothing', async () => {
+    const tenantB = IDS.tenantB;
+    const clientB = IDS.clientB;
+    const invoiceB = '00000000-0000-4000-8000-0000000000d7';
+    await asPractice();
+    await seedTenant(h.owner, tenantB, IDS.ownerB, 'Synthetic Studio B');
+    await seedClient(h.owner, tenantB, clientB, IDS.ownerB, 'Beta');
+    await h.owner.query(
+      'insert into invoice (id, tenant_id, client_id, number, kind, issued_on, net_fils, ' +
+        "vat_fils, gross_fils, supplier_legal_name) values ($1, $2, $3, 1, 'statement', " +
+        "$4, 10000, 0, 10000, 'Synthetic Studio B')",
+      [invoiceB, tenantB, clientB, SEED_TODAY],
+    );
+    await h.owner.query(
+      'insert into invoice_line (tenant_id, invoice_id, client_id, line_no, description, ' +
+        'quantity, unit_net_fils, net_fils, vat_rate_basis_points, vat_setting_version, ' +
+        "vat_fils, gross_fils) values ($1, $2, $3, 1, 'Statement', 1, 10000, 10000, 0, 1, " +
+        '0, 10000)',
+      [tenantB, invoiceB, clientB],
+    );
+    const counted = async () =>
+      (
+        await h.owner.query<{ notes: string; numbers: string }>(
+          'select (select count(*) from credit_note)::text as notes, ' +
+            '(select coalesce(sum(next_number), 0) from credit_note_series)::text as numbers',
+        )
+      ).rows[0];
+    const before = await counted();
+
+    // As practice A's finance, with practice B's real invoice id. The
+    // practice is asked before anything about the invoice, so B's statement
+    // is not found rather than refused as a statement.
+    const result = await issue(invoiceB);
+    expect(result.error?.message).toBe('invoice_not_found');
+    expect(result.error?.code).toBe('P0002');
+    expect(await counted()).toEqual(before);
   });
 
   it('refuses a practitioner, in the database and not only in the route', async () => {
