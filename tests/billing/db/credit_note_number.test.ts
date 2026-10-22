@@ -121,7 +121,7 @@ describe('credit notes taken at the same moment', () => {
 });
 
 describe('a credit note, once written', () => {
-  it('the app role can neither update nor delete a credit note', async () => {
+  it('the app role can neither insert, update nor delete a credit note', async () => {
     await setPracticePrices(h, SEED_TODAY);
     const created = await h.call(
       'POST',
@@ -184,8 +184,14 @@ describe('a credit note, once written', () => {
     expect(note.rows[0]?.reference).toBe('CN-000010');
 
     const ownerUser = h.data.users[SEEDED.owner];
+    // Not even insert: app.issue_credit_note (417) is the one writer, so a
+    // note never arrives without the locks and the arithmetic it does first.
     for (const table of ['credit_note', 'credit_note_line']) {
-      for (const statement of [`update ${table} set created_at = now()`, `delete from ${table}`]) {
+      for (const statement of [
+        `insert into ${table} default values`,
+        `update ${table} set created_at = now()`,
+        `delete from ${table}`,
+      ]) {
         await h.owner.query('begin');
         await h.owner.query('set local role app_role');
         await h.owner.query(

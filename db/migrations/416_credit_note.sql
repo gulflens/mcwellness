@@ -33,18 +33,25 @@
 -- in the transaction that adds it, so no check, trigger or function in this
 -- file names it; those go in the next file (the 408 and 969 precedent).
 --
--- Append-only like the invoice: select and insert for app_role, never update
--- or delete. The two checks that make a note honest — the lines sum to the
+-- Append-only like the invoice, and written by one door: app_role may select
+-- a note and its lines and nothing else. app.issue_credit_note (the next
+-- file), a security definer function, is the only writer, so no note can be
+-- written without the locks and the arithmetic it does first. The two checks that make a note honest — the lines sum to the
 -- header, and no line credits more than its invoice line — are deferred
 -- constraint triggers, because a header and its lines arrive in one
 -- transaction and cannot agree statement by statement.
 --
 -- Needs: 000 (schema app, app.current_tenant_id, app.set_updated_at), 010
--- (tenant), 020 (app_user), 060 (the locale type), 080 (app.audit_row), 402
--- (invoice, invoice_line), 403 (entitlement, entitlement_status), 413
--- (app.document_locale_from_client). The supplier columns copy the types of
--- those the invoice carries from later files (905, 959, 980); a table that
--- states them itself depends on none of those files being present.
+-- (tenant), 020 (app_user), 060 (client, the locale type), 080
+-- (app.audit_row), 400 (vat_setting, which credit_note_line's
+-- (tenant_id, vat_setting_version) key names), 402 (invoice, invoice_line, and
+-- invoice's (tenant_id, id, client_id) key), 403 (entitlement,
+-- entitlement_status), 413 (app.document_locale_from_client,
+-- app.guard_document_locale). 405 is the counter's shape and 409 adds
+-- invoice_line.discount_fils, which nothing here reads; neither is needed.
+-- The supplier columns copy the types of those the invoice carries from later
+-- files (905, 959, 980); a table that states them itself depends on none of
+-- those files being present.
 
 ------------------------------------------------------------------------------
 -- 1. credit_note_series — one counter per practice, and the allocator.
@@ -326,8 +333,9 @@ comment on column public.entitlement.credited_by is
   'Null otherwise. Written with the status by app.issue_credit_note, in the same transaction.';
 
 ------------------------------------------------------------------------------
--- 6. Privileges and row security. Append-only: select and insert, never update
---    or delete. The counter is moved only through the function above, so
+-- 6. Privileges and row security. Read only for app_role: a note and its
+--    lines arrive through app.issue_credit_note (417) and nothing else, and
+--    are never updated or deleted. The counter is moved only through the function above, so
 --    app_role is granted nothing on it at all. Policies live in
 --    db/policies/billing/ledger.sql.
 ------------------------------------------------------------------------------
@@ -344,14 +352,14 @@ begin
       execute format('revoke all on public.%I from anon, authenticated', t);
     end if;
   end loop;
-  grant select, insert on public.credit_note to app_role;
-  grant select, insert on public.credit_note_line to app_role;
+  grant select on public.credit_note to app_role;
+  grant select on public.credit_note_line to app_role;
 end
 $$;
 
 -- rollback:
---   revoke select, insert on public.credit_note_line from app_role;
---   revoke select, insert on public.credit_note from app_role;
+--   revoke select on public.credit_note_line from app_role;
+--   revoke select on public.credit_note from app_role;
 --   drop index if exists entitlement_credited_by_idx;
 --   alter table public.entitlement drop constraint if exists entitlement_credited_by_fkey;
 --   alter table public.entitlement drop column if exists credited_by;
