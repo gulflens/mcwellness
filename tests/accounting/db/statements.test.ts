@@ -5,6 +5,7 @@ import {
   corporateTaxEstimate,
 } from '../../../domain/accounting';
 import { fils } from '../../../domain/shared';
+import { setVatRegistration } from '../../billing/db/support';
 import { buildActivity, deliverVisit, type Activity } from './fixture';
 import { FINANCE, SEEDED, seedFinanceUser, startHarness, type Harness } from './support';
 
@@ -464,5 +465,42 @@ describe('after credit notes', () => {
 
     const tb = await get<TrialBalance>(`/api/accounting/statements/trial-balance?asOf=${AS_OF}`);
     expect(tb.totalDebitFils).toBe(tb.totalCreditFils);
+  });
+
+  it('reverses the VAT of a registered practice’s sale, line for line', async () => {
+    const user = h.data.users[SEEDED.owner]?.id ?? null;
+    await setVatRegistration(h.owner, h.data.tenant.id, user, true);
+    try {
+      const visitor = h.clientId(4);
+      await deliverVisit(h, visitor);
+      const invoice = await h.owner.query<{ id: string; vat_fils: number }>(
+        "select id, vat_fils from invoice where tenant_id = $1 and kind = 'session' and client_id = $2",
+        [h.data.tenant.id, visitor],
+      );
+      expect(invoice.rows[0]!.vat_fils).toBeGreaterThan(0);
+      await issue(invoice.rows[0]!.id);
+      await runPoster();
+
+      const note = await h.owner.query<{ id: string; vat_fils: number; gross_fils: number }>(
+        'select id, vat_fils, gross_fils from credit_note where tenant_id = $1 and invoice_id = $2',
+        [h.data.tenant.id, invoice.rows[0]!.id],
+      );
+      const { id, vat_fils: vat, gross_fils: gross } = note.rows[0]!;
+      expect(vat).toBeGreaterThan(0);
+      const lines = await h.owner.query<{ code: string; debit: string; credit: string }>(
+        'select a.code, l.debit_fils::text as debit, l.credit_fils::text as credit ' +
+          'from journal_line l ' +
+          'join journal_entry e on e.tenant_id = l.tenant_id and e.id = l.entry_id ' +
+          'join account a on a.tenant_id = l.tenant_id and a.id = l.account_id ' +
+          "where l.tenant_id = $1 and e.source_table = 'credit_note' and e.source_id = $2",
+        [h.data.tenant.id, id],
+      );
+      const line = (code: string) => lines.rows.find((row) => row.code === code);
+      expect(Number(line('2500')?.debit)).toBe(vat);
+      expect(Number(line('1200')?.credit)).toBe(gross);
+      expect(Number(line('4000')?.debit)).toBe(gross - vat);
+    } finally {
+      await setVatRegistration(h.owner, h.data.tenant.id, user, false);
+    }
   });
 });

@@ -19,6 +19,8 @@ type EventRow = {
   occurred_on: string;
   invoice_kind: string | null;
   net_fils: string | null;
+  vat_fils: string | null;
+  gross_fils: string | null;
   amount_fils: string | null;
   method: string | null;
   service_code: string | null;
@@ -82,7 +84,7 @@ function readEvents(roles: string): Promise<EventRow[]> {
       async () => {
         const { rows } = await h.owner.query<EventRow>(
           'select source_table, source_id, source_event, occurred_on::text as occurred_on, ' +
-            'invoice_kind, net_fils::text as net_fils, amount_fils::text as amount_fils, ' +
+            'invoice_kind, net_fils::text as net_fils, vat_fils::text as vat_fils, gross_fils::text as gross_fils, amount_fils::text as amount_fils, ' +
             'method, service_code, has_replacement, released_net_fils::text as released_net_fils ' +
             'from app.unposted_money_events() order by 1, 3, 2',
         );
@@ -253,6 +255,16 @@ describe('a credit note in the books', () => {
       service_code: 'nf-session',
     });
     expect(Number(offered[0]!.released_net_fils)).toBe(Number(offered[0]!.net_fils));
+    const stored = await h.owner.query<{ net: string; vat: string; gross: string }>(
+      'select net_fils::text as net, vat_fils::text as vat, gross_fils::text as gross ' +
+        'from credit_note where id = $1',
+      [noteId],
+    );
+    expect([offered[0]!.net_fils, offered[0]!.vat_fils, offered[0]!.gross_fils]).toEqual([
+      stored.rows[0]!.net,
+      stored.rows[0]!.vat,
+      stored.rows[0]!.gross,
+    ]);
 
     await post();
     expect(await notesOffered(noteId)).toHaveLength(0);
