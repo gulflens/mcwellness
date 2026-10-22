@@ -832,3 +832,215 @@ describe('what is refused', () => {
     expect(Number(rows[0]?.n)).toBe(0);
   });
 });
+
+describe('a credit note and the waiver', () => {
+  it('refuses to waive a fee that has a credit note, and the balance falls once', async () => {
+    const clientIndex = 18;
+    const invoiceId = await callOutFee(clientIndex);
+    const before = await balanceOf(clientIndex);
+    const note = await noteRow(issuedId(await issue(invoiceId)));
+
+    const res = await h.call('POST', `/api/billing/invoices/${invoiceId}/waiver`, SEEDED.owner, {
+      reason: 'Credited already; forgiving it too would count it twice.',
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code?: string }).code).toBe('credited');
+
+    // And the door refuses it too, with the route out of the way.
+    const user = h.data.users[SEEDED.owner];
+    await h.owner.query('begin');
+    try {
+      await h.owner.query('set local role app_role');
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.actor_roles', 'finance', true), set_config('app.reason', '', true)",
+        [h.data.tenant.id, user?.id ?? null],
+      );
+      await expect(
+        h.owner.query('select waived from app.waive_call_out_fee($1, $2)', [
+          invoiceId,
+          'Reaching past the route, which is the point of the case.',
+        ]),
+      ).rejects.toThrow('waiver_refused:credited');
+    } finally {
+      await h.owner.query('rollback');
+    }
+
+    const waived = await h.owner.query<{ waived_at: Date | null }>(
+      'select waived_at from invoice where id = $1',
+      [invoiceId],
+    );
+    expect(waived.rows[0]?.waived_at).toBeNull();
+    expect(before - (await balanceOf(clientIndex))).toBe(note.gross_fils);
+  });
+});
+
+describe('a credit note and a void of the visit that used the credit', () => {
+  const VOID_REASON = 'Logged against the wrong household';
+
+  /** A visit logged from the records, taking the client's credit. */
+  async function logVisit(clientIndex: number, startTime: string): Promise<string> {
+    const client = h.data.clients[clientIndex];
+    const res = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      {
+        clientId: client?.id,
+        practitionerId: h.data.practitioners[0]?.id,
+        serviceTypeId: h.serviceTypeId('nf-session'),
+        locationId: client?.primaryLocationId,
+        deliveryMode: 'home',
+        on: '2026-09-01',
+        startTime,
+        billing: 'credit',
+      },
+      { 'x-reason': 'From the paper diary, before the app' },
+    );
+    if (res.status !== 201) throw new Error(`The visit was not logged: ${res.status}`);
+    return ((await res.json()) as { sessionId: string }).sessionId;
+  }
+
+  async function beginVoidSide(conn: pg.Client): Promise<void> {
+    const user = h.data.users[SEEDED.owner];
+    await conn.query('begin');
+    await conn.query('set local role app_role');
+    await conn.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.actor_roles', 'owner', true), " +
+        "set_config('app.request_id', '00000000-0000-4000-8000-0000000000ca', true), " +
+        "set_config('app.reason', $3, true)",
+      [h.data.tenant.id, user?.id ?? null, VOID_REASON],
+    );
+  }
+
+  async function consumedCredit(sessionId: string): Promise<string> {
+    const { rows } = await h.owner.query<{ id: string }>(
+      'select id from entitlement where consumed_by_session_id = $1',
+      [sessionId],
+    );
+    const id = rows[0]?.id;
+    if (!id) throw new Error('The visit took no credit.');
+    return id;
+  }
+
+  type Outcome = { ok: true } | { ok: false; code?: string; message?: string };
+
+  async function runVoid(conn: pg.Client, sessionId: string): Promise<Outcome> {
+    try {
+      await conn.query('select app.void_recorded_session($1, $2) as result', [
+        sessionId,
+        VOID_REASON,
+      ]);
+      await conn.query('commit');
+      return { ok: true };
+    } catch (error) {
+      await conn.query('rollback').catch(() => undefined);
+      const e = error as { code?: string; message?: string };
+      return { ok: false, code: e.code, message: e.message };
+    }
+  }
+
+  /** The note, begun and computed but not committed, as the API role. */
+  async function holdNote(conn: pg.Client, invoiceId: string): Promise<string> {
+    const user = h.data.users[SEEDED.owner];
+    await conn.query('begin');
+    await conn.query('set local role app_role');
+    await conn.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.actor_roles', 'finance', true), " +
+        "set_config('app.request_id', '00000000-0000-4000-8000-0000000000cb', true), " +
+        "set_config('app.reason', $3, true)",
+      [h.data.tenant.id, user?.id ?? null, REASON],
+    );
+    const { rows } = await conn.query<{ id: string }>(
+      'select app.issue_credit_note($1, $2, $3) as id',
+      [invoiceId, REASON, nextKey()],
+    );
+    return String(rows[0]?.id);
+  }
+
+  it('a void and a note on the same invoice never deadlock, in either order or at once', async () => {
+    const orders = ['void-first', 'note-first', 'at-once'] as const;
+    const startTimes = ['10:00', '12:00', '14:00'];
+    for (const [index, order] of orders.entries()) {
+      // A household each, holding only this sale's credit, so the visit takes
+      // exactly the credit on the invoice being credited.
+      const clientIndex = [19, 18, 17][index] ?? 19;
+      const invoiceId = await sellSession(clientIndex);
+      const sessionId = await logVisit(clientIndex, startTimes[index] ?? '16:00');
+      const credit = await consumedCredit(sessionId);
+      const onInvoice = await h.owner.query<{ invoice_id: string }>(
+        'select invoice_id from entitlement where id = $1',
+        [credit],
+      );
+      expect(onInvoice.rows[0]?.invoice_id).toBe(invoiceId);
+
+      const voidSide = await connection();
+      const noteSide = await connection();
+      let voided: Outcome;
+      let issued: Issued;
+      try {
+        await beginVoidSide(voidSide);
+        if (order === 'void-first') {
+          // The void done and uncommitted: it holds the chain, the credit and
+          // the replacement. The note waits, then sees the replacement.
+          await voidSide.query('select app.void_recorded_session($1, $2)', [
+            sessionId,
+            VOID_REASON,
+          ]);
+          const pending = issueOn(noteSide, invoiceId);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          await voidSide.query('commit');
+          voided = { ok: true };
+          issued = await pending;
+        } else if (order === 'note-first') {
+          // The note done and uncommitted; the void waits for it.
+          const id = await holdNote(noteSide, invoiceId);
+          const pending = runVoid(voidSide, sessionId);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          await noteSide.query('commit');
+          issued = { id };
+          voided = await pending;
+        } else {
+          [issued, voided] = await Promise.all([
+            issueOn(noteSide, invoiceId),
+            runVoid(voidSide, sessionId),
+          ]);
+        }
+      } finally {
+        await voidSide.end();
+        await noteSide.end();
+      }
+
+      // Neither side was chosen as a deadlock victim, and both went through.
+      expect(issued.error, order).toBeUndefined();
+      expect(voided, order).toEqual({ ok: true });
+      const id = issuedId(issued);
+
+      const note = await noteRow(id);
+      const replacement = await h.owner.query<{ status: string; credited_by: string | null }>(
+        'select status::text as status, credited_by from entitlement ' +
+          'where replaces_entitlement_id = $1',
+        [credit],
+      );
+      const both = await h.owner.query<{ n: string }>(
+        'select count(*)::text as n from entitlement ' +
+          "where status = 'consumed' and credited_by is not null",
+      );
+      expect(Number(both.rows[0]?.n), order).toBe(0);
+      if (note.released_net_fils > 0) {
+        // The void landed first: the note credited the restored credit.
+        expect(replacement.rows, order).toEqual([{ status: 'credited', credited_by: id }]);
+      } else {
+        // The note landed first and credited the used session to income; the
+        // void then gave the credit back (see the task report: a void after a
+        // credit note is the void's question, not this door's).
+        expect(order).not.toBe('void-first');
+        expect(replacement.rows, order).toEqual([{ status: 'available', credited_by: null }]);
+      }
+      if (order === 'void-first') expect(note.released_net_fils).toBeGreaterThan(0);
+      if (order === 'note-first') expect(note.released_net_fils).toBe(0);
+    }
+  });
+});

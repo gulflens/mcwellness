@@ -68,8 +68,19 @@ type EntitlementDbRow = {
 const WAIVE_FEE_SQL = 'select waived, gross_fils from app.waive_call_out_fee($1, $2)';
 
 const FEE_INVOICE_SQL =
-  'select id, kind::text as kind, waived_at, supplier_vat_registered from invoice ' +
-  'where tenant_id = app.current_tenant_id() and id = $1';
+  'select i.id, i.kind::text as kind, i.waived_at, i.supplier_vat_registered, ' +
+  'exists (select 1 from credit_note n where n.invoice_id = i.id) as credited ' +
+  'from invoice i where i.tenant_id = app.current_tenant_id() and i.id = $1';
+
+/** The function's own refusals (migration 417), each answered as a 409 with its code. */
+const WAIVER_REFUSALS = ['vat_registered', 'credited'] as const;
+
+function waiverRefusal(error: unknown): (typeof WAIVER_REFUSALS)[number] | null {
+  const message = (error as { message?: string }).message ?? '';
+  const match = /^waiver_refused:(\w+)$/.exec(message);
+  const code = match?.[1];
+  return WAIVER_REFUSALS.find((refusal) => refusal === code) ?? null;
+}
 
 /**
  * `POST /api/billing/invoices/:id/waiver` — forgiving a call-out fee
@@ -120,6 +131,7 @@ function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
       kind: string;
       waived_at: Date | null;
       supplier_vat_registered: boolean | null;
+      credited: boolean;
     }>(FEE_INVOICE_SQL, [invoiceId]);
     const invoice = found.rows[0];
     if (!invoice) {
@@ -138,6 +150,11 @@ function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
     if (invoice.supplier_vat_registered === true) {
       return c.json({ error: 'conflict', code: 'vat_registered', requestId }, 409);
     }
+    // Already corrected by a credit note: waiving it too would take it off the
+    // balance twice (migration 417).
+    if (invoice.credited) {
+      return c.json({ error: 'conflict', code: 'credited', requestId }, 409);
+    }
 
     // Why the charge was forgiven belongs in the audit trail, not only in the
     // column: the update this makes is stamped by the row trigger with
@@ -146,10 +163,20 @@ function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
     // have sent.
     await db.query("select set_config('app.reason', $1, true)", [scrubReason(body.data.reason)]);
 
-    const waived = await db.query<{ waived: boolean; gross_fils: number }>(WAIVE_FEE_SQL, [
-      invoiceId,
-      body.data.reason,
-    ]);
+    // The door asks both questions again under its own lock; a note issued
+    // between the read above and this write is refused there, and answered the
+    // same way here.
+    let waived;
+    try {
+      waived = await db.query<{ waived: boolean; gross_fils: number }>(WAIVE_FEE_SQL, [
+        invoiceId,
+        body.data.reason,
+      ]);
+    } catch (error) {
+      const refusal = waiverRefusal(error);
+      if (!refusal) throw error;
+      return c.json({ error: 'conflict', code: refusal, requestId }, 409);
+    }
     const row = waived.rows[0];
     // Nothing was written: somebody waived it between the read above and this
     // write. That is not an error to raise — the fee is forgiven either way —

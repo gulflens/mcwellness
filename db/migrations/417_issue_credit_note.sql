@@ -32,8 +32,9 @@
 --   - Anything else creditable: the whole invoice, each line's VAT copied
 --     exactly, nothing released.
 --
--- **Locks before arithmetic.** The invoice row, then every credit behind it,
--- are taken `for update` before anything is read for the figures. A visit
+-- **Locks before arithmetic.** The invoice row is taken `for no key update`,
+-- then every credit behind it `for update`, and the available credits are
+-- read and locked again in the one statement that counts them. A visit
 -- closing at the same moment either already holds its credit — and the note
 -- waits, then reads it as consumed — or finds it locked:
 -- app.oldest_available_entitlement steps over a locked credit (`skip locked`,
@@ -41,6 +42,27 @@
 -- and credited. Two notes on one invoice queue on the invoice row; the second
 -- sees the first and is refused already_credited (and
 -- credit_note_one_per_invoice is the guarantee behind the courtesy).
+--
+-- **Why `no key update` and not `update`.** A void (969) locks the consumed
+-- credit and then writes its replacement, whose foreign key to the invoice
+-- takes `for key share` on the invoice row. `for update` conflicts with that
+-- and the two would deadlock — the void holding the credit and waiting on the
+-- invoice, the note holding the invoice and waiting on the credit. `for no key
+-- update` lets the key share through, and still conflicts with a second
+-- issuer and with the waiver's own update of the row. A replacement committed
+-- while the note waited is then seen, and locked, by the statement that reads
+-- the available credits.
+--
+-- **And the audit chain before any of it.** Every audited write in the
+-- database queues on app.audit_chain's one row (070, 908). The void writes
+-- the session (taking the chain) before it locks the credit; a note that
+-- locked the credit first and then wrote its own audited rows would wait on
+-- the chain while the void waited on the credit — a second deadlock, found by
+-- the concurrent test. So both doors this file writes take the chain row
+-- first, the order the void and a visit's close already follow, and a note,
+-- a void, a waiver and a visit closing queue one behind another instead of in
+-- a circle. It costs nothing the chain was not already costing: every one of
+-- them writes the trail before it commits.
 --
 -- **A retried request is the first one.** The idempotency key is looked up
 -- before any refusal and again once the invoice is locked, so a retry returns
@@ -53,10 +75,14 @@
 -- **The fee waiver.** docs/SPEC/billing.md section 4.3: "once the practice is
 -- registered for VAT, a fee is reversed by a credit note and not by this flag".
 -- app.waive_call_out_fee now refuses a fee whose invoice states a registered
--- supplier, with 'waiver_refused:vat_registered'.
+-- supplier, with 'waiver_refused:vat_registered'. And it refuses a fee that
+-- already has a credit note, with 'waiver_refused:credited': waived, the
+-- charge would leave the ledger while the note's minus-gross stayed, and the
+-- balance would fall by the fee twice. It locks the invoice row first, in the
+-- mode the issuing function takes it, so the two cannot pass each other.
 --
 -- Needs: 000 (app.current_tenant_id), 010 (tenant.timezone), 060 (client,
--- client.status), 095 (app.actor_has_role), 100 (app.current_actor_id), 402
+-- client.status), 070 (app.audit_chain, the lock taken first), 095 (app.actor_has_role), 100 (app.current_actor_id), 402
 -- (invoice, invoice_line), 403 (entitlement, package_purchase,
 -- entitlement_status), 404 (app.billing_ledger), 408 (app.waive_call_out_fee
 -- and app.billing_ledger as last written, invoice.waived_at), 411 (the
@@ -136,12 +162,13 @@ begin
     return v_existing.id;
   end if;
 
-  -- The invoice first, then every credit behind it, before anything is read
-  -- for the figures (header).
+  -- The audit chain first (header), then the invoice, then every credit
+  -- behind it, before anything is read for the figures.
+  perform 1 from app.audit_chain where singleton for update;
   select * into v_invoice
     from public.invoice
    where id = p_invoice_id and tenant_id = v_tenant_id
-     for update;
+     for no key update;
   if not found then
     raise exception 'invoice_not_found' using errcode = 'no_data_found';
   end if;
@@ -183,17 +210,23 @@ begin
     raise exception 'credit_note_refused:already_credited';
   end if;
 
-  -- The available credits, read after the lock, so a credit a visit took
-  -- while this waited reads as taken.
-  select coalesce(array_agg(e.id order by e.created_at, e.id), '{}'),
-         coalesce(sum(e.allocated_net_fils), 0)
+  -- The available credits, read after the locks above, so a credit a visit
+  -- took while this waited reads as taken — and locked in this same
+  -- statement, so a replacement a void committed meanwhile is held before it
+  -- is counted.
+  select coalesce(array_agg(a.id order by a.created_at, a.id), '{}'),
+         coalesce(sum(a.allocated_net_fils), 0)
     into v_available, v_remaining
-    from public.entitlement e
-   where e.tenant_id = v_tenant_id
-     and e.status = 'available'
-     and (case when v_kind = 'package'
-               then e.package_purchase_id = v_invoice.package_purchase_id
-               else e.invoice_id = v_invoice.id end);
+    from (
+      select e.id, e.created_at, e.allocated_net_fils
+        from public.entitlement e
+       where e.tenant_id = v_tenant_id
+         and e.status = 'available'
+         and (case when v_kind = 'package'
+                   then e.package_purchase_id = v_invoice.package_purchase_id
+                   else e.invoice_id = v_invoice.id end)
+         for update
+    ) a;
 
   if v_kind = 'package' then
     if v_remaining <= 0 then
@@ -365,6 +398,7 @@ set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_tenant_id uuid := app.current_tenant_id();
+  v_invoice   record;
 begin
   if v_tenant_id is null then
     raise exception 'No practice in context; a fee cannot be waived.'
@@ -376,17 +410,27 @@ begin
     raise exception 'forgiving a charge is the owner''s, an admin''s or finance''s'
       using errcode = 'insufficient_privilege';
   end if;
-  -- A tax invoice is reversed by a credit note, not by this flag
-  -- (docs/SPEC/billing.md section 4.3).
-  if exists (
-    select 1 from public.invoice i
-     where i.id = p_invoice_id
-       and i.tenant_id = v_tenant_id
-       and i.kind::text = 'call_out_fee'
-       and i.supplier_vat_registered is true
-  ) then
-    raise exception 'waiver_refused:vat_registered'
-      using hint = 'This fee was invoiced while the practice was registered for VAT. Issue a credit note instead.';
+  -- The audit chain, then the row, in the order and the mode
+  -- app.issue_credit_note takes them: a waiver and a credit note on the same
+  -- fee queue here, and the second sees the first.
+  perform 1 from app.audit_chain where singleton for update;
+  select i.kind::text as kind, i.supplier_vat_registered as registered into v_invoice
+    from public.invoice i
+   where i.id = p_invoice_id and i.tenant_id = v_tenant_id
+     for no key update;
+  if found and v_invoice.kind = 'call_out_fee' then
+    -- A tax invoice is reversed by a credit note, not by this flag
+    -- (docs/SPEC/billing.md section 4.3).
+    if v_invoice.registered is true then
+      raise exception 'waiver_refused:vat_registered'
+        using hint = 'This fee was invoiced while the practice was registered for VAT. Issue a credit note instead.';
+    end if;
+    -- Already corrected by a credit note: waiving it as well would take it off
+    -- the balance twice.
+    if exists (select 1 from public.credit_note n where n.invoice_id = p_invoice_id) then
+      raise exception 'waiver_refused:credited'
+        using hint = 'This fee has a credit note already.';
+    end if;
   end if;
   return query
     update public.invoice i
@@ -406,7 +450,8 @@ comment on function app.waive_call_out_fee(uuid, text) is
   'balance (migration 408). Refuses a caller who is not the owner, an admin or finance, the '
   'three roles a credit''s waiver is held to, and refuses a fee invoiced while the practice '
   'was registered for VAT with waiver_refused:vat_registered: that is a credit note''s '
-  '(migration 417). Returns no row when there was nothing to waive: the invoice is not this '
+  '(migration 417), and a fee that already has a credit note with waiver_refused:credited. '
+  'Returns no row when there was nothing to waive: the invoice is not this '
   'practice''s, is not a fee, or has been waived already.';
 
 -- rollback:
