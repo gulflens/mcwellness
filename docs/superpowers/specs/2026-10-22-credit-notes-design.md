@@ -1,9 +1,11 @@
 # Credit notes: correcting an issued invoice
 
-**Date:** 22 October 2026. **Status:** draft, for the owner's approval. The
-owner asked for this piece ("take care of it") and opted out of design
-questions; every choice below marked *design* is Claude's call, made inside
-what the specifications already decide.
+**Date:** 22 October 2026. **Status:** approved by the owner, 23:13 +04
+("go with your recommendation"), taking the three recommendations under
+"Owner's answers". The owner asked for this piece ("take care of it") and
+opted out of design questions. Every choice below marked *design* is
+Claude's call, made inside what the specifications already decide. The owner
+will not engage a lawyer, so no part of this piece waits on legal review.
 
 ## Why
 
@@ -36,10 +38,15 @@ be corrected properly instead of left standing.
 
 - **Paying money back.** A credited invoice that was already paid leaves the
   household in credit (a negative balance), which later sales draw on.
-  Refund payouts wait for the lawyer's refund wording (`billing.md` §10
-  item 2).
-- **Crediting sessions already delivered from a package.** Only the unused
-  part of a package is creditable. A delivered visit is not undone (§4.3).
+  Refund payouts are a later piece.
+- **Ending a package early.** A credit note corrects a mistake. Settling a
+  household that leaves a package early follows the refund rule in §4.3
+  (`refundOnTermination`) and is the refund piece's.
+- **Crediting sessions already delivered.** Only the unused part of a
+  package is creditable here. Undoing a delivered visit by a credit note
+  (§4.3) is the next piece.
+- **A payment recorded in error.** A credit note reduces an invoice, not a
+  payment. Reversing a payment is a separate piece.
 - **More than one credit note per invoice**, or an arbitrary amount. See
   "What can be credited".
 - **Statement invoices** (they post nothing and carry no supply).
@@ -216,17 +223,14 @@ they treat `refunded`.
   Arabic strings need the owner's review before going live, as earlier
   Arabic copy did. Erasure already keeps `credit_note` documents
   (`domain/client/erasureKeeps.ts`).
-- **Fields, to be confirmed by the tax adviser.** Nothing in the repo lists
-  what the FTA requires on a tax credit note. This design carries the usual
-  set:
+- **Fields.** Nothing in the repo lists what the FTA requires on a tax
+  credit note. This design carries the standard set:
   - the heading;
   - supplier name, address and TRN;
   - its own number and date;
   - the corrected invoice's number and date;
   - the amount and VAT credited;
   - the reason.
-
-  Confirming them is added to `billing.md` §10.
 
 ### Screen
 
@@ -236,12 +240,16 @@ they treat `refunded`.
   - what will be credited, from the quote, with the package's used and
     unused credits shown;
   - the reason field;
+  - one plain sentence that this corrects a mistake and is not how a package
+    is ended early;
   - the confirm button.
 - **A credited invoice's row** says **Credited CN-000004** in place of the
   kind words, and offers the credit note's PDF beside the invoice's.
-- **`PaymentDrawer.tsx`** wording ("Correcting one is a credit note") stays
-  true. The finance guide's "there are no credit notes yet" paragraph is
-  rewritten.
+- **Wording that promises credit notes fix payments** is rewritten:
+  `PaymentDrawer.tsx` (comment and on-screen text), `app/api/billing/payments.ts`
+  and `app/api/billing/sales.ts`. A payment recorded in error is a known gap
+  until the payment-reversal piece. The finance guide's "there are no credit
+  notes yet" paragraph is rewritten to match.
 
 ## Ownership
 
@@ -280,30 +288,21 @@ under a recorded widening, as earlier pieces did. Change requests:
 - Whether `creditableFor` returns per-line detail or totals, as long as the
   SQL mirror is tested against it.
 
-## Open questions for the owner (from the builder check, 22 October)
+## Owner's answers (builder check, 22 October)
 
-The design's claims about the code were checked and hold. These three are
-the owner's to answer, and each changes what gets built:
+The design's claims about the code were checked and hold. The owner took all
+three recommendations:
 
-1. **Is a credit note how a household leaving a package early is settled?**
-   Recommendation: **no, it corrects mistakes only.** The design credits the
-   unused credits at their allocated rate. The refund rule in §4.3
-   (`refundOnTermination`) instead reprices delivered sessions at the
-   single-session rate, so a credit note would be worth more than the refund
-   rule allows, before the lawyer's wording is back. If the answer is no, the
-   drawer and the finance guide say plainly that this is not how a package is
-   ended early.
-2. **Can a credit note undo a visit the household actually had?**
-   §4.3, the data model's void note and `session-capture.md` §4 all say a
-   delivered visit "is unwound only by a credit note". This design excludes
-   that. Recommendation: **yes, in a follow-up piece.** It needs a note per
-   visit, so more than one note per invoice, and a Dr income / Cr receivable
-   posting. The alternative is amending those three passages.
-3. **Should a payment recorded in error be fixable here?** `payments.ts`,
-   `PaymentDrawer.tsx` and `sales.ts` point mistaken payments at credit
-   notes, but a credit note only reduces an invoice. Recommendation: **a
-   separate payment-reversal piece.** This piece rewrites that copy and
-   records the gap.
+1. **A credit note corrects mistakes only.** It is not how a household
+   leaving a package early is settled. That follows the §4.3 refund rule,
+   which reprices delivered sessions, and belongs to the refund piece.
+2. **Undoing a visit the household actually had is a credit note, in the
+   next piece.** §4.3, the data model's void note and `session-capture.md`
+   §4 stand. That piece adds a note per visit (so more than one per invoice)
+   and a Dr income / Cr receivable posting. This piece's unique index on
+   `credit_note.invoice_id` is the one thing it will relax.
+3. **A payment recorded in error is a separate payment-reversal piece.**
+   This piece rewrites the copy that promises otherwise.
 
 Settled by Claude:
 - A `session` invoice whose credit a void restored is treated as
