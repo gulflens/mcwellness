@@ -27,6 +27,9 @@ const BILLING_TABLES = [
   'payment',
   'billing_exception',
   'invoice_number_series',
+  'credit_note',
+  'credit_note_line',
+  'credit_note_series',
   'price',
   'vat_setting',
 ] as const;
@@ -77,5 +80,19 @@ describe('the audit trigger on the money', () => {
     for (const row of rows) {
       expect(row.enabled, `${row.table} is not "enable always"`).toBe('A');
     }
+  });
+});
+
+describe('the credit-note tables declare themselves to the audit test', () => {
+  it("lists both documents as 'audited: client' and the counter as 'audited: no client'", async () => {
+    const { rows } = await db.query<{ table: string; comment: string | null }>(
+      "select c.relname as table, obj_description(c.oid, 'pg_class') as comment " +
+        "from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' " +
+        "and c.relname in ('credit_note', 'credit_note_line', 'credit_note_series') order by 1",
+    );
+    const comments = new Map(rows.map((row) => [row.table, row.comment ?? '']));
+    expect(comments.get('credit_note')).toMatch(/^audited: client\b(?! no)/);
+    expect(comments.get('credit_note_line')).toMatch(/^audited: client\b(?! no)/);
+    expect(comments.get('credit_note_series')).toMatch(/^audited: no client/);
   });
 });

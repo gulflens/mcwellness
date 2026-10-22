@@ -41,7 +41,8 @@ declare
 begin
   foreach t in array array[
     'package', 'package_component', 'package_price', 'package_purchase',
-    'entitlement', 'invoice', 'invoice_line', 'payment', 'billing_exception'
+    'entitlement', 'invoice', 'invoice_line', 'payment', 'billing_exception',
+    'credit_note', 'credit_note_line'
   ] loop
     execute format('drop policy if exists tenant_isolation on public.%I', t);
     execute format(
@@ -113,7 +114,8 @@ declare
   t text;
 begin
   foreach t in array array[
-    'package_purchase', 'entitlement', 'invoice', 'invoice_line', 'payment'
+    'package_purchase', 'entitlement', 'invoice', 'invoice_line', 'payment',
+    'credit_note', 'credit_note_line'
   ] loop
     execute format('drop policy if exists ledger_readers on public.%I', t);
     execute format(
@@ -222,6 +224,13 @@ $$;
 
 drop policy if exists tenant_isolation on public.payment_receipt_series;
 create policy tenant_isolation on public.payment_receipt_series for all to app_role
+  using (tenant_id = app.current_tenant_id())
+  with check (tenant_id = app.current_tenant_id());
+
+-- The credit note counter (416_credit_note.sql): the same arrangement, moved
+-- only through app.next_credit_note_number(), granted to nobody.
+drop policy if exists tenant_isolation on public.credit_note_series;
+create policy tenant_isolation on public.credit_note_series for all to app_role
   using (tenant_id = app.current_tenant_id())
   with check (tenant_id = app.current_tenant_id());
 
