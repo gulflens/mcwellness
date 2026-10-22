@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SEED_TENANT_ID } from '../../../db/seed/generate';
 import { asApiRole, rejectsWith, rolledBack, setAuditContext } from '../../db/helpers';
-import { startHarness, type Harness } from './support';
+import { SEEDED, setPracticePrices, startHarness, type Harness } from './support';
 
 /**
  * Migration 454: the money events not yet in the books, read through a
@@ -10,6 +10,7 @@ import { startHarness, type Harness } from './support';
  * depended on who ran the poster would not be books.
  */
 const NOW = () => new Date('2026-09-07T08:00:00.000Z');
+const TODAY = '2026-09-07';
 
 type EventRow = {
   source_table: string;
@@ -22,6 +23,7 @@ type EventRow = {
   method: string | null;
   service_code: string | null;
   has_replacement: boolean | null;
+  released_net_fils: string | null;
 };
 
 let h: Harness;
@@ -81,7 +83,8 @@ function readEvents(roles: string): Promise<EventRow[]> {
         const { rows } = await h.owner.query<EventRow>(
           'select source_table, source_id, source_event, occurred_on::text as occurred_on, ' +
             'invoice_kind, net_fils::text as net_fils, amount_fils::text as amount_fils, ' +
-            'method, service_code, has_replacement from app.unposted_money_events() order by 1, 3, 2',
+            'method, service_code, has_replacement, released_net_fils::text as released_net_fils ' +
+            'from app.unposted_money_events() order by 1, 3, 2',
         );
         return rows;
       },
@@ -189,6 +192,114 @@ describe('app.unposted_money_events', () => {
       );
       expect(rows.map((r) => r.source_id)).not.toContain(payments[0]);
       expect(rows.map((r) => r.source_id)).toContain(payments[1]);
+    });
+  });
+});
+
+describe('a credit note in the books', () => {
+  let keySeq = 0;
+
+  /** A session sold ahead, and a note issued on it: the whole net released. */
+  async function noteOnASale(clientIndex: number): Promise<{ noteId: string; grossFils: number }> {
+    const sold = await h.call('POST', '/api/billing/session-purchases', SEEDED.owner, {
+      clientId: h.clientId(clientIndex),
+      serviceTypeId: h.serviceTypeId('nf-session'),
+      purchasedOn: TODAY,
+    });
+    expect(sold.status).toBe(201);
+    const { invoiceId } = (await sold.json()) as { invoiceId: string };
+    keySeq += 1;
+    const issued = await h.call(
+      'POST',
+      `/api/billing/invoices/${invoiceId}/credit-note`,
+      SEEDED.owner,
+      {
+        reason: 'Invoiced to the wrong household by mistake.',
+        idempotencyKey: `0000000e-0000-4000-8000-${String(keySeq).padStart(12, '0')}`,
+      },
+    );
+    expect(issued.status).toBe(201);
+    const body = (await issued.json()) as { creditNote: { id: string; grossFils: number } };
+    return { noteId: body.creditNote.id, grossFils: body.creditNote.grossFils };
+  }
+
+  async function post(): Promise<{ posted: number; unknown: number }> {
+    const res = await h.call(
+      'POST',
+      '/api/accounting/post',
+      SEEDED.owner,
+      {},
+      {
+        'x-reason': 'Bringing the books up to date.',
+      },
+    );
+    expect(res.status).toBe(200);
+    return (await res.json()) as { posted: number; unknown: number };
+  }
+
+  async function notesOffered(noteId: string): Promise<EventRow[]> {
+    return (await readEvents('owner')).filter((row) => row.source_id === noteId);
+  }
+
+  it('offers the event once, with its released part, and not after it is posted', async () => {
+    await setPracticePrices(h, TODAY);
+    const { noteId } = await noteOnASale(2);
+    const offered = await notesOffered(noteId);
+    expect(offered).toHaveLength(1);
+    expect(offered[0]).toMatchObject({
+      source_table: 'credit_note',
+      source_event: 'credit_note.issued',
+      invoice_kind: 'single_session',
+      service_code: 'nf-session',
+    });
+    expect(Number(offered[0]!.released_net_fils)).toBe(Number(offered[0]!.net_fils));
+
+    await post();
+    expect(await notesOffered(noteId)).toHaveLength(0);
+    const entries = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from journal_entry where source_table = 'credit_note' and source_id = $1",
+      [noteId],
+    );
+    expect(entries.rows[0]?.n).toBe('1');
+  });
+
+  it('adds nothing when the poster runs twice', async () => {
+    const before = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from journal_entry',
+    );
+    expect(await post()).toEqual({ posted: 0, unknown: 0 });
+    const after = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from journal_entry',
+    );
+    expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
+  });
+
+  it('lands in the first open day after a lock, with the real date in the memo', async () => {
+    const { noteId } = await noteOnASale(3);
+    const note = await h.owner.query<{ issued_on: string; next_day: string }>(
+      'select issued_on::text as issued_on, (issued_on + 1)::text as next_day ' +
+        'from credit_note where id = $1',
+      [noteId],
+    );
+    const { issued_on: issuedOn, next_day: nextDay } = note.rows[0]!;
+    await h.owner.query('update accounting_setting set locked_through = $2 where tenant_id = $1', [
+      SEED_TENANT_ID,
+      issuedOn,
+    ]);
+    await post();
+    const entry = await h.owner.query<{
+      entered_on: string;
+      occurred_on: string;
+      memo: string;
+    }>(
+      'select entered_on::text as entered_on, occurred_on::text as occurred_on, memo ' +
+        "from journal_entry where source_table = 'credit_note' and source_id = $1",
+      [noteId],
+    );
+    expect(entry.rows[0]).toEqual({
+      entered_on: nextDay,
+      occurred_on: issuedOn,
+      memo: `Credit note issued (occurred ${issuedOn})`,
     });
   });
 });

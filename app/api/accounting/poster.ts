@@ -58,7 +58,7 @@ const LINE_SQL =
   'values (app.current_tenant_id(), $1, $2, $3, $4, $5, app.current_actor_id())';
 
 export type EventRow = {
-  source_table: 'invoice' | 'payment' | 'entitlement';
+  source_table: 'invoice' | 'payment' | 'entitlement' | 'credit_note';
   source_id: string;
   source_event: string;
   occurred_on: string;
@@ -70,6 +70,7 @@ export type EventRow = {
   method: string | null;
   service_code: string | null;
   has_replacement: boolean | null;
+  released_net_fils: string | null;
 };
 
 export type PostingReport = { posted: number; unknown: number };
@@ -156,6 +157,22 @@ export function toEvent(row: EventRow): MoneyEvent | null {
         ...common,
         allocatedNetFils: fils(amount(row.net_fils)),
       };
+    case 'credit_note.issued': {
+      const kind = INVOICE_KINDS.find((k) => k === row.invoice_kind);
+      if (!kind) {
+        return null;
+      }
+      return {
+        event: 'credit_note.issued',
+        ...common,
+        invoiceKind: kind,
+        netFils: fils(amount(row.net_fils)),
+        vatFils: fils(amount(row.vat_fils)),
+        grossFils: fils(amount(row.gross_fils)),
+        releasedNetFils: fils(amount(row.released_net_fils)),
+        serviceCode: row.service_code,
+      };
+    }
     default:
       return null;
   }

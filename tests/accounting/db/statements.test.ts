@@ -5,7 +5,7 @@ import {
   corporateTaxEstimate,
 } from '../../../domain/accounting';
 import { fils } from '../../../domain/shared';
-import { buildActivity, type Activity } from './fixture';
+import { buildActivity, deliverVisit, type Activity } from './fixture';
 import { FINANCE, SEEDED, seedFinanceUser, startHarness, type Harness } from './support';
 
 /**
@@ -366,5 +366,103 @@ describe('the overview', () => {
   it('is refused to an admin', async () => {
     const res = await h.call('GET', '/api/accounting/overview', SEEDED.admin);
     expect(res.status).toBe(403);
+  });
+});
+
+describe('after credit notes', () => {
+  /**
+   * A note on the programme (what is still owed in sessions is released) and a
+   * note on a visit that was delivered and charged on the spot (income taken
+   * back out), both posted by the poster, then the identities of section 7
+   * with the notes in them: receivable is invoices less payments less waived
+   * fees less credit notes, all gross; VAT payable is invoice VAT less waived
+   * VAT less credit-note VAT.
+   */
+  const tenantFigure = async (sql: string): Promise<number> => {
+    const { rows } = await h.owner.query<{ total: string }>(sql, [h.data.tenant.id]);
+    return Number(rows[0]?.total ?? 0);
+  };
+  const balanceOf = async (code: string): Promise<number> => {
+    const tb = await get<TrialBalance>(`/api/accounting/statements/trial-balance?asOf=${AS_OF}`);
+    return tb.rows.find((row) => row.accountCode === code)?.balanceFils ?? 0;
+  };
+  let keySeq = 0;
+  const issue = async (invoiceId: string): Promise<void> => {
+    keySeq += 1;
+    const res = await h.call(
+      'POST',
+      `/api/billing/invoices/${invoiceId}/credit-note`,
+      SEEDED.owner,
+      {
+        reason: 'Corrected: the invoice was raised in error.',
+        idempotencyKey: `0000000e-0000-4000-8000-${String(keySeq).padStart(12, '0')}`,
+      },
+    );
+    expect(res.status).toBe(201);
+  };
+
+  const runPoster = async (): Promise<void> => {
+    const posted = await h.call('POST', '/api/accounting/post', SEEDED.owner, {}, REASON);
+    expect(posted.status).toBe(200);
+    expect(((await posted.json()) as { unknown: number }).unknown).toBe(0);
+  };
+
+  it('reads receivable and VAT payable off the invoices, payments, waivers and notes', async () => {
+    const packageInvoice = await h.owner.query<{ id: string }>(
+      "select id from invoice where tenant_id = $1 and kind = 'package' and client_id = $2",
+      [h.data.tenant.id, activity.clientId],
+    );
+    await issue(packageInvoice.rows[0]!.id);
+
+    // A visit delivered with nothing owed charges itself and is income at once.
+    const visitor = h.clientId(3);
+    await deliverVisit(h, visitor);
+    await runPoster();
+    const incomeBefore = await balanceOf('4000');
+    const visitInvoice = await h.owner.query<{ id: string }>(
+      "select id from invoice where tenant_id = $1 and kind = 'session' and client_id = $2",
+      [h.data.tenant.id, visitor],
+    );
+    await issue(visitInvoice.rows[0]!.id);
+    await runPoster();
+
+    const invoiced = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from invoice where tenant_id = $1',
+    );
+    const paid = await tenantFigure(
+      'select coalesce(sum(amount_fils), 0)::text as total from payment where tenant_id = $1',
+    );
+    const waived = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from invoice ' +
+        'where tenant_id = $1 and waived_at is not null',
+    );
+    const credited = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from credit_note where tenant_id = $1',
+    );
+    expect(credited).toBeGreaterThan(0);
+    expect(await balanceOf('1200')).toBe(invoiced - paid - waived - credited);
+
+    const invoiceVat = await tenantFigure(
+      'select coalesce(sum(vat_fils), 0)::text as total from invoice where tenant_id = $1',
+    );
+    const waivedVat = await tenantFigure(
+      'select coalesce(sum(vat_fils), 0)::text as total from invoice ' +
+        'where tenant_id = $1 and waived_at is not null',
+    );
+    const creditedVat = await tenantFigure(
+      'select coalesce(sum(vat_fils), 0)::text as total from credit_note where tenant_id = $1',
+    );
+    expect(await balanceOf('2500')).toBe(invoiceVat - waivedVat - creditedVat);
+
+    // The delivered visit's income is taken back out by exactly its note's net.
+    const visitNet = await tenantFigure(
+      `select coalesce(sum(net_fils), 0)::text as total from credit_note where tenant_id = $1 ` +
+        `and invoice_id = '${visitInvoice.rows[0]!.id}'`,
+    );
+    expect(visitNet).toBeGreaterThan(0);
+    expect(await balanceOf('4000')).toBe(incomeBefore - visitNet);
+
+    const tb = await get<TrialBalance>(`/api/accounting/statements/trial-balance?asOf=${AS_OF}`);
+    expect(tb.totalDebitFils).toBe(tb.totalCreditFils);
   });
 });

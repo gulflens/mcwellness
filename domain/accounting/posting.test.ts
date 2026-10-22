@@ -88,6 +88,7 @@ describe('SOURCE_TABLE', () => {
     expect(SOURCE_TABLE['credit.waived']).toBe('entitlement');
     expect(SOURCE_TABLE['credit.expired']).toBe('entitlement');
     expect(SOURCE_TABLE['credit.refunded']).toBe('entitlement');
+    expect(SOURCE_TABLE['credit_note.issued']).toBe('credit_note');
   });
 });
 
@@ -493,5 +494,88 @@ describe('an event worth nothing posts nothing', () => {
       grossFils: fils(70_000),
     };
     expect(() => postingsFor(event, CHART)).toThrow(UnbalancedEntryError);
+  });
+});
+
+describe('a credit note', () => {
+  const CN = '0000000e-0000-4000-8000-000000005001';
+  function note(over: Partial<Extract<MoneyEvent, { event: 'credit_note.issued' }>>): MoneyEvent {
+    return {
+      event: 'credit_note.issued',
+      sourceId: CN,
+      occurredOn: '2026-09-05',
+      invoiceKind: 'call_out_fee',
+      netFils: fils(10_000),
+      vatFils: fils(500),
+      grossFils: fils(10_500),
+      releasedNetFils: fils(0),
+      serviceCode: null,
+      ...over,
+    } as MoneyEvent;
+  }
+
+  it('on a fee reverses income_fees and VAT', () => {
+    const draft = postingsFor(note({}), CHART);
+    expect(draft?.memo).toBe('Credit note issued');
+    expect(draft?.enteredOn).toBe('2026-09-05');
+    expect(draft?.source).toEqual({ table: 'credit_note', id: CN, event: 'credit_note.issued' });
+    expect(draft?.lines).toEqual([
+      dr(FEES.id, fils(10_000)),
+      dr(VAT.id, fils(500)),
+      cr(RECEIVABLE.id, fils(10_500)),
+    ]);
+  });
+
+  it('on a package releases sessions owed', () => {
+    const draft = postingsFor(
+      note({
+        invoiceKind: 'package',
+        netFils: fils(400_000),
+        vatFils: fils(20_000),
+        grossFils: fils(420_000),
+        releasedNetFils: fils(400_000),
+      }),
+      CHART,
+    );
+    expect(draft?.lines).toEqual([
+      dr(CONTRACT.id, fils(400_000)),
+      dr(VAT.id, fils(20_000)),
+      cr(RECEIVABLE.id, fils(420_000)),
+    ]);
+  });
+
+  it('on a delivered session reverses that service’s income', () => {
+    const draft = postingsFor(note({ invoiceKind: 'session', serviceCode: 'nf-session' }), CHART);
+    expect(draft?.lines).toEqual([
+      dr(SESSIONS.id, fils(10_000)),
+      dr(VAT.id, fils(500)),
+      cr(RECEIVABLE.id, fils(10_500)),
+    ]);
+    const brain = postingsFor(note({ invoiceKind: 'session', serviceCode: 'brain-map' }), CHART);
+    expect(brain?.lines[0]).toEqual(dr(ASSESSMENTS.id, fils(10_000)));
+  });
+
+  it('splits a part-released net between sessions owed and income', () => {
+    const draft = postingsFor(
+      note({ invoiceKind: 'session', serviceCode: 'nf-session', releasedNetFils: fils(4_000) }),
+      CHART,
+    );
+    expect(draft?.lines).toEqual([
+      dr(CONTRACT.id, fils(4_000)),
+      dr(SESSIONS.id, fils(6_000)),
+      dr(VAT.id, fils(500)),
+      cr(RECEIVABLE.id, fils(10_500)),
+    ]);
+  });
+
+  it('with no VAT has no VAT line', () => {
+    const draft = postingsFor(note({ vatFils: fils(0), grossFils: fils(10_000) }), CHART);
+    expect(draft?.lines).toEqual([dr(FEES.id, fils(10_000)), cr(RECEIVABLE.id, fils(10_000))]);
+  });
+
+  it('worth nothing posts nothing', () => {
+    expect(
+      postingsFor(note({ netFils: fils(0), vatFils: fils(0), grossFils: fils(0) }), CHART),
+    ).toBeNull();
   });
 });

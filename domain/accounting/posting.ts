@@ -1,4 +1,4 @@
-import type { Fils, IsoDate } from '../shared';
+import { fils, type Fils, type IsoDate } from '../shared';
 import { accountByRole, assertBalanced, cr, dr } from './journal';
 import type { ChartAccount, DraftLine, JournalDraft } from './types';
 
@@ -56,9 +56,25 @@ export type MoneyEvent =
       hasReplacement: boolean;
     }
   | { event: 'credit.expired'; sourceId: string; occurredOn: IsoDate; allocatedNetFils: Fils }
-  | { event: 'credit.refunded'; sourceId: string; occurredOn: IsoDate; allocatedNetFils: Fils };
+  | { event: 'credit.refunded'; sourceId: string; occurredOn: IsoDate; allocatedNetFils: Fils }
+  | {
+      event: 'credit_note.issued';
+      sourceId: string;
+      occurredOn: IsoDate;
+      invoiceKind: 'session' | 'package' | 'call_out_fee' | 'statement' | 'single_session';
+      netFils: Fils;
+      vatFils: Fils;
+      grossFils: Fils;
+      /** The part of the net that comes off sessions owed (2400); the rest was already income. */
+      releasedNetFils: Fils;
+      /** The corrected invoice's service, for the income the rest of the net reverses. */
+      serviceCode: string | null;
+    };
 
-export const SOURCE_TABLE: Record<MoneyEvent['event'], 'invoice' | 'payment' | 'entitlement'> = {
+export const SOURCE_TABLE: Record<
+  MoneyEvent['event'],
+  'invoice' | 'payment' | 'entitlement' | 'credit_note'
+> = {
   'invoice.issued': 'invoice',
   'fee.waived': 'invoice',
   'payment.received': 'payment',
@@ -66,6 +82,7 @@ export const SOURCE_TABLE: Record<MoneyEvent['event'], 'invoice' | 'payment' | '
   'credit.waived': 'entitlement',
   'credit.expired': 'entitlement',
   'credit.refunded': 'entitlement',
+  'credit_note.issued': 'credit_note',
 };
 
 /** The brain map is the one service whose income has its own account. */
@@ -101,6 +118,7 @@ function worthNothing(event: MoneyEvent): boolean {
   switch (event.event) {
     case 'invoice.issued':
     case 'fee.waived':
+    case 'credit_note.issued':
       return event.grossFils === 0 && event.netFils === 0 && event.vatFils === 0;
     case 'payment.received':
       return event.amountFils === 0;
@@ -182,5 +200,27 @@ export function postingsFor(
         dr(accountByRole(chart, 'contract_liability').id, event.allocatedNetFils),
         cr(accountByRole(chart, 'refunds_payable').id, event.allocatedNetFils),
       ]);
+    case 'credit_note.issued': {
+      // The mirror of the invoice: what was owed in sessions is released from
+      // 2400, and the rest of the net had already become income (a call-out
+      // fee, or a visit delivered) and is taken back out of it.
+      const lines: DraftLine[] = [];
+      if (event.releasedNetFils > 0) {
+        lines.push(dr(accountByRole(chart, 'contract_liability').id, event.releasedNetFils));
+      }
+      const incomeFils = fils(event.netFils - event.releasedNetFils);
+      if (incomeFils > 0) {
+        const income =
+          event.invoiceKind === 'call_out_fee'
+            ? accountByRole(chart, 'income_fees')
+            : incomeAccountFor(chart, event.serviceCode ?? '');
+        lines.push(dr(income.id, incomeFils));
+      }
+      if (event.vatFils > 0) {
+        lines.push(dr(accountByRole(chart, 'vat_payable').id, event.vatFils));
+      }
+      lines.push(cr(accountByRole(chart, 'receivable').id, event.grossFils));
+      return draft(event, 'Credit note issued', lines);
+    }
   }
 }
