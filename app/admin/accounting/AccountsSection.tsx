@@ -5,6 +5,7 @@ import { Button, Note } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate, formatFils } from './money';
+import { useDefaultPeriod, type Period } from './useDefaultPeriod';
 import { ViewDrawer } from './ViewDrawer';
 import { ACCOUNT_ROLE_WORDS, ACCOUNT_TYPE_WORDS } from './words';
 
@@ -26,14 +27,20 @@ type Opened = {
   read: { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; ledger: LedgerResponse };
 };
 
-const THIS_YEAR_START = () => `${new Date().getUTCFullYear()}-01-01`;
-const THIS_YEAR_END = () => `${new Date().getUTCFullYear()}-12-31`;
-
 export function AccountsSection({ reloadKey }: { reloadKey: number }) {
+  const period = useDefaultPeriod();
+  return period ? (
+    <Accounts reloadKey={reloadKey} initial={period} />
+  ) : (
+    <Note>Reading the chart.</Note>
+  );
+}
+
+function Accounts({ reloadKey, initial }: { reloadKey: number; initial: Period }) {
   const { apiFetch } = useAuth();
   const [state, setState] = useState<State>({ kind: 'loading' });
-  const [from, setFrom] = useState(THIS_YEAR_START);
-  const [to, setTo] = useState(THIS_YEAR_END);
+  const [from, setFrom] = useState(initial.from);
+  const [to, setTo] = useState(initial.to);
   const [opened, setOpened] = useState<Opened | null>(null);
 
   useEffect(() => {

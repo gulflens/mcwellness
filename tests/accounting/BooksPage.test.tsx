@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isoDateIn } from '../../domain/shared';
 import { BooksPage } from '../../app/admin/accounting/BooksPage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
@@ -748,7 +749,8 @@ describe('the statements', () => {
       ).toBe(true),
     );
     const asked = mounted.calls.find((call) => call.includes('trial-balance.csv'))!;
-    expect(asked).toContain(`asOf=${new Date().getUTCFullYear()}-12-31`);
+    // Year to date: the statements open as at the practice's own today.
+    expect(asked).toContain(`asOf=${isoDateIn(new Date(), 'Asia/Dubai')}`);
     expect(objectUrls.created).toHaveLength(1);
     await waitFor(() => expect(objectUrls.revoked).toEqual(objectUrls.created));
     expect(downloaded).toEqual(['trial-balance-2026-12-31.csv']);

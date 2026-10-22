@@ -290,6 +290,25 @@ describe('the Zoho-shaped exports', () => {
     expect(fields(file.lines[1]!)).toHaveLength(ZOHO_JOURNAL_HEADINGS.length);
   });
 
+  it('starts the journal at the financial year’s first day when no start is asked for', async () => {
+    // A 30 June year end, so the financial year and the calendar year differ.
+    await h.owner.query(
+      'update accounting_setting set year_end_month = 6, year_end_day = 30 where tenant_id = $1',
+      [h.data.tenant.id],
+    );
+    try {
+      const file = await csv(`/api/accounting/exports/zoho-journal.csv?to=${AS_OF}`);
+      expect(file.headers.get('content-disposition')).toBe(
+        `attachment; filename="zoho-journal-2026-07-01-${AS_OF}.csv"`,
+      );
+    } finally {
+      await h.owner.query(
+        'update accounting_setting set year_end_month = 12, year_end_day = 31 where tenant_id = $1',
+        [h.data.tenant.id],
+      );
+    }
+  });
+
   it('gives the chart with the template’s own headings', async () => {
     const file = await csv('/api/accounting/exports/zoho-accounts.csv');
     expect(file.lines[0]).toBe(ZOHO_ACCOUNT_HEADINGS.join(','));
