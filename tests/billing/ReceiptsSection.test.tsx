@@ -232,6 +232,7 @@ describe('finding a payment, the older ones, and recording one', () => {
           purchases: [],
           chargedFils: 25_000,
           paidFils: 0,
+          creditedFils: 0,
           outstandingFils: 25_000,
           nextExpiryOn: null,
           expiryWarning: 'none',

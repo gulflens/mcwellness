@@ -120,9 +120,14 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
 
     const charged = ledger.rows.filter((row) => row.entry_kind === 'charge');
     const paid = ledger.rows.filter((row) => row.entry_kind === 'payment');
+    // A credit note is stored with minus its gross, like a payment, and lowers
+    // what is owed in the same way (migration 417).
+    const credited = ledger.rows.filter((row) => row.entry_kind === 'credit');
     const chargedFils = charged.reduce((total, row) => total + row.amount_fils, 0);
     // A payment is stored with the opposite sign so the balance is a plain sum.
     const paidFils = paid.reduce((total, row) => total - row.amount_fils, 0);
+
+    const creditedFils = credited.reduce((total, row) => total - row.amount_fils, 0);
 
     await logRead(db, 'billing_ledger', clientId, clientId);
 
@@ -157,10 +162,11 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
         expiryWarning: balance.expiryWarning,
         outstandingFils: outstandingBalanceFils(
           charged.map((row) => ({ grossFils: fils(row.amount_fils) })),
-          paid.map((row) => ({ amountFils: fils(-row.amount_fils) })),
+          [...paid, ...credited].map((row) => ({ amountFils: fils(-row.amount_fils) })),
         ),
         chargedFils,
         paidFils,
+        creditedFils,
         purchases: purchases.rows.map(purchaseRow),
       }),
     );

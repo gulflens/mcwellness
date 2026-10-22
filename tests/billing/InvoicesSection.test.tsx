@@ -49,6 +49,7 @@ const INVOICES = [
     discountFils: 0,
     waivedAt: null,
     documentId: null,
+    creditNoteReference: null,
   },
   {
     id: '00000004-0000-4000-8000-000000000501',
@@ -66,6 +67,7 @@ const INVOICES = [
     discountFils: 182_500,
     waivedAt: null,
     documentId: null,
+    creditNoteReference: null,
   },
 ];
 
