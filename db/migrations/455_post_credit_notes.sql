@@ -156,12 +156,6 @@ $$;
 comment on function app.unposted_money_events() is
   'Every billing row not yet in the journal, as amounts, days and kinds and nothing that names '
   'anybody; steps past the erasure gate on purpose and checks the caller''s role itself '
-  '(docs/SPEC/accounting.md section 4.3).';
-revoke execute on function app.unposted_money_events() from public;
-grant execute on function app.unposted_money_events() to app_role;
-comment on function app.unposted_money_events() is
-  'Every billing row not yet in the journal, as amounts, days and kinds and nothing that names '
-  'anybody; steps past the erasure gate on purpose and checks the caller''s role itself '
   '(docs/SPEC/accounting.md section 4.3). 455 adds credit notes.';
 revoke execute on function app.unposted_money_events() from public;
 grant execute on function app.unposted_money_events() to app_role;
@@ -273,7 +267,5 @@ grant execute on function app.unposted_money_events() to app_role;
 --     'Every billing row not yet in the journal, as amounts, days and kinds and nothing that names '
 --     'anybody; steps past the erasure gate on purpose and checks the caller''s role itself '
 --     '(docs/SPEC/accounting.md section 4.3).';
---   revoke execute on function app.unposted_money_events() from public;
---   grant execute on function app.unposted_money_events() to app_role;
 --   revoke execute on function app.unposted_money_events() from public;
 --   grant execute on function app.unposted_money_events() to app_role;
