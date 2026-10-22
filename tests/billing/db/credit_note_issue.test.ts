@@ -875,6 +875,70 @@ describe('a credit note and the waiver', () => {
   });
 });
 
+describe('a credit note and the credit waiver', () => {
+  it('refuses to give back a credit from a sale that has a credit note, and writes no replacement', async () => {
+    // A household whose other rows here are only call-out fees, so the one
+    // credit on this sale is the one taken.
+    const clientIndex = 3;
+    const invoiceId = await sellSession(clientIndex);
+
+    // The sold credit taken by a late cancellation, the way 404 used to take
+    // one (408 now charges a fee instead; the rows 404 wrote are still on
+    // real ledgers, and the waiver still reaches them). Called off as
+    // practice_request so no fee is charged beside it.
+    await asPractice('admin');
+    appointmentSeq += 1;
+    const client = h.data.clients.find((c) => c.id === h.clientId(clientIndex));
+    const start = new Date(
+      new Date(`${visitDay}T04:00:00.000Z`).getTime() + appointmentSeq * 3_600_000,
+    ).toISOString();
+    const booked = await h.owner.query<{ id: string }>(
+      'insert into appointment (tenant_id, client_id, practitioner_id, service_type_id, ' +
+        'location_id, delivery_mode, window_start, window_end, status) values ($1, $2, $3, $4, $5, ' +
+        "'home', $6::timestamptz, $6::timestamptz + interval '45 minutes', 'confirmed') returning id",
+      [
+        h.data.tenant.id,
+        h.clientId(clientIndex),
+        h.data.practitioners[0]?.id,
+        h.serviceTypeId('nf-session'),
+        client?.primaryLocationId,
+        start,
+      ],
+    );
+    const appointmentId = String(booked.rows[0]?.id);
+    await h.owner.query(
+      "update appointment set status = 'cancelled_late', cancellation_reason = 'practice_request', " +
+        'cancelled_at = now() where id = $1',
+      [appointmentId],
+    );
+    const consumed = await h.owner.query<{ id: string }>(
+      "update entitlement set status = 'consumed', consumption_kind = 'late_cancellation', " +
+        'consumed_by_appointment_id = $1, consumed_at = now() ' +
+        "where invoice_id = $2 and status = 'available' returning id",
+      [appointmentId, invoiceId],
+    );
+    const creditId = consumed.rows[0]?.id;
+    if (!creditId) throw new Error('The sold credit was not taken.');
+
+    // The invoice credited: nothing was left on it, so the whole of it.
+    const note = await noteRow(issuedId(await issue(invoiceId)));
+    expect(note.released_net_fils).toBe(0);
+
+    const res = await h.call('POST', `/api/billing/entitlements/${creditId}/waiver`, SEEDED.owner, {
+      reason: 'The family had an emergency; the practice let it go.',
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code?: string }).code).toBe('credited');
+
+    const after = await h.owner.query<{ status: string; replacements: string }>(
+      'select status::text as status, (select count(*) from entitlement r ' +
+        'where r.replaces_entitlement_id = e.id)::text as replacements from entitlement e where id = $1',
+      [creditId],
+    );
+    expect(after.rows[0]).toEqual({ status: 'consumed', replacements: '0' });
+  });
+});
+
 describe('a credit note and a void of the visit that used the credit', () => {
   const VOID_REASON = 'Logged against the wrong household';
 

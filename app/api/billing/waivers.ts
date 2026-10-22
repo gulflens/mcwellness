@@ -31,13 +31,24 @@ import {
  *
  * Only a credit taken by a cancellation or a no-show may be waived. A
  * delivered session is not waivable here: the family had the visit, and
- * unwinding that is a credit note, not a waiver.
+ * unwinding that is a credit note, not a waiver. Nor may a credit whose
+ * sale has a credit note: the note settled that invoice (409 `credited`).
+ *
+ * The credit is read `for update`, so a note being issued on the same
+ * invoice is waited for and then seen. This route cannot take the audit
+ * chain first as app.issue_credit_note does (app_role may not lock it), so a
+ * note and a waiver landing at the same instant can still meet as a
+ * deadlock that Postgres breaks (40P01) — never as a credit given twice.
  */
 
 const ENTITLEMENT_SQL =
   'select id, client_id, service_type_id, source_type, package_purchase_id, invoice_id, ' +
   'allocated_net_fils, vat_rate_basis_points, vat_setting_version, status, consumption_kind, ' +
-  'expires_on from entitlement where tenant_id = app.current_tenant_id() and id = $1';
+  'expires_on from entitlement where tenant_id = app.current_tenant_id() and id = $1 for update';
+
+const INVOICE_CREDITED_SQL =
+  'select exists (select 1 from credit_note n where n.tenant_id = app.current_tenant_id() ' +
+  'and n.invoice_id = $1) as credited';
 
 const WAIVE_SQL =
   "update entitlement set status = 'waived', waiver_reason = $2, waived_at = now(), " +
@@ -60,7 +71,7 @@ type EntitlementDbRow = {
   allocated_net_fils: number;
   vat_rate_basis_points: number;
   vat_setting_version: number;
-  status: 'available' | 'consumed' | 'expired' | 'refunded' | 'waived';
+  status: 'available' | 'consumed' | 'expired' | 'refunded' | 'waived' | 'credited';
   consumption_kind: 'session' | 'late_cancellation' | 'no_show' | null;
   expires_on: string | null;
 };
@@ -226,6 +237,20 @@ export function mountWaivers(api: Hono<ApiEnv>, now: () => Date = () => new Date
     }
     if (credit.consumption_kind === 'session') {
       return c.json({ error: 'conflict', code: 'session_delivered', requestId }, 409);
+    }
+    // The sale this credit came from has a credit note: the note already gave
+    // the family what was left on it, so a replacement credit written now
+    // would be a session given twice. Asked after the read above has locked
+    // the credit (`for update`), in a statement of its own, so it sees a note
+    // committed while this waited: app.issue_credit_note locks every credit
+    // behind the invoice, this one included, before it writes (migration 417).
+    if (credit.invoice_id !== null) {
+      const noted = await db.query<{ credited: boolean }>(INVOICE_CREDITED_SQL, [
+        credit.invoice_id,
+      ]);
+      if (noted.rows[0]?.credited) {
+        return c.json({ error: 'conflict', code: 'credited', requestId }, 409);
+      }
     }
 
     // Why the charge was forgiven belongs in the audit trail, not only in the
