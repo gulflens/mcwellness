@@ -1,4 +1,4 @@
-# client-record-06: Finance is offered a Timeline tab it cannot open
+# accounting-02: Finance is offered a Timeline tab it cannot open
 
 Raised by the accounting stream on 2026-10-22 while reviewing the console from
 a finance user's seat. Nothing in `app/admin/clients/**` was edited; this
@@ -11,7 +11,7 @@ request asks the client-record stream to make one of two changes.
 `app/admin/clients/ClientDrawer.tsx` gives a finance-only user three tabs:
 
 ```ts
-const FINANCE_TABS = ALL_TABS.filter((tab) =>
+const FINANCE_TABS: readonly Tab[] = ALL_TABS.filter((tab) =>
   ['overview', 'contacts', 'timeline'].includes(tab.id),
 );
 ```

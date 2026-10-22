@@ -2,8 +2,7 @@
 
 For whoever holds the **Finance** role: a bookkeeper, an accountant, or the
 owner on a Sunday evening. It says where things are, what to do each month,
-and what the system does not do yet so it is done elsewhere. The rules behind
-it are in `docs/SPEC/accounting.md` and `docs/SPEC/billing.md`.
+and what the system does not do yet so it is done elsewhere.
 
 ## What Finance can and cannot do
 
@@ -12,8 +11,8 @@ it are in `docs/SPEC/accounting.md` and `docs/SPEC/billing.md`.
 | Read every statement and export it as CSV | Close or reopen a financial year (owner) |
 | Post a journal entry, and reverse one | Set the lock date (owner) |
 | Add, rename or archive an account | Change the year end or books settings (owner) |
-| Record a payment; sell a package; waive a late-cancellation fee | Read the audit log (owner, admin, lead practitioner) |
-| See a client's name, contacts and balance | See anything clinical — goals, sessions, reports, measurements |
+| Record a payment; sell a package; waive a call-out fee | Read the audit log (owner, admin, lead practitioner) |
+| See a client's name, contacts, balance and session credits | See a client's goals, session notes, reports or measurements |
 
 Every change asks for a reason of at least eight characters. Write it for the
 auditor who reads it in three years.
@@ -37,15 +36,18 @@ auditor who reads it in three years.
 
 You do not post sales or payments. The system does, from billing:
 
-- **Invoice issued:** money owed by the client, against *sessions owed*
-  (account 2400) and VAT. A package is income only as it is used.
-- **Payment recorded:** Bank, Cash box or Payment-link clearing, against
+- **Session or package invoice issued:** money owed by the client, against
+  *sessions owed* (account 2400) and VAT. A package is income only as it is
+  used.
+- **Call-out fee invoiced:** money owed, against call-out fee income (4300)
+  and VAT. A waived fee reverses it.
+- **Payment recorded:** Bank, Cash box or Payment link clearing, against
   money owed.
 - **Session used:** sessions owed released to income.
 
 Posting runs every night at 03:00 Dubai time, whenever someone opens Books,
-and from **Bring the books up to date** on the Overview. A figure read in the
-afternoon may miss the morning's payments until Books is opened.
+and from **Bring the books up to date** on the Overview, so every figure in
+Books is current when you read it.
 
 ## Correcting a mistake
 
@@ -82,5 +84,4 @@ Nothing posted is ever edited or deleted.
 Bank reconciliation and statement import, suppliers and bills, VAT on
 purchases and the VAT return, credit notes, refunds paid out, aged
 receivables and client statements, payroll and WPS, fixed assets and
-depreciation. These are later pieces of `docs/SPEC/accounting.md` section 14.
-The Zoho Books exports are there for when the practice moves its books.
+depreciation. These are planned for later. The Zoho Books exports are there for when the practice moves its books.
