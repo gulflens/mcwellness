@@ -294,24 +294,37 @@ describe('a credit note in the books', () => {
       [noteId],
     );
     const { issued_on: issuedOn, next_day: nextDay } = note.rows[0]!;
+    // The lock is put back whatever happens, so no later test posts into a
+    // period this one closed.
+    const previous = await h.owner.query<{ locked_through: string | null }>(
+      'select locked_through::text as locked_through from accounting_setting where tenant_id = $1',
+      [SEED_TENANT_ID],
+    );
     await h.owner.query('update accounting_setting set locked_through = $2 where tenant_id = $1', [
       SEED_TENANT_ID,
       issuedOn,
     ]);
-    await post();
-    const entry = await h.owner.query<{
-      entered_on: string;
-      occurred_on: string;
-      memo: string;
-    }>(
-      'select entered_on::text as entered_on, occurred_on::text as occurred_on, memo ' +
-        "from journal_entry where source_table = 'credit_note' and source_id = $1",
-      [noteId],
-    );
-    expect(entry.rows[0]).toEqual({
-      entered_on: nextDay,
-      occurred_on: issuedOn,
-      memo: `Credit note issued (occurred ${issuedOn})`,
-    });
+    try {
+      await post();
+      const entry = await h.owner.query<{
+        entered_on: string;
+        occurred_on: string;
+        memo: string;
+      }>(
+        'select entered_on::text as entered_on, occurred_on::text as occurred_on, memo ' +
+          "from journal_entry where source_table = 'credit_note' and source_id = $1",
+        [noteId],
+      );
+      expect(entry.rows[0]).toEqual({
+        entered_on: nextDay,
+        occurred_on: issuedOn,
+        memo: `Credit note issued (occurred ${issuedOn})`,
+      });
+    } finally {
+      await h.owner.query(
+        'update accounting_setting set locked_through = $2 where tenant_id = $1',
+        [SEED_TENANT_ID, previous.rows[0]?.locked_through ?? null],
+      );
+    }
   });
 });
