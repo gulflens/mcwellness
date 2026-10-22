@@ -29,6 +29,13 @@ function credits(n: number, over: Partial<EntitlementRecord> = {}): EntitlementR
 }
 
 describe('balanceFor', () => {
+  it('a credited credit no longer counts in the session balance', () => {
+    const balance = balanceFor([credit({ status: 'credited' }), credit()], TODAY);
+    expect(balance.services[0]?.purchased).toBe(1);
+    expect(balance.services[0]?.remaining).toBe(1);
+    expect(balance.remaining).toBe(1);
+  });
+
   it('reads "Session 3 of 15" off fifteen credits with two delivered', () => {
     const balance = balanceFor(
       [...credits(2, { status: 'consumed', consumptionKind: 'session' }), ...credits(13)],

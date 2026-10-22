@@ -43,3 +43,5 @@ export {
   isLateCancellation,
 } from './lateCancellation';
 export type { CallOutFeeSetting, ChargingOutcome } from './lateCancellation';
+export { creditableFor, proportionalVat } from './creditNote';
+export type { CreditableCredit, CreditableInvoice, CreditPlan, CreditRefusal } from './creditNote';

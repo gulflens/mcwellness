@@ -17,6 +17,7 @@ export const ENTITLEMENT_STATUSES = [
   'expired',
   'refunded',
   'waived',
+  'credited',
 ] as const;
 export type EntitlementStatus = (typeof ENTITLEMENT_STATUSES)[number];
 
@@ -35,7 +36,7 @@ export type EntitlementRecord = {
 
 export type ServiceBalance = {
   serviceTypeId: string;
-  /** Credits that still belong to the client: everything but the refunded and the waived. */
+  /** Credits that still belong to the client: everything but the refunded, the waived and the credited. */
   purchased: number;
   /** Used by a delivered session — the number in "Session 3 of 15". */
   delivered: number;
@@ -84,10 +85,15 @@ export type ClientBalance = {
  * A waived credit is one a late cancellation took and the coordinator then
  * forgave; a replacement was written in its place, so counting it again
  * would double the client's holding. A refunded credit has been paid back.
- * Neither counts towards anything.
+ * A credited credit was sold on an invoice since corrected by a credit note,
+ * so it is no longer owed. None of the three counts towards anything.
  */
 function counts(entitlement: EntitlementRecord): boolean {
-  return entitlement.status !== 'waived' && entitlement.status !== 'refunded';
+  return (
+    entitlement.status !== 'waived' &&
+    entitlement.status !== 'refunded' &&
+    entitlement.status !== 'credited'
+  );
 }
 
 function earlier(a: IsoDate | null, b: IsoDate | null): IsoDate | null {
