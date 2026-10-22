@@ -68,7 +68,7 @@ type EntitlementDbRow = {
 const WAIVE_FEE_SQL = 'select waived, gross_fils from app.waive_call_out_fee($1, $2)';
 
 const FEE_INVOICE_SQL =
-  'select id, kind::text as kind, waived_at from invoice ' +
+  'select id, kind::text as kind, waived_at, supplier_vat_registered from invoice ' +
   'where tenant_id = app.current_tenant_id() and id = $1';
 
 /**
@@ -115,10 +115,12 @@ function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
     // rather than being handed one refusal for all of them. The definer door
     // below asks the same questions again for itself, because it runs with row
     // security switched off.
-    const found = await db.query<{ id: string; kind: string; waived_at: Date | null }>(
-      FEE_INVOICE_SQL,
-      [invoiceId],
-    );
+    const found = await db.query<{
+      id: string;
+      kind: string;
+      waived_at: Date | null;
+      supplier_vat_registered: boolean | null;
+    }>(FEE_INVOICE_SQL, [invoiceId]);
     const invoice = found.rows[0];
     if (!invoice) {
       return c.json({ error: 'not_found', requestId }, 404);
@@ -128,6 +130,13 @@ function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
     }
     if (invoice.waived_at !== null) {
       return c.json({ error: 'conflict', code: 'already_waived', requestId }, 409);
+    }
+    // A fee invoiced while the practice was registered for VAT is a tax
+    // invoice, reversed by a credit note and not by this flag
+    // (docs/SPEC/billing.md section 4.3; app.waive_call_out_fee refuses it too,
+    // migration 417).
+    if (invoice.supplier_vat_registered === true) {
+      return c.json({ error: 'conflict', code: 'vat_registered', requestId }, 409);
     }
 
     // Why the charge was forgiven belongs in the audit trail, not only in the

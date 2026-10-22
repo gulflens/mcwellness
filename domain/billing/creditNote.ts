@@ -5,8 +5,9 @@
  *
  *   - A call-out fee, or a session already delivered: the whole invoice,
  *     taken back from income.
- *   - A sold-ahead session whose credit is unused: the whole invoice, taken
- *     back from sessions owed, and that credit is closed as `credited`.
+ *   - A sold-ahead session whose credit is unused (or a delivered visit's
+ *     invoice whose credit a void restored): the whole invoice, taken back
+ *     from sessions owed, and that credit is closed as `credited`.
  *   - A package: only what the client has not used, at the net each credit
  *     was allocated (so a discounted package is credited at its discounted
  *     rate), with the VAT in the same proportion.
@@ -128,7 +129,10 @@ export function creditableFor(
     };
   }
 
-  if (invoice.kind === 'single_session' && available.length > 0) {
+  // A sold-ahead session whose credit is still unused, or a delivered-visit
+  // invoice whose credit a void gave back (migration 969 writes an available
+  // replacement on the same invoice): the whole net comes off sessions owed.
+  if ((invoice.kind === 'single_session' || invoice.kind === 'session') && available.length > 0) {
     const released = fils(wholeNets.reduce((total, net) => total + net, 0));
     return {
       ok: true,

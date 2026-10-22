@@ -75,6 +75,22 @@ describe('creditableFor', () => {
     expect(plan.creditedEntitlementIds).toEqual(['credit-a']);
   });
 
+  it('credits a session invoice whose credit a void restored as a sold-ahead session', () => {
+    // A voided visit waives its consumed credit and writes an available
+    // replacement on the same invoice (migration 969). The spec's settled
+    // answer: that invoice is treated as single_session.
+    const plan = planOf(
+      creditableFor(invoice({ kind: 'session' }), [
+        { id: 'voided', status: 'waived', allocatedNetFils: fils(15_000) },
+        { id: 'restored', status: 'available', allocatedNetFils: fils(15_000) },
+      ]),
+    );
+    expect(plan.netFils).toBe(15_000);
+    expect(plan.vatFils).toBe(750);
+    expect(plan.releasedNetFils).toBe(15_000);
+    expect(plan.creditedEntitlementIds).toEqual(['restored']);
+  });
+
   it('credits a sold-ahead session already used to income', () => {
     const plan = planOf(
       creditableFor(invoice({ kind: 'single_session' }), creditsOf(1, 'consumed', 15_000)),
