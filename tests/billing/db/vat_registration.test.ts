@@ -389,4 +389,44 @@ describe('the VAT-threshold figure and credit notes', () => {
     await issueCreditNote(invoiceId, '0000000c-0000-4000-8000-000000000982');
     expect(await suppliesAsOf(earlier)).toBe(before);
   });
+
+  it('never goes below zero when the notes in the window outweigh its invoices', async () => {
+    await unregisterForVat();
+    const invoiceId = await chargedVisit(10);
+    const user = h.data.users[SEEDED.owner];
+    await asOwner();
+    // Everything the practice has invoiced is moved out of the window, inside a
+    // transaction that is rolled back, so the one note issued is all the window
+    // holds and the raw difference is -70,000.
+    await h.owner.query('begin');
+    try {
+      await h.owner.query("update invoice set issued_on = '2020-01-10' where tenant_id = $1", [
+        h.data.tenant.id,
+      ]);
+      await h.owner.query('set local role app_role');
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.actor_roles', 'finance', true), set_config('app.request_id', $3, true), " +
+          "set_config('app.reason', 'Invoiced in error.', true)",
+        [h.data.tenant.id, user?.id ?? null, REQUEST_ID],
+      );
+      await h.owner.query('select app.issue_credit_note($1, $2, $3)', [
+        invoiceId,
+        'Invoiced in error.',
+        '0000000c-0000-4000-8000-000000000983',
+      ]);
+      // The tenant's day, which is the day the note carries (not current_date).
+      const { rows } = await h.owner.query<{ figure: string; raw: string }>(
+        'with d as (select max(issued_on) as day from credit_note) ' +
+          'select app.vat_taxable_supplies_fils(d.day)::text as figure, ' +
+          '(0 - (select sum(net_fils) from credit_note c ' +
+          "where c.issued_on > (d.day - interval '12 months')::date and c.issued_on <= d.day))::text as raw " +
+          'from d',
+      );
+      expect(Number(rows[0]?.raw)).toBeLessThan(0);
+      expect(Number(rows[0]?.figure)).toBe(0);
+    } finally {
+      await h.owner.query('rollback');
+    }
+  });
 });

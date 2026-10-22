@@ -13,6 +13,11 @@
 -- that the supply was reduced, and the threshold is about what the practice
 -- supplied, not about what it charged VAT on.
 --
+-- **Never below zero.** A note issued in the window may credit an invoice from
+-- an earlier window, so the raw difference can be negative. The figure is
+-- floored at zero: the practice settings read takes a non-negative integer,
+-- and "no supplies in the window" is the honest reading of a net-negative one.
+--
 -- **Nothing else moves.** The role check, the practice in context, the waived
 -- clause (957) and the security attributes are 957's word for word. `create or
 -- replace` keeps the grants the function already has (953 revoked it from
@@ -58,7 +63,10 @@ begin
   -- invoice's own day or registration: a note on an invoice issued while the
   -- practice was unregistered still reduces what it supplied. (A waived fee
   -- never has a note, 417 refuses one, so nothing is taken off twice.)
-  select v_total - coalesce(sum(c.net_fils), 0) into v_total
+  -- The result is floored at zero: a note issued in the window can be on an
+  -- invoice from an earlier window, and a supply total below nothing is not a
+  -- figure the practice settings read (a non-negative integer) can carry.
+  select greatest(v_total - coalesce(sum(c.net_fils), 0), 0) into v_total
     from public.credit_note c
    where c.tenant_id = v_tenant_id
      and c.issued_on > (p_as_of - interval '12 months')::date
