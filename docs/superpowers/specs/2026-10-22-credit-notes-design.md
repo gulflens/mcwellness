@@ -279,3 +279,35 @@ under a recorded widening, as earlier pieces did. Change requests:
 - Test file names.
 - Whether `creditableFor` returns per-line detail or totals, as long as the
   SQL mirror is tested against it.
+
+## Open questions for the owner (from the builder check, 22 October)
+
+The design's claims about the code were checked and hold. These three are
+the owner's to answer, and each changes what gets built:
+
+1. **Is a credit note how a household leaving a package early is settled?**
+   Recommendation: **no, it corrects mistakes only.** The design credits the
+   unused credits at their allocated rate. The refund rule in §4.3
+   (`refundOnTermination`) instead reprices delivered sessions at the
+   single-session rate, so a credit note would be worth more than the refund
+   rule allows, before the lawyer's wording is back. If the answer is no, the
+   drawer and the finance guide say plainly that this is not how a package is
+   ended early.
+2. **Can a credit note undo a visit the household actually had?**
+   §4.3, the data model's void note and `session-capture.md` §4 all say a
+   delivered visit "is unwound only by a credit note". This design excludes
+   that. Recommendation: **yes, in a follow-up piece.** It needs a note per
+   visit, so more than one note per invoice, and a Dr income / Cr receivable
+   posting. The alternative is amending those three passages.
+3. **Should a payment recorded in error be fixable here?** `payments.ts`,
+   `PaymentDrawer.tsx` and `sales.ts` point mistaken payments at credit
+   notes, but a credit note only reduces an invoice. Recommendation: **a
+   separate payment-reversal piece.** This piece rewrites that copy and
+   records the gap.
+
+Settled by Claude:
+- A `session` invoice whose credit a void restored is treated as
+  `single_session`.
+- Erasure keeps `credit_note.reason`, following the void precedent.
+- Credit notes on unregistered invoices still reduce the VAT-threshold
+  figure, since the supply was reduced.
