@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { extractAll } from '../../../domain/billing/document';
+import { extractAll, formatDocumentDate } from '../../../domain/billing/document';
 import type {
   CreateDocumentResponse,
   DocumentLinkResponse,
@@ -11,6 +11,7 @@ import type {
   SellSessionResponse,
 } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
+import { IDS, seedClient, seedTenant } from '../../db/helpers';
 import { SEEDED, setPracticePrices, startHarness, type Harness } from './support';
 
 /**
@@ -803,6 +804,8 @@ describe('a credit note’s PDF', () => {
     expect(page).toContain(invoice[0]?.reference ?? 'missing');
     expect(page).toContain('Total credited');
     expect(page).toContain(REASON);
+    // The credited invoice's own issue date.
+    expect(page).toContain(formatDocumentDate(SEED_TODAY));
 
     // Kept five years like any financial record.
     const { rows: kept } = await h.owner.query<{ retention_until: Date | null; kind: string }>(
@@ -819,6 +822,69 @@ describe('a credit note’s PDF', () => {
       sourceId: '00000000-0000-4000-8000-00000000dead',
     });
     expect(res.status).toBe(404);
+  });
+
+  it('will not file, or reveal, another practice’s credit note', async () => {
+    const tenantB = IDS.tenantB;
+    const clientB = IDS.clientB;
+    const invoiceB = '00000000-0000-4000-8000-0000000000b7';
+    const lineB = '00000000-0000-4000-8000-0000000000b8';
+    const noteB = '00000000-0000-4000-8000-0000000000b9';
+    await seedTenant(h.owner, tenantB, IDS.ownerB, 'Synthetic Studio B');
+    await seedClient(h.owner, tenantB, clientB, IDS.ownerB, 'Beta');
+    await h.owner.query(
+      'insert into invoice (id, tenant_id, client_id, number, kind, issued_on, net_fils, ' +
+        "vat_fils, gross_fils, supplier_legal_name) values ($1, $2, $3, 1, 'statement', " +
+        "'2026-09-02', 10000, 0, 10000, 'Synthetic Studio B')",
+      [invoiceB, tenantB, clientB],
+    );
+    await h.owner.query(
+      'insert into invoice_line (id, tenant_id, invoice_id, client_id, line_no, description, ' +
+        'quantity, unit_net_fils, net_fils, vat_rate_basis_points, vat_setting_version, ' +
+        "vat_fils, gross_fils) values ($1, $2, $3, $4, 1, 'Statement', 1, 10000, 10000, 0, 1, " +
+        '0, 10000)',
+      [lineB, tenantB, invoiceB, clientB],
+    );
+    await h.owner.query('begin');
+    await h.owner.query(
+      'insert into credit_note (id, tenant_id, client_id, invoice_id, issued_on, reason, ' +
+        'net_fils, vat_fils, gross_fils, supplier_legal_name, idempotency_key) values ($1, $2, ' +
+        "$3, $4, '2026-09-03', 'Another practice’s note', 10000, 0, 10000, " +
+        "'Synthetic Studio B', 'other-practice-key')",
+      [noteB, tenantB, clientB, invoiceB],
+    );
+    await h.owner.query(
+      'insert into credit_note_line (tenant_id, credit_note_id, client_id, invoice_line_id, ' +
+        'line_no, description, net_fils, vat_rate_basis_points, vat_setting_version, ' +
+        "vat_fils, gross_fils) values ($1, $2, $3, $4, 1, 'Statement', 10000, 0, 1, 0, 10000)",
+      [tenantB, noteB, clientB, lineB],
+    );
+    await h.owner.query('commit');
+
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      kind: 'credit_note',
+      sourceId: noteB,
+    });
+    expect(res.status).toBe(404);
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from billing_document where credit_note_id = $1',
+      [noteB],
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
+  });
+
+  it('refuses an actor outside the invoice audience with a 403', async () => {
+    const { creditNoteId } = await creditedInvoice(1);
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.practitioner, {
+      kind: 'credit_note',
+      sourceId: creditNoteId,
+    });
+    expect(res.status).toBe(403);
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from billing_document where credit_note_id = $1',
+      [creditNoteId],
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
   });
 
   it('is not sent: the send route refuses a credit note', async () => {

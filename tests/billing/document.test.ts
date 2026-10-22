@@ -1051,6 +1051,9 @@ describe('a credit note', () => {
     // The masthead sets the title in capitals, as it does "TAX INVOICE".
     expect(page).toContain('TAX CREDIT NOTE');
     expect(page).toContain('INV-000123');
+    // The credited invoice's issue date, and the supplier's VAT registration.
+    expect(page).toContain('2 September 2026');
+    expect(page).toContain(REGISTERED.vatNumber ?? 'missing');
     expect(page).toContain('CN-000001');
     expect(page).toContain('Total credited');
     expect(page).toContain('Credits invoice');
