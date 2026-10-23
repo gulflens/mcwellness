@@ -4094,3 +4094,25 @@ running was the memory plugin's summariser.
   carries `clients?q=`.
 - `POST /api/clients/search` without a sign-in answers 401.
 - The runtime log shows three clean start blocks and no error or warning.
+
+## What was done on 2026-10-23: the fifty-ninth live pass — credit notes, the debtors list, and the books' financial year
+
+**06:50 UTC: main `bd124115`, PRs 294, 292, 293 and 295, on the operator's word ("push live").** Main's own `verify` and `verify-db` passed on `bd124115` before the archive was made. PR 292's and 293's first runs failed only on the two known load-flaky tests (`useNewEnquiryCount`, `TeamHelpers`) and passed on re-run. PR 295 was replayed onto main (its base, PR 293, was squash-merged) and verified locally (6,499 passing) before it merged.
+- PR 294: `vite` 8.3.5, clearing GHSA-587h-7wmj-h5pm, which had failed `pnpm audit:deps` on every pull request.
+- PR 292: Books' statements, ledgers and the Zoho journal export open on the financial year to date; `docs/OPERATOR/finance-guide.md`.
+- PR 293: credit notes — `CN-` series, Billing › Invoices › Issue credit note, the PDF, the ledger, the fee waiver's two refusals.
+- PR 295: Billing › Balances opens on the debtors list (ageing, CSV) and a household's statement of account PDF. No migration.
+
+**Databases, 140 → 144 on both, through Supabase's migration tool in the runner's shape** (the audit context, the file's statements, the `schema_migration` row with the file's sha256): `416_credit_note.sql` (`987d66de…`), `417_issue_credit_note.sql` (`aa17fadb…`), `418_credit_note_document.sql` (`ab455417…`), `981_vat_supplies_less_credit_notes.sql` (`2344b186…`) — staging first, then production. The policies the runner would re-apply for the new tables were created directly (no drops): `tenant_isolation`, `ledger_readers` and `ledger_writers` on `credit_note` and `credit_note_line`, `tenant_isolation` on `credit_note_series`, and `helper_reach_read` / `helper_reach_write` on all three (`db/policies/core/helper_reach.sql`).
+- **Fingerprinted against a local database migrated by the runner from the files:** md5 of `pg_get_functiondef` for the eight new or replaced functions, of `pg_get_viewdef` for `app.billing_ledger`, of the six new constraints, of the five tables' columns and of the thirteen policies — all equal on local, staging and production. Grants differ only by Supabase's own `service_role`.
+- **`455_post_credit_notes.sql` is NOT applied on either database.** Its `drop function app.unposted_money_events()` (recreated in the same transaction with one more column) was declined three times by the migration tool's confirmation gate. Until the operator runs it in the SQL editor, credit notes are issued but not posted to the journal; nothing else depends on it. Both databases stand at 144, `main` at 145.
+
+**Build.** Before the upload the host's latest build was the 58th pass's (`01a15aa6`), so there were no unrecorded builds.
+- Archive `mcwellness-bd124115.tar.gz` (`git archive --prefix=mcwellness/ | gzip -9`), 8,213,221 bytes, sha256 `008b7514…`, through `hosting_deploy` with the stored settings passed explicitly (Hono, Node 24, root `mcwellness`, output `.`, `build:production`, entry `app/api/start.mjs`, npm).
+- Build `01a16786`, started 06:50:51 UTC.
+- Entry `index-BSOWZS-C.js` → `index-CgUgJtRK.js`, flipped about 40 s after the start. The old entry answers 404.
+
+**Verified.**
+- Health 200 in 0.25 s and deep health 200 in 0.39 s.
+- `GET /api/billing/debtors`, `/debtors.csv`, `/invoices/:id/credit-quote`, `/clients/:id/statement.pdf` and `POST /invoices/:id/credit-note` answer 401 without a sign-in.
+- `BillingPage-Bxfhkc42.js` carries `billing/debtors`, "Issue credit note", "Statement of account", "All households", `credit-quote` and `statement.pdf`; `BooksPage-BIkgBVZl.js` reads `accounting/settings`.
