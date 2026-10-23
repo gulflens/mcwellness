@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, isWithin, isoDateOf, yearBoundsContaining, yearOf } from './dates';
+import {
+  addDays,
+  defaultStatementPeriod,
+  isWithin,
+  isoDateOf,
+  yearBoundsContaining,
+  yearOf,
+} from './dates';
 
 describe('addDays', () => {
   it('crosses a month and a year end', () => {
@@ -26,6 +33,33 @@ describe('yearBoundsContaining', () => {
     expect(yearBoundsContaining('2026-06-30', 6, 30)).toEqual({
       startsOn: '2025-07-01',
       endsOn: '2026-06-30',
+    });
+  });
+});
+
+describe('defaultStatementPeriod', () => {
+  it('opens on the calendar year to date for a 31 December year end', () => {
+    expect(defaultStatementPeriod('2026-10-22', 12, 31)).toEqual({
+      from: '2026-01-01',
+      to: '2026-10-22',
+    });
+  });
+  it('opens on the financial year to date when the year straddles two calendar years', () => {
+    expect(defaultStatementPeriod('2027-02-10', 6, 30)).toEqual({
+      from: '2026-07-01',
+      to: '2027-02-10',
+    });
+  });
+  it('is a single day on the first day of a financial year', () => {
+    expect(defaultStatementPeriod('2026-07-01', 6, 30)).toEqual({
+      from: '2026-07-01',
+      to: '2026-07-01',
+    });
+  });
+  it('still belongs to the closing year on its last day', () => {
+    expect(defaultStatementPeriod('2026-06-30', 6, 30)).toEqual({
+      from: '2025-07-01',
+      to: '2026-06-30',
     });
   });
 });

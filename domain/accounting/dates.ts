@@ -50,3 +50,19 @@ export function yearBoundsContaining(
   const startsOn = addDays(isoDateOf(yearOf(endsOn) - 1, yearEndMonth, yearEndDay), 1);
   return { startsOn, endsOn };
 }
+
+/**
+ * The period the statements and an account's ledger open on before anyone
+ * picks dates: the financial year that contains `today`, to `today` — never
+ * the calendar year, so a practice with a 30 June year end is not shown half
+ * of two years. `today` is the practice's own day (Asia/Dubai), not UTC's.
+ */
+export function defaultStatementPeriod(
+  today: IsoDate,
+  yearEndMonth: number,
+  yearEndDay: number,
+): { from: IsoDate; to: IsoDate } {
+  // Year to date, as the statements' own route defaults (app/api/accounting/
+  // statements.ts): a balance sheet is never dated after today.
+  return { from: yearBoundsContaining(today, yearEndMonth, yearEndDay).startsOn, to: today };
+}

@@ -18,7 +18,14 @@ export type {
   JournalSource,
   PostedLine,
 } from './types';
-export { addDays, isWithin, isoDateOf, yearBoundsContaining, yearOf } from './dates';
+export {
+  addDays,
+  defaultStatementPeriod,
+  isWithin,
+  isoDateOf,
+  yearBoundsContaining,
+  yearOf,
+} from './dates';
 export {
   MissingRoleError,
   UnbalancedEntryError,
