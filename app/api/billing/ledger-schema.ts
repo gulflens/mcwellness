@@ -628,3 +628,45 @@ export const IssueCreditNoteResponse = z.object({
   }),
 });
 export type IssueCreditNoteResponse = z.infer<typeof IssueCreditNoteResponse>;
+
+// ---------------------------------------------------------------------------
+// Who owes the practice what
+// ---------------------------------------------------------------------------
+
+/** The as-at day, optional: the route defaults it to today in Dubai. */
+export const DebtorsQuery = z.object({ asOf: IsoDate.optional() });
+export type DebtorsQuery = z.infer<typeof DebtorsQuery>;
+
+export const DebtorRow = z.object({
+  clientId: z.uuid(),
+  name: z.string(),
+  mrn: z.string(),
+  owedFils: Fils,
+  b0to30Fils: Fils,
+  b31to60Fils: Fils,
+  b61to90Fils: Fils,
+  over90Fils: Fils,
+  inCreditFils: Fils,
+  oldestOpenOn: IsoDate.nullable(),
+});
+export type DebtorRow = z.infer<typeof DebtorRow>;
+
+/**
+ * Totals cover every household with a balance and name nobody; `rows` is the
+ * largest fifty, and `truncated` says there are more.
+ */
+export const DebtorsResponse = z.object({
+  asOf: IsoDate,
+  totals: z.object({
+    owedFils: Fils,
+    b0to30Fils: Fils,
+    b31to60Fils: Fils,
+    b61to90Fils: Fils,
+    over90Fils: Fils,
+    inCreditFils: Fils,
+    households: z.number().int().nonnegative(),
+  }),
+  rows: z.array(DebtorRow),
+  truncated: z.boolean(),
+});
+export type DebtorsResponse = z.infer<typeof DebtorsResponse>;
