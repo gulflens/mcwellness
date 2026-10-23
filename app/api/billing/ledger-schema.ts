@@ -637,6 +637,10 @@ export type IssueCreditNoteResponse = z.infer<typeof IssueCreditNoteResponse>;
 export const DebtorsQuery = z.object({ asOf: IsoDate.optional() });
 export type DebtorsQuery = z.infer<typeof DebtorsQuery>;
 
+/** The statement's period, both ends optional: the route defaults them. */
+export const StatementQuery = z.object({ from: IsoDate.optional(), to: IsoDate.optional() });
+export type StatementQuery = z.infer<typeof StatementQuery>;
+
 export const DebtorRow = z.object({
   clientId: z.uuid(),
   name: z.string(),

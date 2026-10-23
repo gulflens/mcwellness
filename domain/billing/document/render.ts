@@ -22,7 +22,7 @@
  * bytes, exactly as the fonts do; nothing here opens anything.
  */
 
-import { chargesVat, type MoneyDocument } from './model';
+import { chargesVat, type RenderableDocument } from './model';
 import {
   PAGE_HEIGHT,
   PAGE_WIDTH,
@@ -33,6 +33,7 @@ import {
 import { WORDS } from './strings';
 import { INVOICE_GEOMETRY, invoiceLayout } from './invoice';
 import { receiptLayout } from './receipt';
+import { statementLayout } from './statement';
 import type { Block } from './page';
 import {
   BAND,
@@ -76,7 +77,7 @@ export const GEOMETRY = {
 
 /** Lays out a document, across as many pages as its lines need. */
 export function layout(
-  document_: MoneyDocument,
+  document_: RenderableDocument,
   fonts: FontSet,
   logo: DocumentImage | null = null,
 ): Page[] {
@@ -90,19 +91,22 @@ export function layout(
  * page against as boxes rather than as loose pieces of type.
  */
 export function layoutWithBlocks(
-  document_: MoneyDocument,
+  document_: RenderableDocument,
   fonts: FontSet,
   logo: DocumentImage | null = null,
 ): { pages: Page[]; blocks: Block[][] } {
-  return document_.kind === 'receipt'
-    ? receiptLayout(document_, fonts, logo)
-    : invoiceLayout(document_, fonts, logo);
+  if (document_.kind === 'receipt') return receiptLayout(document_, fonts, logo);
+  if (document_.kind === 'statement') return statementLayout(document_, fonts, logo);
+  return invoiceLayout(document_, fonts, logo);
 }
 
 /** The document's title, which is what a reader's browser tab and file manager show. */
-export function titleOf(document_: MoneyDocument): string {
+export function titleOf(document_: RenderableDocument): string {
   if (document_.kind === 'receipt') {
     return `${WORDS.receipt.en} ${document_.reference}`;
+  }
+  if (document_.kind === 'statement') {
+    return `${WORDS.statement.en} ${document_.recipient.recordNumber}`;
   }
   if (document_.kind === 'credit_note') {
     const credit = chargesVat(document_.supplier) ? WORDS.taxCreditNote : WORDS.creditNote;

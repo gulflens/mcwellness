@@ -1,10 +1,11 @@
 import type { Context, Hono } from 'hono';
 import { ageing, openItems, type LedgerEntry } from '../../../domain/billing';
-import { amountCell, fils, isoDateIn, toCsv } from '../../../domain/shared';
+import { amountCell, isoDateIn, toCsv } from '../../../domain/shared';
 import { logAction, logReads } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { csvResponse } from '../accounting/csv-response';
 import { mayReadInvoices } from './access';
+import { ledgerEntry, type LedgerDbRow } from './ledger-entries';
 import { DebtorsQuery, DebtorsResponse, type DebtorRow } from './ledger-schema';
 
 /**
@@ -51,20 +52,14 @@ const SQL =
   "where l.tenant_id = app.current_tenant_id() and c.status <> 'erased' " +
   'and l.occurred_on <= $1::date';
 
-type LedgerDbRow = {
+type DebtorDbRow = LedgerDbRow & {
   client_id: string;
-  entry_kind: 'charge' | 'payment' | 'credit';
-  source_id: string;
-  reference: string;
-  occurred_on: string;
-  amount_fils: number;
-  invoice_id: string | null;
   client_name: string;
   client_mrn: string;
 };
 
 /** Every household with a balance, largest debt first, then largest credit. */
-function debtorRows(rows: readonly LedgerDbRow[], asOf: string): DebtorRow[] {
+function debtorRows(rows: readonly DebtorDbRow[], asOf: string): DebtorRow[] {
   const households = new Map<string, { name: string; mrn: string; entries: LedgerEntry[] }>();
   for (const row of rows) {
     let household = households.get(row.client_id);
@@ -72,24 +67,8 @@ function debtorRows(rows: readonly LedgerDbRow[], asOf: string): DebtorRow[] {
       household = { name: row.client_name, mrn: row.client_mrn, entries: [] };
       households.set(row.client_id, household);
     }
-    const base = { id: row.source_id, reference: row.reference, on: row.occurred_on };
-    if (row.entry_kind === 'charge') {
-      household.entries.push({ kind: 'charge', ...base, grossFils: fils(row.amount_fils) });
-    } else if (row.entry_kind === 'payment') {
-      household.entries.push({
-        kind: 'payment',
-        ...base,
-        amountFils: fils(-row.amount_fils),
-        invoiceId: row.invoice_id,
-      });
-    } else if (row.invoice_id !== null) {
-      household.entries.push({
-        kind: 'credit',
-        ...base,
-        amountFils: fils(-row.amount_fils),
-        invoiceId: row.invoice_id,
-      });
-    }
+    const entry = ledgerEntry(row);
+    if (entry) household.entries.push(entry);
   }
 
   const result: DebtorRow[] = [];
@@ -123,7 +102,7 @@ export function mountDebtors(api: Hono<ApiEnv>, now: () => Date = () => new Date
     const parsed = DebtorsQuery.safeParse({ asOf: c.req.query('asOf') });
     if (!parsed.success) return null;
     const asOf = parsed.data.asOf ?? isoDateIn(now(), PRACTICE_TIME_ZONE);
-    const { rows } = await c.get('db').query<LedgerDbRow>(SQL, [asOf]);
+    const { rows } = await c.get('db').query<DebtorDbRow>(SQL, [asOf]);
     return { asOf, all: debtorRows(rows, asOf) };
   }
 

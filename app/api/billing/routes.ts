@@ -13,6 +13,7 @@ import { mountSendOptions } from './send-options';
 import { mountRefundQuotes } from './refunds';
 import { mountSales } from './sales';
 import { mountSessionSales } from './session-sales';
+import { mountStatement } from './statement';
 import { mountStopBalance } from './stop-balance';
 import { mountSummary } from './summary';
 import { mountServiceTypeOptions } from './service-types';
@@ -45,4 +46,5 @@ export function mountBilling(api: Hono<ApiEnv>, now: () => Date = () => new Date
   mountWaivers(api, now);
   mountCreditNotes(api, now);
   mountDebtors(api, now);
+  mountStatement(api, now);
 }

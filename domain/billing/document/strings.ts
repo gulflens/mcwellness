@@ -43,6 +43,37 @@ export const WORDS = {
   creditNoteNo: { en: 'Credit note no.', ar: 'رقم الإشعار الدائن' },
   creditNoteSummary: { en: 'Credit note summary', ar: 'ملخص الإشعار الدائن' },
 
+  /**
+   * The statement of account (docs/superpowers/specs/2026-10-23-debtors-
+   * design.md, "Document"). Not a tax document: nothing in this block says
+   * "tax".
+   *
+   * OWNER REVIEW: every Arabic string in this block is the assistant's wording
+   * and awaits the owner's review of the Arabic.
+   */
+  statement: { en: 'Statement of account', ar: 'كشف حساب' },
+  statementSummary: { en: 'Statement summary', ar: 'ملخص الكشف' },
+  statementFor: { en: 'ACCOUNT OF', ar: 'حساب' },
+  periodFrom: { en: 'From', ar: 'من' },
+  periodTo: { en: 'To', ar: 'إلى' },
+  itemColumn: { en: 'Item', ar: 'البند' },
+  dateColumn: { en: 'Date', ar: 'التاريخ' },
+  referenceColumn: { en: 'Reference', ar: 'المرجع' },
+  charged: { en: 'Charged', ar: 'المبلغ المحتسب' },
+  paidOrCredited: { en: 'Paid or credited', ar: 'المدفوع أو المخصوم' },
+  balanceColumn: { en: 'Balance', ar: 'الرصيد' },
+  balanceBroughtForward: { en: 'Balance brought forward', ar: 'الرصيد المرحّل' },
+  closingBalance: { en: 'Closing balance', ar: 'الرصيد الختامي' },
+  paymentItem: { en: 'Payment', ar: 'دفعة' },
+  balanceDue: { en: 'BALANCE DUE', ar: 'الرصيد المستحق' },
+  inCreditBlock: { en: 'IN CREDIT', ar: 'رصيد دائن' },
+  creditMark: { en: 'CR', ar: 'دائن' },
+  ageingTitle: { en: 'Amount owed by age', ar: 'المستحق حسب المدة' },
+  age0to30: { en: '0-30 days', ar: 'من 0 إلى 30 يوماً' },
+  age31to60: { en: '31-60 days', ar: 'من 31 إلى 60 يوماً' },
+  age61to90: { en: '61-90 days', ar: 'من 61 إلى 90 يوماً' },
+  ageOver90: { en: 'Over 90 days', ar: 'أكثر من 90 يوماً' },
+
   dateOfSupply: { en: 'Date of supply', ar: 'تاريخ التوريد' },
   dateReceived: { en: 'Date received', ar: 'تاريخ الاستلام' },
 
@@ -341,6 +372,25 @@ export { groupIban };
 export function money(fils: number): string {
   return `AED ${formatFils(fils)}`;
 }
+
+/**
+ * A running balance as a page prints it: the figure, with CR after it when the
+ * household is in credit, so a credit is never a minus sign.
+ */
+export function signedBalance(balanceFils: number, creditMark: string): string {
+  return balanceFils < 0 ? `${money(-balanceFils)} ${creditMark}` : money(balanceFils);
+}
+
+/** The statement's note, said once and in the page's language. */
+export const STATEMENT_NOTE: Phrase = {
+  en:
+    'Balances are as at the end of the period. A balance marked CR is a credit in the ' +
+    "household's favour. Amounts owed are listed by how long each invoice has been open.",
+  // OWNER REVIEW: the assistant's wording.
+  ar:
+    'الأرصدة كما في نهاية الفترة. الرصيد المسبوق بعلامة دائن هو رصيد لصالح الأسرة. ' +
+    'تُصنَّف المبالغ المستحقة بحسب المدة التي بقيت فيها كل فاتورة مفتوحة.',
+};
 
 /** The wordmark at the top of the page. */
 export const WORDMARK = 'McWellness';
