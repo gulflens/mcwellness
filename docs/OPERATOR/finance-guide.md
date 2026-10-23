@@ -12,6 +12,7 @@ and what the system does not do yet so it is done elsewhere.
 | Post a journal entry, and reverse one | Set the lock date (owner) |
 | Add, rename or archive an account | Change the year end or books settings (owner) |
 | Record a payment; sell a package; waive a call-out fee | Read the audit log (owner, admin, lead practitioner) |
+| Issue a credit note; download a client's statement of account | Change or delete an issued invoice, payment or credit note (nobody can) |
 | See a client's name, contacts, balance and session credits | See a client's goals, session notes, reports or measurements |
 
 Every change asks for a reason of at least eight characters. Write it for the
@@ -20,8 +21,12 @@ auditor who reads it in three years.
 ## Where things are
 
 - **Billing › Invoices / Receipts**: every invoice (INV-) and payment
-  receipt (RCP-), searchable and paged, each with its PDF.
-- **Billing › Balances**: one client's balance at a time.
+  receipt (RCP-), searchable and paged, each with its PDF. A corrected
+  invoice reads **Credited CN-…** and offers the credit note's PDF beside it.
+- **Billing › Balances**: who owes the practice, as at a day you choose,
+  split 0–30 / 31–60 / 61–90 / over 90 days from the invoice date, with a
+  CSV download. Open a client for their own balance and **Statement of
+  account** (a PDF for a period, in the client's language).
 - **Books › Overview**: cash position, money owed to the practice, the
   year's result, and the corporate-tax estimate.
 - **Books › Journal**: every entry (JE-), newest first. Open one to see its
@@ -44,6 +49,9 @@ You do not post sales or payments. The system does, from billing:
 - **Payment recorded:** Bank, Cash box or Payment link clearing, against
   money owed.
 - **Session used:** sessions owed released to income.
+- **Credit note issued:** the reverse of the invoice it corrects — money owed
+  comes down by the note's total, against sessions owed for unused sessions,
+  against income for anything already earned, and against VAT.
 
 Posting runs every night at 03:00 Dubai time, whenever someone opens Books,
 and from **Bring the books up to date** on the Overview, so every figure in
@@ -55,9 +63,20 @@ Nothing posted is ever edited or deleted.
 
 - **A wrong manual entry:** open it in the Journal and **Reverse** it, then
   post the right one. The reversal is dated today.
-- **A wrong payment or invoice:** there are no credit notes yet. Tell the
-  owner. Do not try to cancel it with a manual entry against Receivable; the
-  client's balance in billing would not follow.
+- **A wrong invoice:** in Billing › Invoices, choose **Issue credit note** on
+  its row, say why, and confirm. The credit note (CN-, its own numbering)
+  cancels the invoice: the whole of it, or for a package only the sessions
+  not yet used. The client's balance, their session credits and the books
+  all follow; if they had paid, they are left in credit. One credit note per
+  invoice. Then issue the right invoice the usual way (sell the right package
+  or session).
+- **Not for these:** a credit note corrects a mistake. It is not how a client
+  ends a package early, and it cannot undo a visit the client actually had —
+  tell the owner about either.
+- **A wrong payment:** a payment cannot be changed once recorded, and a credit
+  note does not touch payments. Tell the owner.
+- Never correct an invoice or a payment with a manual journal entry against
+  Receivable: the client's balance in billing would not follow.
 - **A period that is locked:** a late payment or invoice lands on the first
   open day, and its memo says the real date. Ask the owner if a locked
   period must be reopened.
@@ -75,13 +94,19 @@ Nothing posted is ever edited or deleted.
 5. **Spending:** post each bill or expense as a manual entry to the right
    expense account, against Bank or Cash box. Keep the receipt outside the
    system and put its reference in the memo.
-6. Read the **trial balance** as at the month's last day, then the
+6. **Who owes:** in Billing › Balances, set As at to the month's last day and
+   download the CSV. Its total should match account 1200 (money owed) on the
+   trial balance, less anything owed by clients whose records were erased
+   (they are left off the list but stay in the books). Send a statement of
+   account to anyone over 30 days.
+7. Read the **trial balance** as at the month's last day, then the
    **profit and loss** for the month. Download both.
-7. Ask the owner to **lock through** the month's last day.
+8. Ask the owner to **lock through** the month's last day.
 
 ## Done outside the system for now
 
 Bank reconciliation and statement import, suppliers and bills, VAT on
-purchases and the VAT return, credit notes, refunds paid out, aged
-receivables and client statements, payroll and WPS, fixed assets and
-depreciation. These are planned for later. The Zoho Books exports are there for when the practice moves its books.
+purchases and the VAT return, refunds paid out, reversing a payment recorded
+in error, payment reminders, payroll and WPS, fixed assets and depreciation.
+These are planned for later. The Zoho Books exports are there for when the
+practice moves its books.
