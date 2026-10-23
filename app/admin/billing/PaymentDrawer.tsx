@@ -41,7 +41,7 @@ export function PaymentDrawer({
   onClose,
   onRecorded,
 }: {
-  client: ClientRow;
+  client: Pick<ClientRow, 'id' | 'givenName' | 'familyName' | 'mrn'>;
   outstandingFils: number;
   onClose: () => void;
   onRecorded: (summary: string) => void;

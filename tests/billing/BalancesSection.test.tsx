@@ -36,6 +36,21 @@ const CLIENT = {
   emirate: 'DXB',
 };
 
+const EMPTY_DEBTORS = {
+  asOf: '2026-10-23',
+  totals: {
+    owedFils: 0,
+    b0to30Fils: 0,
+    b31to60Fils: 0,
+    b61to90Fils: 0,
+    over90Fils: 0,
+    inCreditFils: 0,
+    households: 0,
+  },
+  rows: [],
+  truncated: false,
+};
+
 function balance(over: Record<string, unknown> = {}) {
   return {
     clientId: CLIENT_ID,
@@ -110,6 +125,7 @@ function balance(over: Record<string, unknown> = {}) {
 
 function mount(body: Record<string, unknown>, canWrite = true) {
   return mountWith(OWNER, <BalancesSection canWrite={canWrite} />, (url, init) => {
+    if (url.startsWith('/api/billing/debtors?')) return json(EMPTY_DEBTORS);
     if (url === '/api/clients/search') return json({ clients: [CLIENT], note: null });
     if (url === `/api/billing/clients/${CLIENT_ID}/balance`) return json(body);
     if (url === '/api/billing/payments' && init?.method === 'POST') {
@@ -193,9 +209,10 @@ describe('what a family bought', () => {
 });
 
 describe('BalancesSection', () => {
-  it('asks for a client before it shows anything', () => {
+  it('opens on the debtors list, with the search above it', async () => {
     mount(balance());
-    expect(screen.getByText('Find a client to see what they have left.')).toBeTruthy();
+    expect(screen.getByRole('searchbox', { name: 'Client' })).toBeTruthy();
+    expect(await screen.findByText('Nobody owes the practice anything.')).toBeTruthy();
   });
 
   it('reads "2 of 15" for the sessions a family has had', async () => {
@@ -415,13 +432,14 @@ describe('the balance at a glance', () => {
 });
 
 describe('choosing another family', () => {
-  it('names the chosen family once, in their header, and Change goes back to the search', async () => {
+  it('names the chosen family once, in their header, and All households goes back to the list', async () => {
     mount(balance());
     await findClient();
     await screen.findByRole('region', { name: 'Client' });
     expect(screen.queryByRole('searchbox', { name: 'Client' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Choose another client' }));
+    fireEvent.click(screen.getByRole('button', { name: 'All households' }));
     expect(screen.getByRole('searchbox', { name: 'Client' })).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Client' })).toBeNull();
+    expect(await screen.findByText('Nobody owes the practice anything.')).toBeTruthy();
   });
 });

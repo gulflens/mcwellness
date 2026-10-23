@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BalanceResponse, type ServiceBalanceRow } from '../../api/billing/ledger-schema';
+import {
+  BalanceResponse,
+  type DebtorRow,
+  type ServiceBalanceRow,
+} from '../../api/billing/ledger-schema';
 import type { ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { BillingNote } from './BillingNote';
+import { DebtorsList } from './DebtorsList';
+import { StatementDrawer } from './StatementDrawer';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate } from './BillingPage';
 import { ClientPicker } from './ClientPicker';
@@ -64,9 +70,27 @@ type State =
   | { kind: 'error'; clientId: string }
   | { kind: 'ready'; clientId: string; balance: BalanceResponse };
 
+/**
+ * The household on screen: what the picker returns, or — from the debtors
+ * list, which carries one joined name — that name split at its first space.
+ * Only the joined name is ever shown, so where the split falls is invisible.
+ */
+type Household = Pick<ClientRow, 'id' | 'givenName' | 'familyName' | 'mrn'>;
+
+function householdFrom(row: DebtorRow): Household {
+  const space = row.name.indexOf(' ');
+  return {
+    id: row.clientId,
+    givenName: space === -1 ? row.name : row.name.slice(0, space),
+    familyName: space === -1 ? '' : row.name.slice(space + 1),
+    mrn: row.mrn,
+  };
+}
+
 export function BalancesSection({ canWrite }: { canWrite: boolean }) {
   const { apiFetch } = useAuth();
-  const [client, setClient] = useState<ClientRow | null>(null);
+  const [client, setClient] = useState<Household | null>(null);
+  const [statementOpen, setStatementOpen] = useState(false);
   const [state, setState] = useState<State>({ kind: 'idle' });
   const [payingOpen, setPayingOpen] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -98,9 +122,9 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
 
   // What is on screen right now: nothing without a client, the figures once
   // they are this client's, and the loading line in between.
-  const showing: 'idle' | 'loading' | 'error' | 'ready' =
+  const showing: 'list' | 'loading' | 'error' | 'ready' =
     clientId === null
-      ? 'idle'
+      ? 'list'
       : state.kind === 'idle' || state.clientId !== clientId
         ? 'loading'
         : state.kind;
@@ -195,16 +219,16 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
           naming them a second time. */}
       {balance && client ? null : (
         <div className="toolbar">
-          <ClientPicker id="balance-client" label="Client" selected={client} onSelect={setClient} />
+          <ClientPicker id="balance-client" label="Client" selected={null} onSelect={setClient} />
         </div>
       )}
+      {showing === 'list' ? <DebtorsList onOpen={(row) => setClient(householdFrom(row))} /> : null}
 
       {note ? (
         <div role="status">
           <Note>{note}</Note>
         </div>
       ) : null}
-      {showing === 'idle' ? <Note>Find a client to see what they have left.</Note> : null}
       {showing === 'loading' ? <Note>Loading the balance.</Note> : null}
       {showing === 'error' ? (
         <Note tone="critical">This balance could not be loaded. Try again.</Note>
@@ -225,13 +249,15 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
             </span>
             <Button
               variant="quiet"
-              aria-label="Choose another client"
               onClick={() => {
                 setNote(null);
                 setClient(null);
               }}
             >
-              Change
+              All households
+            </Button>
+            <Button variant="secondary" onClick={() => setStatementOpen(true)}>
+              Statement of account
             </Button>
             {docked ? null : payButton}
           </section>
@@ -337,6 +363,10 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
         </>
       ) : null}
 
+      {statementOpen && client ? (
+        <StatementDrawer client={client} onClose={() => setStatementOpen(false)} />
+      ) : null}
+
       {payingOpen && client ? (
         <PaymentDrawer
           client={client}
@@ -363,7 +393,7 @@ const TABLE_NEEDS = 640;
 const PAY_IN_HEADER_NEEDS = 768;
 
 /** "JV": the avatar's two letters, from the names the picker returned. */
-function initials(client: ClientRow): string {
+function initials(client: Household): string {
   return `${client.givenName.charAt(0)}${client.familyName.charAt(0)}`.toUpperCase();
 }
 
