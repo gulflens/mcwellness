@@ -99,6 +99,7 @@ function balance(over: Record<string, unknown> = {}) {
     chargedFils: 1_157_625,
     paidFils: 1_084_125,
     creditedFils: 0,
+    reversedFils: 0,
     purchases: [
       {
         id: SILVER_PURCHASE_ID,

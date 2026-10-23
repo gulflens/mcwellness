@@ -106,6 +106,9 @@ export const ReceiptRow = z.object({
   invoiceReference: z.string().nullable(),
   /** The rendered PDF, when one has been filed. */
   documentId: z.uuid().nullable(),
+  /** The day it was reversed as recorded in error, and the reversal's id; null when it stands. */
+  reversedOn: z.string().nullable(),
+  reversalId: z.uuid().nullable(),
 });
 export type ReceiptRow = z.infer<typeof ReceiptRow>;
 

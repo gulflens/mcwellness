@@ -123,11 +123,16 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
     // A credit note is stored with minus its gross, like a payment, and lowers
     // what is owed in the same way (migration 417).
     const credited = ledger.rows.filter((row) => row.entry_kind === 'credit');
+    // A payment reversed in error is stored with plus its amount (migration
+    // 419): it puts back what the payment had taken off, so it counts with
+    // the charges and the payment it cancels stays in what was paid.
+    const reversed = ledger.rows.filter((row) => row.entry_kind === 'reversal');
     const chargedFils = charged.reduce((total, row) => total + row.amount_fils, 0);
     // A payment is stored with the opposite sign so the balance is a plain sum.
     const paidFils = paid.reduce((total, row) => total - row.amount_fils, 0);
 
     const creditedFils = credited.reduce((total, row) => total - row.amount_fils, 0);
+    const reversedFils = reversed.reduce((total, row) => total + row.amount_fils, 0);
 
     await logRead(db, 'billing_ledger', clientId, clientId);
 
@@ -161,12 +166,13 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
         nextExpiryOn: balance.nextExpiryOn,
         expiryWarning: balance.expiryWarning,
         outstandingFils: outstandingBalanceFils(
-          charged.map((row) => ({ grossFils: fils(row.amount_fils) })),
+          [...charged, ...reversed].map((row) => ({ grossFils: fils(row.amount_fils) })),
           [...paid, ...credited].map((row) => ({ amountFils: fils(-row.amount_fils) })),
         ),
         chargedFils,
         paidFils,
         creditedFils,
+        reversedFils,
         purchases: purchases.rows.map(purchaseRow),
       }),
     );

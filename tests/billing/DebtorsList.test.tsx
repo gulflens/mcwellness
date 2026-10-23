@@ -90,6 +90,7 @@ function balance() {
     chargedFils: 400_000,
     paidFils: 0,
     creditedFils: 0,
+    reversedFils: 0,
     purchases: [],
   };
 }

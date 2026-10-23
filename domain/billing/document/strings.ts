@@ -36,6 +36,7 @@ export const WORDS = {
    */
   taxCreditNote: { en: 'Tax Credit Note', ar: 'إشعار دائن ضريبي' },
   creditNote: { en: 'Credit Note', ar: 'إشعار دائن' },
+  paymentReversed: { en: 'Payment reversed', ar: 'عكس دفعة' },
   creditsInvoice: { en: 'Credits invoice', ar: 'إشعار دائن للفاتورة' },
   reason: { en: 'Reason', ar: 'السبب' },
   totalCredited: { en: 'Total credited', ar: 'إجمالي المبلغ الدائن' },

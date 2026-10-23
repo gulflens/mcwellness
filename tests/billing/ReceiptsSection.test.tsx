@@ -26,6 +26,8 @@ const RECEIPTS = [
     clientName: 'Rowan Meadow',
     invoiceReference: 'INV-000002',
     documentId: null,
+    reversedOn: null,
+    reversalId: null,
   },
   {
     id: '00000007-0000-4000-8000-000000000001',
@@ -39,6 +41,8 @@ const RECEIPTS = [
     clientName: 'Hazel Harbour',
     invoiceReference: null,
     documentId: null,
+    reversedOn: null,
+    reversalId: null,
   },
 ];
 
@@ -233,6 +237,7 @@ describe('finding a payment, the older ones, and recording one', () => {
           chargedFils: 25_000,
           paidFils: 0,
           creditedFils: 0,
+          reversedFils: 0,
           outstandingFils: 25_000,
           nextExpiryOn: null,
           expiryWarning: 'none',

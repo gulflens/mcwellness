@@ -27,6 +27,15 @@ export type LedgerEntry =
       on: IsoDate;
       amountFils: Fils;
       invoiceId: string;
+    }
+  | {
+      /** A payment recorded in error, cancelled in full on the day it was reversed. */
+      kind: 'reversal';
+      id: string;
+      reference: string;
+      on: IsoDate;
+      paymentId: string;
+      amountFils: Fils;
     };
 
 export type OpenItem = { invoiceId: string; reference: string; on: IsoDate; openFils: Fils };
@@ -46,7 +55,7 @@ export type Ageing = {
 export type StatementLine = {
   on: IsoDate;
   reference: string;
-  kind: 'charge' | 'payment' | 'credit';
+  kind: 'charge' | 'payment' | 'credit' | 'reversal';
   chargedFils: Fils;
   paidFils: Fils;
   balanceFils: Fils;
@@ -69,7 +78,18 @@ function byDateThenReference(
  * pays the open invoices oldest first; what the pool has left is credit.
  */
 export function openItems(entries: readonly LedgerEntry[], asOf: IsoDate): OpenItems {
-  const upTo = entries.filter((entry) => entry.on <= asOf).sort(byDateThenReference);
+  const dated = entries.filter((entry) => entry.on <= asOf);
+  // A payment reversed by the as-at day is as if it was never made, and its
+  // reversal with it; as at an earlier day the payment still counts.
+  const reversed = new Set<string>();
+  for (const entry of dated) {
+    if (entry.kind === 'reversal') reversed.add(entry.paymentId);
+  }
+  const upTo = dated
+    .filter(
+      (entry) => entry.kind !== 'reversal' && !(entry.kind === 'payment' && reversed.has(entry.id)),
+    )
+    .sort(byDateThenReference);
 
   const invoices = new Map<string, OpenItem>();
   for (const entry of upTo) {
@@ -144,7 +164,7 @@ export function ageing(open: OpenItems, asOf: IsoDate): Ageing {
 /**
  * A statement of account for `from` to `to` inclusive: the balance carried in
  * from before `from`, each entry with a running balance, and the closing
- * balance. A credit note counts as paid. Negative means the household is in credit.
+ * balance. A credit note counts as paid; a reversal counts as charged. Negative means the household is in credit.
  */
 export function statementLines(
   entries: readonly LedgerEntry[],
@@ -154,7 +174,9 @@ export function statementLines(
   const signed = (entry: LedgerEntry): { charged: number; paid: number } =>
     entry.kind === 'charge'
       ? { charged: entry.grossFils, paid: 0 }
-      : { charged: 0, paid: entry.amountFils };
+      : entry.kind === 'reversal'
+        ? { charged: entry.amountFils, paid: 0 }
+        : { charged: 0, paid: entry.amountFils };
 
   let opening = 0;
   for (const entry of entries) {

@@ -189,3 +189,12 @@ export function mayReadBalance(
   }
   return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(clientId);
 }
+
+/** Reversing a payment recorded in error: the audience that issues a credit note. */
+export function mayReversePayment(actor: Actor, now: Date): boolean {
+  const action = named('billing.payment.reversal.write');
+  if (action) {
+    return canActor(actor, action, {}, now);
+  }
+  return hasRole(actor, 'owner', 'admin', 'finance');
+}
