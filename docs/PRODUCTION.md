@@ -4118,3 +4118,20 @@ running was the memory plugin's summariser.
 - `BillingPage-Bxfhkc42.js` carries `billing/debtors`, "Issue credit note", "Statement of account", "All households", `credit-quote` and `statement.pdf`; `BooksPage-BIkgBVZl.js` reads `accounting/settings`.
 
 **Addendum, 07:00 UTC: migration 455 applied by the operator.** Run in the Supabase SQL editor as one transaction, in the runner's shape (audit context, the file's statements, the `schema_migration` row `74963ec6…`), on staging and then production. Both databases now stand at **145**, in step with `main`. On each, `journal_entry_source_table_check` admits `credit_note`, `app.unposted_money_events()` carries `released_net_fils` and fingerprints (`5fb0e19f…`) equal to a local database migrated by the runner, and `app_role` may execute it. No credit note existed on production, so nothing was waiting to post.
+
+## What was done on 2026-10-23: the sixtieth live pass — reversing a payment recorded in error
+
+**08:58 UTC: main `bb62e2e5`, PR 300, on the operator's word ("push live").** PR 300's first `verify` failed only on the load-flaky `useNewEnquiryCount` and a qEEG page test's 5 s timeout, and passed on re-run; main's own `verify` and `verify-db` passed on `bb62e2e5` before the archive was made.
+- Billing › Receipts › **Reverse payment**: one payment cancelled in full, with a reason, by owner, admin or finance; the row reads "Reversed <date>". The balance, the debtors list and statements, the books (`payment.reversed`: Dr receivable / Cr cash, bank or link clearing) and "received this month" follow. The payment drawer's copy points to it.
+
+**Databases, 145 → 148 on both, through Supabase's migration tool in the runner's shape** — staging first, then production: `419_payment_reversal.sql` (`2411adf8…`), `456_post_payment_reversals.sql` (`4352cb9b…`), `982_money_ledger_less_reversals.sql` (`b8a8af2f…`). All three replace functions with `create or replace` and the same signatures; no drop. The new table's policies were created with 419: `tenant_isolation`, `ledger_readers`, `ledger_writers`, `helper_reach_read`, `helper_reach_write`.
+- **Fingerprinted against a local database migrated by the runner:** `app.reverse_payment`, `app.unposted_money_events`, `app.practice_money_ledger`, the `app.billing_ledger` view, `payment_reversal`'s columns, constraints and five policies — equal on local, staging and production.
+
+**Build.** Before the upload the host's latest build was the 59th pass's (`01a16786`).
+- Archive `mcwellness-bb62e2e5.tar.gz`, 8,237,059 bytes, sha256 `b169ceb9…`, through `hosting_deploy` with the stored settings.
+- Build `01a167fd`. Entry `index-CgUgJtRK.js` → `index-CK3n87Aa.js`, flipped about 45 s after the start. The old entry answers 404.
+
+**Verified.**
+- Health 200 in 0.24 s and deep health 200 in 0.34 s.
+- `POST /api/billing/payments/:id/reversal` answers 401 without a sign-in.
+- `BillingPage-zATHbI5J.js` carries "Reverse payment", `/reversal`, "This cancels the whole payment" and "reverse it in Receipts"; `BooksPage-DLgLs7ib.js` names "Payment reversed".
