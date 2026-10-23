@@ -33,7 +33,7 @@ create table payment_reversal (
   client_id       uuid not null references client (id),
   payment_id      uuid not null,
   reversed_on     date not null,
-  -- The function enforces eight characters; the table only refuses nothing.
+  -- The table requires a non-blank reason; the function enforces eight characters.
   reason          text not null check (length(btrim(reason)) >= 1),
   idempotency_key text not null,
   created_at      timestamptz not null default now(),
@@ -49,6 +49,8 @@ create table payment_reversal (
   foreign key (tenant_id, client_id) references client (tenant_id, id)
 );
 comment on table public.payment_reversal is 'audited: client';
+comment on column public.payment_reversal.reason is
+  'Kept through erasure, as invoice.waiver_reason and credit_note.reason are (financial record); the screen asks for no names or health details.';
 create index payment_reversal_tenant_idx on payment_reversal (tenant_id);
 create index payment_reversal_client_idx on payment_reversal (tenant_id, client_id, reversed_on);
 create index payment_reversal_created_by_idx on payment_reversal (created_by);

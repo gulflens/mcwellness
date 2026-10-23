@@ -595,7 +595,7 @@ eight characters of real text).
 - **Table `payment_reversal`** (migration 419): one per payment (unique
   `payment_id`), with `reversed_on` (the practice's own today), `reason` and
   `idempotency_key`. No number series, no document. `app_role` has `select` only.
-  The reason is kept through an erasure, as the credit-note reason is, and is
+  `payment_reversal.reason` is kept through an erasure, as `credit_note.reason` and `invoice.waiver_reason` are (financial record), and is
   kept out of every list (`ReceiptRow` carries `reversedOn` and `reversalId`).
 - **Function `app.reverse_payment(payment_id, reason, idempotency_key)`** is the
   one writer (security definer, role check inside). Refusals: `already_reversed`
