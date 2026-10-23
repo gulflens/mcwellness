@@ -80,7 +80,8 @@ export type SendDocumentResponse = z.infer<typeof SendDocumentResponse>;
 export const MonthlyMoneyResponse = z.object({
   /** YYYY-MM. */
   month: z.string(),
-  cashCollectedFils: z.number().int().nonnegative(),
+  // Net of reversals (982), so a month that corrected an earlier one can read below nought.
+  cashCollectedFils: z.number().int(),
   revenueRecognisedFils: z.number().int().nonnegative(),
   deferredNetFils: z.number().int().nonnegative(),
 });

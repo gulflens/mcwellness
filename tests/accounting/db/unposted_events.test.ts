@@ -327,4 +327,67 @@ describe('a credit note in the books', () => {
       );
     }
   });
+
+  it('offers a reversal once, as a second event on its payment, and not after it is posted', async () => {
+    await rolledBack(h.owner, async () => {
+      const actor = h.data.users[0]!.id;
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_roles', 'owner', true)",
+        [SEED_TENANT_ID],
+      );
+      await setAuditContext(h.owner, actor, 'reversing one payment by hand');
+      await h.owner.query(
+        'insert into payment_reversal (tenant_id, client_id, payment_id, reversed_on, reason, ' +
+          'idempotency_key, created_by) values ($1, $2, $3, $4, $5, $6, $7)',
+        [
+          SEED_TENANT_ID,
+          h.clientId(0),
+          payments[0],
+          '2026-05-02',
+          'Recorded twice by mistake.',
+          '0000000e-0000-4000-8000-0000000000c1',
+          actor,
+        ],
+      );
+      const offered = async () =>
+        (
+          await h.owner.query<EventRow>(
+            'select source_table, source_id, source_event, occurred_on::text as occurred_on, ' +
+              'amount_fils::text as amount_fils, method ' +
+              "from app.unposted_money_events() where source_event = 'payment.reversed'",
+          )
+        ).rows;
+      const first = await offered();
+      expect(first).toHaveLength(1);
+      expect(first[0]).toMatchObject({
+        source_table: 'payment',
+        source_id: payments[0],
+        occurred_on: '2026-05-02',
+        amount_fils: '105000',
+        method: 'transfer',
+      });
+      const year = await h.owner.query<{ id: string }>(
+        "select app.fiscal_year_for('2026-05-02') as id",
+      );
+      const entry = await h.owner.query<{ id: string }>(
+        'insert into journal_entry (tenant_id, entered_on, fiscal_year_id, kind, memo, ' +
+          'source_table, source_id, source_event, created_by) ' +
+          "values ($1, '2026-05-02', $2, 'automatic', 'Payment reversed', 'payment', $3, " +
+          "'payment.reversed', $4) returning id",
+        [SEED_TENANT_ID, year.rows[0]!.id, payments[0], actor],
+      );
+      const accounts = await h.owner.query<{ code: string; id: string }>(
+        "select code, id from account where tenant_id = $1 and code in ('1010', '1200')",
+        [SEED_TENANT_ID],
+      );
+      const idOf = (code: string) => accounts.rows.find((r) => r.code === code)!.id;
+      await h.owner.query(
+        'insert into journal_line (tenant_id, entry_id, line_no, account_id, debit_fils, credit_fils, created_by) ' +
+          'values ($1, $2, 1, $3, 105000, 0, $5), ($1, $2, 2, $4, 0, 105000, $5)',
+        [SEED_TENANT_ID, entry.rows[0]!.id, idOf('1200'), idOf('1010'), actor],
+      );
+      await h.owner.query('set constraints all immediate');
+      expect(await offered()).toHaveLength(0);
+    });
+  });
 });

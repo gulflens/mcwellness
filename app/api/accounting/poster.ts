@@ -130,6 +130,18 @@ export function toEvent(row: EventRow): MoneyEvent | null {
         amountFils: fils(amount(row.amount_fils)),
       };
     }
+    case 'payment.reversed': {
+      const method = METHODS.find((m) => m === row.method);
+      if (!method) {
+        return null;
+      }
+      return {
+        event: 'payment.reversed',
+        ...common,
+        method,
+        amountFils: fils(amount(row.amount_fils)),
+      };
+    }
     case 'credit.consumed':
       return {
         event: 'credit.consumed',

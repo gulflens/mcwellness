@@ -523,3 +523,84 @@ describe('after credit notes', () => {
     }
   });
 });
+
+describe('after a payment reversed', () => {
+  /**
+   * A cash payment recorded in error, posted, then reversed and posted again:
+   * cash is back down by the amount and receivable back up, and the
+   * receivable identity of section 7 gains "+ reversals".
+   */
+  const AMOUNT = 77_700;
+  const tenantFigure = async (sql: string): Promise<number> => {
+    const { rows } = await h.owner.query<{ total: string }>(sql, [h.data.tenant.id]);
+    return Number(rows[0]?.total ?? 0);
+  };
+  const balanceOf = async (code: string): Promise<number> => {
+    const tb = await get<TrialBalance>(`/api/accounting/statements/trial-balance?asOf=${AS_OF}`);
+    return tb.rows.find((row) => row.accountCode === code)?.balanceFils ?? 0;
+  };
+  const runPoster = async (): Promise<number> => {
+    const posted = await h.call('POST', '/api/accounting/post', SEEDED.owner, {}, REASON);
+    expect(posted.status).toBe(200);
+    const body = (await posted.json()) as { posted: number; unknown: number };
+    expect(body.unknown).toBe(0);
+    return body.posted;
+  };
+
+  it('takes the cash back out and puts the debt back, and the identity holds', async () => {
+    await runPoster();
+    const recorded = await h.call(
+      'POST',
+      '/api/billing/payments',
+      SEEDED.owner,
+      { clientId: h.clientId(0), method: 'cash', amountFils: AMOUNT },
+      { 'idempotency-key': '0000000e-0000-4000-8000-0000000000a1' },
+    );
+    expect(recorded.status).toBe(201);
+    await runPoster();
+    const cashBefore = await balanceOf('1020');
+    const receivableBefore = await balanceOf('1200');
+
+    const payment = await h.owner.query<{ id: string }>(
+      "select id from payment where client_id = $1 and method = 'cash' and amount_fils = $2",
+      [h.clientId(0), AMOUNT],
+    );
+    const reversed = await h.call(
+      'POST',
+      `/api/billing/payments/${payment.rows[0]!.id}/reversal`,
+      SEEDED.owner,
+      {
+        reason: 'Recorded twice by mistake.',
+        idempotencyKey: '0000000e-0000-4000-8000-0000000000a2',
+      },
+    );
+    expect(reversed.status).toBe(201);
+    expect(await runPoster()).toBe(1);
+
+    expect(await balanceOf('1020')).toBe(cashBefore - AMOUNT);
+    expect(await balanceOf('1200')).toBe(receivableBefore + AMOUNT);
+    // Run twice, the poster adds nothing.
+    expect(await runPoster()).toBe(0);
+
+    const invoiced = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from invoice where tenant_id = $1',
+    );
+    const paid = await tenantFigure(
+      'select coalesce(sum(amount_fils), 0)::text as total from payment where tenant_id = $1',
+    );
+    const reversals = await tenantFigure(
+      'select coalesce(sum(p.amount_fils), 0)::text as total from payment_reversal r ' +
+        'join payment p on p.tenant_id = r.tenant_id and p.id = r.payment_id ' +
+        'where r.tenant_id = $1',
+    );
+    const waived = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from invoice ' +
+        'where tenant_id = $1 and waived_at is not null',
+    );
+    const credited = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from credit_note where tenant_id = $1',
+    );
+    expect(reversals).toBe(AMOUNT);
+    expect(await balanceOf('1200')).toBe(invoiced - paid + reversals - waived - credited);
+  });
+});
