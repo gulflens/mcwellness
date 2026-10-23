@@ -1,11 +1,17 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { isWithin, toCsv, zohoAccountRows, zohoJournalRows } from '../../../domain/accounting';
+import {
+  isWithin,
+  toCsv,
+  yearBoundsContaining,
+  zohoAccountRows,
+  zohoJournalRows,
+} from '../../../domain/accounting';
 import { isoDateIn } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayReadBooks } from './access';
 import { csvResponse } from './csv-response';
-import { readChart, readPostedLines } from './rows';
+import { readChart, readPostedLines, readSetting } from './rows';
 import { IsoDate } from './schema';
 
 /**
@@ -28,12 +34,17 @@ export function mountExports(api: Hono<ApiEnv>, now: () => Date = () => new Date
     if (!parsed.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
+    const db = c.get('db');
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
     const to = parsed.data.to ?? today;
-    const from = parsed.data.from ?? `${to.slice(0, 4)}-01-01`;
-    const lines = (await readPostedLines(c.get('db'))).filter((line) =>
-      isWithin(line.enteredOn, from, to),
-    );
+    // The start of the financial year `to` falls in, as the statements' own
+    // period defaults (./statements.ts), never 1 January.
+    let from = parsed.data.from;
+    if (!from) {
+      const setting = await readSetting(db);
+      from = yearBoundsContaining(to, setting.yearEndMonth, setting.yearEndDay).startsOn;
+    }
+    const lines = (await readPostedLines(db)).filter((line) => isWithin(line.enteredOn, from, to));
     return csvResponse(c, `zoho-journal-${from}-${to}.csv`, toCsv(zohoJournalRows(lines)));
   });
 

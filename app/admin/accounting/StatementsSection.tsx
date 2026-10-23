@@ -11,6 +11,7 @@ import { DateField } from '../../shell/components/DateField';
 import { Table } from '../../shell/components/Table';
 import { DOWNLOAD_REFUSED, downloadCsv } from './download';
 import { formatFils } from './money';
+import { useDefaultPeriod, type Period } from './useDefaultPeriod';
 import { ACCOUNT_TYPE_WORDS } from './words';
 
 /**
@@ -33,9 +34,6 @@ type Statements = {
 };
 
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; statements: Statements };
-
-const YEAR_START = () => `${new Date().getUTCFullYear()}-01-01`;
-const YEAR_END = () => `${new Date().getUTCFullYear()}-12-31`;
 
 const MONEY_COLUMNS = [
   { key: 'code', header: 'Code', render: (row: { accountCode: string }) => row.accountCode },
@@ -84,9 +82,14 @@ function DownloadCsv({ path, children }: { path: string; children: ReactNode }) 
 }
 
 export function StatementsSection() {
+  const period = useDefaultPeriod();
+  return period ? <Statements initial={period} /> : <Note>Reading the books.</Note>;
+}
+
+function Statements({ initial }: { initial: Period }) {
   const { apiFetch } = useAuth();
-  const [from, setFrom] = useState(YEAR_START);
-  const [to, setTo] = useState(YEAR_END);
+  const [from, setFrom] = useState(initial.from);
+  const [to, setTo] = useState(initial.to);
   const [state, setState] = useState<State>({ kind: 'loading' });
 
   const load = useCallback(() => {
