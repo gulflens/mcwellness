@@ -32,8 +32,7 @@ export const WORDS = {
    * notes-design.md, "Documents"). "Tax Credit Note" is, like "Tax Invoice", a
    * claim about a VAT registration, and is chosen the same way.
    *
-   * OWNER REVIEW: every Arabic string in this block is the assistant's wording
-   * and awaits the owner's review of the Arabic.
+   * The Arabic in this block was approved by the owner on 2026-10-23.
    */
   taxCreditNote: { en: 'Tax Credit Note', ar: 'إشعار دائن ضريبي' },
   creditNote: { en: 'Credit Note', ar: 'إشعار دائن' },
@@ -48,8 +47,7 @@ export const WORDS = {
    * design.md, "Document"). Not a tax document: nothing in this block says
    * "tax".
    *
-   * OWNER REVIEW: every Arabic string in this block is the assistant's wording
-   * and awaits the owner's review of the Arabic.
+   * The Arabic in this block was approved by the owner on 2026-10-23.
    */
   statement: { en: 'Statement of account', ar: 'كشف حساب' },
   statementSummary: { en: 'Statement summary', ar: 'ملخص الكشف' },
@@ -242,7 +240,7 @@ export const SIMPLIFIED_BASIS: Phrase = {
 
 /**
  * A registered practice's credit note says what it is: it reduces tax that an
- * earlier tax invoice charged. (Arabic awaits the owner's review.)
+ * earlier tax invoice charged. (Arabic approved by the owner on 2026-10-23.)
  */
 export const CREDIT_NOTE_BASIS: Phrase = {
   en: 'A tax credit note, reducing the tax charged on the invoice it credits.',
@@ -386,7 +384,7 @@ export const STATEMENT_NOTE: Phrase = {
   en:
     'Balances are as at the end of the period. A balance marked CR is a credit in the ' +
     "household's favour. Amounts owed are listed by how long each invoice has been open.",
-  // OWNER REVIEW: the assistant's wording.
+  // Arabic approved by the owner on 2026-10-23.
   ar:
     'الأرصدة كما في نهاية الفترة. الرصيد المسبوق بعلامة دائن هو رصيد لصالح الأسرة. ' +
     'تُصنَّف المبالغ المستحقة بحسب المدة التي بقيت فيها كل فاتورة مفتوحة.',
