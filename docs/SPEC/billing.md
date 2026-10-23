@@ -514,7 +514,7 @@ idempotency key travelling in the body). The rules, in short:
   fee.
 
 A payment taken in error is still not a credit note's business: a note reduces
-an invoice, not a payment. Ending a package early, and undoing a visit the
+an invoice, not a payment. It has its own act, in section 4.3a below. Ending a package early, and undoing a visit the
 household actually had, are likewise not corrections of a mistake and are not
 what this builds.
 
@@ -583,6 +583,32 @@ no migration; `docs/superpowers/specs/2026-10-23-debtors-design.md`).
   records of section 5.6 or the books (see `accounting.md`). Its supplier
   block comes from the household's latest invoice snapshot, so a household
   never invoiced has no statement.
+
+### 4.3a Reversing a payment recorded in error (2026-10-23)
+
+`docs/superpowers/specs/2026-10-23-payment-reversal-design.md`. A payment is
+append-only, so a wrong one (wrong amount, recorded twice, wrong client) is
+cancelled whole and the right one recorded afterwards. Owner, admin and finance
+do it from Billing › Receipts (**Reverse payment**, with a reason of at least
+eight characters of real text).
+
+- **Table `payment_reversal`** (migration 419): one per payment (unique
+  `payment_id`), with `reversed_on` (the practice's own today), `reason` and
+  `idempotency_key`. No number series, no document. `app_role` has `select` only.
+  The reason is kept through an erasure, as the credit-note reason is, and is
+  kept out of every list (`ReceiptRow` carries `reversedOn` and `reversalId`).
+- **Function `app.reverse_payment(payment_id, reason, idempotency_key)`** is the
+  one writer (security definer, role check inside). Refusals: `already_reversed`
+  and `client_erased` (409 `reversal_refused`); the same key on the same payment
+  replays the first reversal. Route: `POST /api/billing/payments/:id/reversal`.
+- **Ledger arm.** `app.billing_ledger` gains `entry_kind 'reversal'` of
+  +amount on `reversed_on`, naming the payment's receipt. The balance, the
+  debtors list, the stop-balance and statements follow it: a reversal cancels
+  its payment for any as-at day on or after `reversed_on`, and a statement shows
+  both lines.
+- **Books.** The poster posts a second event on the payment, `payment.reversed`
+  (`docs/SPEC/accounting.md` section 7, migration 456), and "received this
+  month" is net of reversals by `reversed_on` (migration 982).
 
 ### 4.4 Journal entries
 

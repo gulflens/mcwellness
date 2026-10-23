@@ -63,7 +63,8 @@ answer 3).
   idempotencyKey }` → 201 `{ reversal: { id, reversedOn } }`.
   - Error mapping as for credit notes: 409 `reversal_refused` with a refusal,
     400, 403, 404.
-  - The receipt rows (`ReceiptRow`) gain `reversedOn` and `reversalReason`.
+  - The receipt rows (`ReceiptRow`) gain `reversedOn` and `reversalId`. The reason is kept out of the list
+    deliberately.
   - `balance.ts`, `stop-balance.ts` and `ledger-entries.ts` handle `'reversal'`.
 - **Migration 456** (accounting), `domain/accounting/posting.ts` and
   `app/api/accounting/poster.ts`: `payment.reversed`.
