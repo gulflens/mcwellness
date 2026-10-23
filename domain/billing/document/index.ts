@@ -57,6 +57,8 @@ export type {
   PaymentMethod,
   Recipient,
   ReceiptDocument,
+  RenderableDocument,
+  StatementDocument,
   SupplierSnapshot,
 } from './model';
 export { clampForDocument, GEOMETRY, layout, layoutWithBlocks, titleOf } from './render';
@@ -71,6 +73,8 @@ export {
   groupIban,
   money,
   NOT_REGISTERED_BASIS,
+  signedBalance,
+  STATEMENT_NOTE,
   SIMPLIFIED_BASIS,
   waivedNotice,
   WORDMARK,
@@ -80,7 +84,7 @@ export type { Phrase } from './strings';
 
 import { layout, titleOf } from './render';
 import { renderPdf, type DocumentImage, type FontSet } from '../../shared/document';
-import type { MoneyDocument } from './model';
+import type { RenderableDocument } from './model';
 
 /**
  * The one call: a document, the faces and — when the practice has filed one —
@@ -92,7 +96,7 @@ import type { MoneyDocument } from './model';
  * instead (`app/api/billing/document-source.ts`, `practiceLogo`).
  */
 export function renderDocument(
-  document_: MoneyDocument,
+  document_: RenderableDocument,
   fonts: FontSet,
   logo?: DocumentImage | null,
 ): Uint8Array {

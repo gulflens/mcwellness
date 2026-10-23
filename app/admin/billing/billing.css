@@ -1171,3 +1171,30 @@
   flex: none;
   scroll-snap-align: start;
 }
+
+/* Who owes the practice: the totals strip is the balance's own figures; the
+   name opens that household's balance. */
+.debtors__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--s-3) var(--s-4);
+}
+
+.debtors__totals {
+  margin-block: var(--s-4);
+}
+
+.debtor__open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.debtor__open:hover .name > span:first-child {
+  text-decoration: underline;
+}

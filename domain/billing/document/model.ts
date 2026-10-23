@@ -24,6 +24,8 @@
  * Invoice".
  */
 
+import type { Ageing, StatementLine } from '../ageing';
+
 /** The practice as it was on the day, copied onto the row and never read back from `tenant`. */
 export type SupplierSnapshot = {
   legalName: string;
@@ -190,7 +192,36 @@ export type CreditNoteDocument = Omit<InvoiceDocument, 'kind' | 'waivedOn' | 'su
 /** YYYY-MM-DD. */
 export type IsoDate = string;
 
+/**
+ * A household's statement of account (docs/superpowers/specs/
+ * 2026-10-23-debtors-design.md, "Document"): what was charged, paid and
+ * credited between two days, with the balance carried in and the balance at
+ * the end. Made on request and never filed, so it has no number of its own and
+ * its language is the household's, read when it is made. It is not a tax
+ * document and says nothing about tax.
+ *
+ * Balances may be negative: the household is in credit, and the page says so
+ * in words rather than printing a minus sign.
+ */
+export type StatementDocument = {
+  kind: 'statement';
+  locale: DocumentLocale;
+  supplier: SupplierSnapshot;
+  recipient: Recipient;
+  from: IsoDate;
+  to: IsoDate;
+  openingFils: number;
+  lines: readonly StatementLine[];
+  closingFils: number;
+  /** What is owed at the end of the period, by how long it has been owed. */
+  ageing: Ageing;
+};
+
+/** The documents the practice files. A statement is made on request and is not among them. */
 export type MoneyDocument = InvoiceDocument | ReceiptDocument | CreditNoteDocument;
+
+/** Everything `renderDocument` can draw: the filed documents and the statement. */
+export type RenderableDocument = MoneyDocument | StatementDocument;
 
 /**
  * Whether this document may say the word "tax".

@@ -19,8 +19,10 @@ import {
   type InvoiceLine,
   type Page,
   type ReceiptDocument,
+  type StatementDocument,
   type SupplierSnapshot,
 } from '../../domain/billing/document';
+import { fils } from '../../domain/shared';
 import { undrawable } from '../../domain/shared/document';
 
 /**
@@ -1096,5 +1098,111 @@ describe('a credit note', () => {
     );
     expect(titleOf(creditNoteFor(REGISTERED))).toBe('Tax Credit Note CN-000001');
     expect(titleOf(creditNoteFor(UNREGISTERED))).toBe('Credit Note CN-000001');
+  });
+});
+
+describe('a statement of account', () => {
+  const lines: StatementDocument['lines'] = [
+    {
+      on: '2026-09-02',
+      reference: 'INV-000123',
+      kind: 'charge',
+      chargedFils: fils(70000),
+      paidFils: fils(0),
+      balanceFils: fils(90000),
+    },
+    {
+      on: '2026-09-10',
+      reference: 'RCP-000007',
+      kind: 'payment',
+      chargedFils: fils(0),
+      paidFils: fils(40000),
+      balanceFils: fils(50000),
+    },
+    {
+      on: '2026-09-15',
+      reference: 'CN-000002',
+      kind: 'credit',
+      chargedFils: fils(0),
+      paidFils: fils(12300),
+      balanceFils: fils(37700),
+    },
+  ];
+
+  function statementFor(over: Partial<StatementDocument> = {}): StatementDocument {
+    return {
+      kind: 'statement',
+      supplier: UNREGISTERED,
+      recipient: HOUSEHOLD,
+      locale: 'en',
+      from: '2026-08-01',
+      to: '2026-10-23',
+      openingFils: fils(20000),
+      lines,
+      closingFils: fils(37700),
+      ageing: {
+        b0to30Fils: fils(11111),
+        b31to60Fils: fils(22222),
+        b61to90Fils: fils(33333),
+        over90Fils: fils(44444),
+        owedFils: fils(37700),
+        oldestOpenOn: '2026-07-01',
+      },
+      ...over,
+    };
+  }
+
+  it('is headed Statement of account, with the period, balances, references and buckets', () => {
+    const page = extractAll(renderDocument(statementFor(), fonts));
+    expect(page).toContain('STATEMENT OF ACCOUNT');
+    expect(page).toContain('1 August 2026');
+    expect(page).toContain('23 October 2026');
+    expect(page).toContain('200.00');
+    expect(page).toContain('377.00');
+    for (const reference of ['INV-000123', 'RCP-000007', 'CN-000002']) {
+      expect(page).toContain(reference);
+    }
+    for (const bucket of ['111.11', '222.22', '333.33', '444.44']) {
+      expect(page).toContain(bucket);
+    }
+    expect(page).toContain('MW-000099');
+    expect(page.toLowerCase()).not.toContain('tax');
+    expect(titleOf(statementFor())).toBe('Statement of account MW-000099');
+  });
+
+  it('is set in Arabic for an Arabic household', () => {
+    const page = extractAll(renderDocument(statementFor({ locale: 'ar' }), fonts));
+    expect(page).toContain(asCopied('كشف حساب'));
+    expect(page).not.toContain('STATEMENT OF ACCOUNT');
+  });
+
+  it('shows a household in credit as credit, never as a negative figure', () => {
+    const page = extractAll(
+      renderDocument(
+        statementFor({
+          closingFils: fils(-5000),
+          lines: [{ ...lines[2]!, balanceFils: fils(-5000) }],
+        }),
+        fonts,
+      ),
+    );
+    expect(page).toContain('50.00');
+    expect(page).toContain('IN CREDIT');
+    expect(page).toContain('CR');
+    expect(page).not.toContain('-50.00');
+    expect(page).not.toContain('- AED 50.00');
+  });
+
+  it('runs onto a second page when it has many lines, with the same bytes twice', () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      ...lines[0]!,
+      reference: `INV-${String(i + 1).padStart(6, '0')}`,
+    }));
+    const doc = statementFor({ lines: many });
+    const a = renderDocument(doc, fonts);
+    expect(extractText(a).join(' ')).toContain('INV-000060');
+    expect(createHash('sha256').update(a).digest('hex')).toBe(
+      createHash('sha256').update(renderDocument(doc, fonts)).digest('hex'),
+    );
   });
 });

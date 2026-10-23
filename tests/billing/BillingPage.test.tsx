@@ -120,6 +120,22 @@ function mount(
     const url = String(input);
     if (url === '/api/me') return json(me);
     if (url === '/api/billing/service-types') return json(SERVICE_TYPES);
+    if (url.startsWith('/api/billing/debtors?')) {
+      return json({
+        asOf: '2026-10-23',
+        totals: {
+          owedFils: 0,
+          b0to30Fils: 0,
+          b31to60Fils: 0,
+          b61to90Fils: 0,
+          over90Fils: 0,
+          inCreditFils: 0,
+          households: 0,
+        },
+        rows: [],
+        truncated: false,
+      });
+    }
     if (url.startsWith('/api/billing/vat-rate')) return json(VAT_RATE);
     if (url === '/api/billing/prices' && init?.method === 'POST') {
       posted.push(JSON.parse(String(init.body)));
@@ -365,7 +381,7 @@ describe('the money screen’s four sections', () => {
     await screen.findByRole('button', { name: 'Add price' });
     fireEvent.click(screen.getByRole('button', { name: 'Balances' }));
     expect(screen.queryByRole('button', { name: 'Add price' })).toBeNull();
-    expect(screen.getByText('Find a client to see what they have left.')).toBeTruthy();
+    expect(screen.getByRole('searchbox', { name: 'Client' })).toBeTruthy();
   });
 
   it('opens the section the address names, so a rail link lands on it', async () => {

@@ -200,6 +200,24 @@ type LineRow = {
   gross_fils: number;
 };
 
+/**
+ * The practice as its latest invoice to this household snapshotted it, for a
+ * statement — a paper that is made now and filed nowhere, so the freshest
+ * snapshot is the one that says who the practice is today without reading the
+ * live `tenant` (the rule at the head of this file). Null for a household that
+ * has never been invoiced.
+ */
+export async function latestSupplier(db: Db, clientId: string): Promise<SupplierSnapshot | null> {
+  const found = await db.query<SupplierColumns>(
+    `select ${SUPPLIER_COLUMNS} from invoice ` +
+      'where tenant_id = app.current_tenant_id() and client_id = $1 ' +
+      'order by issued_on desc, number desc limit 1',
+    [clientId],
+  );
+  const row = found.rows[0];
+  return row ? supplierOf(row) : null;
+}
+
 /** The invoice as a document, or null when this practice has no such invoice. */
 export async function invoiceDocument(
   db: Db,
