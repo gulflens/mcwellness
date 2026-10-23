@@ -4116,3 +4116,5 @@ running was the memory plugin's summariser.
 - Health 200 in 0.25 s and deep health 200 in 0.39 s.
 - `GET /api/billing/debtors`, `/debtors.csv`, `/invoices/:id/credit-quote`, `/clients/:id/statement.pdf` and `POST /invoices/:id/credit-note` answer 401 without a sign-in.
 - `BillingPage-Bxfhkc42.js` carries `billing/debtors`, "Issue credit note", "Statement of account", "All households", `credit-quote` and `statement.pdf`; `BooksPage-BIkgBVZl.js` reads `accounting/settings`.
+
+**Addendum, 07:00 UTC: migration 455 applied by the operator.** Run in the Supabase SQL editor as one transaction, in the runner's shape (audit context, the file's statements, the `schema_migration` row `74963ec6…`), on staging and then production. Both databases now stand at **145**, in step with `main`. On each, `journal_entry_source_table_check` admits `credit_note`, `app.unposted_money_events()` carries `released_net_fils` and fingerprints (`5fb0e19f…`) equal to a local database migrated by the runner, and `app_role` may execute it. No credit note existed on production, so nothing was waiting to post.
