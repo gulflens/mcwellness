@@ -45,3 +45,5 @@ export {
 export type { CallOutFeeSetting, ChargingOutcome } from './lateCancellation';
 export { creditableFor, proportionalVat } from './creditNote';
 export type { CreditableCredit, CreditableInvoice, CreditPlan, CreditRefusal } from './creditNote';
+export { ageing, openItems, statementLines } from './ageing';
+export type { Ageing, LedgerEntry, OpenItem, OpenItems, StatementLine } from './ageing';
