@@ -71,6 +71,17 @@ describe('openItems', () => {
     ]);
   });
 
+  it("a credit note naming an invoice that isn't in the ledger joins the pool", () => {
+    expect(openOf([jan, feb, credit('1', '2026-02-02', 120, 'not-in-ledger')]).open).toEqual([180]);
+  });
+
+  it('pays the oldest invoice first, then by reference on the same day', () => {
+    const b = charge('000009', '2026-03-01', 100);
+    const a = charge('000008', '2026-03-01', 100);
+    const result = openItems([b, a, payment('1', '2026-03-02', 100, null)], ASOF);
+    expect(result.items.map((item) => item.reference)).toEqual(['INV-000009']);
+  });
+
   it('an overpayment becomes credit and leaves no open invoice', () => {
     const result = openItems([jan, payment('1', '2026-01-02', 130, null)], ASOF);
     expect(result.items).toEqual([]);
@@ -157,6 +168,22 @@ describe('statementLines', () => {
       ['CN-1', 0, 50, 450],
     ]);
     expect(result.closingFils).toBe(450);
+  });
+
+  it('a statement includes entries dated exactly on from and on to', () => {
+    const result = statementLines(
+      [
+        charge('000001', '2026-01-31', 10),
+        charge('000002', '2026-02-01', 20),
+        charge('000003', '2026-02-28', 30),
+        charge('000004', '2026-03-01', 40),
+      ],
+      '2026-02-01',
+      '2026-02-28',
+    );
+    expect(result.openingFils).toBe(10);
+    expect(result.lines.map((line) => line.reference)).toEqual(['INV-000002', 'INV-000003']);
+    expect(result.closingFils).toBe(60);
   });
 
   it('shows a negative balance when the household is in credit', () => {
