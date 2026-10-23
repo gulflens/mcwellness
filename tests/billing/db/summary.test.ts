@@ -236,3 +236,47 @@ describe('the summary route', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('a payment reversed', () => {
+  it('comes off received in the month of the reversal, and stays in the month it arrived', async () => {
+    const actor = h.data.users[SEEDED.owner]?.id ?? null;
+    const arrived = '2026-03';
+    const AMOUNT = 123_400;
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, false), set_config('app.actor_id', $2, false), " +
+        "set_config('app.actor_roles', 'owner', false), " +
+        "set_config('app.request_id', $3, false), set_config('app.reason', 'a fixture', false)",
+      [h.data.tenant.id, actor, REQUEST_ID],
+    );
+    const inserted = await h.owner.query<{ id: string }>(
+      'insert into payment (tenant_id, client_id, method, amount_fils, received_at, created_by) ' +
+        "values ($1, $2, 'transfer', $3, '2026-03-10T09:00:00+04:00', $4) returning id",
+      [h.data.tenant.id, h.clientId(2), AMOUNT, actor],
+    );
+    const month = (
+      await h.owner.query<{ m: string }>(
+        "select to_char(now() at time zone t.timezone, 'YYYY-MM') as m from tenant t where t.id = $1",
+        [h.data.tenant.id],
+      )
+    ).rows[0]!.m;
+    expect(month).not.toBe(arrived);
+
+    const arrivedBefore = (await summary(arrived)).cashCollectedFils;
+    const monthBefore = (await summary(month)).cashCollectedFils;
+    expect(arrivedBefore).toBe(AMOUNT);
+
+    const res = await h.call(
+      'POST',
+      `/api/billing/payments/${inserted.rows[0]!.id}/reversal`,
+      SEEDED.owner,
+      {
+        reason: 'Recorded against the wrong client.',
+        idempotencyKey: '0000000e-0000-4000-8000-0000000000b1',
+      },
+    );
+    expect(res.status).toBe(201);
+
+    expect((await summary(arrived)).cashCollectedFils).toBe(arrivedBefore);
+    expect((await summary(month)).cashCollectedFils).toBe(monthBefore - AMOUNT);
+  });
+});

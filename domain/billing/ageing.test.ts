@@ -19,6 +19,16 @@ function payment(id: string, on: string, amount: number, invoiceId: string | nul
 function credit(id: string, on: string, amount: number, invoiceId: string): LedgerEntry {
   return { kind: 'credit', id, reference: `CN-${id}`, on, amountFils: fils(amount), invoiceId };
 }
+function reversal(paymentId: string, on: string, amount: number): LedgerEntry {
+  return {
+    kind: 'reversal',
+    id: paymentId,
+    reference: `PAY-${paymentId}`,
+    on,
+    paymentId,
+    amountFils: fils(amount),
+  };
+}
 function openOf(entries: LedgerEntry[], asOf = ASOF) {
   const result = openItems(entries, asOf);
   return { open: result.items.map((item) => item.openFils), credit: result.creditFils };
@@ -99,6 +109,34 @@ describe('openItems', () => {
     expect(result.items).toEqual([
       { invoiceId: '000002', reference: 'INV-000002', on: '2026-02-01', openFils: 200 },
     ]);
+  });
+});
+
+describe('openItems with a reversed payment', () => {
+  const jan = charge('000001', '2026-01-01', 100);
+
+  it('a payment reversed on or before the as-at day never happened', () => {
+    const entries = [
+      jan,
+      payment('1', '2026-01-05', 100, '000001'),
+      reversal('1', '2026-01-09', 100),
+    ];
+    expect(openOf(entries, '2026-01-09')).toEqual({ open: [100], credit: 0 });
+    expect(openOf(entries)).toEqual({ open: [100], credit: 0 });
+  });
+
+  it('as at a day before the reversal the payment still counts', () => {
+    const entries = [
+      jan,
+      payment('1', '2026-01-05', 100, '000001'),
+      reversal('1', '2026-01-09', 100),
+    ];
+    expect(openOf(entries, '2026-01-08')).toEqual({ open: [], credit: 0 });
+  });
+
+  it('an unnamed payment reversed no longer pays the oldest invoice', () => {
+    const entries = [jan, payment('1', '2026-01-05', 60, null), reversal('1', '2026-01-06', 60)];
+    expect(openOf(entries)).toEqual({ open: [100], credit: 0 });
   });
 });
 
@@ -184,6 +222,19 @@ describe('statementLines', () => {
     expect(result.openingFils).toBe(10);
     expect(result.lines.map((line) => line.reference)).toEqual(['INV-000002', 'INV-000003']);
     expect(result.closingFils).toBe(60);
+  });
+
+  it('a reversal is a charge: the payment stays, the balance goes back up', () => {
+    const result = statementLines(
+      [payment('1', '2026-02-05', 80, null), reversal('1', '2026-02-09', 80)],
+      '2026-02-01',
+      '2026-02-28',
+    );
+    expect(result.lines.map((line) => [line.kind, line.chargedFils, line.paidFils])).toEqual([
+      ['payment', 0, 80],
+      ['reversal', 80, 0],
+    ]);
+    expect(result.closingFils).toBe(0);
   });
 
   it('shows a negative balance when the household is in credit', () => {

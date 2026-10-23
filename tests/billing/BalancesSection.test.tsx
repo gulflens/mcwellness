@@ -99,6 +99,7 @@ function balance(over: Record<string, unknown> = {}) {
     chargedFils: 1_157_625,
     paidFils: 1_084_125,
     creditedFils: 0,
+    reversedFils: 0,
     purchases: [
       {
         id: SILVER_PURCHASE_ID,
@@ -335,7 +336,7 @@ describe('BalancesSection', () => {
     expect(screen.getByText('AED 735.00 is outstanding.')).toBeTruthy();
     expect(
       screen.getByText(
-        "A payment can't be changed once recorded. If one was recorded in error, tell the owner.",
+        "A payment can't be changed once recorded. If one was recorded in error, reverse it in Receipts and record the right one.",
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/credit note/i)).toBeNull();

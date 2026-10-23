@@ -33,10 +33,12 @@ const COLUMNS =
   // payments that close together would then compare as one.
   'to_char(p.received_at at time zone \'UTC\', \'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') as received_key, ' +
   'p.client_id, i.reference as invoice_reference, bd.document_id, ' +
+  "to_char(rv.reversed_on, 'YYYY-MM-DD') as reversed_on, rv.id as reversal_id, " +
   "c.mrn as client_mrn, c.given_name || ' ' || c.family_name as client_name " +
   'from payment p join client c on c.id = p.client_id ' +
   'left join invoice i on i.id = p.invoice_id ' +
-  'left join billing_document bd on bd.payment_id = p.id ';
+  'left join billing_document bd on bd.payment_id = p.id ' +
+  'left join payment_reversal rv on rv.tenant_id = p.tenant_id and rv.payment_id = p.id ';
 
 const SQL =
   COLUMNS +
@@ -73,6 +75,8 @@ type ReceiptDbRow = {
   client_name: string;
   invoice_reference: string | null;
   document_id: string | null;
+  reversed_on: string | null;
+  reversal_id: string | null;
 };
 
 export function mountReceipts(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -169,5 +173,7 @@ function toReceiptRow(row: ReceiptDbRow): ReceiptRow {
     clientName: row.client_name,
     invoiceReference: row.invoice_reference,
     documentId: row.document_id,
+    reversedOn: row.reversed_on,
+    reversalId: row.reversal_id,
   };
 }

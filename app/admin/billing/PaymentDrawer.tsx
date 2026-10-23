@@ -215,7 +215,8 @@ export function PaymentDrawer({
           />
 
           <p className="small muted">
-            A payment can't be changed once recorded. If one was recorded in error, tell the owner.
+            A payment can't be changed once recorded. If one was recorded in error, reverse it in
+            Receipts and record the right one.
           </p>
 
           {formError ? <Note tone="critical">{formError}</Note> : null}

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReceiptsSection } from '../../app/admin/billing/ReceiptsSection';
-import { json, mountWith, narrowTo, OWNER } from './harness';
+import { json, LEAD_PRACTITIONER, mountWith, narrowTo, OWNER } from './harness';
 
 afterEach(cleanup);
 
@@ -26,6 +26,8 @@ const RECEIPTS = [
     clientName: 'Rowan Meadow',
     invoiceReference: 'INV-000002',
     documentId: null,
+    reversedOn: null,
+    reversalId: null,
   },
   {
     id: '00000007-0000-4000-8000-000000000001',
@@ -39,6 +41,8 @@ const RECEIPTS = [
     clientName: 'Hazel Harbour',
     invoiceReference: null,
     documentId: null,
+    reversedOn: null,
+    reversalId: null,
   },
 ];
 
@@ -233,6 +237,7 @@ describe('finding a payment, the older ones, and recording one', () => {
           chargedFils: 25_000,
           paidFils: 0,
           creditedFils: 0,
+          reversedFils: 0,
           outstandingFils: 25_000,
           nextExpiryOn: null,
           expiryWarning: 'none',
@@ -276,5 +281,106 @@ describe('finding a payment, the older ones, and recording one', () => {
     mountWith(OWNER, <ReceiptsSection canWrite={false} />, routes);
     await screen.findByText('RCP-000002');
     expect(screen.queryByRole('button', { name: 'Record a payment' })).toBeNull();
+  });
+});
+
+/** Reversing a payment recorded in error (payment reversal, Task 4). */
+describe('reversing a payment', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const REVERSED = {
+    ...RECEIPTS[0]!,
+    reversedOn: '2026-09-04',
+    reversalId: '00000008-0000-4000-8000-000000000001',
+  };
+  const FINANCE = { ...OWNER, roles: ['finance'] };
+
+  it('offers Reverse payment to finance, on a payment that stands', async () => {
+    mountWith(FINANCE, <ReceiptsSection />, routes);
+    await screen.findByText('RCP-000002');
+    expect(screen.getAllByRole('button', { name: 'Reverse payment' })).toHaveLength(2);
+  });
+
+  it('offers it to no one else', async () => {
+    mountWith(LEAD_PRACTITIONER, <ReceiptsSection />, routes);
+    await screen.findByText('RCP-000002');
+    expect(screen.queryByRole('button', { name: 'Reverse payment' })).toBeNull();
+  });
+
+  it('says Reversed and the date on a reversed row, with no action', async () => {
+    mountWith(OWNER, <ReceiptsSection />, (url) =>
+      url === '/api/billing/payments/search'
+        ? json({ receipts: [REVERSED], nextBefore: null })
+        : null,
+    );
+    expect(await screen.findByText('Reversed 4 Sept 2026')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Reverse payment' })).toBeNull();
+  });
+
+  it('offers it on a phone too, after a tap', async () => {
+    narrowTo(360);
+    mountWith(OWNER, <ReceiptsSection />, routes);
+    const day = await screen.findByRole('region', { name: 'Receipts, Thursday, 3 September' });
+    fireEvent.click(within(day).getByRole('button'));
+    expect(screen.getByRole('button', { name: 'Reverse payment' })).toBeTruthy();
+  });
+
+  it('reads a negative month clearly, with a true minus', async () => {
+    mountWith(OWNER, <ReceiptsSection />, (url) =>
+      url === '/api/billing/summary'
+        ? json({
+            month: '2026-09',
+            cashCollectedFils: -15_000,
+            revenueRecognisedFils: 0,
+            deferredNetFils: 0,
+          })
+        : routes(url),
+    );
+    const label = await screen.findByText('Received this month (AED)');
+    expect(label.nextElementSibling?.textContent).toBe('\u2212150.00');
+  });
+
+  it('opens the drawer, and a success marks the row reversed without reloading', async () => {
+    const { requests } = mountWith(OWNER, <ReceiptsSection />, (url, init) => {
+      if (url === `/api/billing/payments/${RECEIPTS[0]!.id}/reversal` && init?.method === 'POST') {
+        return json(
+          { reversal: { id: '00000008-0000-4000-8000-000000000001', reversedOn: '2026-09-04' } },
+          201,
+        );
+      }
+      return routes(url);
+    });
+    await screen.findByText('RCP-000002');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reverse payment' })[0]!);
+    const reason = await screen.findByLabelText('Why is it being reversed?');
+    const confirm = within(screen.getByRole('dialog')).getByRole('button', {
+      name: 'Reverse payment',
+    });
+    expect(confirm).toHaveProperty('disabled', true);
+    fireEvent.change(reason, { target: { value: 'entered twice' } });
+    fireEvent.click(confirm);
+    expect(await screen.findByText('Reversed 4 Sept 2026')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(requests.filter((r) => r.url === '/api/billing/payments/search')).toHaveLength(1);
+  });
+
+  it('says why a 409 refused, and keeps the row as it was', async () => {
+    mountWith(OWNER, <ReceiptsSection />, (url, init) =>
+      init?.method === 'POST' && url.endsWith('/reversal')
+        ? json({ error: 'reversal_refused', refusal: 'already_reversed' }, 409)
+        : routes(url),
+    );
+    await screen.findByText('RCP-000002');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reverse payment' })[0]!);
+    fireEvent.change(await screen.findByLabelText('Why is it being reversed?'), {
+      target: { value: 'entered twice' },
+    });
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Reverse payment' }),
+    );
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'This payment has already been reversed.',
+    );
+    expect(screen.queryByText(/^Reversed /)).toBeNull();
   });
 });

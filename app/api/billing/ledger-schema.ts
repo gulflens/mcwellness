@@ -413,6 +413,8 @@ export const BalanceResponse = z.object({
   paidFils: z.number().int().nonnegative(),
   /** What credit notes have taken off the charges, in fils (migration 417). */
   creditedFils: z.number().int().nonnegative(),
+  /** Payments recorded in error and reversed, in fils; they are still in `paidFils` (migration 419). */
+  reversedFils: z.number().int().nonnegative(),
   purchases: z.array(PurchaseRow),
 });
 export type BalanceResponse = z.infer<typeof BalanceResponse>;
@@ -591,6 +593,21 @@ export const IssueCreditNoteInput = z.object({
   idempotencyKey: IdempotencyKey,
 });
 export type IssueCreditNoteInput = z.infer<typeof IssueCreditNoteInput>;
+
+/** Reversing a payment: why, and the key that makes a repeat press the same reversal. */
+export const ReversePaymentInput = z.object({
+  reason: Reason,
+  idempotencyKey: IdempotencyKey,
+});
+export type ReversePaymentInput = z.infer<typeof ReversePaymentInput>;
+
+export const ReversalRefusal = z.enum(['client_erased', 'already_reversed']);
+export type ReversalRefusal = z.infer<typeof ReversalRefusal>;
+
+export const ReversePaymentResponse = z.object({
+  reversal: z.object({ id: z.uuid(), reversedOn: z.string() }),
+});
+export type ReversePaymentResponse = z.infer<typeof ReversePaymentResponse>;
 
 export const CreditRefusal = z.enum([
   'statement',

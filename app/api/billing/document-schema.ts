@@ -80,7 +80,8 @@ export type SendDocumentResponse = z.infer<typeof SendDocumentResponse>;
 export const MonthlyMoneyResponse = z.object({
   /** YYYY-MM. */
   month: z.string(),
-  cashCollectedFils: z.number().int().nonnegative(),
+  // Net of reversals (982), so a month that corrected an earlier one can read below nought.
+  cashCollectedFils: z.number().int(),
   revenueRecognisedFils: z.number().int().nonnegative(),
   deferredNetFils: z.number().int().nonnegative(),
 });
@@ -106,6 +107,9 @@ export const ReceiptRow = z.object({
   invoiceReference: z.string().nullable(),
   /** The rendered PDF, when one has been filed. */
   documentId: z.uuid().nullable(),
+  /** The day it was reversed as recorded in error, and the reversal's id; null when it stands. */
+  reversedOn: z.string().nullable(),
+  reversalId: z.uuid().nullable(),
 });
 export type ReceiptRow = z.infer<typeof ReceiptRow>;
 

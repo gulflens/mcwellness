@@ -30,6 +30,7 @@ const BILLING_TABLES = [
   'credit_note',
   'credit_note_line',
   'credit_note_series',
+  'payment_reversal',
   'price',
   'vat_setting',
 ] as const;

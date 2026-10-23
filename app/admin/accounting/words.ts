@@ -41,6 +41,7 @@ const EVENT_WORDS: Record<string, string> = {
   'invoice.issued': 'Invoice issued',
   'fee.waived': 'Call-out fee waived',
   'payment.received': 'Payment received',
+  'payment.reversed': 'Payment reversed',
   'credit.consumed': 'Credit used up',
   'credit.waived': 'Credit restored',
   'credit.expired': 'Credit expired',

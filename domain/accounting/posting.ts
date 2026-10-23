@@ -41,6 +41,14 @@ export type MoneyEvent =
       amountFils: Fils;
     }
   | {
+      /** A payment recorded in error, cancelled in full on the day it was reversed (419). */
+      event: 'payment.reversed';
+      sourceId: string;
+      occurredOn: IsoDate;
+      method: 'cash' | 'transfer' | 'link';
+      amountFils: Fils;
+    }
+  | {
       event: 'credit.consumed';
       sourceId: string;
       occurredOn: IsoDate;
@@ -78,6 +86,7 @@ export const SOURCE_TABLE: Record<
   'invoice.issued': 'invoice',
   'fee.waived': 'invoice',
   'payment.received': 'payment',
+  'payment.reversed': 'payment',
   'credit.consumed': 'entitlement',
   'credit.waived': 'entitlement',
   'credit.expired': 'entitlement',
@@ -121,6 +130,7 @@ function worthNothing(event: MoneyEvent): boolean {
     case 'credit_note.issued':
       return event.grossFils === 0 && event.netFils === 0 && event.vatFils === 0;
     case 'payment.received':
+    case 'payment.reversed':
       return event.amountFils === 0;
     case 'credit.consumed':
     case 'credit.waived':
@@ -173,6 +183,14 @@ export function postingsFor(
       return draft(event, 'Payment received', [
         dr(accountByRole(chart, role).id, event.amountFils),
         cr(accountByRole(chart, 'receivable').id, event.amountFils),
+      ]);
+    }
+    case 'payment.reversed': {
+      const role =
+        event.method === 'transfer' ? 'bank' : event.method === 'cash' ? 'cash' : 'link_clearing';
+      return draft(event, 'Payment reversed', [
+        dr(accountByRole(chart, 'receivable').id, event.amountFils),
+        cr(accountByRole(chart, role).id, event.amountFils),
       ]);
     }
     case 'credit.consumed':

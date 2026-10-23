@@ -401,3 +401,13 @@ export function formatDiscount(row: {
     ? formatFils(row.discountFils)
     : `${row.discountBasisPoints / 100}%`;
 }
+
+/**
+ * A figure that can fall below nought: "Received this month" is net of
+ * reversals (migration 982), so a month that corrected an earlier one can read
+ * "−150.00". The sign is a real minus (U+2212), not the hyphen formatFils
+ * prints, so it cannot be mistaken for a dash or a range.
+ */
+export function formatNetFils(amountFils: number): string {
+  return formatFils(amountFils).replace(/^-/, '−');
+}

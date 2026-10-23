@@ -73,8 +73,14 @@ Nothing posted is ever edited or deleted.
 - **Not for these:** a credit note corrects a mistake. It is not how a client
   ends a package early, and it cannot undo a visit the client actually had —
   tell the owner about either.
-- **A wrong payment:** a payment cannot be changed once recorded, and a credit
-  note does not touch payments. Tell the owner.
+- **A wrong payment:** a payment cannot be changed once recorded, but it can
+  be reversed. In Billing › Receipts, find the payment and choose **Reverse
+  payment**, say why in a few words (no names or health details), and confirm.
+  This cancels the whole payment: the client's balance, the debtors list and
+  the books follow, and the row reads "Reversed" with the day. Then record the
+  right payment the usual way. A credit note does not touch payments. Owner,
+  admin and finance can reverse; a client whose record has been erased cannot
+  have a payment reversed, so ask the owner.
 - Never correct an invoice or a payment with a manual journal entry against
   Receivable: the client's balance in billing would not follow.
 - **A period that is locked:** a late payment or invoice lands on the first
@@ -106,7 +112,6 @@ Nothing posted is ever edited or deleted.
 ## Done outside the system for now
 
 Bank reconciliation and statement import, suppliers and bills, VAT on
-purchases and the VAT return, refunds paid out, reversing a payment recorded
-in error, payment reminders, payroll and WPS, fixed assets and depreciation.
+purchases and the VAT return, refunds paid out, payment reminders, payroll and WPS, fixed assets and depreciation.
 These are planned for later. The Zoho Books exports are there for when the
 practice moves its books.

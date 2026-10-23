@@ -151,6 +151,7 @@ class StatementPage extends DocumentPage {
       charge: WORDS.invoice,
       payment: WORDS.paymentItem,
       credit: WORDS.creditNote,
+      reversal: WORDS.paymentReversed,
     } as const;
     return [
       made(

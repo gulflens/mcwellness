@@ -162,3 +162,16 @@ describe('the money received between two days', () => {
     expect(cashCollectedBetween(payments, '2026-01-01', '2026-01-31')).toBe(0);
   });
 });
+
+describe('a payment reversed', () => {
+  it('comes off the month of the reversal, which may read below nought', () => {
+    // 982 hands a reversal over as a negative payment dated the day it was made.
+    const payments: CollectedPayment[] = [
+      { amountFils: fils(100_000), receivedOn: '2026-03-10' },
+      { amountFils: fils(-100_000), receivedOn: '2026-04-02' },
+    ];
+    expect(monthlyMoney(payments, [], '2026-03').cashCollectedFils).toBe(100_000);
+    expect(monthlyMoney(payments, [], '2026-04').cashCollectedFils).toBe(-100_000);
+    expect(cashCollectedBetween(payments, '2026-01-01', '2026-12-31')).toBe(0);
+  });
+});

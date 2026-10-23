@@ -6,7 +6,7 @@ import { fils } from '../../../domain/shared';
  * names joined on, as the debtors list and the statement both read it.
  */
 export type LedgerDbRow = {
-  entry_kind: 'charge' | 'payment' | 'credit';
+  entry_kind: 'charge' | 'payment' | 'credit' | 'reversal';
   source_id: string;
   reference: string;
   occurred_on: string;
@@ -31,6 +31,15 @@ export function ledgerEntry(row: LedgerDbRow): LedgerEntry | null {
       ...base,
       amountFils: fils(-row.amount_fils),
       invoiceId: row.invoice_id,
+    };
+  }
+  if (row.entry_kind === 'reversal') {
+    // Plus the payment's amount; source_id is the payment it cancels.
+    return {
+      kind: 'reversal',
+      ...base,
+      paymentId: row.source_id,
+      amountFils: fils(row.amount_fils),
     };
   }
   if (row.invoice_id === null) return null;

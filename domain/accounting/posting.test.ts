@@ -84,6 +84,7 @@ describe('SOURCE_TABLE', () => {
     expect(SOURCE_TABLE['invoice.issued']).toBe('invoice');
     expect(SOURCE_TABLE['fee.waived']).toBe('invoice');
     expect(SOURCE_TABLE['payment.received']).toBe('payment');
+    expect(SOURCE_TABLE['payment.reversed']).toBe('payment');
     expect(SOURCE_TABLE['credit.consumed']).toBe('entitlement');
     expect(SOURCE_TABLE['credit.waived']).toBe('entitlement');
     expect(SOURCE_TABLE['credit.expired']).toBe('entitlement');
@@ -225,6 +226,31 @@ describe('postingsFor', () => {
       dr(LINK.id, fils(1_084_125)),
     );
     expect(postingsFor(PAYMENT, CHART)?.memo).toBe('Payment received');
+  });
+
+  it('posts a reversed payment as the mirror of its receipt, on the payment as source', () => {
+    const reversed: MoneyEvent = {
+      event: 'payment.reversed',
+      sourceId: PAY,
+      occurredOn: '2026-09-10',
+      method: 'transfer',
+      amountFils: fils(1_084_125),
+    };
+    const draft = postingsFor(reversed, CHART);
+    expect(draft?.memo).toBe('Payment reversed');
+    expect(draft?.enteredOn).toBe('2026-09-10');
+    expect(draft?.source).toEqual({ table: 'payment', id: PAY, event: 'payment.reversed' });
+    expect(draft?.lines).toEqual([
+      dr(RECEIVABLE.id, fils(1_084_125)),
+      cr(BANK.id, fils(1_084_125)),
+    ]);
+    expect(postingsFor({ ...reversed, method: 'cash' }, CHART)?.lines[1]).toEqual(
+      cr(CASH.id, fils(1_084_125)),
+    );
+    expect(postingsFor({ ...reversed, method: 'link' }, CHART)?.lines[1]).toEqual(
+      cr(LINK.id, fils(1_084_125)),
+    );
+    expect(postingsFor({ ...reversed, amountFils: fils(0) }, CHART)).toBeNull();
   });
 
   it('recognises a consumed credit as session or brain-map income by service code', () => {
