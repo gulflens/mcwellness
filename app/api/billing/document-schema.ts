@@ -12,19 +12,24 @@ export const CreateDocumentInput = z
   .object({
     invoiceId: z.uuid().optional(),
     paymentId: z.uuid().optional(),
+    // A credit note is named by kind and source: `{ kind: 'credit_note', sourceId }`.
+    kind: z.literal('credit_note').optional(),
+    sourceId: z.uuid().optional(),
   })
   // One or the other, never both and never neither: an invoice and a receipt
   // are different documents and a request that named both would be asking for
   // one of them by accident.
-  .refine(
-    (value) => (value.invoiceId === undefined) !== (value.paymentId === undefined),
-    'Name an invoice or a payment, not both.',
-  );
+  .refine((value) => {
+    const creditNote = value.kind !== undefined && value.sourceId !== undefined;
+    if ((value.kind === undefined) !== (value.sourceId === undefined)) return false;
+    const named = [value.invoiceId, value.paymentId, creditNote ? value.sourceId : undefined];
+    return named.filter((id) => id !== undefined).length === 1;
+  }, 'Name an invoice, a payment or a credit note, and only one.');
 export type CreateDocumentInput = z.infer<typeof CreateDocumentInput>;
 
 export const DocumentRow = z.object({
   id: z.uuid(),
-  kind: z.enum(['invoice', 'receipt']),
+  kind: z.enum(['invoice', 'receipt', 'credit_note']),
   /** "INV-000001" or "RCP-000004" — what a family quotes on the telephone. */
   reference: z.string(),
   clientId: z.uuid(),

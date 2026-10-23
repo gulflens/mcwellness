@@ -464,8 +464,59 @@ and not by this flag.** A credit note is the Federal Tax Authority's own
 mechanism for undoing a taxable supply, with its own number and its own entry
 in the VAT return; `waived_at` is a switch on the charge, which is honest
 bookkeeping for an unregistered practice and is not a tax document. The flag is
-for the unregistered period only, and registering is the moment to build the
+for the unregistered period only, and registering was the moment to build the
 credit note rather than widen it.
+
+**Credit notes are built** (2026-10-22, migrations 416, 417, 418, 455 and 981;
+`docs/superpowers/specs/2026-10-22-credit-notes-design.md`). Finance, an admin
+or the owner issues one against an issued invoice from Billing › Invoices
+("Issue credit note"; `GET /api/billing/invoices/:id/credit-quote` previews it
+and `POST /api/billing/invoices/:id/credit-note` issues it, the
+idempotency key travelling in the body). The rules, in short:
+
+- **One per invoice, for everything still creditable.** A unique index on
+  `credit_note.invoice_id`. It has its own gapless series (`CN-000001`, per
+  practice, `credit_note_series`), `credit_note_line` rows copying the credited
+  invoice lines' figures, and a reason. VAT is read from the invoice's lines,
+  never typed.
+- **The credits behind the invoice.** The unused ones take the new entitlement
+  status `credited` and are stamped `credited_by` with the note's id; credits
+  already consumed stay consumed. A package with three of ten sessions used
+  credits exactly the seven unused ones.
+- **`app.issue_credit_note` does it in one transaction**, locking in the order
+  audit chain, then the invoice (`FOR NO KEY UPDATE`), then its credits. The
+  ledger (`app.billing_ledger`) gains a `credit` branch, so the household's
+  balance already follows the note.
+- **The waiver and the note exclude each other.** `app.waive_call_out_fee`
+  refuses a fee charged while registered for VAT (409 `vat_registered`) and an
+  invoice that already has a credit note (409 `credited`); a registered fee is
+  corrected by credit note only. The credit waiver
+  (`POST /api/billing/entitlements/:id/waiver`) refuses, with the same 409
+  `credited`, a credit whose invoice has a credit note: the note already
+  settled that sale, and a replacement credit would be a session given twice.
+- **The reason is kept through an erasure.** `credit_note.reason` is part of
+  the financial record, as a credit's `waiver_reason` is, and an erasure leaves
+  it as written (unlike a void's `void_reason`, which an erasure replaces). So
+  the drawer says under the field: "Don't include names or health details."
+- **The books and the VAT return follow.** The note posts as
+  `credit_note.issued` (`accounting.md` section 7, migration 455), and
+  `app.vat_taxable_supplies_fils` is net of the credit notes issued in the
+  window, clamped at zero (migration 981).
+- **Filing and sending.** The note is filed as a `billing_document` of kind
+  `credit_note` (418) and prints as "TAX CREDIT NOTE" in the invoice's
+  layout. **It cannot be sent yet**: the send route answers 422 `not_sendable`
+  until the shared sender admits the kind
+  (`docs/CHANGE-REQUESTS/billing-credit-notes.md`); the owner downloads the PDF
+  and hands it over. The household's portal does not list it yet either (same
+  file); the balance does follow.
+- **Refused:** an invoice for an erased client (conservative; the owner can
+  relax it), an invoice that already has a note, and a statement or a waived
+  fee.
+
+A payment taken in error is still not a credit note's business: a note reduces
+an invoice, not a payment. Ending a package early, and undoing a visit the
+household actually had, are likewise not corrections of a mistake and are not
+what this builds.
 
 **A no-show carrying the fee is Claude's default of 2026-09-06, not the
 founder's decision**, and it is recorded as one in
@@ -494,8 +545,12 @@ and the appointment keep it whole.
 This is **not a credit note**, and does not start one. A void withdraws a
 record that should never have been written — the household never had that
 visit — so nothing supplied is being undone. A visit the household actually
-had, closed on the phone, is still unwound only by a credit note, which stays
-unbuilt, as the paragraph on registration above already says.
+had, closed on the phone, is not unwound by this; the credit note built on
+2026-10-22 (paragraph on registration above) corrects an invoice issued in
+error and does not undo a delivered visit. **A known gap:** voiding a visit
+whose invoice was later credited still restores an available credit, a free
+session; the fix is in 969 and is session-capture's, asked for in
+`docs/CHANGE-REQUESTS/billing-credit-notes.md` request 5.
 
 ### 4.4 Journal entries
 
@@ -781,7 +836,7 @@ Collection rate                 invoiced vs collected
 ## 10. Decide before building
 
 1. **Final price list.** The table in §2.2 is a defensible starting point from competitor data, not a recommendation — test it.
-2. **Refund policy wording**, reviewed by a lawyer, shown at point of sale.
+2. **Refund policy wording**, shown at point of sale. The owner decides the wording (2026-10-22).
 3. ~~**Expiry period** and whether extensions are discretionary or ruled.~~ **Answered 2026-09-11 and 2026-09-12** (§4.3): there is no expiry period unless the practice sets one, per programme and per price, in days or months; there are no extensions, because a programme with no term has nothing to extend.
 4. **Tax point on prepaid packages** — in writing, from a UAE tax advisor.
 5. **BNPL provider** — Tabby and Tamara both work; compare merchant fees at your ticket size.

@@ -169,7 +169,28 @@ export type ReceiptDocument = {
   settles: { reference: string; issuedOn: string } | null;
 };
 
-export type MoneyDocument = InvoiceDocument | ReceiptDocument;
+/**
+ * A credit note (migration 416): the invoice's own page in the credit note's
+ * words. Its lines, supplier, locale and recipient come off the credit note's
+ * own rows (snapshotted when it was issued), never off the live invoice.
+ *
+ * No waiver, no date of supply: a credit note neither forgives a charge nor
+ * supplies anything on another day. Its `bank` is always null — it asks for
+ * nothing — and its `discountFils` nought, a credit note's lines being the
+ * net figures that came off.
+ */
+export type CreditNoteDocument = Omit<InvoiceDocument, 'kind' | 'waivedOn' | 'suppliedOn'> & {
+  kind: 'credit_note';
+  /** "CN-000001" is `reference`; this is the invoice it credits. */
+  credits: { reference: string; issuedOn: IsoDate };
+  /** Why it was issued, in the words the issuer typed. */
+  reason: string;
+};
+
+/** YYYY-MM-DD. */
+export type IsoDate = string;
+
+export type MoneyDocument = InvoiceDocument | ReceiptDocument | CreditNoteDocument;
 
 /**
  * Whether this document may say the word "tax".

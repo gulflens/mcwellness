@@ -1,9 +1,15 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { hasRole } from '@domain/shared';
 import type { MonthlyMoneyResponse } from '../../api/billing/document-schema';
-import { InvoiceSearchResponse, type InvoiceRow } from '../../api/billing/ledger-schema';
+import {
+  InvoiceSearchResponse,
+  type InvoiceRow,
+  type IssueCreditNoteResponse,
+} from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { formatDate } from './BillingPage';
+import { CreditNoteDrawer } from './CreditNoteDrawer';
 import { useDocumentActions } from './documents';
 import { LedgerSearch, groupBy, monthOf, type Choice } from './LedgerSearch';
 import { MoneyFigures } from './MoneyFigures';
@@ -72,7 +78,12 @@ type State =
   | { kind: 'ready'; book: Book; more: 'idle' | 'loading' | 'error' };
 
 export function InvoicesSection() {
-  const { apiFetch } = useAuth();
+  const { apiFetch, session } = useAuth();
+  // Owner, admin and finance, the three roles the route and the database
+  // function both check (app/api/billing/access.ts, migration 417).
+  const canCredit =
+    session.status === 'signed-in' && hasRole(session.actor, 'owner', 'admin', 'finance');
+  const [crediting, setCrediting] = useState<InvoiceRow | null>(null);
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [figures, setFigures] = useState<MonthlyMoneyResponse | null>(null);
   const [search, setSearch] = useState('');
@@ -187,8 +198,30 @@ export function InvoicesSection() {
     }
   }
 
+  function credited(row: InvoiceRow, note: IssueCreditNoteResponse['creditNote']) {
+    setCrediting(null);
+    setState((current) =>
+      current.kind === 'ready'
+        ? {
+            ...current,
+            book: {
+              ...current.book,
+              invoices: current.book.invoices.map((r) =>
+                r.id === row.id
+                  ? { ...r, creditNoteReference: note.reference, creditNoteId: note.id }
+                  : r,
+              ),
+            },
+          }
+        : current,
+    );
+  }
+
   const actions: RowActions = {
     open: (row) => void open(row.id, { invoiceId: row.id }),
+    openCreditNote: (row) =>
+      row.creditNoteId ? void open(`cn-${row.id}`, { creditNoteId: row.creditNoteId }) : undefined,
+    credit: canCredit ? (row) => setCrediting(row) : null,
     send: (row) => void startSending(row),
     opening: busyOn,
     preparing: sendingOn,
@@ -256,6 +289,14 @@ export function InvoicesSection() {
         </div>
       ) : null}
 
+      {crediting ? (
+        <CreditNoteDrawer
+          invoice={crediting}
+          onClose={() => setCrediting(null)}
+          onIssued={(note) => credited(crediting, note)}
+        />
+      ) : null}
+
       {sending ? (
         <SendDrawer
           documentId={sending.documentId}
@@ -271,6 +312,9 @@ export function InvoicesSection() {
 type RowActions = {
   open: (row: InvoiceRow) => void;
   send: (row: InvoiceRow) => void;
+  openCreditNote: (row: InvoiceRow) => void;
+  /** Null when the reader may not issue credit notes. */
+  credit: ((row: InvoiceRow) => void) | null;
   opening: string | null;
   preparing: string | null;
 };
@@ -281,10 +325,15 @@ function KindWords({ row }: { row: InvoiceRow }) {
   // figures, and stops counting in the balance (migration 408). So the row
   // says so: without it the total owed and the charges listed above it do not
   // add up, and nobody can see why.
-  return row.waivedAt ? (
+  const note = row.waivedAt
+    ? `Waived ${formatDate(row.waivedAt)}`
+    : row.creditNoteReference
+      ? `Credited ${row.creditNoteReference}`
+      : null;
+  return note ? (
     <span className="name">
       <span>{KIND_LABELS[row.kind]}</span>
-      <span className="small muted">Waived {formatDate(row.waivedAt)}</span>
+      <span className="small muted">{note}</span>
     </span>
   ) : (
     <>{KIND_LABELS[row.kind]}</>
@@ -308,6 +357,19 @@ function DocumentButtons({ row, actions }: { row: InvoiceRow; actions: RowAction
       >
         {actions.preparing === row.id ? 'Preparing…' : 'Send'}
       </Button>
+      {row.creditNoteId ? (
+        <Button
+          variant="quiet"
+          disabled={actions.opening === `cn-${row.id}`}
+          onClick={() => actions.openCreditNote(row)}
+        >
+          {actions.opening === `cn-${row.id}` ? 'Opening…' : 'Open credit note PDF'}
+        </Button>
+      ) : actions.credit && row.kind !== 'statement' && !row.waivedAt ? (
+        <Button variant="quiet" onClick={() => actions.credit?.(row)}>
+          Issue credit note
+        </Button>
+      ) : null}
     </span>
   );
 }

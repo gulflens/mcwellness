@@ -94,15 +94,19 @@ export function layoutWithBlocks(
   fonts: FontSet,
   logo: DocumentImage | null = null,
 ): { pages: Page[]; blocks: Block[][] } {
-  return document_.kind === 'invoice'
-    ? invoiceLayout(document_, fonts, logo)
-    : receiptLayout(document_, fonts, logo);
+  return document_.kind === 'receipt'
+    ? receiptLayout(document_, fonts, logo)
+    : invoiceLayout(document_, fonts, logo);
 }
 
 /** The document's title, which is what a reader's browser tab and file manager show. */
 export function titleOf(document_: MoneyDocument): string {
   if (document_.kind === 'receipt') {
     return `${WORDS.receipt.en} ${document_.reference}`;
+  }
+  if (document_.kind === 'credit_note') {
+    const credit = chargesVat(document_.supplier) ? WORDS.taxCreditNote : WORDS.creditNote;
+    return `${credit.en} ${document_.reference}`;
   }
   const words = chargesVat(document_.supplier) ? WORDS.taxInvoice : WORDS.invoice;
   return `${words.en} ${document_.reference}`;

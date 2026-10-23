@@ -9,6 +9,7 @@ import { SEED_TODAY } from '../../../db/seed/generate';
 import {
   SEEDED,
   setPracticePrices,
+  setPracticeVatRegistration,
   silverInput,
   SILVER_CODE,
   startHarness,
@@ -537,6 +538,60 @@ describe('waiving the fee', () => {
     const after = await h.owner.query<{ waived_at: Date | null }>(
       'select waived_at from invoice where id = $1',
       [rows[0]?.id],
+    );
+    expect(after.rows[0]?.waived_at).toBeNull();
+  });
+});
+
+describe('waiving a fee issued while registered for VAT', () => {
+  it('the waiver refuses a fee issued while VAT-registered', async () => {
+    // docs/SPEC/billing.md section 4.3: once the practice is registered, a
+    // fee is reversed by a credit note and not by this flag (migration 417).
+    await setPracticeVatRegistration(h, true);
+    let invoiceId: string | undefined;
+    try {
+      await asCoordinator();
+      const appointment = await bookAppointment(h.clientId(0));
+      await callOff(appointment, 'cancelled_late', 'client_request');
+      const { rows } = await h.owner.query<{ id: string; registered: boolean | null }>(
+        'select id, supplier_vat_registered as registered from invoice where appointment_id = $1',
+        [appointment],
+      );
+      invoiceId = String(rows[0]?.id);
+      expect(rows[0]?.registered).toBe(true);
+
+      const res = await h.call('POST', `/api/billing/invoices/${invoiceId}/waiver`, SEEDED.owner, {
+        reason: 'Registered now; this should be a credit note.',
+      });
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { code?: string }).code).toBe('vat_registered');
+
+      // And the door refuses it too, with the route out of the way.
+      const user = h.data.users[SEEDED.owner];
+      await h.owner.query('begin');
+      try {
+        await h.owner.query('set local role app_role');
+        await h.owner.query(
+          "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+            "set_config('app.actor_roles', 'finance', true), set_config('app.reason', '', true)",
+          [h.data.tenant.id, user?.id ?? null],
+        );
+        await expect(
+          h.owner.query('select waived from app.waive_call_out_fee($1, $2)', [
+            invoiceId,
+            'Reaching past the route, which is the point of the case.',
+          ]),
+        ).rejects.toThrow('waiver_refused:vat_registered');
+      } finally {
+        await h.owner.query('rollback');
+      }
+    } finally {
+      await setPracticeVatRegistration(h, false);
+      await asCoordinator();
+    }
+    const after = await h.owner.query<{ waived_at: Date | null }>(
+      'select waived_at from invoice where id = $1',
+      [invoiceId],
     );
     expect(after.rows[0]?.waived_at).toBeNull();
   });

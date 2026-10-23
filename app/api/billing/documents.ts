@@ -23,7 +23,12 @@ import {
   SendDocumentInput,
   SendDocumentResponse,
 } from './document-schema';
-import { invoiceDocument, practiceLogo, receiptDocument } from './document-source';
+import {
+  creditNoteDocument,
+  invoiceDocument,
+  practiceLogo,
+  receiptDocument,
+} from './document-source';
 import { documentFonts } from './fonts';
 import { isUuid } from './ids';
 import { documentSender } from '../_middleware/sending';
@@ -66,26 +71,28 @@ import { documentSender } from '../_middleware/sending';
 
 const KIND_SQL =
   'select bd.id, bd.kind, bd.client_id, bd.document_id, d.storage_key, d.sha256, ' +
-  'coalesce(i.reference, p.receipt_reference) as reference, ' +
+  'coalesce(i.reference, p.receipt_reference, cn.reference) as reference, ' +
   // The document's own language (migration 413); for one issued before it,
   // the client's own, so the message is still in one language.
-  "coalesce(i.locale, p.locale, c.preferred_locale, 'en')::text as locale, " +
+  "coalesce(i.locale, p.locale, cn.locale, c.preferred_locale, 'en')::text as locale, " +
   'coalesce(i.supplier_legal_name_ar, si.supplier_legal_name_ar) as practice_name_ar ' +
   'from billing_document bd join document d on d.id = bd.document_id ' +
   // Left: the link and send routes never needed the client's row to answer.
   'left join client c on c.id = bd.client_id ' +
   'left join invoice i on i.id = bd.invoice_id ' +
   'left join payment p on p.id = bd.payment_id ' +
+  'left join credit_note cn on cn.id = bd.credit_note_id ' +
   'left join invoice si on si.id = p.invoice_id ' +
   'where bd.tenant_id = app.current_tenant_id() and bd.document_id = $1';
 
 const EXISTING_SQL =
   'select document_id from billing_document where tenant_id = app.current_tenant_id() ' +
-  "and ((kind = 'invoice' and invoice_id = $1) or (kind = 'receipt' and payment_id = $1))";
+  "and ((kind = 'invoice' and invoice_id = $1) or (kind = 'receipt' and payment_id = $1) " +
+  "or (kind::text = 'credit_note' and credit_note_id = $1))";
 
 type FiledRow = {
   id: string;
-  kind: 'invoice' | 'receipt';
+  kind: 'invoice' | 'receipt' | 'credit_note';
   client_id: string;
   document_id: string;
   storage_key: string;
@@ -110,6 +117,10 @@ async function sourceFor(
     const found = await receiptDocument(db, input.paymentId);
     return found ? { ...found, sourceId: input.paymentId } : null;
   }
+  if (input.kind === 'credit_note' && input.sourceId) {
+    const found = await creditNoteDocument(db, input.sourceId);
+    return found ? { ...found, sourceId: input.sourceId } : null;
+  }
   return null;
 }
 
@@ -133,7 +144,7 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const db = c.get('db');
-    const sourceId = body.data.invoiceId ?? body.data.paymentId ?? '';
+    const sourceId = body.data.invoiceId ?? body.data.paymentId ?? body.data.sourceId ?? '';
 
     // Already rendered: the same document, not a second one.
     const already = await db.query<{ document_id: string }>(EXISTING_SQL, [sourceId]);
@@ -299,7 +310,7 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
 }
 
 const SOURCE_OF_DOCUMENT_SQL =
-  'select invoice_id, payment_id from billing_document ' +
+  'select invoice_id, payment_id, credit_note_id from billing_document ' +
   'where tenant_id = app.current_tenant_id() and document_id = $1';
 
 /**
@@ -310,16 +321,22 @@ const SOURCE_OF_DOCUMENT_SQL =
 async function documentBehind(
   db: Db,
   documentId: string,
-  kind: 'invoice' | 'receipt',
+  kind: 'invoice' | 'receipt' | 'credit_note',
 ): Promise<MoneyDocument | null> {
-  const found = await db.query<{ invoice_id: string | null; payment_id: string | null }>(
-    SOURCE_OF_DOCUMENT_SQL,
-    [documentId],
-  );
+  const found = await db.query<{
+    invoice_id: string | null;
+    payment_id: string | null;
+    credit_note_id: string | null;
+  }>(SOURCE_OF_DOCUMENT_SQL, [documentId]);
   const row = found.rows[0];
   if (!row) return null;
   if (kind === 'invoice') {
     return row.invoice_id ? ((await invoiceDocument(db, row.invoice_id))?.document ?? null) : null;
+  }
+  if (kind === 'credit_note') {
+    return row.credit_note_id
+      ? ((await creditNoteDocument(db, row.credit_note_id))?.document ?? null)
+      : null;
   }
   return row.payment_id ? ((await receiptDocument(db, row.payment_id))?.document ?? null) : null;
 }
@@ -374,6 +391,13 @@ export function mountDocumentSending(
     const row = found.rows[0];
     if (!row) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+
+    // The smallest change that keeps credit notes out of sending (a non-goal,
+    // and `domain/shared/sending` is not this stream's to extend): the kind is
+    // refused here, before a link is signed or anything is audited.
+    if (row.kind === 'credit_note') {
+      return c.json({ error: 'unprocessable', code: 'not_sendable', requestId }, 422);
     }
 
     const contacts = await db.query<{

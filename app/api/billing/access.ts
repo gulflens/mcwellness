@@ -121,6 +121,22 @@ export function mayDiscount(actor: Actor, now: Date): boolean {
   return hasRole(actor, 'owner', 'admin', 'finance');
 }
 
+/**
+ * Issuing a credit note, and asking what one would credit: the owner, an admin
+ * or finance, and nobody else (docs/superpowers/specs/
+ * 2026-10-22-credit-notes-design.md). The same three roles
+ * `app.issue_credit_note` (migration 417) checks for itself. The fallback
+ * names them outright, as `mayDiscount` does: correcting a tax invoice is not
+ * the same act as setting a price, and widening one should not widen the other.
+ */
+export function mayIssueCreditNote(actor: Actor, now: Date): boolean {
+  const action = named('billing.credit_note.write');
+  if (action) {
+    return canActor(actor, action, {}, now);
+  }
+  return hasRole(actor, 'owner', 'admin', 'finance');
+}
+
 /** Invoices: read by everyone who reads the price list. */
 export function mayReadInvoices(actor: Actor, now: Date): boolean {
   return may(actor, 'billing.invoice.read', PRICE_READ, now);

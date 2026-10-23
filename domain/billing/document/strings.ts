@@ -27,6 +27,22 @@ export const WORDS = {
   invoice: { en: 'Invoice', ar: 'فاتورة' },
   receipt: { en: 'Receipt', ar: 'إيصال استلام' },
 
+  /**
+   * The credit note (migration 418; docs/superpowers/specs/2026-10-22-credit-
+   * notes-design.md, "Documents"). "Tax Credit Note" is, like "Tax Invoice", a
+   * claim about a VAT registration, and is chosen the same way.
+   *
+   * OWNER REVIEW: every Arabic string in this block is the assistant's wording
+   * and awaits the owner's review of the Arabic.
+   */
+  taxCreditNote: { en: 'Tax Credit Note', ar: 'إشعار دائن ضريبي' },
+  creditNote: { en: 'Credit Note', ar: 'إشعار دائن' },
+  creditsInvoice: { en: 'Credits invoice', ar: 'إشعار دائن للفاتورة' },
+  reason: { en: 'Reason', ar: 'السبب' },
+  totalCredited: { en: 'Total credited', ar: 'إجمالي المبلغ الدائن' },
+  creditNoteNo: { en: 'Credit note no.', ar: 'رقم الإشعار الدائن' },
+  creditNoteSummary: { en: 'Credit note summary', ar: 'ملخص الإشعار الدائن' },
+
   dateOfSupply: { en: 'Date of supply', ar: 'تاريخ التوريد' },
   dateReceived: { en: 'Date received', ar: 'تاريخ الاستلام' },
 
@@ -191,6 +207,15 @@ export const WORDS = {
 export const SIMPLIFIED_BASIS: Phrase = {
   en: 'A simplified tax invoice, issued to a person who is not registered for VAT.',
   ar: 'فاتورة ضريبية مبسطة صادرة إلى شخص غير مسجل في ضريبة القيمة المضافة.',
+};
+
+/**
+ * A registered practice's credit note says what it is: it reduces tax that an
+ * earlier tax invoice charged. (Arabic awaits the owner's review.)
+ */
+export const CREDIT_NOTE_BASIS: Phrase = {
+  en: 'A tax credit note, reducing the tax charged on the invoice it credits.',
+  ar: 'إشعار دائن ضريبي يخفض الضريبة المحتسبة على الفاتورة المشار إليها.',
 };
 
 /**

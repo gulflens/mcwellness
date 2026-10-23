@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { extractAll } from '../../../domain/billing/document';
+import { extractAll, formatDocumentDate } from '../../../domain/billing/document';
 import type {
   CreateDocumentResponse,
   DocumentLinkResponse,
@@ -11,7 +11,14 @@ import type {
   SellSessionResponse,
 } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
-import { SEEDED, setPracticePrices, startHarness, type Harness } from './support';
+import { IDS, seedClient, seedTenant } from '../../db/helpers';
+import {
+  SEEDED,
+  setPracticePrices,
+  setPracticeVatRegistration,
+  startHarness,
+  type Harness,
+} from './support';
 
 /**
  * Rendering an invoice, filing it, and handing somebody a link to it.
@@ -726,5 +733,254 @@ describe('the practice’s bank account on a filed invoice', () => {
     } finally {
       await setBank(null, null);
     }
+  });
+});
+
+describe('a credit note’s PDF', () => {
+  const REASON = 'Invoiced to the wrong household by mistake.';
+
+  /** Sells one session and credits it, answering both ids and the references. */
+  let keySeq = 0;
+
+  async function creditedInvoice(
+    clientIndex: number,
+  ): Promise<{ invoiceId: string; creditNoteId: string; reference: string }> {
+    const sold = await h.call('POST', '/api/billing/session-purchases', SEEDED.owner, {
+      clientId: h.clientId(clientIndex),
+      serviceTypeId: h.serviceTypeId('nf-session'),
+      purchasedOn: SEED_TODAY,
+    });
+    if (sold.status !== 201) throw new Error(`The session could not be sold: ${sold.status}`);
+    const invoiceId = ((await sold.json()) as { invoiceId: string }).invoiceId;
+    const noted = await h.call(
+      'POST',
+      `/api/billing/invoices/${invoiceId}/credit-note`,
+      SEEDED.owner,
+      {
+        reason: REASON,
+        idempotencyKey: `0000000e-0000-4000-8000-${String((keySeq += 1)).padStart(12, '0')}`,
+      },
+    );
+    if (noted.status !== 201) throw new Error(`The credit note was not issued: ${noted.status}`);
+    const note = ((await noted.json()) as { creditNote: { id: string; reference: string } })
+      .creditNote;
+    return { invoiceId, creditNoteId: note.id, reference: note.reference };
+  }
+
+  async function pageOf(documentId: string): Promise<string> {
+    const { rows } = await h.owner.query<{ storage_key: string }>(
+      'select storage_key from document where id = $1',
+      [documentId],
+    );
+    const bytes = await h.storage.get?.(rows[0]?.storage_key ?? '');
+    if (!bytes) throw new Error('The store holds nothing at that key.');
+    return extractAll(new Uint8Array(bytes));
+  }
+
+  it('files a credit note’s PDF once, and a second call returns the same document', async () => {
+    const { invoiceId, creditNoteId, reference } = await creditedInvoice(1);
+    const first = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      kind: 'credit_note',
+      sourceId: creditNoteId,
+    });
+    expect(first.status).toBe(201);
+    const a = (await first.json()) as CreateDocumentResponse;
+    expect(a.document.kind).toBe('credit_note');
+    expect(a.document.reference).toBe(reference);
+
+    const second = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      kind: 'credit_note',
+      sourceId: creditNoteId,
+    });
+    expect(second.status).toBe(200);
+    expect(((await second.json()) as CreateDocumentResponse).document.id).toBe(a.document.id);
+
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from billing_document where credit_note_id = $1',
+      [creditNoteId],
+    );
+    expect(Number(rows[0]?.n)).toBe(1);
+
+    // It names the invoice it credits and the word it was issued under.
+    const page = await pageOf(a.document.id);
+    const { rows: invoice } = await h.owner.query<{ reference: string }>(
+      'select reference from invoice where id = $1',
+      [invoiceId],
+    );
+    expect(page).toContain(invoice[0]?.reference ?? 'missing');
+    expect(page).toContain('Total credited');
+    expect(page).toContain(REASON);
+    // The credited invoice's own issue date.
+    expect(page).toContain(formatDocumentDate(SEED_TODAY));
+
+    // Kept five years like any financial record.
+    const { rows: kept } = await h.owner.query<{ retention_until: Date | null; kind: string }>(
+      'select retention_until, kind from document where id = $1',
+      [a.document.id],
+    );
+    expect(kept[0]?.kind).toBe('credit_note');
+    expect(kept[0]?.retention_until?.getUTCFullYear()).toBe(2031);
+  });
+
+  it('states both dates and the supplier the credited invoice stated', async () => {
+    // Registered, so the supplier carries a VAT number to print.
+    await setPracticeVatRegistration(h, true);
+    try {
+      const { invoiceId, creditNoteId } = await creditedInvoice(5);
+      const filed = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+        kind: 'credit_note',
+        sourceId: creditNoteId,
+      });
+      expect(filed.status).toBe(201);
+      const page = await pageOf(((await filed.json()) as CreateDocumentResponse).document.id);
+
+      const { rows } = await h.owner.query<{
+        invoice_on: string;
+        note_on: string;
+        vat_trn: string | null;
+        address: string | null;
+      }>(
+        "select to_char(i.issued_on, 'YYYY-MM-DD') as invoice_on, " +
+          "to_char(n.issued_on, 'YYYY-MM-DD') as note_on, n.supplier_vat_trn as vat_trn, " +
+          'n.supplier_address as address from credit_note n join invoice i on i.id = n.invoice_id ' +
+          'where n.id = $1 and i.id = $2',
+        [creditNoteId, invoiceId],
+      );
+      const row = rows[0];
+      if (!row?.vat_trn || !row.address) throw new Error('The note carries no TRN or address.');
+      // The invoice was sold on the seed's day and credited today: two dates,
+      // and the page must tell them apart.
+      expect(row.invoice_on).not.toBe(row.note_on);
+      const flat = page.replace(/\s+/g, ' ');
+      expect(flat).toContain(formatDocumentDate(row.invoice_on));
+      expect(flat).toContain(formatDocumentDate(row.note_on));
+      expect(flat).toContain(row.vat_trn);
+      // The address is set one part to a line, at its commas.
+      expect(flat).toContain(
+        row.address
+          .split(',')
+          .map((part) => part.trim())
+          .join(' '),
+      );
+    } finally {
+      await setPracticeVatRegistration(h, false);
+    }
+  });
+
+  it('will not file a document for a credit note that is not there', async () => {
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      kind: 'credit_note',
+      sourceId: '00000000-0000-4000-8000-00000000dead',
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('will not file, or reveal, another practice’s credit note', async () => {
+    const tenantB = IDS.tenantB;
+    const clientB = IDS.clientB;
+    const invoiceB = '00000000-0000-4000-8000-0000000000b7';
+    const lineB = '00000000-0000-4000-8000-0000000000b8';
+    const noteB = '00000000-0000-4000-8000-0000000000b9';
+    await seedTenant(h.owner, tenantB, IDS.ownerB, 'Synthetic Studio B');
+    await seedClient(h.owner, tenantB, clientB, IDS.ownerB, 'Beta');
+    await h.owner.query(
+      'insert into invoice (id, tenant_id, client_id, number, kind, issued_on, net_fils, ' +
+        "vat_fils, gross_fils, supplier_legal_name) values ($1, $2, $3, 1, 'statement', " +
+        "'2026-09-02', 10000, 0, 10000, 'Synthetic Studio B')",
+      [invoiceB, tenantB, clientB],
+    );
+    await h.owner.query(
+      'insert into invoice_line (id, tenant_id, invoice_id, client_id, line_no, description, ' +
+        'quantity, unit_net_fils, net_fils, vat_rate_basis_points, vat_setting_version, ' +
+        "vat_fils, gross_fils) values ($1, $2, $3, $4, 1, 'Statement', 1, 10000, 10000, 0, 1, " +
+        '0, 10000)',
+      [lineB, tenantB, invoiceB, clientB],
+    );
+    await h.owner.query('begin');
+    await h.owner.query(
+      'insert into credit_note (id, tenant_id, client_id, invoice_id, issued_on, reason, ' +
+        'net_fils, vat_fils, gross_fils, supplier_legal_name, idempotency_key) values ($1, $2, ' +
+        "$3, $4, '2026-09-03', 'Another practice’s note', 10000, 0, 10000, " +
+        "'Synthetic Studio B', 'other-practice-key')",
+      [noteB, tenantB, clientB, invoiceB],
+    );
+    await h.owner.query(
+      'insert into credit_note_line (tenant_id, credit_note_id, client_id, invoice_line_id, ' +
+        'line_no, description, net_fils, vat_rate_basis_points, vat_setting_version, ' +
+        "vat_fils, gross_fils) values ($1, $2, $3, $4, 1, 'Statement', 10000, 0, 1, 0, 10000)",
+      [tenantB, noteB, clientB, lineB],
+    );
+    await h.owner.query('commit');
+
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      kind: 'credit_note',
+      sourceId: noteB,
+    });
+    expect(res.status).toBe(404);
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from billing_document where credit_note_id = $1',
+      [noteB],
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
+  });
+
+  it('refuses an actor outside the invoice audience with a 403', async () => {
+    const { creditNoteId } = await creditedInvoice(1);
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.practitioner, {
+      kind: 'credit_note',
+      sourceId: creditNoteId,
+    });
+    expect(res.status).toBe(403);
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from billing_document where credit_note_id = $1',
+      [creditNoteId],
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
+  });
+
+  it('is not sent: the send route refuses a credit note', async () => {
+    const { creditNoteId } = await creditedInvoice(2);
+    const filed = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      kind: 'credit_note',
+      sourceId: creditNoteId,
+    });
+    const doc = ((await filed.json()) as CreateDocumentResponse).document;
+    const { rows } = await h.owner.query<{ id: string }>(
+      'select id from contact where client_id = $1 limit 1',
+      [h.clientId(2)],
+    );
+    const res = await h.call('POST', `/api/billing/documents/${doc.id}/send`, SEEDED.owner, {
+      channel: 'email',
+      contactId: rows[0]?.id,
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it('is kept when the household is erased', async () => {
+    const { creditNoteId } = await creditedInvoice(3);
+    const filed = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      kind: 'credit_note',
+      sourceId: creditNoteId,
+    });
+    const doc = ((await filed.json()) as CreateDocumentResponse).document;
+    const owner = h.data.users[SEEDED.owner];
+    const clientId = h.clientId(3);
+    const { rows: requested } = await h.owner.query<{ id: string }>(
+      'insert into erasure_request (tenant_id, client_id, reason, created_by) ' +
+        "values ($1, $2, 'The household asked.', $3) returning id",
+      [h.data.tenant.id, clientId, owner?.id],
+    );
+    await h.owner.query(
+      "select set_config('app.actor_id', $1, false), set_config('app.actor_roles', 'owner', false), " +
+        "set_config('app.reason', 'The household asked.', false)",
+      [owner?.id],
+    );
+    await h.owner.query('select app.erase_client($1, $2)', [clientId, requested[0]?.id]);
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select (select count(*) from document where id = $1)::text || ' +
+        "'/' || (select count(*) from billing_document where document_id = $1)::text as n",
+      [doc.id],
+    );
+    expect(rows[0]?.n).toBe('1/1');
   });
 });

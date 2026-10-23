@@ -411,6 +411,8 @@ export const BalanceResponse = z.object({
   outstandingFils: z.number().int(),
   chargedFils: z.number().int().nonnegative(),
   paidFils: z.number().int().nonnegative(),
+  /** What credit notes have taken off the charges, in fils (migration 417). */
+  creditedFils: z.number().int().nonnegative(),
   purchases: z.array(PurchaseRow),
 });
 export type BalanceResponse = z.infer<typeof BalanceResponse>;
@@ -455,6 +457,13 @@ export const InvoiceRow = z.object({
    * rendered yet, not that it cannot be: the screen offers to make it.
    */
   documentId: z.uuid().nullable(),
+  /**
+   * The reference of the credit note that corrects this invoice (CN-000001),
+   * or null when none has been issued. An invoice has at most one.
+   */
+  creditNoteReference: z.string().nullable(),
+  /** That note's id, which the screen needs to open its PDF. Null with the reference. */
+  creditNoteId: z.uuid().nullable(),
 });
 export type InvoiceRow = z.infer<typeof InvoiceRow>;
 
@@ -572,3 +581,50 @@ export const WaiveCallOutFeeResponse = z.object({
   waivedGrossFils: z.number().int().nonnegative(),
 });
 export type WaiveCallOutFeeResponse = z.infer<typeof WaiveCallOutFeeResponse>;
+
+/**
+ * Issuing a credit note (migration 417). The key is the drawer's, made when
+ * the person presses the button, so the same press retried is the same note.
+ */
+export const IssueCreditNoteInput = z.object({
+  reason: Reason,
+  idempotencyKey: IdempotencyKey,
+});
+export type IssueCreditNoteInput = z.infer<typeof IssueCreditNoteInput>;
+
+export const CreditRefusal = z.enum([
+  'statement',
+  'waived',
+  'already_credited',
+  'nothing_left',
+  'client_erased',
+]);
+export type CreditRefusal = z.infer<typeof CreditRefusal>;
+
+/** What a credit note on an invoice would credit, or why none may be issued. */
+export const CreditQuoteResponse = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    plan: z.object({
+      netFils: z.number().int().nonnegative(),
+      vatFils: z.number().int().nonnegative(),
+      grossFils: z.number().int().nonnegative(),
+      /** The part of the net that comes off sessions owed rather than income. */
+      releasedNetFils: z.number().int().nonnegative(),
+      usedCredits: z.number().int().nonnegative(),
+      unusedCredits: z.number().int().nonnegative(),
+    }),
+  }),
+  z.object({ ok: z.literal(false), refusal: CreditRefusal }),
+]);
+export type CreditQuoteResponse = z.infer<typeof CreditQuoteResponse>;
+
+export const IssueCreditNoteResponse = z.object({
+  creditNote: z.object({
+    id: z.uuid(),
+    reference: z.string(),
+    grossFils: z.number().int().nonnegative(),
+    issuedOn: z.string(),
+  }),
+});
+export type IssueCreditNoteResponse = z.infer<typeof IssueCreditNoteResponse>;

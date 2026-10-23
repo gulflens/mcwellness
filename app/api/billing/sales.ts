@@ -67,7 +67,7 @@ import { readVatRegistered } from './supplier';
  * grant no delete and no update, so a retried request — a double tap, a lost
  * response, a phone that changed network mid-request — would leave a second
  * purchase, a second invoice number, a second set of credits and a second
- * payment, correctable only by a credit note that does not exist yet. The
+ * payment, none of which a payment's own route can undo. The
  * drawer generates an `Idempotency-Key` when the person presses the button
  * and sends it with every attempt of that press; a repeat replays the
  * original answer, from the row the first attempt wrote.

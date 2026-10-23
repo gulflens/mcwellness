@@ -5,7 +5,8 @@ import {
   corporateTaxEstimate,
 } from '../../../domain/accounting';
 import { fils } from '../../../domain/shared';
-import { buildActivity, type Activity } from './fixture';
+import { setVatRegistration } from '../../billing/db/support';
+import { buildActivity, deliverVisit, type Activity } from './fixture';
 import { FINANCE, SEEDED, seedFinanceUser, startHarness, type Harness } from './support';
 
 /**
@@ -385,5 +386,140 @@ describe('the overview', () => {
   it('is refused to an admin', async () => {
     const res = await h.call('GET', '/api/accounting/overview', SEEDED.admin);
     expect(res.status).toBe(403);
+  });
+});
+
+describe('after credit notes', () => {
+  /**
+   * A note on the programme (what is still owed in sessions is released) and a
+   * note on a visit that was delivered and charged on the spot (income taken
+   * back out), both posted by the poster, then the identities of section 7
+   * with the notes in them: receivable is invoices less payments less waived
+   * fees less credit notes, all gross; VAT payable is invoice VAT less waived
+   * VAT less credit-note VAT.
+   */
+  const tenantFigure = async (sql: string): Promise<number> => {
+    const { rows } = await h.owner.query<{ total: string }>(sql, [h.data.tenant.id]);
+    return Number(rows[0]?.total ?? 0);
+  };
+  const balanceOf = async (code: string): Promise<number> => {
+    const tb = await get<TrialBalance>(`/api/accounting/statements/trial-balance?asOf=${AS_OF}`);
+    return tb.rows.find((row) => row.accountCode === code)?.balanceFils ?? 0;
+  };
+  let keySeq = 0;
+  const issue = async (invoiceId: string): Promise<void> => {
+    keySeq += 1;
+    const res = await h.call(
+      'POST',
+      `/api/billing/invoices/${invoiceId}/credit-note`,
+      SEEDED.owner,
+      {
+        reason: 'Corrected: the invoice was raised in error.',
+        idempotencyKey: `0000000e-0000-4000-8000-${String(keySeq).padStart(12, '0')}`,
+      },
+    );
+    expect(res.status).toBe(201);
+  };
+
+  const runPoster = async (): Promise<void> => {
+    const posted = await h.call('POST', '/api/accounting/post', SEEDED.owner, {}, REASON);
+    expect(posted.status).toBe(200);
+    expect(((await posted.json()) as { unknown: number }).unknown).toBe(0);
+  };
+
+  it('reads receivable and VAT payable off the invoices, payments, waivers and notes', async () => {
+    const packageInvoice = await h.owner.query<{ id: string }>(
+      "select id from invoice where tenant_id = $1 and kind = 'package' and client_id = $2",
+      [h.data.tenant.id, activity.clientId],
+    );
+    await issue(packageInvoice.rows[0]!.id);
+
+    // A visit delivered with nothing owed charges itself and is income at once.
+    const visitor = h.clientId(3);
+    await deliverVisit(h, visitor);
+    await runPoster();
+    const incomeBefore = await balanceOf('4000');
+    const visitInvoice = await h.owner.query<{ id: string }>(
+      "select id from invoice where tenant_id = $1 and kind = 'session' and client_id = $2",
+      [h.data.tenant.id, visitor],
+    );
+    await issue(visitInvoice.rows[0]!.id);
+    await runPoster();
+
+    const invoiced = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from invoice where tenant_id = $1',
+    );
+    const paid = await tenantFigure(
+      'select coalesce(sum(amount_fils), 0)::text as total from payment where tenant_id = $1',
+    );
+    const waived = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from invoice ' +
+        'where tenant_id = $1 and waived_at is not null',
+    );
+    const credited = await tenantFigure(
+      'select coalesce(sum(gross_fils), 0)::text as total from credit_note where tenant_id = $1',
+    );
+    expect(credited).toBeGreaterThan(0);
+    expect(await balanceOf('1200')).toBe(invoiced - paid - waived - credited);
+
+    const invoiceVat = await tenantFigure(
+      'select coalesce(sum(vat_fils), 0)::text as total from invoice where tenant_id = $1',
+    );
+    const waivedVat = await tenantFigure(
+      'select coalesce(sum(vat_fils), 0)::text as total from invoice ' +
+        'where tenant_id = $1 and waived_at is not null',
+    );
+    const creditedVat = await tenantFigure(
+      'select coalesce(sum(vat_fils), 0)::text as total from credit_note where tenant_id = $1',
+    );
+    expect(await balanceOf('2500')).toBe(invoiceVat - waivedVat - creditedVat);
+
+    // The delivered visit's income is taken back out by exactly its note's net.
+    const visitNet = await tenantFigure(
+      `select coalesce(sum(net_fils), 0)::text as total from credit_note where tenant_id = $1 ` +
+        `and invoice_id = '${visitInvoice.rows[0]!.id}'`,
+    );
+    expect(visitNet).toBeGreaterThan(0);
+    expect(await balanceOf('4000')).toBe(incomeBefore - visitNet);
+
+    const tb = await get<TrialBalance>(`/api/accounting/statements/trial-balance?asOf=${AS_OF}`);
+    expect(tb.totalDebitFils).toBe(tb.totalCreditFils);
+  });
+
+  it('reverses the VAT of a registered practice’s sale, line for line', async () => {
+    const user = h.data.users[SEEDED.owner]?.id ?? null;
+    await setVatRegistration(h.owner, h.data.tenant.id, user, true);
+    try {
+      const visitor = h.clientId(4);
+      await deliverVisit(h, visitor);
+      const invoice = await h.owner.query<{ id: string; vat_fils: number }>(
+        "select id, vat_fils from invoice where tenant_id = $1 and kind = 'session' and client_id = $2",
+        [h.data.tenant.id, visitor],
+      );
+      expect(invoice.rows[0]!.vat_fils).toBeGreaterThan(0);
+      await issue(invoice.rows[0]!.id);
+      await runPoster();
+
+      const note = await h.owner.query<{ id: string; vat_fils: number; gross_fils: number }>(
+        'select id, vat_fils, gross_fils from credit_note where tenant_id = $1 and invoice_id = $2',
+        [h.data.tenant.id, invoice.rows[0]!.id],
+      );
+      const { id, vat_fils: vat, gross_fils: gross } = note.rows[0]!;
+      expect(vat).toBeGreaterThan(0);
+      const lines = await h.owner.query<{ code: string; debit: string; credit: string }>(
+        'select a.code, l.debit_fils::text as debit, l.credit_fils::text as credit ' +
+          'from journal_line l ' +
+          'join journal_entry e on e.tenant_id = l.tenant_id and e.id = l.entry_id ' +
+          'join account a on a.tenant_id = l.tenant_id and a.id = l.account_id ' +
+          "where l.tenant_id = $1 and e.source_table = 'credit_note' and e.source_id = $2",
+        [h.data.tenant.id, id],
+      );
+      const line = (code: string) => lines.rows.find((row) => row.code === code);
+      expect(Number(line('2500')?.debit)).toBe(vat);
+      expect(Number(line('1200')?.credit)).toBe(gross);
+      expect(Number(line('4000')?.debit)).toBe(gross - vat);
+    } finally {
+      await setVatRegistration(h.owner, h.data.tenant.id, user, false);
+    }
   });
 });

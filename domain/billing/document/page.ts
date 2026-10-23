@@ -137,6 +137,7 @@ export type BlockName =
   | 'tableHeader'
   | 'tableRows'
   | 'paymentCard'
+  | 'creditsCard'
   | 'receivedCard'
   | 'summaryCard'
   | 'taxCard'

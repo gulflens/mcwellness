@@ -403,10 +403,11 @@ describe('the first practice', () => {
     expect(actual.counts).toEqual(expected.counts);
     expect(actual.rows).toEqual(expected.rows);
     // And the comparison is not vacuous: every default-writing migration in
-    // this schema is represented (100, 202, 400, 402, 405, 450, 451 and 600).
+    // this schema is represented (100, 202, 400, 402, 405, 416, 450, 451 and 600).
     expect(Object.keys(actual.counts).sort()).toEqual([
       'account',
       'accounting_setting',
+      'credit_note_series',
       'goal_category',
       'invoice_number_series',
       'payment_receipt_series',

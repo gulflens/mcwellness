@@ -91,10 +91,14 @@ export function monthlyMoney(
   let recognised = fils(0);
   let deferred = fils(0);
   for (const credit of credits) {
-    // Refunded and waived credits are neither earned nor owed: the money went
-    // back, or the practice forgave the charge. Counting either would be
-    // counting something nobody has.
-    if (credit.status === 'refunded' || credit.status === 'waived') {
+    // Refunded, waived and credited credits are neither earned nor owed: the
+    // money went back, the practice forgave the charge, or a credit note
+    // corrected the invoice. Counting any would be counting something nobody has.
+    if (
+      credit.status === 'refunded' ||
+      credit.status === 'waived' ||
+      credit.status === 'credited'
+    ) {
       continue;
     }
     if (credit.status === 'consumed') {

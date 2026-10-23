@@ -248,8 +248,10 @@ Summarised here; FINANCE-SPEC is authoritative.
   Issued invoices are immutable; a call-out fee is waived in place with a
   reason (408). A line names its discount: `unit_net_fils` is the list figure,
   `discount_fils` and `discount_basis_points` are what came off it, and the
-  check is `net = quantity × unit − discount` (409). `credit_note` was never
-  built; a correction is a reversing journal entry.
+  check is `net = quantity × unit − discount` (409). `credit_note` and `credit_note_line` are built (migrations 416 and 417,
+  `billing.md` section 4.3): one note per invoice, its own `CN-` series, and
+  the unused credits behind the invoice take the status `credited`
+  (`entitlement.credited_by`).
 - **The practice's own contact details** — `tenant` carries `contact_phone`,
   `contact_email` and `website` (912), the three facts printed in the footer of
   every document it issues, and `invoice` snapshots all three at numbering time
@@ -278,7 +280,7 @@ Summarised here; FINANCE-SPEC is authoritative.
 
 ## 7. Cross-cutting rules
 
-**Append-only records.** `session` (once closed), `report` (once signed), `client_protocol`, `assessment`, `invoice` are never updated in place. Each carries `version`, `supersedes_id`, `amendment_reason`. The current version is the one with no successor. Full snapshots, not diffs. `journal_entry` and `journal_line` (migration 453) are never updated or deleted either, for any role including the database owner's; they carry no version because a correction is not a new version of an entry but a new entry that reverses it (`accounting.md` section 4.2).
+**Append-only records.** `session` (once closed), `report` (once signed), `client_protocol`, `assessment` are versioned and never updated in place: each carries `version`, `supersedes_id`, `amendment_reason`, and the current version is the one with no successor. An `invoice` is also never rewritten once issued, but it is **not** versioned: it has none of those three columns, and a mistake on one is corrected by a credit note (`credit_note`, `billing.md` section 4.3), which points at it. Full snapshots, not diffs. `journal_entry` and `journal_line` (migration 453) are never updated or deleted either, for any role including the database owner's; they carry no version because a correction is not a new version of an entry but a new entry that reverses it (`accounting.md` section 4.2).
 
 **Consent gates execution.** Starting a session, sending a report to a contact, storing a photo — each checks a specific consent purpose at that moment.
 

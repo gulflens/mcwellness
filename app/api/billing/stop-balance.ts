@@ -116,6 +116,9 @@ export function mountStopBalance(api: Hono<ApiEnv>, now: () => Date = () => new 
     const charged = ledger.rows.filter((row) => row.entry_kind === 'charge');
     // A payment is stored with the opposite sign so the balance is a plain sum.
     const paid = ledger.rows.filter((row) => row.entry_kind === 'payment');
+    // A credit note is stored with minus its gross, like a payment, and lowers
+    // what is owed in the same way (migration 417).
+    const credited = ledger.rows.filter((row) => row.entry_kind === 'credit');
 
     await logRead(db, 'billing_ledger', clientId, clientId);
 
@@ -132,7 +135,7 @@ export function mountStopBalance(api: Hono<ApiEnv>, now: () => Date = () => new 
         })),
         outstandingFils: outstandingBalanceFils(
           charged.map((row) => ({ grossFils: fils(row.amount_fils) })),
-          paid.map((row) => ({ amountFils: fils(-row.amount_fils) })),
+          [...paid, ...credited].map((row) => ({ amountFils: fils(-row.amount_fils) })),
         ),
       }),
     );

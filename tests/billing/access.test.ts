@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Actor, Role } from '../../domain/shared';
 import {
   mayDiscount,
+  mayIssueCreditNote,
   mayQuoteRefund,
   mayReadBalance,
   mayReadCatalogue,
@@ -62,6 +63,7 @@ const WRAPPERS: readonly { name: string; may: (actor: Actor) => boolean; allowed
   { name: 'mayRecordPayment', may: (a) => mayRecordPayment(a, NOW), allowed: MONEY },
   { name: 'mayWaive', may: (a) => mayWaive(a, NOW), allowed: MONEY },
   { name: 'mayDiscount', may: (a) => mayDiscount(a, NOW), allowed: MONEY },
+  { name: 'mayIssueCreditNote', may: (a) => mayIssueCreditNote(a, NOW), allowed: MONEY },
   { name: 'mayReadInvoices', may: (a) => mayReadInvoices(a, NOW), allowed: OFFICE },
   { name: 'mayQuoteRefund', may: (a) => mayQuoteRefund(a, NOW), allowed: OFFICE },
 ];

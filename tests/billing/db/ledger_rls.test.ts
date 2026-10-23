@@ -37,6 +37,7 @@ const ENTITLEMENT_ID = '00000000-0000-4000-8000-0000000000d8';
 const PAYMENT_ID = '00000000-0000-4000-8000-0000000000d9';
 const PACKAGE_PRICE_ID = '00000000-0000-4000-8000-0000000000da';
 const LINE_ID = '00000000-0000-4000-8000-0000000000db';
+const CREDIT_NOTE_ID = '00000000-0000-4000-8000-0000000000dc';
 
 let client: pg.Client;
 
@@ -111,6 +112,21 @@ beforeAll(async () => {
       '1, 0, 1032500)',
     [LINE_ID, IDS.tenantA, INVOICE_ID, IDS.clientA, PACKAGE_ID],
   );
+  await client.query('begin');
+  await client.query(
+    'insert into credit_note (id, tenant_id, client_id, invoice_id, issued_on, reason, net_fils, ' +
+      'vat_fils, gross_fils, supplier_legal_name, idempotency_key) values ($1, $2, $3, $4, ' +
+      "'2026-09-03', 'Sold to the wrong household', 1032500, 0, 1032500, 'Synthetic Studio A', " +
+      "'rls-key')",
+    [CREDIT_NOTE_ID, IDS.tenantA, IDS.clientA, INVOICE_ID],
+  );
+  await client.query(
+    'insert into credit_note_line (tenant_id, credit_note_id, client_id, invoice_line_id, line_no, ' +
+      'description, net_fils, vat_rate_basis_points, vat_setting_version, vat_fils, gross_fils) ' +
+      "values ($1, $2, $3, $4, 1, 'Silver', 1032500, 0, 1, 0, 1032500)",
+    [IDS.tenantA, CREDIT_NOTE_ID, IDS.clientA, LINE_ID],
+  );
+  await client.query('commit');
   await client.query(
     'insert into payment (id, tenant_id, client_id, method, amount_fils, received_at, invoice_id) ' +
       "values ($1, $2, $3, 'transfer', 1032500, now(), $4)",
@@ -140,6 +156,8 @@ describe('another practice', () => {
         'entitlement',
         'invoice',
         'invoice_line',
+        'credit_note',
+        'credit_note_line',
         'payment',
         'billing_exception',
       ]) {
@@ -174,6 +192,8 @@ describe('a practitioner', () => {
         expect(await count(client, 'invoice')).toBe(0);
         expect(await count(client, 'payment')).toBe(0);
         expect(await count(client, 'package_purchase')).toBe(0);
+        expect(await count(client, 'credit_note')).toBe(0);
+        expect(await count(client, 'credit_note_line')).toBe(0);
       },
       'practitioner',
     );
@@ -194,6 +214,7 @@ describe('a practitioner', () => {
         await client.query("select set_config('app.actor_id', $1, true)", [PRACTITIONER_USER]);
         expect(await count(client, 'entitlement')).toBe(1);
         expect(await count(client, 'invoice')).toBe(1);
+        expect(await count(client, 'credit_note')).toBe(1);
         // Still no catalogue, and still nothing from the office's own queue.
         expect(await count(client, 'package')).toBe(0);
         expect(await count(client, 'billing_exception')).toBe(0);
@@ -309,6 +330,7 @@ describe('a client contact', () => {
         await client.query("select set_config('app.actor_id', $1, true)", [MORE_IDS.contactUserA]);
         expect(await count(client, 'entitlement')).toBe(1);
         expect(await count(client, 'invoice')).toBe(1);
+        expect(await count(client, 'credit_note')).toBe(1);
         expect(await count(client, 'payment')).toBe(1);
         // Not the catalogue, and not the office's queue.
         expect(await count(client, 'package')).toBe(0);
@@ -327,10 +349,47 @@ describe('a client contact', () => {
   });
 });
 
+describe('a client contact of another household', () => {
+  it('reads no credit note, though the practice has one', async () => {
+    await client.query('savepoint other_household');
+    const BETA = '00000000-0000-4000-8000-0000000000c3';
+    const BETA_CONTACT = '00000000-0000-4000-8000-0000000000e3';
+    const BETA_USER = '00000000-0000-4000-8000-0000000000a6';
+    await seedClient(client, IDS.tenantA, BETA, IDS.ownerA, 'Beta');
+    await seedContact(client, IDS.tenantA, BETA_CONTACT, BETA, 'synthetic-beta-fingerprint');
+    await seedUser(client, {
+      id: BETA_USER,
+      tenantId: IDS.tenantA,
+      authId: null,
+      displayName: 'Synthetic Contact Beta',
+      roles: ['client_contact'],
+    });
+    await client.query('update contact set user_id = $1 where id = $2', [BETA_USER, BETA_CONTACT]);
+    await asApiRole(
+      client,
+      IDS.tenantA,
+      async () => {
+        await client.query("select set_config('app.actor_id', $1, true)", [BETA_USER]);
+        expect(await count(client, 'credit_note')).toBe(0);
+        expect(await count(client, 'credit_note_line')).toBe(0);
+      },
+      'client_contact',
+    );
+    await client.query('rollback to savepoint other_household');
+  });
+});
+
 describe('append-only, by construction', () => {
   it('refuses to edit or delete an invoice, its lines, or a payment — even for the owner', async () => {
     await asApiRole(client, IDS.tenantA, async () => {
-      for (const table of ['invoice', 'invoice_line', 'payment', 'package_price']) {
+      for (const table of [
+        'invoice',
+        'invoice_line',
+        'credit_note',
+        'credit_note_line',
+        'payment',
+        'package_price',
+      ]) {
         await rejectsWith(
           client,
           RLS_VIOLATION,

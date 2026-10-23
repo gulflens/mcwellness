@@ -31,13 +31,24 @@ import {
  *
  * Only a credit taken by a cancellation or a no-show may be waived. A
  * delivered session is not waivable here: the family had the visit, and
- * unwinding that is a credit note, not a waiver.
+ * unwinding that is a credit note, not a waiver. Nor may a credit whose
+ * sale has a credit note: the note settled that invoice (409 `credited`).
+ *
+ * The credit is read `for update`, so a note being issued on the same
+ * invoice is waited for and then seen. This route cannot take the audit
+ * chain first as app.issue_credit_note does (app_role may not lock it), so a
+ * note and a waiver landing at the same instant can still meet as a
+ * deadlock that Postgres breaks (40P01) — never as a credit given twice.
  */
 
 const ENTITLEMENT_SQL =
   'select id, client_id, service_type_id, source_type, package_purchase_id, invoice_id, ' +
   'allocated_net_fils, vat_rate_basis_points, vat_setting_version, status, consumption_kind, ' +
-  'expires_on from entitlement where tenant_id = app.current_tenant_id() and id = $1';
+  'expires_on from entitlement where tenant_id = app.current_tenant_id() and id = $1 for update';
+
+const INVOICE_CREDITED_SQL =
+  'select exists (select 1 from credit_note n where n.tenant_id = app.current_tenant_id() ' +
+  'and n.invoice_id = $1) as credited';
 
 const WAIVE_SQL =
   "update entitlement set status = 'waived', waiver_reason = $2, waived_at = now(), " +
@@ -60,7 +71,7 @@ type EntitlementDbRow = {
   allocated_net_fils: number;
   vat_rate_basis_points: number;
   vat_setting_version: number;
-  status: 'available' | 'consumed' | 'expired' | 'refunded' | 'waived';
+  status: 'available' | 'consumed' | 'expired' | 'refunded' | 'waived' | 'credited';
   consumption_kind: 'session' | 'late_cancellation' | 'no_show' | null;
   expires_on: string | null;
 };
@@ -68,8 +79,19 @@ type EntitlementDbRow = {
 const WAIVE_FEE_SQL = 'select waived, gross_fils from app.waive_call_out_fee($1, $2)';
 
 const FEE_INVOICE_SQL =
-  'select id, kind::text as kind, waived_at from invoice ' +
-  'where tenant_id = app.current_tenant_id() and id = $1';
+  'select i.id, i.kind::text as kind, i.waived_at, i.supplier_vat_registered, ' +
+  'exists (select 1 from credit_note n where n.invoice_id = i.id) as credited ' +
+  'from invoice i where i.tenant_id = app.current_tenant_id() and i.id = $1';
+
+/** The function's own refusals (migration 417), each answered as a 409 with its code. */
+const WAIVER_REFUSALS = ['vat_registered', 'credited'] as const;
+
+function waiverRefusal(error: unknown): (typeof WAIVER_REFUSALS)[number] | null {
+  const message = (error as { message?: string }).message ?? '';
+  const match = /^waiver_refused:(\w+)$/.exec(message);
+  const code = match?.[1];
+  return WAIVER_REFUSALS.find((refusal) => refusal === code) ?? null;
+}
 
 /**
  * `POST /api/billing/invoices/:id/waiver` — forgiving a call-out fee
@@ -115,10 +137,13 @@ function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
     // rather than being handed one refusal for all of them. The definer door
     // below asks the same questions again for itself, because it runs with row
     // security switched off.
-    const found = await db.query<{ id: string; kind: string; waived_at: Date | null }>(
-      FEE_INVOICE_SQL,
-      [invoiceId],
-    );
+    const found = await db.query<{
+      id: string;
+      kind: string;
+      waived_at: Date | null;
+      supplier_vat_registered: boolean | null;
+      credited: boolean;
+    }>(FEE_INVOICE_SQL, [invoiceId]);
     const invoice = found.rows[0];
     if (!invoice) {
       return c.json({ error: 'not_found', requestId }, 404);
@@ -129,6 +154,18 @@ function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
     if (invoice.waived_at !== null) {
       return c.json({ error: 'conflict', code: 'already_waived', requestId }, 409);
     }
+    // A fee invoiced while the practice was registered for VAT is a tax
+    // invoice, reversed by a credit note and not by this flag
+    // (docs/SPEC/billing.md section 4.3; app.waive_call_out_fee refuses it too,
+    // migration 417).
+    if (invoice.supplier_vat_registered === true) {
+      return c.json({ error: 'conflict', code: 'vat_registered', requestId }, 409);
+    }
+    // Already corrected by a credit note: waiving it too would take it off the
+    // balance twice (migration 417).
+    if (invoice.credited) {
+      return c.json({ error: 'conflict', code: 'credited', requestId }, 409);
+    }
 
     // Why the charge was forgiven belongs in the audit trail, not only in the
     // column: the update this makes is stamped by the row trigger with
@@ -137,10 +174,20 @@ function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
     // have sent.
     await db.query("select set_config('app.reason', $1, true)", [scrubReason(body.data.reason)]);
 
-    const waived = await db.query<{ waived: boolean; gross_fils: number }>(WAIVE_FEE_SQL, [
-      invoiceId,
-      body.data.reason,
-    ]);
+    // The door asks both questions again under its own lock; a note issued
+    // between the read above and this write is refused there, and answered the
+    // same way here.
+    let waived;
+    try {
+      waived = await db.query<{ waived: boolean; gross_fils: number }>(WAIVE_FEE_SQL, [
+        invoiceId,
+        body.data.reason,
+      ]);
+    } catch (error) {
+      const refusal = waiverRefusal(error);
+      if (!refusal) throw error;
+      return c.json({ error: 'conflict', code: refusal, requestId }, 409);
+    }
     const row = waived.rows[0];
     // Nothing was written: somebody waived it between the read above and this
     // write. That is not an error to raise — the fee is forgiven either way —
@@ -190,6 +237,20 @@ export function mountWaivers(api: Hono<ApiEnv>, now: () => Date = () => new Date
     }
     if (credit.consumption_kind === 'session') {
       return c.json({ error: 'conflict', code: 'session_delivered', requestId }, 409);
+    }
+    // The sale this credit came from has a credit note: the note already gave
+    // the family what was left on it, so a replacement credit written now
+    // would be a session given twice. Asked after the read above has locked
+    // the credit (`for update`), in a statement of its own, so it sees a note
+    // committed while this waited: app.issue_credit_note locks every credit
+    // behind the invoice, this one included, before it writes (migration 417).
+    if (credit.invoice_id !== null) {
+      const noted = await db.query<{ credited: boolean }>(INVOICE_CREDITED_SQL, [
+        credit.invoice_id,
+      ]);
+      if (noted.rows[0]?.credited) {
+        return c.json({ error: 'conflict', code: 'credited', requestId }, 409);
+      }
     }
 
     // Why the charge was forgiven belongs in the audit trail, not only in the

@@ -2,6 +2,7 @@ import {
   readPng,
   sharedDiscountBasisPoints,
   type DocumentImage,
+  type CreditNoteDocument,
   type InvoiceDocument,
   type ReceiptDocument,
   type SupplierSnapshot,
@@ -307,6 +308,101 @@ export async function receiptDocument(
         row.invoice_reference && row.invoice_issued_on
           ? { reference: row.invoice_reference, issuedOn: row.invoice_issued_on }
           : null,
+    },
+  };
+}
+
+const CREDIT_NOTE_SQL =
+  'select n.id, n.reference, n.issued_on, n.reason, n.net_fils, n.vat_fils, n.gross_fils, ' +
+  'n.locale::text as locale, n.client_id, ' +
+  'n.supplier_legal_name, n.supplier_legal_name_ar, n.supplier_address, ' +
+  'n.supplier_licence_number, n.supplier_licensing_authority, n.supplier_trn, ' +
+  'n.supplier_address_ar, n.supplier_licensing_authority_ar, ' +
+  'n.supplier_vat_registered, n.supplier_vat_trn, ' +
+  'n.supplier_contact_phone, n.supplier_contact_email, n.supplier_website, ' +
+  'i.reference as invoice_reference, i.issued_on as invoice_issued_on, ' +
+  "c.mrn as client_mrn, c.given_name || ' ' || c.family_name as client_name " +
+  'from credit_note n join client c on c.id = n.client_id ' +
+  'join invoice i on i.id = n.invoice_id ' +
+  'where n.tenant_id = app.current_tenant_id() and n.id = $1';
+
+/** The lines as the credit note snapshotted them, never the invoice's live ones. */
+const CREDIT_NOTE_LINES_SQL =
+  'select description, description_ar, net_fils, vat_rate_basis_points, vat_fils, gross_fils ' +
+  'from credit_note_line where tenant_id = app.current_tenant_id() and credit_note_id = $1 ' +
+  'order by line_no';
+
+type CreditNoteRow = SupplierColumns & {
+  id: string;
+  reference: string;
+  issued_on: string;
+  reason: string;
+  net_fils: number;
+  vat_fils: number;
+  gross_fils: number;
+  locale: 'en' | 'ar' | null;
+  client_id: string;
+  invoice_reference: string;
+  invoice_issued_on: string;
+  client_mrn: string;
+  client_name: string;
+};
+
+type CreditNoteLineRow = Pick<
+  LineRow,
+  | 'description'
+  | 'description_ar'
+  | 'net_fils'
+  | 'vat_rate_basis_points'
+  | 'vat_fils'
+  | 'gross_fils'
+>;
+
+/**
+ * The credit note as a document, or null when this practice has no such note.
+ * Every supplier fact is the note's own snapshot (migration 416), copied from
+ * the invoice it credits when it was issued.
+ */
+export async function creditNoteDocument(
+  db: Db,
+  creditNoteId: string,
+): Promise<{ document: CreditNoteDocument; clientId: string } | null> {
+  const found = await db.query<CreditNoteRow>(CREDIT_NOTE_SQL, [creditNoteId]);
+  const row = found.rows[0];
+  if (!row) return null;
+  const lines = await db.query<CreditNoteLineRow>(CREDIT_NOTE_LINES_SQL, [creditNoteId]);
+
+  return {
+    clientId: row.client_id,
+    document: {
+      kind: 'credit_note',
+      locale: row.locale,
+      supplier: supplierOf(row),
+      recipient: { name: row.client_name, recordNumber: row.client_mrn },
+      reference: row.reference,
+      issuedOn: row.issued_on,
+      credits: { reference: row.invoice_reference, issuedOn: row.invoice_issued_on },
+      reason: row.reason,
+      // A credit note credits a line whole: one unit, the net that came off.
+      lines: lines.rows.map((line) => ({
+        description: line.description,
+        descriptionAr: line.description_ar,
+        quantity: 1,
+        unitNetFils: line.net_fils,
+        discountFils: 0,
+        discountBasisPoints: null,
+        netFils: line.net_fils,
+        vatRateBasisPoints: line.vat_rate_basis_points,
+        vatFils: line.vat_fils,
+        grossFils: line.gross_fils,
+      })),
+      netFils: row.net_fils,
+      vatFils: row.vat_fils,
+      grossFils: row.gross_fils,
+      discountFils: 0,
+      discountBasisPoints: null,
+      // It asks for nothing, so no account to pay into.
+      bank: null,
     },
   };
 }
