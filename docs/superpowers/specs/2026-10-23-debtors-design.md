@@ -1,6 +1,6 @@
 # Who owes the practice: debtors list, ageing and statements of account
 
-**Date:** 23 October 2026. **Status:** draft, for the owner's approval. The
+**Date:** 23 October 2026. **Status:** approved by the owner, 08:58 +04 ("approved"). The
 owner asked for this piece ("go") after the finance review recommended it,
 and has opted out of design questions on earlier pieces. Every choice below
 marked *design* is Claude's call. Stacked on the credit-notes branch (PR 293),
