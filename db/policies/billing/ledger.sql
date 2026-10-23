@@ -42,7 +42,7 @@ begin
   foreach t in array array[
     'package', 'package_component', 'package_price', 'package_purchase',
     'entitlement', 'invoice', 'invoice_line', 'payment', 'billing_exception',
-    'credit_note', 'credit_note_line'
+    'credit_note', 'credit_note_line', 'payment_reversal'
   ] loop
     execute format('drop policy if exists tenant_isolation on public.%I', t);
     execute format(
@@ -115,7 +115,7 @@ declare
 begin
   foreach t in array array[
     'package_purchase', 'entitlement', 'invoice', 'invoice_line', 'payment',
-    'credit_note', 'credit_note_line'
+    'credit_note', 'credit_note_line', 'payment_reversal'
   ] loop
     execute format('drop policy if exists ledger_readers on public.%I', t);
     execute format(
