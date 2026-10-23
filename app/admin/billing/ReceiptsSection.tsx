@@ -4,13 +4,16 @@ import {
   type MonthlyMoneyResponse,
   type ReceiptRow,
 } from '../../api/billing/document-schema';
+import { hasRole } from '@domain/shared';
+import { type ReversePaymentResponse } from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { formatDate } from './BillingPage';
 import { useDocumentActions } from './documents';
 import { LedgerSearch, dayOf, groupBy, type Choice } from './LedgerSearch';
-import { formatFils } from './money';
+import { formatFils, formatNetFils } from './money';
 import { RecordPaymentFlow } from './RecordPaymentFlow';
+import { ReversePaymentDrawer } from './ReversePaymentDrawer';
 import { SendDrawer } from './SendDrawer';
 import { roomFor, useWidth } from './useWidth';
 
@@ -61,7 +64,12 @@ function dayOfReceipt(row: ReceiptRow, now: Date) {
 }
 
 export function ReceiptsSection({ canWrite = false }: { canWrite?: boolean }) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, session } = useAuth();
+  // Owner, admin and finance: the roles the reversal route and the database
+  // function both check (the same gate as InvoicesSection's canCredit).
+  const canReverse =
+    session.status === 'signed-in' && hasRole(session.actor, 'owner', 'admin', 'finance');
+  const [reversing, setReversing] = useState<ReceiptRow | null>(null);
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [figures, setFigures] = useState<MonthlyMoneyResponse | null>(null);
   const [search, setSearch] = useState('');
@@ -172,7 +180,34 @@ export function ReceiptsSection({ canWrite = false }: { canWrite?: boolean }) {
     }
   }
 
+  function reversed(row: ReceiptRow, reversal: ReversePaymentResponse['reversal']) {
+    setReversing(null);
+    setNote(null);
+    setState((current) =>
+      current.kind === 'ready'
+        ? {
+            ...current,
+            book: {
+              ...current.book,
+              receipts: current.book.receipts.map((r) =>
+                r.id === row.id
+                  ? { ...r, reversedOn: reversal.reversedOn, reversalId: reversal.id }
+                  : r,
+              ),
+            },
+          }
+        : current,
+    );
+    // The month's figure is net of the reversal; ask for it again.
+    void apiFetch('/api/billing/summary')
+      .then(async (res) => {
+        if (res.ok) setFigures((await res.json()) as MonthlyMoneyResponse);
+      })
+      .catch(() => undefined);
+  }
+
   const actions: RowActions = {
+    reverse: canReverse ? (row) => setReversing(row) : null,
     open: (row) => void open(row.id, { paymentId: row.id }),
     send: (row) => void startSending(row),
     opening: busyOn,
@@ -188,7 +223,7 @@ export function ReceiptsSection({ canWrite = false }: { canWrite?: boolean }) {
           <dl className="figures receipts__month">
             <div className="figures__item">
               <dt>Received this month (AED)</dt>
-              <dd className="numeric">{formatFils(figures.cashCollectedFils)}</dd>
+              <dd className="numeric">{formatNetFils(figures.cashCollectedFils)}</dd>
               <dd className="small muted">What arrived, including any VAT.</dd>
             </div>
           </dl>
@@ -271,6 +306,14 @@ export function ReceiptsSection({ canWrite = false }: { canWrite?: boolean }) {
         />
       ) : null}
 
+      {reversing ? (
+        <ReversePaymentDrawer
+          payment={reversing}
+          onClose={() => setReversing(null)}
+          onReversed={(reversal) => reversed(reversing, reversal)}
+        />
+      ) : null}
+
       {sending ? (
         <SendDrawer
           documentId={sending.documentId}
@@ -284,6 +327,8 @@ export function ReceiptsSection({ canWrite = false }: { canWrite?: boolean }) {
 }
 
 type RowActions = {
+  /** Null when the reader may not reverse a payment. */
+  reverse: ((row: ReceiptRow) => void) | null;
   open: (row: ReceiptRow) => void;
   send: (row: ReceiptRow) => void;
   opening: string | null;
@@ -293,7 +338,15 @@ type RowActions = {
 function DocumentButtons({ row, actions }: { row: ReceiptRow; actions: RowActions }) {
   // A payment recorded before the receipt book existed has no number, and
   // nothing invents one for it, so there is no document to open or send.
-  if (row.receiptReference === null) return <span className="small muted">No receipt</span>;
+  const reverse = <ReverseButton row={row} actions={actions} />;
+  if (row.receiptReference === null) {
+    return (
+      <span className="row-actions">
+        <span className="small muted">No receipt</span>
+        {reverse}
+      </span>
+    );
+  }
   return (
     <span className="row-actions">
       <Button
@@ -310,8 +363,27 @@ function DocumentButtons({ row, actions }: { row: ReceiptRow; actions: RowAction
       >
         {actions.preparing === row.id ? 'Preparing…' : 'Send'}
       </Button>
+      {reverse}
     </span>
   );
+}
+
+/** "Reverse payment", for those who may, on a payment that still stands. */
+function ReverseButton({ row, actions }: { row: ReceiptRow; actions: RowActions }) {
+  if (!actions.reverse || row.reversedOn !== null) return null;
+  const reverse = actions.reverse;
+  return (
+    <Button variant="quiet" onClick={() => reverse(row)}>
+      Reverse payment
+    </Button>
+  );
+}
+
+/** What a reversed payment says under its figures, dated like the rest. */
+function ReversedNote({ row }: { row: ReceiptRow }) {
+  return row.reversedOn ? (
+    <span className="small muted">Reversed {formatDate(row.reversedOn)}</span>
+  ) : null;
 }
 
 /** "Against INV-000044", or "On account" when it named no invoice. */
@@ -410,6 +482,7 @@ function ReceiptTable({
                         <span className="name">
                           <span>{row.clientName}</span>
                           <span className="small muted">{METHOD_LABELS[row.method]}</span>
+                          <ReversedNote row={row} />
                         </span>
                       </span>
                     </td>
@@ -446,7 +519,12 @@ function ReceiptTable({
                     <td>
                       <Against row={row} />
                     </td>
-                    <td className="numeric">{formatDate(row.receivedOn)}</td>
+                    <td className="numeric">
+                      <span className="name">
+                        <span>{formatDate(row.receivedOn)}</span>
+                        <ReversedNote row={row} />
+                      </span>
+                    </td>
                     <td className="numeric align-end">
                       <strong className="price-total">{formatFils(row.amountFils)}</strong>
                     </td>
@@ -492,6 +570,7 @@ function ReceiptList({ book, actions, now }: { book: Book; actions: RowActions; 
                         {row.receiptReference ?? 'No receipt'}, {METHOD_LABELS[row.method]},{' '}
                         <Against row={row} />
                       </span>
+                      <ReversedNote row={row} />
                     </span>
                     <span className="ledger-list__amount numeric">
                       {formatFils(row.amountFils)}

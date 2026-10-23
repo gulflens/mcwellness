@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SEED_TODAY } from '../../../db/seed/generate';
+import { IDS, seedClient, seedTenant } from '../../db/helpers';
 import { SEEDED, startHarness, type Harness } from './support';
 
 /**
@@ -137,7 +138,13 @@ describe('app.reverse_payment', () => {
     expect(rows[0]?.payment_id).toBe(paymentId);
     expect(rows[0]?.client_id).toBe(h.clientId(0));
     expect(rows[0]?.reason).toBe(REASON);
-    expect(rows[0]?.reversed_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // The practice's own day, not the server's or the browser's.
+    const { rows: today } = await h.owner.query<{ today: string }>(
+      "select to_char((now() at time zone timezone)::date, 'YYYY-MM-DD') as today " +
+        'from tenant where id = $1',
+      [h.data.tenant.id],
+    );
+    expect(rows[0]?.reversed_on).toBe(today[0]?.today);
   });
 
   it('shows the reversal in the ledger as a plus entry naming the payment', async () => {
@@ -204,10 +211,30 @@ describe('app.reverse_payment', () => {
     reversedId(await reverse(b, { roles: 'owner' }));
   });
 
-  it('finds no payment of another practice', async () => {
-    const result = await reverse('00000000-0000-4000-8000-0000000000f9');
+  it('finds no payment of another practice, and writes nothing', async () => {
+    const paymentB = '00000000-0000-4000-8000-0000000000b4';
+    await seedTenant(h.owner, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
+    await seedClient(h.owner, IDS.tenantB, IDS.clientB, IDS.ownerB, 'Beta');
+    await h.owner.query(
+      'insert into payment (id, tenant_id, client_id, method, amount_fils, received_at, ' +
+        "idempotency_key) values ($1, $2, $3, 'cash', 10000, now(), '0000000e-0000-4000-8000-0000000000b5')",
+      [paymentB, IDS.tenantB, IDS.clientB],
+    );
+    const before = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from payment_reversal',
+    );
+    // Practice A's app_role, asking for practice B's real payment.
+    const result = await reverse(paymentB);
     expect(result.error?.code).toBe('P0002');
     expect(result.error?.message).toBe('payment_not_found');
+    const after = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from payment_reversal',
+    );
+    expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
+    expect(
+      (await h.owner.query('select 1 from payment_reversal where payment_id = $1', [paymentB]))
+        .rowCount,
+    ).toBe(0);
   });
 
   it("refuses an erased client's payment", async () => {

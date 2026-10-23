@@ -36,6 +36,7 @@ export const WORDS = {
    */
   taxCreditNote: { en: 'Tax Credit Note', ar: 'إشعار دائن ضريبي' },
   creditNote: { en: 'Credit Note', ar: 'إشعار دائن' },
+  // OWNER REVIEW: this Arabic label for a reversed payment is not yet confirmed.
   paymentReversed: { en: 'Payment reversed', ar: 'عكس دفعة' },
   creditsInvoice: { en: 'Credits invoice', ar: 'إشعار دائن للفاتورة' },
   reason: { en: 'Reason', ar: 'السبب' },

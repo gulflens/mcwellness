@@ -1,5 +1,5 @@
 import type { MonthlyMoneyResponse } from '../../api/billing/document-schema';
-import { formatFils } from './money';
+import { formatFils, formatNetFils } from './money';
 
 /**
  * Three facts about the month, and nothing else (docs/SPEC/billing.md section
@@ -37,7 +37,7 @@ export function MoneyFigures({ figures }: { figures: MonthlyMoneyResponse }) {
       <dl className="figures">
         <div className="figures__item">
           <dt>Received this month (receipts, AED)</dt>
-          <dd className="numeric">{formatFils(figures.cashCollectedFils)}</dd>
+          <dd className="numeric">{formatNetFils(figures.cashCollectedFils)}</dd>
           <dd className="small muted">What arrived, including any VAT.</dd>
         </div>
       </dl>

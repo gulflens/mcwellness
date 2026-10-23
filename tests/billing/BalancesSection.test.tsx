@@ -336,7 +336,7 @@ describe('BalancesSection', () => {
     expect(screen.getByText('AED 735.00 is outstanding.')).toBeTruthy();
     expect(
       screen.getByText(
-        "A payment can't be changed once recorded. If one was recorded in error, tell the owner.",
+        "A payment can't be changed once recorded. If one was recorded in error, reverse it in Receipts and record the right one.",
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/credit note/i)).toBeNull();
