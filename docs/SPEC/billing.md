@@ -552,6 +552,38 @@ whose invoice was later credited still restores an available credit, a free
 session; the fix is in 969 and is session-capture's, asked for in
 `docs/CHANGE-REQUESTS/billing-credit-notes.md` request 5.
 
+**Ageing, the debtors list and statements of account are built** (2026-10-23,
+no migration; `docs/superpowers/specs/2026-10-23-debtors-design.md`).
+
+- **Ageing** is `domain/billing/ageing.ts`, pure, with "as at" always an
+  argument. The allocation is one pass over every entry dated up to the as-at
+  day, not a day-by-day replay, so a payment made before its invoice existed
+  still pays it. Each invoice starts at its gross. Credit notes go against
+  their own invoice, up to what it still owes. Payments that name an invoice
+  go against it, oldest payment first, up to what it still owes. Everything
+  unused goes into one pool, in this order: unnamed payments; the part of a
+  named payment or credit note that was more than its invoice owed; and a
+  payment or credit naming an invoice that is not in the ledger (a waived
+  fee). The pool pays the open invoices oldest first, by invoice date then
+  number. What the pool has left is the household's credit. A household is
+  therefore owing or in credit, never both, and what it owes equals its
+  balance in Billing > Balances. The buckets are 0-30, 31-60, 61-90 and over
+  90 days from the invoice date, with edges at days 30/31, 60/61 and 90/91.
+- **The debtors list** opens Billing > Balances: `GET /api/billing/debtors`
+  and `GET /api/billing/debtors.csv` (`app/api/billing/debtors.ts`), shown by
+  `app/admin/billing/DebtorsList.tsx`. Both read the ledger through
+  `app/api/billing/ledger-entries.ts`. **Erased households are excluded**, and
+  one the caller cannot see is never listed.
+- **A statement of account** is `GET /api/billing/clients/:id/statement.pdf`
+  (`app/api/billing/statement.ts`, rendered by
+  `domain/billing/document/statement.ts`, opened from
+  `app/admin/billing/StatementDrawer.tsx`). It lists charges, payments and
+  credits for a period with a running balance. **It is rendered on demand and
+  not filed**: no row is written and no copy is kept, so it never enters the
+  records of section 5.6 or the books (see `accounting.md`). Its supplier
+  block comes from the household's latest invoice snapshot, so a household
+  never invoiced has no statement.
+
 ### 4.4 Journal entries
 
 ```
