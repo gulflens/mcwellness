@@ -155,7 +155,10 @@
   --tap: 48px;
   --measure: 68ch;
 
-  /* Motion answers an action: 160ms, ease-out. Nothing else moves. */
+  /* Motion answers an action, and stops (DESIGN.md "Motion", ADR 0004).
+     Control colour eases over 120ms; a surface arriving takes 160ms; the
+     ribbon's newest slice takes 400ms once. Nothing moves on its own. */
+  --motion-control: 120ms;
   --motion: 160ms;
   --motion-ribbon: 400ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
@@ -233,6 +236,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --motion-control: 0ms;
     --motion: 0ms;
     --motion-ribbon: 0ms;
   }
