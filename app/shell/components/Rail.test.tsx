@@ -4,11 +4,23 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as freshBuild from '../freshBuild';
 import { resetFreshBuildForTests, watchForNewBuild } from '../freshBuild';
-import { Rail } from './Rail';
+import { ADMIN_SECTIONS, RAIL_GROUPS, Rail } from './Rail';
 
 afterEach(() => {
   cleanup();
   resetFreshBuildForTests();
+});
+
+describe('RAIL_GROUPS', () => {
+  it('puts every section in exactly one group, so none is left without a door', () => {
+    for (const section of ADMIN_SECTIONS) {
+      const homes = RAIL_GROUPS.filter((group) => group.keys.includes(section.key));
+      expect(
+        homes.map((group) => group.label),
+        section.key,
+      ).toHaveLength(1);
+    }
+  });
 });
 
 describe('Rail', () => {

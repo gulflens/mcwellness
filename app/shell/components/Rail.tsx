@@ -51,6 +51,18 @@ export type RailSection = {
   base?: string;
 };
 
+/**
+ * The rail's groups, in the order they stand. Every section in
+ * `ADMIN_SECTIONS` belongs to exactly one, which Rail.test.tsx holds: the rail
+ * draws only grouped sections, so a section left out of every group had no
+ * door at all (Reviews, until 2026-10-18).
+ */
+export const RAIL_GROUPS: readonly { label: string; keys: readonly string[] }[] = [
+  { label: 'Daily work', keys: ['today', 'clients', 'enquiries', 'reviews', 'schedule'] },
+  { label: 'Finance', keys: ['billing', 'books'] },
+  { label: 'Practice', keys: ['kit', 'portal', 'audit', 'settings'] },
+];
+
 export const ADMIN_SECTIONS: readonly RailSection[] = [
   { key: 'clients', label: 'Clients', to: '/admin/clients', icon: <ClientsIcon /> },
   // What the website's forms sent, until someone makes each one a lead or
@@ -357,11 +369,7 @@ export function Rail({
         ) : null}
       </div>
       <div className="rail__list" onScroll={tip.hide}>
-        {[
-          { label: 'Daily work', keys: ['today', 'clients', 'enquiries', 'schedule'] },
-          { label: 'Finance', keys: ['billing', 'books'] },
-          { label: 'Practice', keys: ['kit', 'portal', 'audit', 'settings'] },
-        ].map((group) => {
+        {RAIL_GROUPS.map((group) => {
           const items = sections.filter((section) => group.keys.includes(section.key));
           if (items.length === 0) return null;
           return (
